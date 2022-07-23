@@ -38,7 +38,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
-    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
+    "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
   private val supportedFunctions = supportedAggregateFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =

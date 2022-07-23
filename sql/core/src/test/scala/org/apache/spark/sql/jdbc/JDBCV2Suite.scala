@@ -265,9 +265,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .limit(1)
-    checkLimitRemoved(df4, false)
+    checkAggregateRemoved(df4)
+    checkLimitRemoved(df4)
     checkPushedInfo(df4,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 1")
     checkAnswer(df4, Seq(Row(1, 19000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -340,9 +344,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .offset(1)
-    checkOffsetRemoved(df5, false)
+    checkAggregateRemoved(df5)
+    checkLimitRemoved(df5)
     checkPushedInfo(df5,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df5, Seq(Row(2, 22000.00), Row(6, 12000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -477,10 +485,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .groupBy("DEPT").sum("SALARY")
       .limit(2)
       .offset(1)
-    checkLimitRemoved(df10, false)
-    checkOffsetRemoved(df10, false)
+    checkAggregateRemoved(df10)
+    checkLimitRemoved(df10)
+    checkOffsetRemoved(df10)
     checkPushedInfo(df10,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 2",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -612,10 +625,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df9, Seq(Row(2, "david", 10000.00, 1300.0, true)))
 
     val df10 = sql("SELECT dept, sum(salary) FROM h2.test.employee group by dept LIMIT 1 OFFSET 1")
-    checkLimitRemoved(df10, false)
-    checkOffsetRemoved(df10, false)
+    checkAggregateRemoved(df10)
+    checkLimitRemoved(df10)
+    checkOffsetRemoved(df10)
     checkPushedInfo(df10,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 2",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -2166,7 +2184,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         df.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregates: [SUM(PRICE), COUNT(PRICE)]"
+              "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]"
             checkKeywordsExistsInExplain(df, expected_plan_fragment)
         }
         if (ansiEnabled) {
@@ -2259,11 +2277,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .asInstanceOf[SupportsIndex]
     assert(jdbcTable != null)
     assert(jdbcTable.indexExists("people_index") == false)
+    val indexes1 = jdbcTable.listIndexes()
+    assert(indexes1.isEmpty)
 
     sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
     assert(jdbcTable.indexExists("people_index"))
+    val indexes2 = jdbcTable.listIndexes()
+    assert(!indexes2.isEmpty)
+    assert(indexes2.size == 1)
+    val tableIndex = indexes2.head
+    assert(tableIndex.indexName() == "people_index")
 
     sql(s"DROP INDEX people_index ON TABLE h2.test.people")
     assert(jdbcTable.indexExists("people_index") == false)
+    val indexes3 = jdbcTable.listIndexes()
+    assert(indexes3.isEmpty)
   }
 }

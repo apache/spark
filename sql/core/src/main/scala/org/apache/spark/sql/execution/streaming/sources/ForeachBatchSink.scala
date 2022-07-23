@@ -30,10 +30,13 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     val rdd = data.queryExecution.toRdd
     val executedPlan = data.queryExecution.executedPlan
+    val analyzedPlanWithoutMarkerNode = eliminateWriteMarkerNode(data.queryExecution.analyzed)
+    // assertion on precondition
+    assert(data.logicalPlan.output == analyzedPlanWithoutMarkerNode.output)
     val node = LogicalRDD(
-      data.schema.toAttributes,
+      data.logicalPlan.output,
       rdd,
-      Some(eliminateWriteMarkerNode(data.queryExecution.analyzed)),
+      Some(analyzedPlanWithoutMarkerNode),
       executedPlan.outputPartitioning,
       executedPlan.outputOrdering)(data.sparkSession)
     implicit val enc = encoder
