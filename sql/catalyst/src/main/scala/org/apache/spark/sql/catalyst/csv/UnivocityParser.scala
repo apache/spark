@@ -219,7 +219,7 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility only if no custom pattern has been set or parser policy is legacy.
+            // compatibility if enabled.
             if (!enableParsingFallbackForTimestampType) {
               throw e
             }
@@ -235,7 +235,7 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility only if no custom pattern has been set or parser policy is legacy.
+            // compatibility if enabled.
             if (!enableParsingFallbackForDateType) {
               throw e
             }
