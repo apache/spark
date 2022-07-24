@@ -143,6 +143,47 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-39854: withNewChildInternal in Generate Node should re-calculate 'unrequiredChildIndex'") {
+    import org.apache.spark.sql.functions.{explode, struct}
+    import org.apache.spark.sql.SparkSession
+
+    val ss:SparkSession = spark
+    import ss.implicits._
+    val testJson =
+      """{
+        | "b": {
+        |  "id": "id00",
+        |  "data": [{
+        |   "b1": "vb1",
+        |   "b2": 101,
+        |   "ex2": [
+        |    { "fb1": false, "fb2": 11, "fb3": "t1" },
+        |    { "fb1": true, "fb2": 12, "fb3": "t2" }
+        |   ]}, {
+        |   "b1": "vb2",
+        |   "b2": 102,
+        |   "ex2": [
+        |    { "fb1": false, "fb2": 13, "fb3": "t3" },
+        |    { "fb1": true, "fb2": 14, "fb3": "t4" }
+        |   ]}
+        |  ],
+        |  "fa": "tes",
+        |  "v": "1.5"
+        | }
+        |}
+        |""".stripMargin
+    val df = spark.read.json((testJson :: Nil).toDS())
+      .withColumn("ex_b", explode($"b.data.ex2"))
+      .withColumn("ex_b2", explode($"ex_b"))
+    val df1 = df
+      .withColumn("rt", struct(
+        $"b.fa".alias("rt_fa"),
+        $"b.v".alias("rt_v")
+      ))
+      .drop("b", "ex_b")
+    df1.show(false)
+  }
 }
 
 case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {

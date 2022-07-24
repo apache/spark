@@ -266,8 +266,16 @@ case class Generate(
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Generate =
-    copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): Generate = {
+    // Generally speaking, using index to keep track of unrequired child nodes is not a good idea,
+    //   should probably use exprId instead.
+    val unrequiredExprIdSet = unrequiredChildIndex.map(output).map(_.exprId).toSet
+    val newUnrequiredChildIndices = newChild.output.indices.filter { idx =>
+      val newAttr = newChild.output(idx)
+      unrequiredExprIdSet.contains(newAttr.exprId)
+    }
+    copy(child = newChild, unrequiredChildIndex = newUnrequiredChildIndices)
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
