@@ -21,6 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -30,12 +31,10 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -46,7 +45,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * A test suite for the `spark-sql` CLI tool.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class CliSuite extends SparkFunSuite {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
@@ -555,22 +554,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("AnalysisException with root cause will be printStacktrace") {
+  test("SparkException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("NumberFormatException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
-      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("JsonParseException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("AnalysisException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("SparkException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -630,7 +629,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
     runCliWithin(2.minute)(
       // Only unclosed comment.
-      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "mismatched input ';'",
+      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
@@ -642,7 +641,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {
@@ -679,5 +678,24 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     }
     sessionState.close()
     SparkSQLEnv.stop()
+  }
+
+  test("SPARK-39068: support in-memory catalog and running concurrently") {
+    val extraConf = Seq("-c", s"${StaticSQLConf.CATALOG_IMPLEMENTATION.key}=in-memory")
+    val cd = new CountDownLatch(2)
+    def t: Thread = new Thread {
+      override def run(): Unit = {
+        // catalog is in-memory and isolated, so that we can create table with duplicated
+        // names.
+        runCliWithin(1.minute, extraArgs = extraConf)(
+          "create table src(key int) using hive;" ->
+            "Hive support is required to CREATE Hive TABLE",
+          "create table src(key int) using parquet;" -> "")
+        cd.countDown()
+      }
+    }
+    t.start()
+    t.start()
+    cd.await()
   }
 }

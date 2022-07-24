@@ -387,8 +387,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  // These defaults copied from YARN
-  private val MEMORY_OVERHEAD_FRACTION = 0.10
+  // This default copied from YARN
   private val MEMORY_OVERHEAD_MINIMUM = 384
 
   /**
@@ -400,8 +399,9 @@ trait MesosSchedulerUtils extends Logging {
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
+    val memoryOverheadFactor = sc.conf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
     sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-      math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
+      math.max(memoryOverheadFactor * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
   }
 
@@ -415,7 +415,8 @@ trait MesosSchedulerUtils extends Logging {
    *         `MEMORY_OVERHEAD_FRACTION (=0.1) * driverMemory`
    */
   def driverContainerMemory(driverDesc: MesosDriverDescription): Int = {
-    val defaultMem = math.max(MEMORY_OVERHEAD_FRACTION * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
+    val memoryOverheadFactor = driverDesc.conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+    val defaultMem = math.max(memoryOverheadFactor * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
     driverDesc.conf.get(mesosConfig.DRIVER_MEMORY_OVERHEAD).getOrElse(defaultMem.toInt) +
       driverDesc.mem
   }

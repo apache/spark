@@ -1353,12 +1353,12 @@ abstract class JsonSuite
   }
 
   test("Dataset toJSON doesn't construct rdd") {
-    val containsRDD = spark.emptyDataFrame.toJSON.queryExecution.logical.find {
+    val containsRDDExists = spark.emptyDataFrame.toJSON.queryExecution.logical.exists {
       case ExternalRDD(_, _) => true
       case _ => false
     }
 
-    assert(containsRDD.isEmpty, "Expected logical plan of toJSON to not contain an RDD")
+    assert(!containsRDDExists, "Expected logical plan of toJSON to not contain an RDD")
   }
 
   test("JSONRelation equality test") {
@@ -3044,8 +3044,8 @@ abstract class JsonSuite
             val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }
-            assert(ex.getErrorClass == "MISSING_COLUMN")
-            assert(ex.messageParameters.head == "AAA")
+            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+            assert(ex.messageParameters.head == "`AAA`")
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -3165,7 +3165,7 @@ abstract class JsonSuite
     Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
       Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
         val json = spark.createDataset(
-          spark.sparkContext.parallelize(jsonString:: Nil))(Encoders.STRING)
+          spark.sparkContext.parallelize(jsonString :: Nil))(Encoders.STRING)
         val df = spark.read
           .option("mode", mode)
           .schema(schema)
@@ -3173,6 +3173,18 @@ abstract class JsonSuite
         assert(df.schema == expected)
         checkAnswer(df, Row(1, null) :: Nil)
       }
+    }
+
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      checkAnswer(
+        spark.read.schema(
+          StructType(
+            StructField("f1", LongType, nullable = false) ::
+            StructField("f2", LongType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS),
+        // It is for testing legacy configuration. This is technically a bug as
+        // `0` has to be `null` but the schema is non-nullable.
+        Row(1, 0))
     }
   }
 

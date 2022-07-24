@@ -31,7 +31,7 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
@@ -233,23 +233,13 @@ class Column:
     __radd__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("plus")
     )
-    __rsub__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("minus")
-    )
+    __rsub__ = _reverse_op("minus")
     __rmul__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("multiply")
     )
-    __rdiv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rtruediv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rmod__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("mod")
-    )
+    __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
 
     __pow__ = _bin_func_op("pow")
     __rpow__ = cast(
@@ -583,57 +573,6 @@ class Column:
     >>> df.filter(df.name.contains('o')).collect()
     [Row(age=5, name='Bob')]
     """
-    _rlike_doc = """
-    SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
-    match.
-
-    Parameters
-    ----------
-    other : str
-        an extended regex expression
-
-    Examples
-    --------
-    >>> df.filter(df.name.rlike('ice$')).collect()
-    [Row(age=2, name='Alice')]
-    """
-    _like_doc = """
-    SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
-
-    Parameters
-    ----------
-    other : str
-        a SQL LIKE pattern
-
-    See Also
-    --------
-    pyspark.sql.Column.rlike
-
-    Examples
-    --------
-    >>> df.filter(df.name.like('Al%')).collect()
-    [Row(age=2, name='Alice')]
-    """
-    _ilike_doc = """
-    SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
-    based on a case insensitive match.
-
-    .. versionadded:: 3.3.0
-
-    Parameters
-    ----------
-    other : str
-        a SQL LIKE pattern
-
-    See Also
-    --------
-    pyspark.sql.Column.rlike
-
-    Examples
-    --------
-    >>> df.filter(df.name.ilike('%Ice')).collect()
-    [Row(age=2, name='Alice')]
-    """
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
@@ -666,11 +605,71 @@ class Column:
     """
 
     contains = _bin_op("contains", _contains_doc)
-    rlike = _bin_op("rlike", _rlike_doc)
-    like = _bin_op("like", _like_doc)
-    ilike = _bin_op("ilike", _ilike_doc)
     startswith = _bin_op("startsWith", _startswith_doc)
     endswith = _bin_op("endsWith", _endswith_doc)
+
+    def like(self: "Column", other: str) -> "Column":
+        """
+        SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Examples
+        --------
+        >>> df.filter(df.name.like('Al%')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "like")(other)
+        return Column(njc)
+
+    def rlike(self: "Column", other: str) -> "Column":
+        """
+        SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
+        match.
+
+        Parameters
+        ----------
+        other : str
+            an extended regex expression
+
+        Examples
+        --------
+        >>> df.filter(df.name.rlike('ice$')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "rlike")(other)
+        return Column(njc)
+
+    def ilike(self: "Column", other: str) -> "Column":
+        """
+        SQL ILIKE expression (case insensitive LIKE). Returns a boolean :class:`Column`
+        based on a case insensitive match.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : str
+            a SQL LIKE pattern
+
+        See Also
+        --------
+        pyspark.sql.Column.rlike
+
+        Examples
+        --------
+        >>> df.filter(df.name.ilike('%Ice')).collect()
+        [Row(age=2, name='Alice')]
+        """
+        njc = getattr(self._jc, "ilike")(other)
+        return Column(njc)
 
     @overload
     def substr(self, startPos: int, length: int) -> "Column":
@@ -709,7 +708,7 @@ class Column:
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
-            jc = self._jc.substr(cast("Column", startPos)._jc, cast("Column", length)._jc)
+            jc = self._jc.substr(startPos._jc, cast("Column", length)._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)

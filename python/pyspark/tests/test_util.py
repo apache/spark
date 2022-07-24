@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
 from pyspark.testing.utils import PySparkTestCase
+from pyspark.find_spark_home import _find_spark_home
 
 
 class KeywordOnlyTests(unittest.TestCase):
@@ -72,6 +74,15 @@ class UtilTests(PySparkTestCase):
         from pyspark.util import VersionUtils
 
         self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
+
+    def test_find_spark_home(self):
+        # SPARK-38827: Test find_spark_home without `SPARK_HOME` environment variable set.
+        origin = os.environ["SPARK_HOME"]
+        try:
+            del os.environ["SPARK_HOME"]
+            self.assertEquals(origin, _find_spark_home())
+        finally:
+            os.environ["SPARK_HOME"] = origin
 
 
 if __name__ == "__main__":

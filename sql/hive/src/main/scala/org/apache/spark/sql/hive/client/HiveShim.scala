@@ -41,7 +41,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -809,7 +809,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
+    val name = CatalystIdentifier.attachSessionCatalog(
+      FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName)))
     val resources = hf.getResourceUris.asScala.map { uri =>
       val resourceType = uri.getResourceType() match {
         case ResourceType.ARCHIVE => "archive"
@@ -1145,10 +1146,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // Because there is no way to know whether the partition properties has timeZone,
     // client-side filtering cannot be used with TimeZoneAwareExpression.
     def hasTimeZoneAwareExpression(e: Expression): Boolean = {
-      e.collectFirst {
-        case cast: CastBase if cast.needsTimeZone => cast
-        case tz: TimeZoneAwareExpression if !tz.isInstanceOf[CastBase] => tz
-      }.isDefined
+      e.exists {
+        case cast: Cast => cast.needsTimeZone
+        case tz: TimeZoneAwareExpression => !tz.isInstanceOf[Cast]
+        case _ => false
+      }
     }
 
     if (!SQLConf.get.metastorePartitionPruningFastFallback ||

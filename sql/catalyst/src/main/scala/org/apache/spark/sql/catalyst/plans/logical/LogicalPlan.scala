@@ -31,6 +31,7 @@ abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
   with LogicalPlanStats
+  with LogicalPlanDistinctKeys
   with QueryPlanConstraints
   with Logging {
 
@@ -212,11 +213,12 @@ object LogicalPlanIntegrity {
 
   private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
-      e.collectFirst {
+      e.exists {
         // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
         // so, we filter out them in advance.
-        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
-      }.isDefined
+        case s: ScalarSubquery => s.plan.schema.fields.isEmpty
+        case _ => false
+      }
     }
   }
 

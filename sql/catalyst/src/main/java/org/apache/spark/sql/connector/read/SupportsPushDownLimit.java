@@ -21,8 +21,8 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down LIMIT. Please note that the combination of LIMIT with other operations
- * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
+ * push down LIMIT. We can push down LIMIT with many other operations if they follow the
+ * operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.3.0
  */
@@ -33,4 +33,10 @@ public interface SupportsPushDownLimit extends ScanBuilder {
    * Pushes down LIMIT to the data source.
    */
   boolean pushLimit(int limit);
+
+  /**
+   * Whether the LIMIT is partially pushed or not. If it returns true, then Spark will do LIMIT
+   * again. This method will only be called when {@link #pushLimit} returns true.
+   */
+  default boolean isPartiallyPushed() { return true; }
 }

@@ -72,12 +72,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("case when") {
     val row = create_row(null, false, true, "a", "b", "c")
-    val c1 = 'a.boolean.at(0)
-    val c2 = 'a.boolean.at(1)
-    val c3 = 'a.boolean.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
-    val c6 = 'a.string.at(5)
+    val c1 = $"a".boolean.at(0)
+    val c2 = $"a".boolean.at(1)
+    val c3 = $"a".boolean.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
+    val c6 = $"a".string.at(5)
 
     checkEvaluation(CaseWhen(Seq((c1, c4)), c6), "c", row)
     checkEvaluation(CaseWhen(Seq((c2, c4)), c6), "c", row)
@@ -95,9 +95,9 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(CaseWhen(Seq((c2, c4), (c3, c5)), c6).nullable)
     assert(CaseWhen(Seq((c2, c4), (c3, c5))).nullable)
 
-    val c4_notNull = 'a.boolean.notNull.at(3)
-    val c5_notNull = 'a.boolean.notNull.at(4)
-    val c6_notNull = 'a.boolean.notNull.at(5)
+    val c4_notNull = $"a".boolean.notNull.at(3)
+    val c5_notNull = $"a".boolean.notNull.at(4)
+    val c6_notNull = $"a".boolean.notNull.at(5)
 
     assert(CaseWhen(Seq((c2, c4_notNull)), c6_notNull).nullable === false)
     assert(CaseWhen(Seq((c2, c4)), c6_notNull).nullable)
@@ -186,12 +186,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("case key when") {
     val row = create_row(null, 1, 2, "a", "b", "c")
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.int.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
-    val c6 = 'a.string.at(5)
+    val c1 = $"a".int.at(0)
+    val c2 = $"a".int.at(1)
+    val c3 = $"a".int.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
+    val c6 = $"a".string.at(5)
 
     val literalNull = Literal.create(null, IntegerType)
     val literalInt = Literal(1)

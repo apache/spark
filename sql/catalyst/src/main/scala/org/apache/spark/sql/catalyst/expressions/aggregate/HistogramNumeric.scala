@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DayTimeIntervalType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection, YearMonthIntervalType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
 
 /**
@@ -46,12 +47,13 @@ import org.apache.spark.sql.util.NumericHistogram
       smaller datasets. Note that this function creates a histogram with non-uniform
       bin widths. It offers no guarantees in terms of the mean-squared-error of the
       histogram, but in practice is comparable to the histograms produced by the R/S-Plus
-      statistical computing packages.
+      statistical computing packages. Note: the output type of the 'x' field in the return value is
+      propagated from the input value consumed in the aggregate function.
     """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 5) FROM VALUES (0), (1), (2), (10) AS tab(col);
-       [{"x":0.0,"y":1.0},{"x":1.0,"y":1.0},{"x":2.0,"y":1.0},{"x":10.0,"y":1.0}]
+       [{"x":0,"y":1.0},{"x":1,"y":1.0},{"x":2,"y":1.0},{"x":10,"y":1.0}]
   """,
   group = "agg_funcs",
   since = "3.3.0")
@@ -71,6 +73,8 @@ case class HistogramNumeric(
     case null => null
     case n: Int => n
   }
+
+  private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
@@ -124,8 +128,33 @@ case class HistogramNumeric(
       null
     } else {
       val result = (0 until buffer.getUsedBins).map { index =>
+        // Note that the 'coord.x' and 'coord.y' have double-precision floating point type here.
         val coord = buffer.getBin(index)
-        InternalRow.apply(coord.x, coord.y)
+        if (propagateInputType) {
+          // If the SQLConf.spark.sql.legacy.histogramNumericPropagateInputType is set to true,
+          // we need to internally convert the 'coord.x' value to the expected result type, for
+          // cases like integer types, timestamps, and intervals which are valid inputs to the
+          // numeric histogram aggregate function. For example, in this case:
+          // 'SELECT histogram_numeric(val, 3) FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)'
+          // returns an array of structs where the first field has LongType.
+          val result: Any = left.dataType match {
+            case ByteType => coord.x.toByte
+            case IntegerType | DateType | _: YearMonthIntervalType =>
+              coord.x.toInt
+            case FloatType => coord.x.toFloat
+            case ShortType => coord.x.toShort
+            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
+              coord.x.toLong
+            case _ => coord.x
+          }
+          InternalRow.apply(result, coord.y)
+        } else {
+          // Otherwise, just apply the double-precision values in 'coord.x' and 'coord.y' to the
+          // output row directly. In this case: 'SELECT histogram_numeric(val, 3)
+          // FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)' returns an array of structs where the
+          // first field has DoubleType.
+          InternalRow.apply(coord.x, coord.y)
+        }
       }
       new GenericArrayData(result)
     }
@@ -157,10 +186,17 @@ case class HistogramNumeric(
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType =
+  override def dataType: DataType = {
+    // If the SQLConf.spark.sql.legacy.histogramNumericPropagateInputType is set to true,
+    // the output data type of this aggregate function is an array of structs, where each struct
+    // has two fields (x, y): one of the same data type as the left child and another of double
+    // type. Otherwise, the 'x' field always has double type.
     ArrayType(new StructType(Array(
-      StructField("x", DoubleType, true),
+      StructField(name = "x",
+        dataType = if (propagateInputType) left.dataType else DoubleType,
+        nullable = true),
       StructField("y", DoubleType, true))), true)
+  }
 
   override def prettyName: String = "histogram_numeric"
 }

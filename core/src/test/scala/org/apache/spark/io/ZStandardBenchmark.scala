@@ -29,8 +29,8 @@ import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED,
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class> <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *   2. build/sbt "core/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/ZStandardBenchmark-results.txt".
  * }}}
  */

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName, UnresolvedFunc}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunc, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -46,7 +46,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
@@ -200,21 +200,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(parsed.isInstanceOf[Project])
   }
 
-  test("duplicate keys in table properties") {
-    val e = intercept[ParseException] {
-      parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'key1'"))
-  }
-
-  test("duplicate columns in partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
-  }
-
   test("unsupported operations") {
     intercept[ParseException] {
       parser.parsePlan(
@@ -288,12 +273,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      s.copy(child = p.copy(child = p.child.where('f < 10)),
-        output = Seq('key.string, 'value.string)))
+      s.copy(child = p.copy(child = p.child.where($"f" < 10)),
+        output = Seq($"key".string, $"value".string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      s.copy(output = Seq('c.string, 'd.string)))
+      s.copy(output = Seq($"c".string, $"d".string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      s.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      s.copy(output = Seq($"c".int, $"d".decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {
@@ -329,7 +314,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val parsed1 = parser.parsePlan(v1)
 
     val expected1 = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
+      UnresolvedIdentifier(Seq("view1")),
       Seq.empty[(String, Option[String])],
       None,
       Map.empty[String, String],
@@ -369,7 +354,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin
     val parsed1 = parser.parsePlan(v1)
     val expected1 = CreateView(
-      UnresolvedDBObjectName(Seq("view1"), false),
+      UnresolvedIdentifier(Seq("view1")),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
       Map("prop1Key" -> "prop1Val"),
@@ -425,35 +410,35 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("CREATE FUNCTION") {
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun", Seq(), false, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun", Seq(), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, false))
 
     comparePlans(parser.parsePlan("CREATE OR REPLACE FUNCTION a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, true))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, true))
 
     comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
-      CreateFunctionCommand(None, "a", "fun", Seq(), true, false, false))
+      CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), true, false))
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), true, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(JarResource, "j")), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(ArchiveResource, "a")), false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING FILE 'f'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(FileResource, "f")), false, false))
 
     comparePlans(
       parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'"),
-      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
         Seq(FunctionResource(JarResource, "j"),
           FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
         false, false))
@@ -475,13 +460,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION a"),
-      DropFunctionCommand(None, "a", false, true))
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
     comparePlans(
       parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
       DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
-      DropFunctionCommand(None, "a", true, true))
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
 
     intercept("DROP TEMPORARY FUNCTION a.b",
       "DROP TEMPORARY FUNCTION requires a single part name")

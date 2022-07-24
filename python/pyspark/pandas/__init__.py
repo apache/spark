@@ -22,9 +22,12 @@
 
 import os
 import sys
-from distutils.version import LooseVersion
 import warnings
+from distutils.version import LooseVersion
+from typing import Any
 
+from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
+from pyspark.pandas.missing.scalars import _MissingPandasLikeScalars
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 try:
@@ -101,8 +104,8 @@ def _auto_patch_spark() -> None:
     import os
     import logging
 
-    # Attach a usage logger.
-    logger_module = os.getenv("KOALAS_USAGE_LOGGER", "")
+    # Attach a usage logger. 'KOALAS_USAGE_LOGGER' is legacy, and it's for compatibility.
+    logger_module = os.getenv("PYSPARK_PANDAS_USAGE_LOGGER", os.getenv("KOALAS_USAGE_LOGGER", ""))
     if logger_module != "":
         try:
             from pyspark.pandas import usage_logging
@@ -134,12 +137,12 @@ def _auto_patch_pandas() -> None:
     if sys.version_info >= (3, 7):
         # Just in case pandas implements '__class_getitem__' later.
         if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+            pd.DataFrame.__class_getitem__ = (  # type: ignore[attr-defined]
                 lambda params: DataFrame.__class_getitem__(params)
             )
 
         if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+            pd.Series.__class_getitem__ = (  # type: ignore[attr-defined]
                 lambda params: Series.__class_getitem__(params)
             )
 
@@ -151,3 +154,14 @@ _auto_patch_pandas()
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # noqa: F403
 from pyspark.pandas.sql_formatter import sql
+
+
+def __getattr__(key: str) -> Any:
+    if key.startswith("__"):
+        raise AttributeError(key)
+    if hasattr(_MissingPandasLikeScalars, key):
+        raise getattr(_MissingPandasLikeScalars, key)
+    if hasattr(_MissingPandasLikeGeneralFunctions, key):
+        return getattr(_MissingPandasLikeGeneralFunctions, key)
+    else:
+        raise AttributeError("module 'pyspark.pandas' has no attribute '%s'" % (key))

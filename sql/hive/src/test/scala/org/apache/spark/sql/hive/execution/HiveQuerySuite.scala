@@ -236,17 +236,19 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("no from clause",
     "SELECT 1, +1, -1")
 
-  createQueryTest("boolean = number",
-    """
-      |SELECT
-      |  1 = true, 1L = true, 1Y = true, true = 1, true = 1L, true = 1Y,
-      |  0 = true, 0L = true, 0Y = true, true = 0, true = 0L, true = 0Y,
-      |  1 = false, 1L = false, 1Y = false, false = 1, false = 1L, false = 1Y,
-      |  0 = false, 0L = false, 0Y = false, false = 0, false = 0L, false = 0Y,
-      |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
-      |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
-      |FROM src LIMIT 1
+  if (!conf.ansiEnabled) {
+    createQueryTest("boolean = number",
+      """
+        |SELECT
+        |  1 = true, 1L = true, 1Y = true, true = 1, true = 1L, true = 1Y,
+        |  0 = true, 0L = true, 0Y = true, true = 0, true = 0L, true = 0Y,
+        |  1 = false, 1L = false, 1Y = false, false = 1, false = 1L, false = 1Y,
+        |  0 = false, 0L = false, 0Y = false, false = 0, false = 0L, false = 0Y,
+        |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
+        |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
+        |FROM src LIMIT 1
     """.stripMargin)
+  }
 
   test("CREATE TABLE AS runs once") {
     sql("CREATE TABLE foo AS SELECT 1 FROM src LIMIT 1").collect()
@@ -282,11 +284,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
     "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
 
-  createQueryTest("Cast Timestamp to Timestamp in UDF",
-    """
-      | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
-      | FROM src LIMIT 1
+  if (!conf.ansiEnabled) {
+    createQueryTest("Cast Timestamp to Timestamp in UDF",
+      """
+        | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
+        | FROM src LIMIT 1
     """.stripMargin)
+  }
 
   createQueryTest("Date comparison test 1",
     """
@@ -516,8 +520,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("Specify the udtf output",
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
-  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
-    "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
+  if (!conf.ansiEnabled) {
+    createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
+      "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
+  }
 
   createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #2",
     "SELECT key,value FROM (SELECT explode(map(key,value)) FROM src LIMIT 1) t")
@@ -768,9 +774,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("SPARK-5367: resolve star expression in udf") {
     assert(sql("select concat(*) from src limit 5").collect().size == 5)
-    assert(sql("select array(*) from src limit 5").collect().size == 5)
     assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
-    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
+    if (!conf.ansiEnabled) {
+      assert(sql("select array(*) from src limit 5").collect().size == 5)
+      assert(sql("select array(key, *) from src limit 5").collect().size == 5)
+    }
   }
 
   test("Exactly once semantics for DDL and command statements") {

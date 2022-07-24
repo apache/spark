@@ -37,7 +37,7 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, Ap
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ManualClock
 
-class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
+class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matchers {
 
   /**
    * Stub cache operations.

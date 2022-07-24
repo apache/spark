@@ -19,6 +19,10 @@ package org.apache.spark.sql.catalyst
 
 import javax.lang.model.SourceVersion
 
+import scala.annotation.tailrec
+import scala.reflect.internal.Symbols
+import scala.util.{Failure, Success}
+
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -102,7 +106,7 @@ object ScalaReflection extends ScalaReflection {
         val className = getClassNameFromType(tpe)
         className match {
           case "scala.Array" =>
-            val TypeRef(_, _, Seq(elementType)) = tpe
+            val TypeRef(_, _, Seq(elementType)) = tpe.dealias
             arrayClassFor(elementType)
           case other =>
             val clazz = getClassFromType(tpe)
@@ -639,7 +643,7 @@ object ScalaReflection extends ScalaReflection {
   def getConstructorParameters(cls: Class[_]): Seq[(String, Type)] = {
     val m = runtimeMirror(cls.getClassLoader)
     val classSymbol = m.staticClass(cls.getName)
-    val t = classSymbol.selfType
+    val t = selfType(classSymbol)
     getConstructorParameters(t)
   }
 
@@ -653,8 +657,36 @@ object ScalaReflection extends ScalaReflection {
   def getConstructorParameterNames(cls: Class[_]): Seq[String] = {
     val m = runtimeMirror(cls.getClassLoader)
     val classSymbol = m.staticClass(cls.getName)
-    val t = classSymbol.selfType
+    val t = selfType(classSymbol)
     constructParams(t).map(_.name.decodedName.toString)
+  }
+
+  /**
+   * Workaround for [[https://github.com/scala/bug/issues/12190 Scala bug #12190]]
+   *
+   * `ClassSymbol.selfType` can throw an exception in case of cyclic annotation reference
+   * in Java classes. A retry of this operation will succeed as the class which defines the
+   * cycle is now resolved. It can however expose further recursive annotation references, so
+   * we keep retrying until we exhaust our retry threshold. Default threshold is set to 5
+   * to allow for a few level of cyclic references.
+   */
+  @tailrec
+  private def selfType(clsSymbol: ClassSymbol, tries: Int = 5): Type = {
+    scala.util.Try {
+      clsSymbol.selfType
+    } match {
+      case Success(x) => x
+      case Failure(e: Symbols#CyclicReference) if tries > 1 =>
+        // Retry on Symbols#CyclicReference if we haven't exhausted our retry limit
+        selfType(clsSymbol, tries - 1)
+      case Failure(e: RuntimeException)
+        if e.getMessage.contains("illegal cyclic reference") && tries > 1 =>
+        // UnPickler.unpickle wraps the original Symbols#CyclicReference exception into a runtime
+        // exception and does not set the cause, so we inspect the message. The previous case
+        // statement is useful for Java classes while this one is for Scala classes.
+        selfType(clsSymbol, tries - 1)
+      case Failure(e) => throw e
+    }
   }
 
   /**
@@ -958,11 +990,7 @@ trait ScalaReflection extends Logging {
   }
 
   private def isValueClass(tpe: Type): Boolean = {
-    tpe.typeSymbol.asClass.isDerivedValueClass
-  }
-
-  private def isTypeParameter(tpe: Type): Boolean = {
-    tpe.typeSymbol.isParameter
+    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isDerivedValueClass
   }
 
   /** Returns the name and type of the underlying parameter of value class `tpe`. */
@@ -983,15 +1011,11 @@ trait ScalaReflection extends Logging {
     val params = constructParams(dealiasedTpe)
     params.map { p =>
       val paramTpe = p.typeSignature
-      if (isTypeParameter(paramTpe)) {
-        // if there are type variables to fill in, do the substitution
-        // (SomeClass[T] -> SomeClass[Int])
-        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
-      } else if (isValueClass(paramTpe)) {
+      if (isValueClass(paramTpe)) {
         // Replace value class with underlying type
         p.name.decodedName.toString -> getUnderlyingTypeOfValueClass(paramTpe)
       } else {
-        p.name.decodedName.toString -> paramTpe
+        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
       }
     }
   }

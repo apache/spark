@@ -29,12 +29,6 @@ template:
       </a>
 
 authors:
-  Shivaram Venkataraman :
-    href: https://github.com/shivaram
-  Xiangrui Meng:
-    href: https://github.com/mengxr
-  Felix Cheung:
-    href: https://github.com/felixcheung
   " The Apache Software Foundation":
     href: "https://www.apache.org/"
 
@@ -267,9 +261,16 @@ reference:
 
 - title: "SQL Catalog"
 - contents:
+  - currentCatalog
   - currentDatabase
+  - databaseExists
   - dropTempTable
   - dropTempView
+  - functionExists
+  - getDatabase
+  - getFunc
+  - getTable
+  - listCatalogs
   - listColumns
   - listDatabases
   - listFunctions
@@ -277,6 +278,9 @@ reference:
   - refreshByPath
   - refreshTable
   - recoverPartitions
+  - setCurrentCatalog
+  - setCurrentDatabase
+  - tableExists
   - tableNames
   - tables
   - uncacheTable
@@ -289,7 +293,6 @@ reference:
   - getLocalProperty
   - install.spark
   - setCheckpointDir
-  - setCurrentDatabase
   - setJobDescription
   - setJobGroup
   - setLocalProperty

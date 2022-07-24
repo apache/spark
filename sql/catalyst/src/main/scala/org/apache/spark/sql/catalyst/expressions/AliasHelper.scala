@@ -70,18 +70,29 @@ trait AliasHelper {
   protected def replaceAliasButKeepName(
      expr: NamedExpression,
      aliasMap: AttributeMap[Alias]): NamedExpression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    trimNonTopLevelAliases(expr.transformUp {
+    expr match {
+      // We need to keep the `Alias` if we replace a top-level Attribute, so that it's still a
+      // `NamedExpression`. We also need to keep the name of the original Attribute.
       case a: Attribute => aliasMap.get(a).map(_.withName(a.name)).getOrElse(a)
-    }).asInstanceOf[NamedExpression]
+      case o =>
+        // Use transformUp to prevent infinite recursion when the replacement expression
+        // redefines the same ExprId.
+        o.mapChildren(_.transformUp {
+          case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
+        }).asInstanceOf[NamedExpression]
+    }
   }
 
-  protected def trimAliases(e: Expression): Expression = {
-    e.transformDown {
-      case Alias(child, _) => child
-      case MultiAlias(child, _) => child
+  protected def trimAliases(e: Expression): Expression = e match {
+    // The children of `CreateNamedStruct` may use `Alias` to carry metadata and we should not
+    // trim them.
+    case c: CreateNamedStruct => c.mapChildren {
+      case a: Alias if a.metadata != Metadata.empty => a
+      case other => trimAliases(other)
     }
+    case a @ Alias(child, _) => trimAliases(child)
+    case MultiAlias(child, _) => trimAliases(child)
+    case other => other.mapChildren(trimAliases)
   }
 
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {

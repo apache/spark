@@ -71,7 +71,7 @@ private[spark] abstract class RestSubmissionServer(
   def start(): Int = {
     val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
     _server = Some(server)
-    logInfo(s"Started REST server for submitting applications on port $boundPort")
+    logInfo(s"Started REST server for submitting applications on $host with port $boundPort")
     boundPort
   }
 

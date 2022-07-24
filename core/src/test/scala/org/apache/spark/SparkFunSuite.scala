@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import java.io.File
-import java.nio.file.Path
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
@@ -224,6 +225,19 @@ abstract class SparkFunSuite
   }
 
   /**
+   * Creates a temporary directory containing a secret file, which is then passed to `f` and
+   * will be deleted after `f` returns.
+   */
+  protected def withSecretFile(contents: String = "test-secret")(f: File => Unit): Unit = {
+    val secretDir = Utils.createTempDir("temp-secrets")
+    val secretFile = new File(secretDir, "temp-secret.txt")
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
+    try f(secretFile) finally {
+      Utils.deleteRecursively(secretDir)
+    }
+  }
+
+  /**
    * Adds a log appender and optionally sets a log level to the root logger or the logger with
    * the specified name, then executes the specified function, and in the end removes the log
    * appender and restores the log level if necessary.
@@ -263,6 +277,69 @@ abstract class SparkFunSuite
       }
     }
   }
+
+  /**
+   * Checks an exception with an error class against expected results.
+   * @param exception     The exception to check
+   * @param errorClass    The expected error class identifying the error
+   * @param errorSubClass Optional the expected subclass, None if not given
+   * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
+   * @param parameters    A map of parameter names and values. The names are as defined
+   *                      in the error-classes file.
+   * @param matchPVals    Optionally treat the parameters value as regular expression pattern.
+   *                      false if not supplied.
+   */
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: Option[String],
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      matchPVals: Boolean = false): Unit = {
+    assert(exception.getErrorClass === errorClass)
+    if (exception.getErrorSubClass != null) {
+      assert(errorSubClass.isDefined)
+      assert(exception.getErrorSubClass === errorSubClass.get)
+    }
+    sqlState.foreach(state => assert(exception.getSqlState === state))
+    val expectedParameters = (exception.getParameterNames zip exception.getMessageParameters).toMap
+    if (matchPVals == true) {
+      assert(expectedParameters.size === parameters.size)
+      expectedParameters.foreach(
+        exp => {
+          val parm = parameters.getOrElse(exp._1,
+            throw new IllegalArgumentException("Missing parameter" + exp._1))
+          if (!exp._2.matches(parm)) {
+            throw new IllegalArgumentException("(" + exp._1 + ", " + exp._2 +
+              ") does not match: " + parm)
+          }
+        }
+      )
+    } else {
+      assert(expectedParameters === parameters)
+    }
+  }
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, Some(sqlState), parameters)
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      parameters: Map[String, String]): Unit =
+    checkError(exception, errorClass, None, None, parameters)
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {

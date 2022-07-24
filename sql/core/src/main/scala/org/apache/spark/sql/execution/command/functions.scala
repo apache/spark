@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
@@ -46,8 +46,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  * @param replace: When true, alter the function with the specified name
  */
 case class CreateFunctionCommand(
-    databaseName: Option[String],
-    functionName: String,
+    identifier: FunctionIdentifier,
     className: String,
     resources: Seq[FunctionResource],
     isTemp: Boolean,
@@ -57,17 +56,17 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
+    val func = CatalogFunction(identifier, className, resources)
     if (isTemp) {
-      if (!replace && catalog.isRegisteredFunction(func.identifier)) {
-        throw QueryCompilationErrors.functionAlreadyExistsError(func.identifier)
+      if (!replace && catalog.isRegisteredFunction(identifier)) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(identifier)
       }
       // We first load resources and then put the builder in the function registry.
       catalog.loadFunctionResources(resources)
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
-      if (replace && catalog.functionExists(func.identifier)) {
+      if (replace && catalog.functionExists(identifier)) {
         // alter the function in the metastore
         catalog.alterFunction(func)
       } else {
@@ -101,7 +100,9 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
+    val identifier = CatalystIdentifier.attachSessionCatalog(
+      FunctionIdentifier(info.getName, Option(info.getDb)))
+    val name = identifier.unquotedString
     val result = if (info.getClassName != null) {
       Row(s"Function: $name") ::
         Row(s"Class: ${info.getClassName}") ::
@@ -125,8 +126,7 @@ case class DescribeFunctionCommand(
  * isTemp: indicates if it is a temporary function.
  */
 case class DropFunctionCommand(
-    databaseName: Option[String],
-    functionName: String,
+    identifier: FunctionIdentifier,
     ifExists: Boolean,
     isTemp: Boolean)
   extends LeafRunnableCommand {
@@ -134,15 +134,14 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(functionName)
+      assert(identifier.database.isEmpty)
+      if (FunctionRegistry.builtin.functionExists(identifier)) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
       }
-      catalog.dropTempFunction(functionName, ifExists)
+      catalog.dropTempFunction(identifier.funcName, ifExists)
     } else {
       // We are dropping a permanent function.
-      catalog.dropFunction(
-        FunctionIdentifier(functionName, databaseName),
-        ignoreIfNotExists = ifExists)
+      catalog.dropFunction(identifier, ignoreIfNotExists = ifExists)
     }
     Seq.empty[Row]
   }

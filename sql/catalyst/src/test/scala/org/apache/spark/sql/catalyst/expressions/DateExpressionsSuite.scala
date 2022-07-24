@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.text.{ParseException, SimpleDateFormat}
+import java.text.SimpleDateFormat
 import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
-import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -29,8 +28,8 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -754,6 +753,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(catalystInput, UTF8String.fromString(fmt))
+    checkEvaluation(
+      TruncDate(
+        BoundReference(ordinal = 0, dataType = DateType, nullable = true),
+        BoundReference(ordinal = 1, dataType = StringType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncDate") {
@@ -780,6 +788,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TruncTimestamp(
         NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(UTF8String.fromString(fmt), catalystInput)
+    checkEvaluation(
+      TruncTimestamp(
+        BoundReference(ordinal = 0, dataType = StringType, nullable = true),
+        BoundReference(ordinal = 1, dataType = TimestampType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncTimestamp") {
@@ -1715,10 +1732,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           if (!ansiEnabled) {
             exprSeq.foreach(checkEvaluation(_, null))
           } else if (policy == "LEGACY") {
-            exprSeq.foreach(checkExceptionInExpression[ParseException](_, "Unparseable"))
+            exprSeq.foreach(checkExceptionInExpression[SparkDateTimeException](_, "Unparseable"))
           } else {
             exprSeq.foreach(
-              checkExceptionInExpression[DateTimeParseException](_, "could not be parsed"))
+              checkExceptionInExpression[SparkDateTimeException](_, "could not be parsed"))
           }
 
           // LEGACY works, CORRECTED failed, EXCEPTION with SparkUpgradeException
@@ -1737,11 +1754,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             exprSeq2.foreach(pair =>
               checkExceptionInExpression[SparkUpgradeException](
                 pair._1,
-                  "You may get a different result due to the upgrading of Spark 3.0"))
+                  "You may get a different result due to the upgrading to Spark >= 3.0"))
           } else {
             if (ansiEnabled) {
               exprSeq2.foreach(pair =>
-                checkExceptionInExpression[DateTimeParseException](pair._1, "could not be parsed"))
+                checkExceptionInExpression[SparkDateTimeException](pair._1, "could not be parsed"))
             } else {
               exprSeq2.foreach(pair => checkEvaluation(pair._1, null))
             }
@@ -1891,31 +1908,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(
-      TimestampAdd(Literal("Hour"), Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      TimestampAdd("Hour", Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       LocalDateTime.of(2022, 2, 15, 13, 57, 0))
     // Check nulls as input values
     checkEvaluation(
       TimestampAdd(
-        Literal.create(null, StringType),
-        Literal(1),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
-      null)
-    checkEvaluation(
-      TimestampAdd(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal.create(null, IntegerType),
         Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       null)
     checkEvaluation(
       TimestampAdd(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal(1),
         Literal.create(null, TimestampType)),
       null)
     // Check crossing the daylight saving time
     checkEvaluation(
       TimestampAdd(
-        Literal("HOUR"),
+        "HOUR",
         Literal(6),
         Literal(Instant.parse("2022-03-12T23:30:00Z")),
         Some("America/Los_Angeles")),
@@ -1923,7 +1934,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Check the leap year
     checkEvaluation(
       TimestampAdd(
-        Literal("DAY"),
+        "DAY",
         Literal(2),
         Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
         Some("America/Los_Angeles")),
@@ -1940,12 +1951,69 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(
             (quantity: Expression, timestamp: Expression) =>
               TimestampAdd(
-                Literal(unit),
+                unit,
                 quantity,
                 timestamp,
                 Some(tz)),
             IntegerType, tsType)
         }
+      }
+    }
+  }
+
+  test("SPARK-38284: difference between two timestamps in units") {
+    // Check case-insensitivity
+    checkEvaluation(
+      TimestampDiff(
+        "Hour",
+        Literal(Instant.parse("2022-02-15T12:57:00Z")),
+        Literal(Instant.parse("2022-02-15T13:57:00Z"))),
+      1L)
+    // Check nulls as input values
+    checkEvaluation(
+      TimestampDiff(
+        "MINUTE",
+        Literal.create(null, TimestampType),
+        Literal(Instant.parse("2022-02-15T12:57:00Z"))),
+      null)
+    checkEvaluation(
+      TimestampDiff(
+        "MINUTE",
+        Literal(Instant.parse("2021-02-15T12:57:00Z")),
+        Literal.create(null, TimestampType)),
+      null)
+    // Check crossing the daylight saving time
+    checkEvaluation(
+      TimestampDiff(
+        "HOUR",
+        Literal(Instant.parse("2022-03-12T23:30:00Z")),
+        Literal(Instant.parse("2022-03-13T05:30:00Z")),
+        Some("America/Los_Angeles")),
+      6L)
+    // Check the leap year
+    checkEvaluation(
+      TimestampDiff(
+        "DAY",
+        Literal(Instant.parse("2020-02-28T10:11:12Z")),
+        Literal(Instant.parse("2020-03-01T10:21:12Z")),
+        Some("America/Los_Angeles")),
+      2L)
+
+    Seq(
+      "YEAR", "QUARTER", "MONTH",
+      "WEEK", "DAY",
+      "HOUR", "MINUTE", "SECOND",
+      "MILLISECOND", "MICROSECOND"
+    ).foreach { unit =>
+      outstandingTimezonesIds.foreach { tz =>
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (startTs: Expression, endTs: Expression) =>
+            TimestampDiff(
+              unit,
+              startTs,
+              endTs,
+              Some(tz)),
+          TimestampType, TimestampType)
       }
     }
   }

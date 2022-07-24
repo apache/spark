@@ -63,3 +63,7 @@ table.dataTable thead .sorting_desc { background: url('images/sort_desc.png') no
 .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active {
   border: none;
 }
+
+div.dataTables_wrapper div.dataTables_length select {
+  width: 100%;
+}

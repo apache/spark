@@ -73,14 +73,27 @@ private[spark] class PythonRDD(
  * A wrapper for a Python function, contains all necessary context to run the function in Python
  * runner.
  */
-private[spark] case class PythonFunction(
+private[spark] trait PythonFunction {
+  def command: Seq[Byte]
+  def envVars: JMap[String, String]
+  def pythonIncludes: JList[String]
+  def pythonExec: String
+  def pythonVer: String
+  def broadcastVars: JList[Broadcast[PythonBroadcast]]
+  def accumulator: PythonAccumulatorV2
+}
+
+/**
+ * A simple wrapper for a Python function created via pyspark.
+ */
+private[spark] case class SimplePythonFunction(
     command: Seq[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2) {
+    accumulator: PythonAccumulatorV2) extends PythonFunction {
 
   def this(
       command: Array[Byte],
@@ -245,7 +258,7 @@ private[spark] object PythonRDD extends Logging {
             out.writeInt(1)
 
             // Write the next object and signal end of data for this iteration
-            writeIteratorToStream(partitionArray.toIterator, out)
+            writeIteratorToStream(partitionArray.iterator, out)
             out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
             out.flush()
           } else {
@@ -684,7 +697,7 @@ private[spark] class PythonAccumulatorV2(
     @transient private val serverHost: String,
     private val serverPort: Int,
     private val secretToken: String)
-  extends CollectionAccumulator[Array[Byte]] with Logging{
+  extends CollectionAccumulator[Array[Byte]] with Logging {
 
   Utils.checkHost(serverHost)
 
@@ -879,7 +892,7 @@ private[spark] class DechunkedInputStream(wrapped: InputStream) extends InputStr
       }
     }
     assert(destSpace == 0 || remainingInChunk == -1)
-    return destPos - off
+    destPos - off
   }
 
   override def close(): Unit = wrapped.close()

@@ -21,7 +21,7 @@ import py4j
 
 from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.wrapper import (  # type: ignore[attr-defined]
+from pyspark.ml.wrapper import (
     _java2py,
     _py2java,
     JavaParams,

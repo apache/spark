@@ -19,13 +19,12 @@ package org.apache.spark.deploy.yarn
 
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.resource.ResourceProfile
 
-class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
+class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
   private val yarnAllocatorSuite = new YarnAllocatorSuite
   import yarnAllocatorSuite._

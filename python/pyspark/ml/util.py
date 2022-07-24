@@ -129,13 +129,9 @@ class MLWriter(BaseReadWrite):
     def _handleOverwrite(self, path: str) -> None:
         from pyspark.ml.wrapper import JavaWrapper
 
-        _java_obj = JavaWrapper._new_java_obj(  # type: ignore[attr-defined]
-            "org.apache.spark.ml.util.FileSystemOverwrite"
-        )
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java(  # type: ignore[attr-defined]
-            "handleOverwrite", path, True, self.sparkSession._jsparkSession
-        )
+        wrapper._call_java("handleOverwrite", path, True, self.sparkSession._jsparkSession)
 
     def save(self, path: str) -> None:
         """Save the ML instance to the input path."""
@@ -540,10 +536,8 @@ class DefaultParamsReader(MLReader[RL]):
         """
         parts = clazz.split(".")
         module = ".".join(parts[:-1])
-        m = __import__(module)
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
+        m = __import__(module, fromlist=[parts[-1]])
+        return getattr(m, parts[-1])
 
     def load(self, path: str) -> RL:
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
@@ -700,9 +694,7 @@ class MetaAlgorithmReadWrite:
         elif isinstance(pyInstance, OneVsRest):
             pySubStages = [pyInstance.getClassifier()]
         elif isinstance(pyInstance, OneVsRestModel):
-            pySubStages = [
-                pyInstance.getClassifier()
-            ] + pyInstance.models  # type: ignore[assignment, operator]
+            pySubStages = [pyInstance.getClassifier()] + pyInstance.models  # type: ignore[operator]
         else:
             pySubStages = []
 

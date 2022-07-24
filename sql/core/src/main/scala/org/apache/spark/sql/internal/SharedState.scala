@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.diagnostic.DiagnosticListener
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
@@ -116,6 +117,12 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  sparkContext.statusStore.diskStore.foreach { kvStore =>
+    sparkContext.listenerBus.addToQueue(
+      new DiagnosticListener(conf, kvStore.asInstanceOf[ElementTrackingStore]),
+      DiagnosticListener.QUEUE_NAME)
   }
 
   /**

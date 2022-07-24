@@ -58,7 +58,7 @@ An identifier is a string used to identify a database object such as a table, vi
 -- This CREATE TABLE fails with ParseException because of the illegal identifier name a.b
 CREATE TABLE test (a.b int);
 org.apache.spark.sql.catalyst.parser.ParseException:
-no viable alternative at input 'CREATE TABLE test (a.'(line 1, pos 20)
+Syntax error at or near '.': extra input '.'(line 1, pos 20)
 
 -- This CREATE TABLE works
 CREATE TABLE test (`a.b` int);
@@ -66,7 +66,7 @@ CREATE TABLE test (`a.b` int);
 -- This CREATE TABLE fails with ParseException because special character ` is not escaped
 CREATE TABLE test1 (`a`b` int);
 org.apache.spark.sql.catalyst.parser.ParseException:
-no viable alternative at input 'CREATE TABLE test (`a`b`'(line 1, pos 23)
+Syntax error at or near '`'(line 1, pos 23)
 
 -- This CREATE TABLE works
 CREATE TABLE test (`a``b` int);

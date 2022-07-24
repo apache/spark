@@ -35,8 +35,8 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
@@ -236,6 +236,38 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             s"value like '${mid.toString.substring(0, mid.toString.length - 1)}%'"
           ).foreach { whereExpr =>
             val title = s"StringStartsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringEndsWith") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10'",
+            "value like '%1000'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}'"
+          ).foreach { whereExpr =>
+            val title = s"StringEndsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringContains") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10%'",
+            "value like '%1000%'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}%'"
+          ).foreach { whereExpr =>
+            val title = s"StringContains filter: ($whereExpr)"
             filterPushDownBenchmark(numRows, title, whereExpr)
           }
         }

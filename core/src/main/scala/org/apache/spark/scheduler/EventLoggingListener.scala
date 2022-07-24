@@ -24,8 +24,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -66,7 +64,7 @@ private[spark] class EventLoggingListener(
     EventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf)
 
   // For testing. Keep track of all JSON serialized events that have been logged.
-  private[scheduler] val loggedEvents = new mutable.ArrayBuffer[JValue]
+  private[scheduler] val loggedEvents = new mutable.ArrayBuffer[String]
 
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
   private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
@@ -86,9 +84,8 @@ private[spark] class EventLoggingListener(
 
   private def initEventLog(): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val eventJson = JsonProtocol.logStartToJson(metadata)
-    val metadataJson = compact(eventJson)
-    logWriter.writeEvent(metadataJson, flushLogger = true)
+    val eventJson = JsonProtocol.sparkEventToJsonString(metadata)
+    logWriter.writeEvent(eventJson, flushLogger = true)
     if (testing && loggedEvents != null) {
       loggedEvents += eventJson
     }
@@ -96,8 +93,8 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false): Unit = {
-    val eventJson = JsonProtocol.sparkEventToJson(event)
-    logWriter.writeEvent(compact(render(eventJson)), flushLogger)
+    val eventJson = JsonProtocol.sparkEventToJsonString(event)
+    logWriter.writeEvent(eventJson, flushLogger)
     if (testing) {
       loggedEvents += eventJson
     }

@@ -82,7 +82,7 @@ private[spark] trait ResourceAllocator {
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable > 0) {
-        addressAvailabilityMap(address) = addressAvailabilityMap(address) - 1
+        addressAvailabilityMap(address) -= 1
       } else {
         throw new SparkException("Try to acquire an address that is not available. " +
           s"$resourceName address $address is not available.")
@@ -103,7 +103,7 @@ private[spark] trait ResourceAllocator {
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable < slotsPerAddress) {
-        addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
+        addressAvailabilityMap(address) += 1
       } else {
         throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +
           s"address $address is not assigned.")

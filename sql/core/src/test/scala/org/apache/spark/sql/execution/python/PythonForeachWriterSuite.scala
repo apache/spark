@@ -102,11 +102,15 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
     private val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
     private val thread = new Thread() {
       override def run(): Unit = {
-        while (iterator.hasNext) {
-          outputBuffer.synchronized {
-            outputBuffer += iterator.next().getInt(0)
+        try {
+          while (iterator.hasNext) {
+            outputBuffer.synchronized {
+              outputBuffer += iterator.next().getInt(0)
+            }
+            Thread.sleep(sleepPerRowReadMs)
           }
-          Thread.sleep(sleepPerRowReadMs)
+        } finally {
+          buffer.close()
         }
       }
     }

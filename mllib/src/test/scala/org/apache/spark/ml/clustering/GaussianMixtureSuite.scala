@@ -87,6 +87,11 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("GaussianMixture validate input dataset") {
+    testInvalidWeights(new GaussianMixture().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GaussianMixture().fit(_))
+  }
+
   test("set parameters") {
     val gm = new GaussianMixture()
       .setK(9)

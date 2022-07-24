@@ -413,8 +413,8 @@ private[ml] object DecisionTreeModelReadWrite {
 
     val dataPath = new Path(path, "data").toString
     var df = sparkSession.read.parquet(dataPath)
-    val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-    if (major.toInt < 3) {
+    val (major, _) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    if (major < 3) {
       df = df.withColumn("rawCount", lit(-1L))
     }
 
@@ -530,8 +530,8 @@ private[ml] object EnsembleModelReadWrite {
 
     val dataPath = new Path(path, "data").toString
     var df = sparkSession.read.parquet(dataPath)
-    val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-    if (major.toInt < 3) {
+    val (major, _) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    if (major < 3) {
       val newNodeDataCol = df.schema("nodeData").dataType match {
         case StructType(fields) =>
           val cols = fields.map(f => col(s"nodeData.${f.name}")) :+ lit(-1L).as("rawCount")

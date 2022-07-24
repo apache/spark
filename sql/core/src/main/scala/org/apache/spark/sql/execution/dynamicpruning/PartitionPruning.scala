@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
@@ -78,7 +78,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
+      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _, _, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
           Some(r)
@@ -194,29 +194,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     scanOverhead + cachedOverhead
   }
 
-  /**
-   * Returns whether an expression is likely to be selective
-   */
-  private def isLikelySelective(e: Expression): Boolean = e match {
-    case Not(expr) => isLikelySelective(expr)
-    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
-    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case _: StringRegexExpression => true
-    case _: BinaryComparison => true
-    case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case _: MultiLikeBase => true
-    case _ => false
-  }
 
   /**
    * Search a filtering predicate in a given logical plan
    */
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.find {
+    plan.exists {
       case f: Filter => isLikelySelective(f.condition)
       case _ => false
-    }.isDefined
+    }
   }
 
   /**
@@ -227,16 +213,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
     !plan.isStreaming && hasSelectivePredicate(plan)
-  }
-
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {

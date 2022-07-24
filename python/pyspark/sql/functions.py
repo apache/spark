@@ -140,7 +140,8 @@ def lit(col: Any) -> Column:
 @since(1.3)
 def col(col: str) -> Column:
     """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
+
     Examples
     --------
     >>> col('x')
@@ -1240,6 +1241,17 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|         2|
+    |  Bob|         5|
+    +-----+----------+
     """
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
@@ -1716,6 +1728,8 @@ def when(condition: Column, value: Any) -> Column:
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
 
+    Examples
+    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
@@ -2505,19 +2519,25 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
 
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
+    Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
+    to a timestamp.
+
     .. versionadded:: 3.1.0
 
     Examples
     --------
     >>> from pyspark.sql.functions import timestamp_seconds
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
     +-------------------+
     |                 ts|
     +-------------------+
-    |2008-12-25 07:30:00|
+    |2008-12-25 15:30:00|
     +-------------------+
+    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
@@ -4687,8 +4707,8 @@ def _create_lambda(f: Callable) -> Callable:
     if not isinstance(result, Column):
         raise ValueError("f should return Column, got {}".format(type(result)))
 
-    jexpr = result._jc.expr()  # type: ignore[operator]
-    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])  # type: ignore[operator]
+    jexpr = result._jc.expr()
+    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])
 
     return expressions.LambdaFunction(jexpr, jargs, False)
 
@@ -5314,6 +5334,16 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         else _to_java_column(numBuckets)
     )
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    """
+    Unwrap UDT data type column into its underlying type.
+
+        .. versionadded:: 3.4.0
+
+    """
+    return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
 # ---------------------------- User Defined Function ----------------------------------

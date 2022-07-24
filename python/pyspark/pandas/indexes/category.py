@@ -705,6 +705,10 @@ class CategoricalIndex(Index):
         """
         return super().map(mapper)
 
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)
+
 
 def _test() -> None:
     import os

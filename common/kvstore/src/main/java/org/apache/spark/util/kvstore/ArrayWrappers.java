@@ -200,7 +200,7 @@ class ArrayWrappers {
     public int compareTo(ComparableObjectArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        int diff = ((Comparable<Object>) array[i]).compareTo((Comparable<Object>) other.array[i]);
+        int diff = ((Comparable<Object>) array[i]).compareTo(other.array[i]);
         if (diff != 0) {
           return diff;
         }

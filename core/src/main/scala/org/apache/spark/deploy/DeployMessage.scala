@@ -24,7 +24,7 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.util.Utils
 
@@ -166,6 +166,7 @@ private[deploy] object DeployMessages {
       masterUrl: String,
       appId: String,
       execId: Int,
+      rpId: Int,
       appDesc: ApplicationDescription,
       cores: Int,
       memory: Int,
@@ -196,7 +197,7 @@ private[deploy] object DeployMessages {
 
   case class MasterChangeAcknowledged(appId: String)
 
-  case class RequestExecutors(appId: String, requestedTotal: Int)
+  case class RequestExecutors(appId: String, resourceProfileToTotalExecs: Map[ResourceProfile, Int])
 
   case class KillExecutors(appId: String, executorIds: Seq[String])
 

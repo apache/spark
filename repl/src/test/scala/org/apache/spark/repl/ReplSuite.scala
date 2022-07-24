@@ -22,14 +22,13 @@ import java.nio.file.Files
 
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Logger, LoggerContext}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
+class ReplSuite extends SparkFunSuite {
 
   private var originalClassLoader: ClassLoader = null
 
@@ -285,7 +284,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
         |appender.console.target = SYSTEM_ERR
         |appender.console.follow = true
         |appender.console.layout.type = PatternLayout
-        |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
         |
         |# Set the log level for this class to ERROR same as the default setting.
         |logger.repl.name = org.apache.spark.repl.Main

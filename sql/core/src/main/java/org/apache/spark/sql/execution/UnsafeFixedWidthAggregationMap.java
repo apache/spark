@@ -25,7 +25,7 @@ import org.apache.spark.internal.config.package$;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
@@ -68,12 +68,7 @@ public final class UnsafeFixedWidthAggregationMap {
    *         schema, false otherwise.
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
-    for (StructField field: schema.fields()) {
-      if (!UnsafeRow.isMutable(field.dataType())) {
-        return false;
-      }
-    }
-    return true;
+    return Aggregate$.MODULE$.isAggregateBufferMutable(schema);
   }
 
   /**
@@ -226,10 +221,10 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Gets the average bucket list iterations per lookup in the underlying `BytesToBytesMap`.
+   * Gets the average number of hash probes per key lookup in the underlying `BytesToBytesMap`.
    */
-  public double getAvgHashProbeBucketListIterations() {
-    return map.getAvgHashProbeBucketListIterations();
+  public double getAvgHashProbesPerKey() {
+    return map.getAvgHashProbesPerKey();
   }
 
   /**

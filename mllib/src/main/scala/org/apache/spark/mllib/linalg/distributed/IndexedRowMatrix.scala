@@ -133,11 +133,11 @@ class IndexedRowMatrix @Since("1.0.0") (
       val rowInBlock = ir.index % rowsPerBlock
 
       ir.vector match {
-        case SparseVector(size, indices, values) =>
+        case SparseVector(_, indices, values) =>
           indices.zip(values).map { case (index, value) =>
             val blockColumn = index / colsPerBlock
             val columnInBlock = index % colsPerBlock
-            ((blockRow.toInt, blockColumn.toInt), (rowInBlock.toInt, Array((value, columnInBlock))))
+            ((blockRow.toInt, blockColumn), (rowInBlock.toInt, Array((value, columnInBlock))))
           }
         case DenseVector(values) =>
           values.grouped(colsPerBlock)

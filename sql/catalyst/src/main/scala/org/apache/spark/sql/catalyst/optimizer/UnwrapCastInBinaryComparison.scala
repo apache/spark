@@ -358,8 +358,18 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
       toType.isInstanceOf[NumericType] &&
-      ((fromExp.dataType.isInstanceOf[NumericType] && Cast.canUpCast(fromExp.dataType, toType)) ||
-        fromExp.dataType.isInstanceOf[BooleanType])
+      canUnwrapCast(fromExp.dataType, toType)
+  }
+
+  private def canUnwrapCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (BooleanType, _) => true
+    // SPARK-39476: It's not safe to unwrap cast from Integer to Float or from Long to Float/Double,
+    // since the length of Integer/Long may exceed the significant digits of Float/Double.
+    case (IntegerType, FloatType) => false
+    case (LongType, FloatType) => false
+    case (LongType, DoubleType) => false
+    case _ if from.isInstanceOf[NumericType] => Cast.canUpCast(from, to)
+    case _ => false
   }
 
   private[optimizer] def getRange(dt: DataType): Option[(Any, Any)] = dt match {

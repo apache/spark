@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -46,7 +46,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     (implicit inputToExpression: A => Expression): Unit = {
     checkEvaluation(mkExpr(input), expected) // check literal input
 
-    val regex = 'a.string.at(0)
+    val regex = $"a".string.at(0)
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
   }
 
@@ -281,7 +281,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithoutCodegen("abbbbc" rlike "**")
     }
     intercept[java.util.regex.PatternSyntaxException] {
-      val regex = 'a.string.at(0)
+      val regex = $"a".string.at(0)
       evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
     }
   }
@@ -293,10 +293,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row4 = create_row(null, "(\\d+)", "###")
     val row5 = create_row("100-200", null, "###")
     val row6 = create_row("100-200", "(-)", null)
+    val row7 = create_row("", "^$", "<empty string>")
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.string.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".string.at(2)
 
     val expr = RegExpReplace(s, p, r)
     checkEvaluation(expr, "num-num", row1)
@@ -305,6 +306,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, null, row4)
     checkEvaluation(expr, null, row5)
     checkEvaluation(expr, null, row6)
+    checkEvaluation(expr, "<empty string>", row7)
     // test position
     val exprWithPos = RegExpReplace(s, p, r, 4)
     checkEvaluation(exprWithPos, "100-num", row1)
@@ -313,6 +315,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(exprWithPos, null, row4)
     checkEvaluation(exprWithPos, null, row5)
     checkEvaluation(exprWithPos, null, row6)
+    checkEvaluation(exprWithPos, "", row7)
     val exprWithLargePos = RegExpReplace(s, p, r, 7)
     checkEvaluation(exprWithLargePos, "100-20num", row1)
     checkEvaluation(exprWithLargePos, "100-20###", row2)
@@ -346,9 +349,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row6 = create_row("100-200", null, 1)
     val row7 = create_row("100-200", "([a-z])", null)
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.int.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
 
     val expr = RegExpExtract(s, p, r)
     checkEvaluation(expr, "100", row1)
@@ -398,9 +401,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row7 = create_row("100-200,300-400,500-600", null, 1)
     val row8 = create_row("100-200,300-400,500-600", "([a-z])", null)
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.int.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
 
     val expr = RegExpExtractAll(s, p, r)
     checkEvaluation(expr, Seq("100-200", "300-400", "500-600"), row1)
@@ -439,8 +442,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPLIT") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".string.at(1)
     val row1 = create_row("aa2bb3cc", "[1-9]+")
     val row2 = create_row(null, "[1-9]+")
     val row3 = create_row("aa2bb3cc", null)
@@ -479,5 +482,38 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.create("foo", StringType)
         .likeAll("%foo%", Literal.create(null, StringType)), null)
     }
+  }
+
+  test("RegExpInStr") {
+    val expr = new RegExpInStr($"s".string.at(0), $"p".string.at(1))
+    checkEvaluation(expr, 1, create_row("100-200", "(\\d+)-(\\d+)"))
+    checkEvaluation(expr, 1, create_row("100-200", "(\\d+).*"))
+    // will not match anything, empty string get
+    checkEvaluation(expr, 0, create_row("100-200", "([a-z])"))
+    checkEvaluation(expr, null, create_row(null, "([a-z])"))
+    checkEvaluation(expr, null, create_row("100-200", null))
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      new RegExpInStr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-39758: invalid regexp pattern") {
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
+    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtract(s, p, r),
+      create_row("1a 2b 14m", "(?l)", 0),
+      s"$prefix `regexp_extract` is invalid: (?l)")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpExtractAll(s, p, r),
+      create_row("abc", "] [", 0),
+      s"$prefix `regexp_extract_all` is invalid: ] [")
+    checkExceptionInExpression[SparkRuntimeException](
+      RegExpInStr(s, p, r),
+      create_row("abc", ", (", 0),
+      s"$prefix `regexp_instr` is invalid: , (")
   }
 }

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -160,7 +159,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
+    throw new IllegalStateException("Alias.doGenCode should not be called.")
   }
 
   override def dataType: DataType = child.dataType
@@ -168,11 +167,8 @@ case class Alias(child: Expression, name: String)(
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
       child match {
-        case named: NamedExpression =>
-          val builder = new MetadataBuilder().withMetadata(named.metadata)
-          nonInheritableMetadataKeys.foreach(builder.remove)
-          builder.build()
-
+        case named: NamedExpression => removeNonInheritableMetadata(named.metadata)
+        case structField: GetStructField => removeNonInheritableMetadata(structField.metadata)
         case _ => Metadata.empty
       }
     }
@@ -196,7 +192,7 @@ case class Alias(child: Expression, name: String)(
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
     } else {
-      UnresolvedAttribute(name)
+      UnresolvedAttribute.quoted(name)
     }
   }
 
@@ -205,6 +201,12 @@ case class Alias(child: Expression, name: String)(
     s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
   } else {
     ""
+  }
+
+  private def removeNonInheritableMetadata(metadata: Metadata): Metadata = {
+    val builder = new MetadataBuilder().withMetadata(metadata)
+    nonInheritableMetadataKeys.foreach(builder.remove)
+    builder.build()
   }
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
@@ -475,4 +477,19 @@ object FileSourceMetadataAttribute {
           && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
       case _ => None
     }
+
+  /**
+   * Cleanup the internal metadata information of an attribute if it is
+   * a [[FileSourceMetadataAttribute]], it will remove both [[METADATA_COL_ATTR_KEY]] and
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]] from the attribute [[Metadata]]
+   */
+  def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute = attr match {
+    case FileSourceMetadataAttribute(attr) => attr.withMetadata(
+      new MetadataBuilder().withMetadata(attr.metadata)
+        .remove(METADATA_COL_ATTR_KEY)
+        .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+        .build()
+    )
+    case attr => attr
+  }
 }

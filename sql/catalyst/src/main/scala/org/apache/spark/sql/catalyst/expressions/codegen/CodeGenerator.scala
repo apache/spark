@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.ByteArrayInputStream
-import java.util.{Map => JavaMap}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -28,8 +27,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
+import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
+import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -1195,10 +1194,13 @@ class CodegenContext extends Logging {
         }
         (localSubExprEliminationExprs, exprCodesNeedEvaluate)
       } else {
+        val errMsg = "Failed to split subexpression code into small functions because " +
+          "the parameter length of at least one split function went over the JVM limit: " +
+          MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
+          throw new IllegalStateException(errMsg)
         } else {
-          logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
+          logInfo(errMsg)
           (localSubExprEliminationExprsForNonSplit, Seq.empty)
         }
       }
@@ -1521,14 +1523,7 @@ object CodeGenerator extends Logging {
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
-    val classes = {
-      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
-      resultField.setAccessible(true)
-      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
-      val classesField = loader.getClass.getDeclaredField("classes")
-      classesField.setAccessible(true)
-      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
-    }
+    val classes = evaluator.getBytecodes.asScala
 
     // Then walk the classes to get at the method bytecode.
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
@@ -1822,12 +1817,17 @@ object CodeGenerator extends Logging {
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
   def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
-    if (dataType.isInstanceOf[StructType]) {
+    val sqlDataType = dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case _ => dataType
+    }
+
+    if (sqlDataType.isInstanceOf[StructType]) {
       // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
       // `ordinal` parameter.
       s"$vector.getStruct($rowId)"
     } else {
-      getValue(vector, dataType, rowId)
+      getValue(vector, sqlDataType, rowId)
     }
   }
 

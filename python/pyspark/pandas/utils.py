@@ -49,6 +49,7 @@ from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
+    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.base import IndexOpsMixin
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import InternalFrame
@@ -474,7 +475,7 @@ def default_session() -> SparkSession:
     # the behavior of pandas API on Spark follows pandas, not SQL.
     if is_testing():
         spark.conf.set("spark.sql.ansi.enabled", False)  # type: ignore[arg-type]
-    if spark.conf.get("spark.sql.ansi.enabled"):
+    if spark.conf.get("spark.sql.ansi.enabled") == "true":
         log_advice(
             "The config 'spark.sql.ansi.enabled' is set to True. "
             "This can cause unexpected behavior "
@@ -927,7 +928,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     >>> spark_column_equals(sdf1["x"] + 1, sdf2["x"] + 1)
     False
     """
-    return left._jc.equals(right._jc)  # type: ignore[operator]
+    return left._jc.equals(right._jc)
 
 
 def compare_null_first(
@@ -973,6 +974,24 @@ def log_advice(message: str) -> None:
     or the behavior of pandas.
     """
     warnings.warn(message, PandasAPIOnSparkAdviceWarning)
+
+
+def validate_index_loc(index: "Index", loc: int) -> None:
+    """
+    Raises IndexError if index is out of bounds
+    """
+    length = len(index)
+    if loc < 0:
+        loc = loc + length
+        if loc < 0:
+            raise IndexError(
+                "index {} is out of bounds for axis 0 with size {}".format((loc - length), length)
+            )
+    else:
+        if loc > length:
+            raise IndexError(
+                "index {} is out of bounds for axis 0 with size {}".format(loc, length)
+            )
 
 
 def _test() -> None:

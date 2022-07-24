@@ -33,7 +33,6 @@ public class JavaTfIdfSuite extends SharedSparkSession {
   public void tfIdf() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),
@@ -53,7 +52,6 @@ public class JavaTfIdfSuite extends SharedSparkSession {
   public void tfIdfMinimumDocumentFrequency() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),

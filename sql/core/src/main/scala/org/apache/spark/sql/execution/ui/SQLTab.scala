@@ -23,6 +23,8 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
 
+  override val name = "SQL / DataFrame"
+
   val parent = sparkUI
 
   attachPage(new AllExecutionsPage(this))

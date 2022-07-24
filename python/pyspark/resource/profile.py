@@ -121,7 +121,7 @@ class ResourceProfileBuilder:
         from pyspark.context import SparkContext
 
         # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-        _jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        _jvm = SparkContext._jvm
         if _jvm is not None:
             self._jvm = _jvm
             self._java_resource_profile_builder = (
@@ -138,17 +138,15 @@ class ResourceProfileBuilder:
     ) -> "ResourceProfileBuilder":
         if isinstance(resourceRequest, TaskResourceRequests):
             if self._java_resource_profile_builder is not None:
-                if (
-                    resourceRequest._java_task_resource_requests is not None
-                ):  # type: ignore[attr-defined]
+                if resourceRequest._java_task_resource_requests is not None:
                     self._java_resource_profile_builder.require(
                         resourceRequest._java_task_resource_requests
-                    )  # type: ignore[attr-defined]
+                    )
                 else:
                     taskReqs = TaskResourceRequests(self._jvm, resourceRequest.requests)
                     self._java_resource_profile_builder.require(
                         taskReqs._java_task_resource_requests
-                    )  # type: ignore[attr-defined]
+                    )
             else:
                 self._task_resource_requests.update(  # type: ignore[union-attr]
                     resourceRequest.requests
@@ -163,7 +161,7 @@ class ResourceProfileBuilder:
                         self._jvm, resourceRequest.requests  # type: ignore[attr-defined]
                     )
                     self._java_resource_profile_builder.require(
-                        execReqs._java_executor_resource_requests  # type: ignore[attr-defined]
+                        execReqs._java_executor_resource_requests
                     )
             else:
                 self._executor_resource_requests.update(  # type: ignore[union-attr]

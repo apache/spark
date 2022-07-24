@@ -92,6 +92,14 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     )
 
     checkCompatible(
+      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"b"))),
+      HashShuffleSpec(HashPartitioning(Seq($"a", $"d"), 10),
+        ClusteredDistribution(Seq($"a", $"c", $"d"))),
+      expected = true
+    )
+
+    checkCompatible(
       HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"a"), 10),
         ClusteredDistribution(Seq($"a", $"b", $"b"))),
       HashShuffleSpec(HashPartitioning(Seq($"a", $"c", $"a"), 10),

@@ -33,7 +33,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 /**
  * Test suite for [[RandomForestRegressor]].
  */
-class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
+class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import RandomForestRegressorSuite.compareAPIs
   import testImplicits._
@@ -56,6 +56,12 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
+
+  test("RandomForestRegressor validate input dataset") {
+    testInvalidRegressionLabels(new RandomForestRegressor().fit(_))
+    testInvalidWeights(new RandomForestRegressor().setWeightCol("weight").fit(_))
+    testInvalidVectors(new RandomForestRegressor().fit(_))
+  }
 
   def regressionTestWithContinuousFeatures(rf: RandomForestRegressor): Unit = {
     val categoricalFeaturesInfo = Map.empty[Int, Int]

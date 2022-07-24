@@ -56,11 +56,12 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 .initialPosition([initial position])
                 .checkpointAppName([Kinesis app name])
                 .checkpointInterval([checkpoint interval])
+                .metricsLevel([metricsLevel.DETAILED])
                 .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                 .build()
 
 	See the [API docs](api/scala/org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/connector/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
 
 	</div>
 	<div data-lang="java" markdown="1">
@@ -78,11 +79,12 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 .initialPosition([initial position])
                 .checkpointAppName([Kinesis app name])
                 .checkpointInterval([checkpoint interval])
+                .metricsLevel([metricsLevel.DETAILED])
                 .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                 .build();
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/connector/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -90,19 +92,19 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
             kinesisStream = KinesisUtils.createStream(
                 streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-                [region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
+                [region name], [initial position], [checkpoint interval], [metricsLevel.DETAILED], StorageLevel.MEMORY_AND_DISK_2)
 
 	See the [API docs](api/python/reference/pyspark.streaming.html#kinesis)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/connector/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
+
+	- CloudWatch metrics level and dimensions. See [the AWS documentation about monitoring KCL](https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html) for details. Default is MetricsLevel.DETAILED
 
 	</div>
 	</div>
 
-	You may also provide the following settings. These are currently only supported in Scala and Java.
+	You may also provide the following settings. This is currently only supported in Scala and Java.
 
 	- A "message handler function" that takes a Kinesis `Record` and returns a generic object `T`, in case you would like to use other data included in a `Record` such as partition key.
-
-	- CloudWatch metrics level and dimensions. See [the AWS documentation about monitoring KCL](https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html) for details.
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
@@ -246,8 +248,8 @@ To run the example,
 	</div>
 	<div data-lang="python" markdown="1">
 
-        ./bin/spark-submit --jars 'external/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
-            external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
+        ./bin/spark-submit --jars 'connector/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
+            connector/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
 
 	</div>

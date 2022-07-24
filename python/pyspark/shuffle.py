@@ -33,7 +33,7 @@ from pyspark.serializers import (
     CompressedSerializer,
     AutoBatchedSerializer,
 )
-from pyspark.util import fail_on_stopiteration  # type: ignore
+from pyspark.util import fail_on_stopiteration
 
 
 try:

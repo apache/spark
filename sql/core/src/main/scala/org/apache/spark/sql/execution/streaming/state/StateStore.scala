@@ -127,6 +127,10 @@ trait StateStore extends ReadStateStore {
   /**
    * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   *
+   * It is not required for implementations to ensure the iterator reflects all updates being
+   * performed after initialization of the iterator. Callers should perform all updates before
+   * calling this method if all updates should be visible in the returned iterator.
    */
   override def iterator(): Iterator[UnsafeRowPair]
 
@@ -511,7 +515,12 @@ object StateStore extends Logging {
           val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
           // regardless of configuration, we check compatibility to at least write schema file
           // if necessary
-          val ret = Try(checker.check(keySchema, valueSchema)).toEither.fold(Some(_), _ => None)
+          // if the format validation for value schema is disabled, we also disable the schema
+          // compatibility checker for value schema as well.
+          val ret = Try(
+            checker.check(keySchema, valueSchema,
+              ignoreValueSchema = !storeConf.formatValidationCheckValue)
+          ).toEither.fold(Some(_), _ => None)
           if (storeConf.stateSchemaCheckEnabled) {
             ret
           } else {

@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -144,8 +144,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
 
-    val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
-      AppStatusStore.CURRENT_VERSION, logDir.toString())
+    val metadata = FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
+      AppStatusStore.CURRENT_VERSION, logDir)
 
     try {
       open(dbPath, metadata, conf)
@@ -325,12 +325,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
-    listing.view(classOf[ApplicationInfoWrapper])
-      .index("endTime")
-      .reverse()
-      .iterator()
-      .asScala
-      .map(_.toApplicationInfo())
+    KVUtils.mapToSeq(listing.view(classOf[ApplicationInfoWrapper])
+      .index("endTime").reverse())(_.toApplicationInfo()).iterator
   }
 
   override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
@@ -414,7 +410,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       Map()
     }
-    Map("Event log directory" -> logDir.toString) ++ safeMode
+    Map("Event log directory" -> logDir) ++ safeMode
   }
 
   override def start(): Unit = {
@@ -476,8 +472,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
    * applications that haven't been updated since last time the logs were checked.
+   * Only a max of UPDATE_BATCHSIZE jobs are processed in each cycle, to prevent the process
+   * from running for too long which blocks updating newly appeared eventlog files.
    */
   private[history] def checkForLogs(): Unit = {
+    var count: Int = 0
     try {
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
@@ -498,6 +497,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
         .flatMap { entry => EventLogFileReader(fs, entry) }
+        .filter { reader =>
+          try {
+            reader.modificationTime
+            true
+          } catch {
+            case e: IllegalArgumentException =>
+              logInfo("Exception in getting modificationTime of "
+                + reader.rootPath.getName + ". " + e.toString)
+              false
+          }
+        }
+        .sortWith { case (entry1, entry2) =>
+          entry1.modificationTime > entry2.modificationTime
+        }
         .filter { reader =>
           try {
             val info = listing.read(classOf[LogInfo], reader.rootPath.toString())
@@ -555,10 +568,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
               try {
-                listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
-                  LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
-                  None, reader.completed))
-                reader.fileSizeForLastIndex > 0
+                if (count < conf.get(UPDATE_BATCHSIZE)) {
+                  listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
+                    LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                    None, reader.completed))
+                  count = count + 1
+                  reader.fileSizeForLastIndex > 0
+                } else {
+                  false
+                }
               } catch {
                 case _: FileNotFoundException => false
                 case NonFatal(e) =>
@@ -570,9 +588,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logWarning(s"Error while filtering log ${reader.rootPath}", e)
               false
           }
-        }
-        .sortWith { case (entry1, entry2) =>
-          entry1.modificationTime > entry2.modificationTime
         }
 
       if (updated.nonEmpty) {
@@ -592,11 +607,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
       val stale = listing.synchronized {
-        listing.view(classOf[LogInfo])
+        KVUtils.viewToSeq(listing.view(classOf[LogInfo])
           .index("lastProcessed")
-          .last(newLastScanTime - 1)
-          .asScala
-          .toList
+          .last(newLastScanTime - 1))
       }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
@@ -637,37 +650,38 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
     try {
-      val app = load(appId)
-      val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
+      var isStale = false
+      listing.synchronized {
+        val app = load(appId)
+        val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
 
-      assert(attempt.isEmpty || attempt.size == 1)
-      val isStale = attempt.headOption.exists { a =>
-        if (a.logPath != new Path(logPath).getName()) {
-          // If the log file name does not match, then probably the old log file was from an
-          // in progress application. Just return that the app should be left alone.
-          false
-        } else {
-          val maybeUI = synchronized {
-            activeUIs.remove(appId -> attemptId)
+        assert(attempt.isEmpty || attempt.size == 1)
+        isStale = attempt.headOption.exists { a =>
+          if (a.logPath != new Path(logPath).getName()) {
+            // If the log file name does not match, then probably the old log file was from an
+            // in progress application. Just return that the app should be left alone.
+            false
+          } else {
+            if (others.nonEmpty) {
+              val newAppInfo = new ApplicationInfoWrapper(app.info, others)
+              listing.write(newAppInfo)
+            } else {
+              listing.delete(classOf[ApplicationInfoWrapper], appId)
+            }
+            true
           }
-
-          maybeUI.foreach { ui =>
-            ui.invalidate()
-            ui.ui.store.close()
-          }
-
-          diskManager.foreach(_.release(appId, attemptId, delete = true))
-          true
         }
       }
 
       if (isStale) {
-        if (others.nonEmpty) {
-          val newAppInfo = new ApplicationInfoWrapper(app.info, others)
-          listing.write(newAppInfo)
-        } else {
-          listing.delete(classOf[ApplicationInfoWrapper], appId)
+        val maybeUI = synchronized {
+          activeUIs.remove(appId -> attemptId)
         }
+        maybeUI.foreach { ui =>
+          ui.invalidate()
+          ui.ui.store.close()
+        }
+        diskManager.foreach(_.release(appId, attemptId, delete = true))
       }
     } catch {
       case _: NoSuchElementException =>
@@ -732,6 +746,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // to handle permission-only changes with the same file sizes later.
         listing.synchronized {
           listing.delete(classOf[LogInfo], rootPath.toString)
+        }
+      case _: FileNotFoundException
+          if reader.rootPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS) =>
+        val finalFileName = reader.rootPath.getName.stripSuffix(EventLogFileWriter.IN_PROGRESS)
+        val finalFilePath = new Path(reader.rootPath.getParent, finalFileName)
+        if (fs.exists(finalFilePath)) {
+          // Do nothing, the application completed during processing, the final event log file
+          // will be processed by next around.
+        } else {
+          logWarning(s"In-progress event log file does not exist: ${reader.rootPath}, " +
+            s"neither does the final event log file: $finalFilePath.")
         }
       case e: Exception =>
         logError("Exception while merging application listings", e)
@@ -819,7 +844,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-        val source = Source.fromInputStream(in).getLines()
+        val source = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
         // Because skipping may leave the stream in the middle of a line, read the next line
         // before replaying.
@@ -957,12 +982,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
     val maxNum = conf.get(MAX_LOG_NUM)
 
-    val expired = listing.view(classOf[ApplicationInfoWrapper])
+    val expired = KVUtils.viewToSeq(listing.view(classOf[ApplicationInfoWrapper])
       .index("oldestAttempt")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .toList
+      .first(maxTime))
     expired.foreach { app =>
       // Applications may have multiple attempts, some of which may not need to be deleted yet.
       val (remaining, toDelete) = app.attempts.partition { attempt =>
@@ -972,13 +995,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     // Delete log files that don't have a valid application and exceed the configured max age.
-    val stale = listing.view(classOf[LogInfo])
+    val stale = KVUtils.viewToSeq(listing.view(classOf[LogInfo])
       .index("lastProcessed")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
-      .toList
+      .first(maxTime), Int.MaxValue) { l => l.logType == null || l.logType == LogType.EventLogs }
     stale.filterNot(isProcessing).foreach { log =>
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
@@ -989,14 +1009,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
-    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
+    val num = KVUtils.size(listing.view(classOf[LogInfo]).index("lastProcessed"))
     var count = num - maxNum
     if (count > 0) {
       logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
-      val oldAttempts = listing.view(classOf[ApplicationInfoWrapper])
-        .index("oldestAttempt")
-        .asScala
-      oldAttempts.foreach { app =>
+      KVUtils.foreach(listing.view(classOf[ApplicationInfoWrapper]).index("oldestAttempt")) { app =>
         if (count > 0) {
           // Applications may have multiple attempts, some of which may not be completed yet.
           val (toDelete, remaining) = app.attempts.partition(_.info.completed)
@@ -1080,13 +1097,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Delete driver log file entries that exceed the configured max age and
     // may have been deleted on filesystem externally.
-    val stale = listing.view(classOf[LogInfo])
+    val stale = KVUtils.viewToSeq(listing.view(classOf[LogInfo])
       .index("lastProcessed")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
-      .toList
+      .first(maxTime), Int.MaxValue) { l => l.logType != null && l.logType == LogType.DriverLogs }
     stale.filterNot(isProcessing).foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")
       listing.delete(classOf[LogInfo], log.logPath)

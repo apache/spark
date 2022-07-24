@@ -1249,18 +1249,12 @@ abstract class RDD[T: ClassTag](
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
       if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
-        // define a new partitioner that results in only 1 partition
-        val constantPartitioner = new Partitioner {
-          override def numPartitions: Int = 1
-
-          override def getPartition(key: Any): Int = 0
-        }
         // map the partially aggregated rdd into a key-value rdd
         // do the computation in the single executor with one partition
         // get the new RDD[U]
         partiallyAggregated = partiallyAggregated
           .map(v => (0.toByte, v))
-          .foldByKey(zeroValue, constantPartitioner)(cleanCombOp)
+          .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
           .values
       }
       val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
@@ -1746,7 +1740,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Removes an RDD's shuffles and it's non-persisted ancestors.
    * When running without a shuffle service, cleaning up shuffle files enables downscaling.
    * If you use the RDD after this call, you should checkpoint and materialize it first.
@@ -1755,7 +1748,6 @@ abstract class RDD[T: ClassTag](
    *   * Tuning the driver GC to be more aggressive, so the regular context cleaner is triggered
    *   * Setting an appropriate TTL for shuffle files to be auto cleaned
    */
-  @Experimental
   @DeveloperApi
   @Since("3.1.0")
   def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
@@ -1818,7 +1810,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   @Since("3.1.0")
-  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  def getResourceProfile(): ResourceProfile = resourceProfile.orNull
 
   // =======================================================================
   // Other internal methods and fields

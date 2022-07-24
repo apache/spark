@@ -105,6 +105,7 @@ private[mesos] class MesosSubmitRequestServlet(
     val superviseDriver = sparkProperties.get(config.DRIVER_SUPERVISE.key)
     val driverMemory = sparkProperties.get(config.DRIVER_MEMORY.key)
     val driverMemoryOverhead = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD.key)
+    val driverMemoryOverheadFactor = sparkProperties.get(config.DRIVER_MEMORY_OVERHEAD_FACTOR.key)
     val driverCores = sparkProperties.get(config.DRIVER_CORES.key)
     val name = request.sparkProperties.getOrElse("spark.app.name", mainClass)
 
@@ -121,8 +122,10 @@ private[mesos] class MesosSubmitRequestServlet(
       mainClass, appArgs, environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
+    val actualDriverMemoryFactor = driverMemoryOverheadFactor.map(_.toDouble).getOrElse(
+      MEMORY_OVERHEAD_FACTOR)
     val actualDriverMemoryOverhead = driverMemoryOverhead.map(_.toInt).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * actualDriverMemory).toInt, MEMORY_OVERHEAD_MIN))
+      math.max((actualDriverMemoryFactor * actualDriverMemory).toInt, MEMORY_OVERHEAD_MIN))
     val actualDriverCores = driverCores.map(_.toDouble).getOrElse(DEFAULT_CORES)
     val submitDate = new Date()
     val submissionId = newDriverId(submitDate)

@@ -232,7 +232,7 @@ private[ui] class SqlStatsPagedTable(
 
     def jobLinks(jobData: Seq[String]): Seq[Node] = {
       jobData.map { jobId =>
-        <a href={jobURL(request, jobId)}>[{jobId.toString}]</a>
+        <a href={jobURL(request, jobId)}>[{jobId}]</a>
       }
     }
 

@@ -184,7 +184,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
             val df = spark.read.format(format).load(path.getCanonicalPath)
             checkAnswer(df, inputData.toDF())
             assert(
-              df.queryExecution.executedPlan.find(_.isInstanceOf[FileSourceScanExec]).isDefined)
+              df.queryExecution.executedPlan.exists(_.isInstanceOf[FileSourceScanExec]))
           }
         } finally {
           spark.listenerManager.unregister(listener)

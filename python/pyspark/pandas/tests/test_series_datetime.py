@@ -264,8 +264,8 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         self.check_func(lambda x: x.dt.floor(freq="H"))
 
     def test_ceil(self):
-        self.check_func(lambda x: x.dt.floor(freq="min"))
-        self.check_func(lambda x: x.dt.floor(freq="H"))
+        self.check_func(lambda x: x.dt.ceil(freq="min"))
+        self.check_func(lambda x: x.dt.ceil(freq="H"))
 
     @unittest.skip("Unsupported locale setting")
     def test_month_name(self):

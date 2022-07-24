@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
@@ -97,7 +95,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       name: String,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): InMemoryTable = {
+      properties: java.util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
   }
 
@@ -112,7 +110,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
@@ -210,7 +208,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     verifyTable(t1, df)
 
     // Check that appends are by name
-    df.select('data, 'id).write.format(v2Format).mode("append").saveAsTable(t1)
+    df.select($"data", $"id").write.format(v2Format).mode("append").saveAsTable(t1)
     verifyTable(t1, df.union(df))
   }
 

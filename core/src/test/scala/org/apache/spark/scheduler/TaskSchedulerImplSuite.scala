@@ -28,12 +28,10 @@ import scala.language.reflectiveCalls
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
@@ -48,8 +46,8 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
-class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
-    with Logging with MockitoSugar with Eventually {
+class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
+  with MockitoSugar with Eventually {
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -2025,11 +2023,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor1", "host1", 1))
     val task1 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 0
-    }, Seq(TaskLocation("host0", "executor0")), new Properties, null)
+    }, 1, Seq(TaskLocation("host0", "executor0")), new Properties, null)
 
     val task2 = new ShuffleMapTask(1, 0, null, new Partition {
       override def index: Int = 1
-    }, Seq(TaskLocation("host1", "executor1")), new Properties, null)
+    }, 1, Seq(TaskLocation("host1", "executor1")), new Properties, null)
 
     val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0)
 

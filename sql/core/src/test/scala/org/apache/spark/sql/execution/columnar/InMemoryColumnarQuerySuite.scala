@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -152,7 +153,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("projection") {
-    val logicalPlan = testData.select('value, 'key).logicalPlan
+    val logicalPlan = testData.select($"value", $"key").logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
     val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
       MEMORY_ONLY, plan, None, logicalPlan)
@@ -562,5 +563,57 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
+    val plan = spark.range(1).queryExecution.executedPlan
+    val serializer = new TestCachedBatchSerializer(true, 1)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+
+    @volatile var isCachedColumnBuffersLoaded = false
+    @volatile var stopped = false
+
+    val th1 = new Thread {
+      override def run(): Unit = {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
+          cachedRDDBuilder.cachedColumnBuffers
+          cachedRDDBuilder.clearCache()
+        }
+      }
+    }
+
+    val th2 = new Thread {
+      override def run(): Unit = {
+        while (!isCachedColumnBuffersLoaded && !stopped) {
+          isCachedColumnBuffersLoaded = cachedRDDBuilder.isCachedColumnBuffersLoaded
+        }
+      }
+    }
+
+    val th3 = new Thread {
+      override def run(): Unit = {
+        Thread.sleep(3000L)
+        stopped = true
+      }
+    }
+
+    val exceptionCnt = new AtomicInteger
+    val exceptionHandler: Thread.UncaughtExceptionHandler = (_: Thread, cause: Throwable) => {
+        exceptionCnt.incrementAndGet
+        fail(cause)
+      }
+
+    th1.setUncaughtExceptionHandler(exceptionHandler)
+    th2.setUncaughtExceptionHandler(exceptionHandler)
+    th1.start()
+    th2.start()
+    th3.start()
+    th1.join()
+    th2.join()
+    th3.join()
+
+    cachedRDDBuilder.clearCache()
+
+    assert(exceptionCnt.get == 0)
   }
 }

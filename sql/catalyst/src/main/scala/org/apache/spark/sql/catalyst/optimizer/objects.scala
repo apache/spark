@@ -186,7 +186,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       serializer: NamedExpression,
       prunedDataType: DataType): NamedExpression = {
     val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
-      .toIterator
+      .iterator
 
     def transformer: PartialFunction[Expression, Expression] = {
       case m: ExternalMapToCatalyst =>
@@ -229,7 +229,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
         }
 
         // Builds new projection.
-        val projectionOverSchema = ProjectionOverSchema(prunedSchema)
+        val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
         val newProjects = p.projectList.map(_.transformDown {
           case projectionOverSchema(expr) => expr
         }).map { case expr: NamedExpression => expr }

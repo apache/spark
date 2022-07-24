@@ -211,6 +211,37 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     assert(model.getLink === "identity")
   }
 
+  test("GeneralizedLinearRegression validate input dataset") {
+    testInvalidRegressionLabels(new GeneralizedLinearRegression().fit(_))
+    testInvalidWeights(new GeneralizedLinearRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GeneralizedLinearRegression().fit(_))
+
+    // offsets contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, null, Vectors.dense(1.0, 2.0)),
+      (1.0, "1.0", Vectors.dense(1.0, 2.0))
+    )).toDF("label", "str_offset", "features")
+      .select(col("label"), col("str_offset").cast("double").as("offset"), col("features"))
+    val e1 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df1))
+    assert(e1.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, Double.NaN, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e2 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df2))
+    assert(e2.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains Infinity
+    val df3 = sc.parallelize(Seq(
+      (1.0, Double.PositiveInfinity, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e3 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df3))
+    assert(e3.getMessage.contains("Offsets MUST NOT be Infinity"))
+  }
+
   test("prediction on single instance") {
     val glr = new GeneralizedLinearRegression
     val model = glr.setFamily("gaussian").setLink("identity")

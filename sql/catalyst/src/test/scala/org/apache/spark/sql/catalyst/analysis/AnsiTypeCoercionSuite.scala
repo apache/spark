@@ -66,7 +66,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     val input = Literal("123")
     val castResult = AnsiTypeCoercion.implicitCast(input, to)
     assert(DataType.equalsIgnoreCaseAndNullability(
-      castResult.map(_.dataType).getOrElse(null), expected),
+      castResult.map(_.dataType).orNull, expected),
       s"Failed to cast String literal to $to")
   }
 
@@ -890,7 +890,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     val wp1 = widenSetOperationTypes(union.select(p1.output.head, $"p2.v"))
     assert(wp1.isInstanceOf[Project])
     // The attribute `p1.output.head` should be replaced in the root `Project`.
-    assert(wp1.expressions.forall(_.find(_ == p1.output.head).isEmpty))
+    assert(wp1.expressions.forall(!_.exists(_ == p1.output.head)))
     val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
     assert(wp2.isInstanceOf[Aggregate])
     assert(wp2.missingInput.isEmpty)

@@ -22,8 +22,8 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -35,9 +35,8 @@ object PushDownUtils extends PredicateHelper {
    *
    * @return pushed filter and post-scan filters.
    */
-  def pushFilters(
-      scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Either[Seq[sources.Filter], Seq[V2Filter]], Seq[Expression]) = {
+  def pushFilters(scanBuilder: ScanBuilder, filters: Seq[Expression])
+      : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -73,15 +72,15 @@ object PushDownUtils extends PredicateHelper {
         // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
         // pushed down. This map can be used to construct a catalyst filter expression from the
         // input filter, or a superset(partial push down filter) of the input filter.
-        val translatedFilterToExpr = mutable.HashMap.empty[V2Filter, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[V2Filter]
+        val translatedFilterToExpr = mutable.HashMap.empty[Predicate, Expression]
+        val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+              filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -92,14 +91,14 @@ object PushDownUtils extends PredicateHelper {
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
-          DataSourceV2Strategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+        val postScanFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
+          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
-        (Right(r.pushedFilters), (untranslatableExprs ++ postScanFilters).toSeq)
+        (Right(r.pushedPredicates), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (Left(f.pushedFilters), postScanFilters)
+        (Right(f.pushedFilters), postScanFilters)
       case _ => (Left(Nil), filters)
     }
   }
@@ -117,24 +116,48 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down LIMIT to the data source Scan
+   * Pushes down LIMIT to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Limit and do it again.
    */
-  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
-      case s: SupportsPushDownLimit =>
-        s.pushLimit(limit)
+      case s: SupportsPushDownLimit if s.pushLimit(limit) =>
+        (true, s.isPartiallyPushed)
+      case _ => (false, false)
+    }
+  }
+
+  /**
+   * Pushes down OFFSET to the data source Scan.
+   *
+   * @return the Boolean value represents whether to push down.
+   */
+  def pushOffset(scanBuilder: ScanBuilder, offset: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownOffset =>
+        s.pushOffset(offset)
       case _ => false
     }
   }
 
   /**
-   * Pushes down top N to the data source Scan
+   * Pushes down top N to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Sort and Limit and do it again.
    */
-  def pushTopN(scanBuilder: ScanBuilder, order: Array[SortOrder], limit: Int): Boolean = {
+  def pushTopN(
+      scanBuilder: ScanBuilder,
+      order: Array[SortOrder],
+      limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
-      case s: SupportsPushDownTopN =>
-        s.pushTopN(order, limit)
-      case _ => false
+      case s: SupportsPushDownTopN if s.pushTopN(order, limit) =>
+        (true, s.isPartiallyPushed)
+      case _ => (false, false)
     }
   }
 
@@ -177,7 +200,7 @@ object PushDownUtils extends PredicateHelper {
     }
   }
 
-  private def toOutputAttrs(
+  def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap

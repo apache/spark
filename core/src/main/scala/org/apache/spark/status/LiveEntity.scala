@@ -201,6 +201,7 @@ private class LiveTask(
       info.taskId,
       info.index,
       info.attemptNumber,
+      info.partitionId,
       info.launchTime,
       if (info.gettingResult) info.gettingResultTime else -1L,
       duration,

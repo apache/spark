@@ -25,7 +25,7 @@ import scala.util.Try
 import org.scalatest.Assertions._
 
 import org.apache.spark.TestUtils
-import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
+import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -306,7 +306,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   case class TestPythonUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
-      func = PythonFunction(
+      func = SimplePythonFunction(
         command = pythonFunc,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
@@ -352,7 +352,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   case class TestScalarPandasUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
-      func = PythonFunction(
+      func = SimplePythonFunction(
         command = pandasFunc,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
@@ -403,7 +403,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   case class TestGroupedAggPandasUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
-      func = PythonFunction(
+      func = SimplePythonFunction(
         command = pandasGroupedAggFunc,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,

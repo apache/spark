@@ -310,7 +310,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)
         }.getMessage
-        assert(errMsg.contains("no viable alternative at input"))
+        assert(errMsg.contains("Syntax error at or near"))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }

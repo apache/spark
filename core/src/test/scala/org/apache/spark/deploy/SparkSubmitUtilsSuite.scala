@@ -28,13 +28,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{DependencyUtils, Utils}
 
-class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class SparkSubmitUtilsSuite extends SparkFunSuite {
 
   private var tempIvyPath: String = _
 
@@ -303,5 +302,11 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency." +
         s" Resolved jars are: $jarPath")
     }
+  }
+
+  test("SPARK-39501: Resolve maven dependenicy in IPv6") {
+    assume(Utils.preferIPv6)
+    DependencyUtils.resolveMavenDependencies(
+      URI.create("ivy://org.apache.logging.log4j:log4j-api:2.17.2"))
   }
 }

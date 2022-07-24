@@ -979,7 +979,8 @@ abstract class ParquetPartitionDiscoverySuite
     withTempPath { dir =>
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
         val path = dir.getCanonicalPath
-        val df = spark.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        val df = spark.range(5).select($"id" as Symbol("a"), $"id" as Symbol("b"),
+          $"id" as Symbol("c")).coalesce(1)
         df.write.partitionBy("b", "c").parquet(path)
         checkAnswer(spark.read.parquet(path), df)
       }
@@ -1075,7 +1076,7 @@ abstract class ParquetPartitionDiscoverySuite
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
         "date_month", "date_hour", "date_t_hour", "data")
 
-      assert(input.schema.sameType(input.schema))
+      assert(data.schema.sameType(input.schema))
       checkAnswer(input, data)
     }
   }
@@ -1256,6 +1257,14 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     val schema = new StructType().add("p_int", "int").add("p_float", "float")
     val path = PartitioningUtils.getPathFragment(spec, schema)
     assert("p_int=10/p_float=1.0" === path)
+  }
+
+  test("SPARK-39417: Null partition value") {
+    // null partition value is replaced by DEFAULT_PARTITION_NAME before hitting getPathFragment.
+    val spec = Map("p_int"-> ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+    val schema = new StructType().add("p_int", "int")
+    val path = PartitioningUtils.getPathFragment(spec, schema)
+    assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
   }
 
   test("read partitioned table - partition key included in Parquet file") {

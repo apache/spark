@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -335,7 +336,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }.getMessage
 
         assert(
-          message.contains("Table default.ctasJsonTable already exists."),
+          message.contains(s"Table $SESSION_CATALOG_NAME.default.ctasJsonTable already exists."),
           "We should complain that ctasJsonTable already exists")
 
         // The following statement should be fine if it has IF NOT EXISTS.
@@ -524,8 +525,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           assert(
             intercept[AnalysisException] {
               sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
-            }.getMessage.contains("Table createdJsonTable already exists."),
-            "We should complain that createdJsonTable already exists")
+            }.getMessage.contains(
+              s"Table $SESSION_CATALOG_NAME.default.createdJsonTable already exists."))
         }
 
         // Data should not be deleted.
@@ -907,8 +908,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains(
-        "The format of the existing table default.appendOrcToParquet is `Parquet"))
+      assert(e.getMessage.contains("The format of the existing table " +
+        s"$SESSION_CATALOG_NAME.default.appendOrcToParquet is `Parquet"))
     }
 
     withTable("appendParquetToJson") {
@@ -918,8 +919,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .saveAsTable("appendParquetToJson")
       }.getMessage
 
-      assert(msg.contains(
-        "The format of the existing table default.appendParquetToJson is `Json"))
+      assert(msg.contains("The format of the existing table " +
+        s"$SESSION_CATALOG_NAME.default.appendParquetToJson is `Json"))
     }
 
     withTable("appendTextToJson") {
@@ -929,7 +930,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .saveAsTable("appendTextToJson")
       }.getMessage
       // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
-      assert(msg.contains("The format of the existing table default.appendTextToJson is `Json"))
+      assert(msg.contains("The format of the existing table " +
+        s"$SESSION_CATALOG_NAME.default.appendTextToJson is `Json"))
     }
   }
 
@@ -1243,7 +1245,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       var e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains(s"Cannot overwrite table default.$tableName that is also being read from"))
+      assert(e.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
+        "that is also being read from"))
 
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
@@ -1343,7 +1346,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
-        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+        assert(tableMeta.identifier ==
+          TableIdentifier("t", Some("default"), Some(SESSION_CATALOG_NAME)))
         assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
       }
     } finally {
@@ -1429,16 +1433,17 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             |  c10 ARRAY<INTERVAL YEAR>,
             |  c11 MAP<INT, STRING>,
             |  c12 MAP<INT, INTERVAL DAY>,
-            |  c13 MAP<INTERVAL MINUTE TO SECOND, STRING>
+            |  c13 MAP<INTERVAL MINUTE TO SECOND, STRING>,
+            |  c14 TIMESTAMP_NTZ
             |) USING Parquet""".stripMargin)
       }
       val expectedMsg = "Hive incompatible types found: interval day to minute, " +
         "interval year to month, interval hour, interval month, " +
         "struct<a:int,b:interval hour to second>, " +
         "array<interval year>, map<int,interval day>, " +
-        "map<interval minute to second,string>. " +
-        "Persisting data source table `default`.`t` into Hive metastore in " +
-        "Spark SQL specific format, which is NOT compatible with Hive."
+        "map<interval minute to second,string>, timestamp_ntz. " +
+        s"Persisting data source table `$SESSION_CATALOG_NAME`.`default`.`t` into Hive " +
+        "metastore in Spark SQL specific format, which is NOT compatible with Hive."
       val actualMessages = logAppender.loggingEvents
         .map(_.getMessage.getFormattedMessage)
         .filter(_.contains("incompatible"))
@@ -1467,7 +1472,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           StructField("c10", ArrayType(YearMonthIntervalType(YEAR))),
           StructField("c11", MapType(IntegerType, StringType)),
           StructField("c12", MapType(IntegerType, DayTimeIntervalType(DAY))),
-          StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)))))
+          StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)),
+          StructField("c14", TimestampNTZType))))
     }
   }
 
