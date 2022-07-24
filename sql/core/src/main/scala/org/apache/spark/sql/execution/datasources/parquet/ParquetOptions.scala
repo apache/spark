@@ -83,6 +83,18 @@ class ParquetOptions(
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+  /**
+   * The compression level for zstd.
+   */
+  def zstdLevel: String = parameters
+    .get(ZSTD_LEVEL)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_COMPRESSION_ZSTD_LEVEL).toString)
+  /**
+   * The compression workers for zstd.
+   */
+  def zstdWorkers: String = parameters
+    .get(ZSTD_WORKERS)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_COMPRESSION_ZSTD_WORKERS).toString)
 }
 
 
@@ -115,4 +127,13 @@ object ParquetOptions {
   // the SQL config `spark.sql.parquet.int96RebaseModeInRead`.
   // The valid option values are: `EXCEPTION`, `LEGACY` or `CORRECTED`.
   val INT96_REBASE_MODE = "int96RebaseMode"
+
+  // The option controls the compression level for zstd. The valid range is 1~22.
+  // In higher compression level, the higher compression ratio can be achieved,
+  // but the writing time will be longer.
+  val ZSTD_LEVEL = "zstdLevel"
+
+  // The option controls the compression workers for zstd.
+  // More workers improve speed, but also increase memory usage.
+  val ZSTD_WORKERS = "zstdWorkers"
 }

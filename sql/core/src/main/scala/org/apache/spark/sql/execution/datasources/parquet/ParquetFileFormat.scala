@@ -34,6 +34,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GRO
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
+import org.apache.parquet.hadoop.codec.ZstandardCodec
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.TaskContext
@@ -125,6 +126,15 @@ class ParquetFileFormat
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
+
+    // Sets Zstd level and Zstd workers, only effect when compression codec is `zstd`
+    conf.set(
+      ZstandardCodec.PARQUET_COMPRESS_ZSTD_LEVEL,
+      parquetOptions.zstdLevel)
+
+    conf.set(
+      ZstandardCodec.PARQUET_COMPRESS_ZSTD_WORKERS,
+      parquetOptions.zstdWorkers)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null

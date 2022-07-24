@@ -922,6 +922,22 @@ object SQLConf {
     .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
     .createWithDefault("snappy")
 
+  val PARQUET_COMPRESSION_ZSTD_LEVEL = buildConf("spark.sql.parquet.zstd.level")
+    .doc("Sets the zstd level when writing Parquet files and compression codec is `zstd`. " +
+      "The valid range is 1~22. Generally the higher compression level, the higher compression " +
+      "ratio can be achieved, but the writing time will be longer.")
+    .version("3.4.0")
+    .intConf
+    .createWithDefault(3)
+
+  val PARQUET_COMPRESSION_ZSTD_WORKERS = buildConf("spark.sql.parquet.zstd.workers")
+    .doc("Sets the zstd workers when writing Parquet files and compression codec is `zstd`. " +
+      "The number of threads will be spawned to compress in parallel. More workers improve " +
+      "speed, but also increase memory usage. When it is 0, it works as single-threaded mode.")
+    .version("3.4.0")
+    .intConf
+    .createWithDefault(0)
+
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
     .version("1.2.0")

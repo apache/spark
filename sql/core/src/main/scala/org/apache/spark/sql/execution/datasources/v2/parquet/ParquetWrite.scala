@@ -20,6 +20,7 @@ import org.apache.hadoop.mapreduce.{Job, OutputCommitter, TaskAttemptContext}
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
+import org.apache.parquet.hadoop.codec.ZstandardCodec
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.internal.Logging
@@ -87,6 +88,15 @@ case class ParquetWrite(
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
+
+    // Sets Zstd level and Zstd workers, only effect when compression codec is `zstd`
+    conf.set(
+      ZstandardCodec.PARQUET_COMPRESS_ZSTD_LEVEL,
+      parquetOptions.zstdLevel)
+
+    conf.set(
+      ZstandardCodec.PARQUET_COMPRESS_ZSTD_WORKERS,
+      parquetOptions.zstdWorkers)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null

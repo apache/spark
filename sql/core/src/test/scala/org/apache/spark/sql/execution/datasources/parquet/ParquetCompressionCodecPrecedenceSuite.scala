@@ -123,4 +123,24 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
       assert(exception.getMessage.contains("Codec [aa] is not available"))
     }
   }
+
+  test("[SPARK-39743] Test `spark.sql.parquet.zstd.level` config") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION_ZSTD_LEVEL.key -> "10") {
+      val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
+      assert(option.zstdLevel == "10")
+      val parameters = Map("zstdLevel" -> "20")
+      val optionWithPar = new ParquetOptions(parameters, spark.sessionState.conf)
+      assert(option.zstdLevel == "20")
+    }
+  }
+
+  test("[SPARK-39743] Test `spark.sql.parquet.zstd.workers` config") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION_ZSTD_WORKERS.key -> "10") {
+      val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
+      assert(option.zstdWorkers == "10")
+      val parameters = Map("zstdWorkers" -> "20")
+      val optionWithPar = new ParquetOptions(parameters, spark.sessionState.conf)
+      assert(option.zstdWorkers == "20")
+    }
+  }
 }
