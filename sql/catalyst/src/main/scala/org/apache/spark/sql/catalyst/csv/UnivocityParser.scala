@@ -234,19 +234,17 @@ class UnivocityParser(
           timestampFormatter.parse(datum)
         } catch {
           case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility if enabled.
-            if (!enableParsingFallbackForDateType) {
-              throw e
-            }
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse {
-              // There may be date type entries in timestamp column due to schema inference
-              if (options.inferDate) {
-                daysToMicros(dateFormatter.parse(datum), options.zoneId)
-              } else {
-                throw(e)
+            // There may be date type entries in timestamp column due to schema inference
+            if (options.inferDate) {
+              daysToMicros(dateFormatter.parse(datum), options.zoneId)
+            } else {
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility if enabled.
+              if (!enableParsingFallbackForDateType) {
+                throw e
               }
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
             }
         }
       }
