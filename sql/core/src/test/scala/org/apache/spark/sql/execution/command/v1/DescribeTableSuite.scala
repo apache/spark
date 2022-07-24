@@ -92,4 +92,36 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Partition Provider", "Catalog", "")))
     }
   }
+
+  test("describe a non-existent column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
+        |$defaultUsing""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"DESC $tbl key1").collect()
+      }.getMessage
+      assert(errMsg === "Column key1 does not exist")
+    }
+  }
+
+  test("describe a column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
+        |$defaultUsing""".stripMargin)
+      val descriptionDf = sql(s"DESC $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment")))
+    }
+  }
 }

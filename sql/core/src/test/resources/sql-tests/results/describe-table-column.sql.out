@@ -8,16 +8,6 @@ struct<>
 
 
 -- !query
-DESC desc_col_temp_view key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-
-
--- !query
 DESC EXTENDED desc_col_temp_view key
 -- !query schema
 struct<info_name:string,info_value:string>
@@ -66,15 +56,6 @@ distinct_count	NULL
 avg_col_len	NULL
 max_col_len	NULL
 histogram	NULL
-
-
--- !query
-DESC desc_col_temp_view key1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-Column key1 does not exist
 
 
 -- !query
