@@ -8,23 +8,6 @@ struct<>
 
 
 -- !query
-DESC EXTENDED desc_col_temp_view key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	NULL
-max	NULL
-num_nulls	NULL
-distinct_count	NULL
-avg_col_len	NULL
-max_col_len	NULL
-histogram	NULL
-
-
--- !query
 DESC FORMATTED desc_col_temp_view key
 -- !query schema
 struct<info_name:string,info_value:string>
@@ -91,23 +74,6 @@ struct<info_name:string,info_value:string>
 col_name	key
 data_type	int
 comment	column_comment
-
-
--- !query
-DESC EXTENDED desc_col_table key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	NULL
-max	NULL
-num_nulls	0
-distinct_count	0
-avg_col_len	4
-max_col_len	4
-histogram	NULL
 
 
 -- !query

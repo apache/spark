@@ -1,8 +1,6 @@
 -- Test temp table
 CREATE TEMPORARY VIEW desc_col_temp_view (key int COMMENT 'column_comment', col struct<x:int, y:string>) USING PARQUET;
 
-DESC EXTENDED desc_col_temp_view key;
-
 DESC FORMATTED desc_col_temp_view key;
 
 -- Describe a column with qualified name
@@ -17,8 +15,6 @@ CREATE TABLE desc_col_table (key int COMMENT 'column_comment') USING PARQUET;
 ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key;
 
 DESC desc_col_table key;
-
-DESC EXTENDED desc_col_table key;
 
 DESC FORMATTED desc_col_table key;
 
