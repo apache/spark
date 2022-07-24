@@ -242,7 +242,9 @@ class SparkSubmitOptionParser {
    * @param arg List of remaining arguments.
    */
   protected void handleDuplicateArgs(String arg) {
-    throw new IllegalArgumentException(String.format("Argument '%s' can be only specified once", arg));
+    throw new IllegalArgumentException(
+            String.format("Argument '%s' can be only specified once", arg)
+    );
   }
 
   private String findCliOption(String name, String[][] available) {
