@@ -2219,9 +2219,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                   agg.prettyName, "IGNORE NULLS")
             }
-            AggregateExpression(aggFunc, Complete, u.isDistinct, u.filter)
+            aggFunc.toAggregateExpression(u.isDistinct, u.filter)
           } else {
-            AggregateExpression(agg, Complete, u.isDistinct, u.filter)
+            agg.toAggregateExpression(u.isDistinct, u.filter)
           }
         // This function is not an aggregate function, just return the resolved one.
         case other if u.isDistinct =>
@@ -2332,7 +2332,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           aggFunc.name(), "IGNORE NULLS")
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
-      AggregateExpression(aggregator, Complete, u.isDistinct, u.filter)
+      aggregator.toAggregateExpression(u.isDistinct, u.filter)
     }
 
     /**

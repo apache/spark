@@ -99,7 +99,8 @@ jobs:
               \"docker-integration-tests\": \"$docker\",
               \"scala-213\": \"true\",
               \"java-11-17\": \"true\",
-              \"lint\" : \"true\"
+              \"lint\" : \"true\",
+              \"k8s-integration-tests\" : \"true\",
             }"
           echo $precondition # For debugging
           # GitHub Actions set-output doesn't take newlines
@@ -869,3 +870,73 @@ jobs:
       with:
         name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
+
+  k8s-integration-tests:
+    needs: precondition
+    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    name: Run Spark on Kubernetes Integration test
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v2
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/coursier
+          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            k8s-integration-coursier-
+      - name: Install Java ${{ inputs.java }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ inputs.java }}
+      - name: start minikube
+        run: |
+          # See more in "Installation" https://minikube.sigs.k8s.io/docs/start/
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install minikube-linux-amd64 /usr/local/bin/minikube
+          # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
+          minikube start --cpus 2 --memory 6144
+      - name: Print K8S pods and nodes info
+        run: |
+          kubectl get pods -A
+          kubectl describe node
+      - name: Run Spark on K8S integration test (With driver cpu 0.5, executor cpu 0.2 limited)
+        run: |
+          # Prepare PV test
+          PVC_TMP_DIR=$(mktemp -d)
+          export PVC_TESTS_HOST_PATH=$PVC_TMP_DIR
+          export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
+          minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
+          kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
+          eval $(minikube docker-env)
+          # - Exclude Volcano test (-Pvolcano), batch jobs need more CPU resource
+          build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests -Dspark.kubernetes.test.driverRequestCores=0.5 -Dspark.kubernetes.test.executorRequestCores=0.2 "kubernetes-integration-tests/test"
+      - name: Upload Spark on K8S integration tests log files
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: spark-on-kubernetes-it-log
+          path: "**/target/integration-tests.log"
