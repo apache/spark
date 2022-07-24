@@ -200,6 +200,7 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       this.appId = newAppResponse.getApplicationId()
+      logInfo(s"Got application $appId from  ResourceManager")
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
