@@ -73,6 +73,8 @@ private[sql] object Dataset {
   val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
+    // FIXME: DO-NOT-MERGE, intentional comment to trigger module test runs
+
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
