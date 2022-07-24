@@ -646,7 +646,7 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
