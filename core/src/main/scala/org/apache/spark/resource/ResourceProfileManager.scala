@@ -72,7 +72,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       isNotDefaultProfile && (isYarn || isK8s || isStandalone) && !dynamicEnabled
 
     if (resourceProfileForTaskOnly) {
-      if (!isStandalone || (isNotDefaultProfile && rp.executorResources.nonEmpty)) {
+      if ((notRunningUnitTests || testExceptionThrown) &&
+        (!isStandalone || (isNotDefaultProfile && rp.executorResources.nonEmpty))) {
         throw new SparkException("ResourceProfiles for task only are supported for Standalone " +
           "cluster with dynamic allocation disabled and executor resources should not be " +
           "specified.")

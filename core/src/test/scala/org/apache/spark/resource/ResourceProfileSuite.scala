@@ -190,6 +190,28 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(immrprof.isCoresLimitKnown == true)
   }
 
+  test("tasks and limit resource for resource profile for task only") {
+    val sparkConf = new SparkConf().setMaster("spark://testing")
+      .set(RESOURCE_PROFILE_FOR_TASK_ONLY, true)
+      .set(EXECUTOR_CORES, 2)
+      .set("spark.executor.resource.gpu.amount", "2")
+      .set("spark.executor.resource.gpu.discoveryScript", "myscript")
+    ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+
+    val rpBuilder = new ResourceProfileBuilder()
+    val rp1 = rpBuilder.require(new TaskResourceRequests().resource("gpu", 1)).build()
+    assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
+    assert(rp1.maxTasksPerExecutor(sparkConf) == 2)
+    assert(rp1.isCoresLimitKnown)
+    assert(rp1.isForTaskOnly)
+
+    rpBuilder.clearTaskResourceRequests()
+    val rp2 = rpBuilder.require(new TaskResourceRequests().resource("gpu", 2)).build()
+    assert(rp2.limitingResource(sparkConf) == "gpu")
+    assert(rp2.maxTasksPerExecutor(sparkConf) == 1)
+    assert(rp2.isCoresLimitKnown)
+    assert(rp2.isForTaskOnly)
+  }
 
   test("Create ResourceProfile") {
     val rprof = new ResourceProfileBuilder()

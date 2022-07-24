@@ -445,7 +445,12 @@ private[spark] object ResourceUtils extends Logging {
       }
     }
     val taskReq = ResourceProfile.getCustomTaskResources(rp)
-    val execReq = ResourceProfile.getCustomExecutorResources(rp)
+    val execReq = if (rp.isForTaskOnly) {
+      ResourceProfile.getCustomExecutorResources(
+        ResourceProfile.getOrCreateDefaultProfile(sparkConf))
+    } else {
+      ResourceProfile.getCustomExecutorResources(rp)
+    }
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {
