@@ -377,9 +377,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     def checkDate(dataType: DataType): Unit = {
       val timestampsOptions =
         new CSVOptions(Map("inferDate" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm",
-          "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy",
-          // Required for date string to be parsed as timestamp since it misses the time component
-          "enableDateTimeParsingFallback" -> "true"),
+          "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
           false, DateTimeUtils.getZoneId("-08:00").toString)
       // Use CSVOption ZoneId="-08:00" (PST) to test that Dates in TimestampNTZ column are always
       // converted to their equivalent UTC timestamp

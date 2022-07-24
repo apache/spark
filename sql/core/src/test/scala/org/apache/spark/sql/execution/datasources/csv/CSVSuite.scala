@@ -2797,7 +2797,6 @@ abstract class CSVSuite
       "inferSchema" -> "true",
       "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd",
-      "enableDateTimeParsingFallback" -> "true",
       "inferDate" -> "true")
     val options2 = Map(
       "header" -> "true",
