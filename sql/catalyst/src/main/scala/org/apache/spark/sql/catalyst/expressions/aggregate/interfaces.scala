@@ -643,7 +643,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 }
 
 /**
- * A special TypedImperativeAggregate that uses `OpenHashMap[AnyRef, Long]` as internal
+ * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
  * aggregation buffer.
  */
 abstract class TypedAggregateWithHashMapAsBuffer
