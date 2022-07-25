@@ -80,15 +80,15 @@ case class Mode(
       return null
     }
 
-    var selected: AnyRef = null
+    var result: AnyRef = null
     var frequency: Long = 0
     buffer.foreach { case (value, freq) =>
       if (freq > frequency) {
-        selected = value
+        result = value
         frequency = freq
       }
     }
-    selected
+    result
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
