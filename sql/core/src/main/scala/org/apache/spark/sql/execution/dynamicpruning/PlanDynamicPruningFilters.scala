@@ -34,8 +34,7 @@ import org.apache.spark.sql.execution.joins._
  * results of broadcast. For joins that are not planned as broadcast hash joins we keep
  * the fallback mechanism with subquery duplicate.
 */
-case class PlanDynamicPruningFilters(sparkSession: SparkSession)
-    extends Rule[SparkPlan] {
+case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[SparkPlan] {
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
