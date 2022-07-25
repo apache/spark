@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
- * Python (Arrow) to JVM (ColumnarBatch).
+ * JVM (an iterator of internal rows) to Python (Arrow).
  */
 private[python] trait PythonArrowInput { self: BasePythonRunner[Iterator[InternalRow], _] =>
   protected val workerConf: Map[String, String]
