@@ -130,7 +130,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
       assert(option.zstdLevel == "10")
       val parameters = Map("zstdLevel" -> "20")
       val optionWithPar = new ParquetOptions(parameters, spark.sessionState.conf)
-      assert(option.zstdLevel == "20")
+      assert(optionWithPar.zstdLevel == "20")
     }
   }
 
@@ -140,7 +140,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
       assert(option.zstdWorkers == "10")
       val parameters = Map("zstdWorkers" -> "20")
       val optionWithPar = new ParquetOptions(parameters, spark.sessionState.conf)
-      assert(option.zstdWorkers == "20")
+      assert(optionWithPar.zstdWorkers == "20")
     }
   }
 }

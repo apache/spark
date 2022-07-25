@@ -89,15 +89,6 @@ case class ParquetWrite(
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
-    // Sets Zstd level and Zstd workers, only effect when compression codec is `zstd`
-    conf.set(
-      ZstandardCodec.PARQUET_COMPRESS_ZSTD_LEVEL,
-      parquetOptions.zstdLevel)
-
-    conf.set(
-      ZstandardCodec.PARQUET_COMPRESS_ZSTD_WORKERS,
-      parquetOptions.zstdWorkers)
-
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null
       && conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
