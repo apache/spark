@@ -121,6 +121,7 @@ Arguments: [ws_order_number#12 ASC NULLS FIRST], false, 0
 (15) SortMergeJoin [codegen id : 7]
 Left keys [1]: [ws_order_number#9]
 Right keys [1]: [ws_order_number#12]
+Join type: Inner
 Join condition: NOT (ws_warehouse_sk#8 = ws_warehouse_sk#11)
 
 (16) Project [codegen id : 7]
@@ -130,6 +131,7 @@ Input [4]: [ws_warehouse_sk#8, ws_order_number#9, ws_warehouse_sk#11, ws_order_n
 (17) SortMergeJoin [codegen id : 8]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [ws_order_number#9]
+Join type: LeftSemi
 Join condition: None
 
 (18) Scan parquet spark_catalog.default.web_returns
@@ -175,6 +177,7 @@ Arguments: [ws_order_number#12 ASC NULLS FIRST], false, 0
 (28) SortMergeJoin [codegen id : 15]
 Left keys [1]: [ws_order_number#9]
 Right keys [1]: [ws_order_number#12]
+Join type: Inner
 Join condition: NOT (ws_warehouse_sk#8 = ws_warehouse_sk#11)
 
 (29) Project [codegen id : 15]
@@ -184,6 +187,7 @@ Input [4]: [ws_warehouse_sk#8, ws_order_number#9, ws_warehouse_sk#11, ws_order_n
 (30) SortMergeJoin [codegen id : 16]
 Left keys [1]: [wr_order_number#13]
 Right keys [1]: [ws_order_number#9]
+Join type: Inner
 Join condition: None
 
 (31) Project [codegen id : 16]
@@ -193,6 +197,7 @@ Input [2]: [wr_order_number#13, ws_order_number#9]
 (32) SortMergeJoin [codegen id : 20]
 Left keys [1]: [ws_order_number#4]
 Right keys [1]: [wr_order_number#13]
+Join type: LeftSemi
 Join condition: None
 
 (33) Scan parquet spark_catalog.default.date_dim
@@ -220,6 +225,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (38) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_date_sk#1]
 Right keys [1]: [d_date_sk#15]
+Join type: Inner
 Join condition: None
 
 (39) Project [codegen id : 20]
@@ -251,6 +257,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (45) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_ship_addr_sk#2]
 Right keys [1]: [ca_address_sk#17]
+Join type: Inner
 Join condition: None
 
 (46) Project [codegen id : 20]
@@ -282,6 +289,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (52) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ws_web_site_sk#3]
 Right keys [1]: [web_site_sk#19]
+Join type: Inner
 Join condition: None
 
 (53) Project [codegen id : 20]
