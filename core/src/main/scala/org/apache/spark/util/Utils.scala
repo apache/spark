@@ -931,7 +931,7 @@ private[spark] object Utils extends Logging {
       randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))
     }
     else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
-     conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+      conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
     } else if (conf.getenv("MESOS_SANDBOX") != null && !shuffleServiceEnabled) {

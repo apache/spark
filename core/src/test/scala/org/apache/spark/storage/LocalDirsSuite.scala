@@ -104,5 +104,4 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
     assert(index_of_path1(0))
     assert(index_of_path1(1))
   }
-
 }
