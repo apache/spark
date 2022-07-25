@@ -132,9 +132,7 @@ class ExecutionListenerManager private[sql](
   /**
    * Get an identical copy of this listener manager.
    */
-  private[sql] def clone(
-      session: SparkSession,
-      sqlConf: SQLConf): ExecutionListenerManager = synchronized {
+  private[sql] def clone(session: SparkSession, sqlConf: SQLConf): ExecutionListenerManager = {
     val newListenerManager =
       new ExecutionListenerManager(session, sqlConf, loadExtensions = false)
     listenerBus.foreach(_.listeners.asScala.foreach(newListenerManager.register))
