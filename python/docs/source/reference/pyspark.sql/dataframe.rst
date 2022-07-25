@@ -29,7 +29,6 @@ DataFrame
     DataFrame.alias
     DataFrame.approxQuantile
     DataFrame.cache
-    DataFrame.cast
     DataFrame.checkpoint
     DataFrame.coalesce
     DataFrame.colRegex
@@ -103,6 +102,7 @@ DataFrame
     DataFrame.summary
     DataFrame.tail
     DataFrame.take
+    DataFrame.to
     DataFrame.toDF
     DataFrame.toJSON
     DataFrame.toLocalIterator

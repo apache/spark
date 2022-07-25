@@ -1201,37 +1201,37 @@ class DataFrameTests(ReusedSQLTestCase):
             [Row(value=None)],
         )
 
-    def test_cast(self):
+    def test_to(self):
         schema = StructType(
             [StructField("i", StringType(), True), StructField("j", IntegerType(), True)]
         )
         df = self.spark.createDataFrame([("a", 1)], schema)
 
         schema1 = StructType([StructField("j", StringType()), StructField("i", StringType())])
-        df1 = df.cast(schema1)
+        df1 = df.to(schema1)
         self.assertEqual(schema1, df1.schema)
         self.assertEqual(df.count(), df1.count())
 
         schema2 = StructType([StructField("j", LongType())])
-        df2 = df.cast(schema2)
+        df2 = df.to(schema2)
         self.assertEqual(schema2, df2.schema)
         self.assertEqual(df.count(), df2.count())
 
         schema3 = StructType([StructField("struct", schema1, False)])
-        df3 = df.select(struct("i", "j").alias("struct")).cast(schema3)
+        df3 = df.select(struct("i", "j").alias("struct")).to(schema3)
         self.assertEqual(schema3, df3.schema)
         self.assertEqual(df.count(), df3.count())
 
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.cast(schema4)
+            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4)
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.cast(schema5)
+            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5)
         )
 
 
