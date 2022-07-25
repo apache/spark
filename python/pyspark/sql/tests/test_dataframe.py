@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import re
 from decimal import Decimal
 import os
 import pydoc
@@ -675,6 +675,32 @@ class DataFrameTests(ReusedSQLTestCase):
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_asSchema(self):
+        new_schema = StructType(
+            [
+                StructField("f1", IntegerType(), True, metadata={"description": "f1 desc"}),
+            ]
+        )
+        incompatible_schema = StructType(
+            [
+                StructField("foobar", IntegerType(), True, metadata={"description": "f1 desc"}),
+            ]
+        )
+        df = self.spark.createDataFrame([(1, 2.0), (3, 4.0)], "f1: int, f2: float")
+
+        self.assertRaisesRegex(
+            AnalysisException,
+            re.escape(
+                "[UNRESOLVED_COLUMN] A column or function parameter with name `foobar`"
+                " cannot be resolved."
+            ),
+            lambda: df.asSchema(incompatible_schema),
+        )
+        self.assertEqual(df.schema.simpleString(), "struct<f1:int,f2:float>")
+        new_df = df.asSchema(new_schema)
+        self.assertEqual(new_df.schema.simpleString(), "struct<f1:int>")
+        self.assertEqual(new_df.schema["f1"].metadata["description"], "f1 desc")
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")

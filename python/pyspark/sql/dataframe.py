@@ -39,7 +39,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, get_method
 
 from pyspark import copy_func, since, _NoValue
 from pyspark._globals import _NoValueType
@@ -3200,6 +3200,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.drop(self._jseq(cols))
 
         return DataFrame(jdf, self.sparkSession)
+
+    def asSchema(self, schema: StructType) -> "DataFrame":
+        """Returns a new DataFrame where each row is reconciled to match the specified schema.
+
+        .. versionadded:: 3.4.0
+
+        Notes
+        -----
+        Spark will:
+        * Reorder columns and/or inner fields by name to match the specified schema.
+        * Project away columns and/or inner fields that are not needed by the specified schema.
+        * Missing columns and/or inner fields (present in the specified schema but not input
+          DataFrame) lead to failures.
+        * Cast the columns and/or inner fields to match the data types in the specified schema, if
+          the types are compatible, e.g., numeric to numeric (error if overflows), but not string
+          to int.
+        * Carry over the metadata from the specified schema, while the columns and/or inner fields
+          still keep their own metadata if not overwritten by the specified schema.
+        * Fail if the nullability are not compatible. For example, the column and/or inner field is
+          nullable but the specified schema requires them to be not nullable.
+
+        Parameters
+        ----------
+        schema : StructType
+            schema to reconcile with.
+
+        Examples
+        --------
+        >>> new_schema = StructType(
+        ...  [StructField("name", StringType(), True, metadata={"description": "name desc"}),]
+        ... )
+        >>> df_with_desc = df.asSchema(new_schema)
+        >>> df_with_desc.collect()
+        [Row(name='Alice'), Row(name='Bob')]
+        """
+        java_new_schema = self._jdf.sparkSession().parseDataType(schema.json())
+        return DataFrame(get_method(self._jdf, "as")(java_new_schema), self.sparkSession)
 
     def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
