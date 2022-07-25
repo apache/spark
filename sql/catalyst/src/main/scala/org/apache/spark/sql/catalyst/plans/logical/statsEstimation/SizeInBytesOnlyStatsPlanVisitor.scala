@@ -118,7 +118,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
               if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) ||
                 right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) =>
-            Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).sum)
+            // The sizeInBytes should be > 1 because sizeInBytes * 1 != sizeInBytes + 1.
+            Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 1L).sum)
           case _ =>
             default(p)
         }
