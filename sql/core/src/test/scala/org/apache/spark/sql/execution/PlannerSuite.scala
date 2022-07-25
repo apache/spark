@@ -1296,7 +1296,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-39698: Use TakeOrderedAndProject if maxRows below the topKSortFallbackThreshold") {
+  test("SPARK-39698: Use TakeOrderedAndProject if maxRows below the topKSortMaxRowsThreshold") {
     Seq(-1, 10).foreach { threshold =>
       withSQLConf(SQLConf.TOP_K_SORT_MAX_ROWS_THRESHOLD.key -> threshold.toString) {
         val df = Seq(1 -> "a", 2 -> "b", 3 -> "c", 4 -> "d", 5 -> "e").toDF("i", "j").orderBy($"i")
