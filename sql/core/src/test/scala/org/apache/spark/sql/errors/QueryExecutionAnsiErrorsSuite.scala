@@ -152,20 +152,19 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   }
 
   test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
-    Seq("BYTE", "SHORT", "INT", "LONG", "DECIMAL(7, 2)").foreach { targetType =>
+    Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(7,2)").foreach { targetType =>
       val tableName = "overflowTable"
       withTable(tableName) {
         sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
         checkError(
           exception = intercept[SparkException] {
             sql(s"insert into $tableName values 12345678901234567890D")
-          }.getCause.getCause.asInstanceOf[SparkThrowable],
+          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
-            "sourceType" -> "DOUBLE",
-            "targetType" -> targetType,
-            "columnName" -> "i"
-          )
+            "sourceType" -> "\"DOUBLE\"",
+            "targetType" -> ("\"" + targetType + "\""),
+            "columnName" -> "`i`")
         )
       }
     }

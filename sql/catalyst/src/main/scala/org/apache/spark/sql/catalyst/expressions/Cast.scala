@@ -2369,7 +2369,7 @@ case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends U
   override def eval(input: InternalRow): Any = try {
     child.eval(input)
   } catch {
-    case e: SparkArithmeticException if e.getErrorClass == "CAST_OVERFLOW" =>
+    case e: SparkArithmeticException =>
       QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
         child.child.dataType,
         child.dataType,
@@ -2392,11 +2392,7 @@ case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends U
         ${ev.isNull} = ${childGen.isNull};
         ${ev.value} = ${childGen.value};
       } catch ($exceptionClass e) {
-        if (e.getErrorClass() == "CAST_OVERFLOW") {
-          throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert($fromDt, $toDt, $col);
-        } else {
-          throw e;
-        }
+        throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert($fromDt, $toDt, $col);
       }"""
     )
     // scalastyle:on line.size.limit
