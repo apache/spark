@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.joins._
  * the fallback mechanism with subquery duplicate.
 */
 case class PlanDynamicPruningFilters(sparkSession: SparkSession)
-    extends Rule[SparkPlan] with PredicateHelper {
+    extends Rule[SparkPlan] {
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.

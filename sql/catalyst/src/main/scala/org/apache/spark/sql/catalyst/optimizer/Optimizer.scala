@@ -768,7 +768,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
  * rule PushDownPredicates. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
-object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -1617,7 +1617,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  * This rule improves performance of predicate pushdown for cascading joins such as:
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
-object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
+object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     CombineFilters.applyLocally

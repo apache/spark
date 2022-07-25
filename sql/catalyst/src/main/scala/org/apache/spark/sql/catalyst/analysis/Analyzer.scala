@@ -2358,7 +2358,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *
    * Note: CTEs are handled in CTESubstitution.
    */
-  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  object ResolveSubquery extends Rule[LogicalPlan] {
     /**
      * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
      * plan. All resolved outer references are wrapped in an [[OuterReference]]
