@@ -17,16 +17,3 @@ DESC FORMATTED desc_complex_col_table col;
 -- Describe a nested column
 DESC FORMATTED desc_complex_col_table col.x;
 
-
---Test case insensitive
-
-CREATE TABLE customer(CName STRING) USING PARQUET;
-
-INSERT INTO customer VALUES('Maria');
-
-ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cname;
-
-DESC EXTENDED customer cname;
-
-DROP TABLE customer;
-

@@ -126,6 +126,27 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     }
   }
 
+  test("describe a column in case insensitivity") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        QueryTest.checkAnswer(
+          sql(s"DESC $tbl KEY"),
+          Seq(Row("col_name", "KEY"), Row("data_type", "int"), Row("comment", "comment1")))
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"DESC $tbl KEY").collect()
+        }.getMessage
+        assert(errMsg === "Column KEY does not exist")
+      }
+    }
+  }
+
   test("describe extended (formatted) a column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""
