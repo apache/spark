@@ -136,4 +136,24 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
       }
     }
   }
+
+  // TODO(SPARK-39859): Support v2 `DESCRIBE TABLE EXTENDED` for columns
+  test("describe extended (formatted) a column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key INT COMMENT 'column_comment', col STRING)
+        |$defaultUsing""".stripMargin)
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment")))
+    }
+  }
 }
