@@ -408,12 +408,6 @@ class ParquetFileFormat
 
     case _ => false
   }
-
-  override def createFileMetadataCol: AttributeReference = {
-    val schema = FileFormat.getBaseFileMetadataCol
-      .add(StructField(FileFormat.ROW_INDEX, LongType))
-    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, schema)
-  }
 }
 
 object ParquetFileFormat extends Logging {

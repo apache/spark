@@ -78,7 +78,7 @@ case class LogicalRelation(
       // filter out the metadata struct column if it has the name conflicting with output columns.
       // if the file has a column "_metadata",
       // then the data column should be returned not the metadata struct column
-      Seq(relation.fileFormat.createFileMetadataCol).filterNot(isOutputColumn)
+      Seq(FileFormat.createFileMetadataCol(relation.fileFormat)).filterNot(isOutputColumn)
     case _ => Nil
   }
 

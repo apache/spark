@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType, TimestampType}
@@ -170,12 +171,6 @@ trait FileFormat {
    * By default all field name is supported.
    */
   def supportFieldName(name: String): Boolean = true
-
-  /**
-   * Create a file metadata struct column containing fields supported by the given file format.
-   */
-  def createFileMetadataCol: AttributeReference =
-    FileFormat.createBaseFileMetadataCol
 }
 
 object FileFormat {
@@ -197,15 +192,22 @@ object FileFormat {
   val METADATA_NAME = "_metadata"
 
   /** Schema of metadata struct that can be produced by every file format. */
-  def getBaseFileMetadataCol: StructType = new StructType()
+  val BASE_METADATA_STRUCT: StructType = new StructType()
     .add(StructField(FileFormat.FILE_PATH, StringType))
     .add(StructField(FileFormat.FILE_NAME, StringType))
     .add(StructField(FileFormat.FILE_SIZE, LongType))
     .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType))
 
-  /** Create a file metadata struct column containing fields supported by every format. */
-  def createBaseFileMetadataCol: AttributeReference = {
-    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, getBaseFileMetadataCol)
+  /**
+   * Create a file metadata struct column containing fields supported by the given file format.
+   */
+  def createFileMetadataCol(fileFormat: FileFormat = null): AttributeReference = {
+    val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
+      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType))
+    } else {
+      BASE_METADATA_STRUCT
+    }
+    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, struct)
   }
 
   // create an internal row given required metadata fields and file information

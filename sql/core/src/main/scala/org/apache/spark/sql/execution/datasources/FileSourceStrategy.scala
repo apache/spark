@@ -232,7 +232,14 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val outputSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns).toStructType
 
-      // outputAttributes should also include the metadata columns at the very end
+      // The output rows will be produced during file scan operation in three steps:
+      //  (1) File format reader populates a `Row` with `readDataColumns` and
+      //      `fileFormatReaderGeneratedMetadataColumns`
+      //  (2) Then, a row containing `partitionColumns` is joined at the end.
+      //  (3) Finally, a row containing `fileConstantMetadataColumns` is also joined at the end.
+      // By placing `fileFormatReaderGeneratedMetadataColumns` before `partitionColumns` and
+      // `fileConstantMetadataColumns` in the `outputAttributes` we make these row operations
+      // simpler and more efficient.
       val outputAttributes = readDataColumns ++ fileFormatReaderGeneratedMetadataColumns ++
         partitionColumns ++ fileConstantMetadataColumns
 
