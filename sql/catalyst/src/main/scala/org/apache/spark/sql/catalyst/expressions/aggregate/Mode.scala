@@ -80,15 +80,7 @@ case class Mode(
       return null
     }
 
-    var result: AnyRef = null
-    var frequency: Long = 0
-    buffer.foreach { case (value, freq) =>
-      if (freq > frequency) {
-        result = value
-        frequency = freq
-      }
-    }
-    result
+    buffer.maxBy(_._2)._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
