@@ -147,6 +147,15 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     }
   }
 
+  test("describe a column with fully qualified name") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+      QueryTest.checkAnswer(
+        sql(s"DESC $tbl $tbl.key"),
+        Seq(Row("col_name", "key"), Row("data_type", "int"), Row("comment", "comment1")))
+    }
+  }
+
   test("describe extended (formatted) a column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""

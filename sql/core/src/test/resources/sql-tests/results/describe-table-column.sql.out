@@ -8,23 +8,6 @@ struct<>
 
 
 -- !query
-DESC FORMATTED desc_col_temp_view desc_col_temp_view.key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	NULL
-max	NULL
-num_nulls	NULL
-distinct_count	NULL
-avg_col_len	NULL
-max_col_len	NULL
-histogram	NULL
-
-
--- !query
 DESC desc_col_temp_view col.x
 -- !query schema
 struct<>
