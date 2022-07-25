@@ -184,6 +184,7 @@ Input [3]: [B2_LP#28, B2_CNT#29, B2_CNTD#30]
 Arguments: IdentityBroadcastMode, [plan_id=5]
 
 (22) BroadcastNestedLoopJoin [codegen id : 18]
+Join type: Inner
 Join condition: None
 
 (23) Scan parquet spark_catalog.default.store_sales
@@ -245,6 +246,7 @@ Input [3]: [B3_LP#43, B3_CNT#44, B3_CNTD#45]
 Arguments: IdentityBroadcastMode, [plan_id=8]
 
 (34) BroadcastNestedLoopJoin [codegen id : 18]
+Join type: Inner
 Join condition: None
 
 (35) Scan parquet spark_catalog.default.store_sales
@@ -306,6 +308,7 @@ Input [3]: [B4_LP#58, B4_CNT#59, B4_CNTD#60]
 Arguments: IdentityBroadcastMode, [plan_id=11]
 
 (46) BroadcastNestedLoopJoin [codegen id : 18]
+Join type: Inner
 Join condition: None
 
 (47) Scan parquet spark_catalog.default.store_sales
@@ -367,6 +370,7 @@ Input [3]: [B5_LP#73, B5_CNT#74, B5_CNTD#75]
 Arguments: IdentityBroadcastMode, [plan_id=14]
 
 (58) BroadcastNestedLoopJoin [codegen id : 18]
+Join type: Inner
 Join condition: None
 
 (59) Scan parquet spark_catalog.default.store_sales
@@ -428,5 +432,6 @@ Input [3]: [B6_LP#88, B6_CNT#89, B6_CNTD#90]
 Arguments: IdentityBroadcastMode, [plan_id=17]
 
 (70) BroadcastNestedLoopJoin [codegen id : 18]
+Join type: Inner
 Join condition: None
 
