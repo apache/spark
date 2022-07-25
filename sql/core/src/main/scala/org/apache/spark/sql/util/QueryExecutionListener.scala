@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -81,7 +83,10 @@ class ExecutionListenerManager private[sql](
     loadExtensions: Boolean)
   extends Logging {
 
-  private val listenerBus = new ExecutionListenerBus(this, session)
+  // SPARK-39864: lazily create the listener bus on the first register() call in order to
+  // avoid listener overheads when QueryExecutionListeners aren't used:
+  @GuardedBy("this")
+  private var listenerBus: Option[ExecutionListenerBus] = None
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
@@ -96,38 +101,43 @@ class ExecutionListenerManager private[sql](
    * Registers the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def register(listener: QueryExecutionListener): Unit = {
-    listenerBus.addListener(listener)
+  def register(listener: QueryExecutionListener): Unit = synchronized {
+    if (listenerBus.isEmpty) {
+      listenerBus = Some(new ExecutionListenerBus(this, session))
+    }
+    listenerBus.get.addListener(listener)
   }
 
   /**
    * Unregisters the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def unregister(listener: QueryExecutionListener): Unit = {
-    listenerBus.removeListener(listener)
+  def unregister(listener: QueryExecutionListener): Unit = synchronized {
+    listenerBus.foreach(_.removeListener(listener))
   }
 
   /**
    * Removes all the registered [[QueryExecutionListener]].
    */
   @DeveloperApi
-  def clear(): Unit = {
-    listenerBus.removeAllListeners()
+  def clear(): Unit = synchronized {
+    listenerBus.foreach(_.removeAllListeners())
   }
 
   /** Only exposed for testing. */
-  private[sql] def listListeners(): Array[QueryExecutionListener] = {
-    listenerBus.listeners.asScala.toArray
+  private[sql] def listListeners(): Array[QueryExecutionListener] = synchronized {
+    listenerBus.map(_.listeners.asScala.toArray).getOrElse(Array.empty[QueryExecutionListener])
   }
 
   /**
    * Get an identical copy of this listener manager.
    */
-  private[sql] def clone(session: SparkSession, sqlConf: SQLConf): ExecutionListenerManager = {
+  private[sql] def clone(
+      session: SparkSession,
+      sqlConf: SQLConf): ExecutionListenerManager = synchronized {
     val newListenerManager =
       new ExecutionListenerManager(session, sqlConf, loadExtensions = false)
-    listenerBus.listeners.asScala.foreach(newListenerManager.register)
+    listenerBus.foreach(_.listeners.asScala.foreach(newListenerManager.register))
     newListenerManager
   }
 }
