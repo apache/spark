@@ -40,7 +40,7 @@ case class SQLQueryContext(
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  def summary(): String = {
+  override lazy val summary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (sqlText.isEmpty || originStartIndex.isEmpty || originStopIndex.isEmpty ||
       originStartIndex.get < 0 || originStopIndex.get >= sqlText.get.length ||
@@ -118,7 +118,7 @@ case class SQLQueryContext(
   }
 
   /** Gets the textual fragment of a SQL query. */
-  def fragment: String = {
+  override lazy val fragment: String = {
     if (sqlText.isEmpty || originStartIndex.isEmpty || originStopIndex.isEmpty ||
       originStartIndex.get < 0 || originStopIndex.get >= sqlText.get.length ||
       originStartIndex.get > originStopIndex.get) {
