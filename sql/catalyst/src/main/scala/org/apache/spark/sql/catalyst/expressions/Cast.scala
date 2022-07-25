@@ -2362,6 +2362,10 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }
 
+/**
+ * Casting a numeric value as another numeric type in store assignment. It can capture the
+ * arithmetic errors and show proper error messages to users.
+ */
 case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild.asInstanceOf[Cast])
