@@ -80,8 +80,15 @@ case class Mode(
       return null
     }
 
-    val sortedBuffer = buffer.toSeq.sortBy(_._2)(LongType.ordering.reverse)
-    sortedBuffer.head._1
+    var selected: AnyRef = null
+    var frequency: Long = 0
+    buffer.foreach { case (value, freq) =>
+      if (freq > frequency) {
+        selected = value
+        frequency = freq
+      }
+    }
+    selected
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
