@@ -125,7 +125,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
     }
   }
 
-  test("describe extended a column") {
+  test("describe extended (formatted) a column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""
         |CREATE TABLE $tbl
@@ -135,6 +135,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
       sql(s"INSERT INTO $tbl SELECT 2, 'b'")
       sql(s"INSERT INTO $tbl SELECT 3, 'c'")
       sql(s"INSERT INTO $tbl SELECT null, 'd'")
+
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
@@ -153,20 +154,23 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("max_col_len", "NULL"),
           Row("histogram", "NULL")))
       sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS FOR COLUMNS key")
-      val descriptionDf2 = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
-      QueryTest.checkAnswer(
-        descriptionDf2,
-        Seq(
-          Row("col_name", "key"),
-          Row("data_type", "int"),
-          Row("comment", "column_comment"),
-          Row("min", "1"),
-          Row("max", "3"),
-          Row("num_nulls", "1"),
-          Row("distinct_count", "3"),
-          Row("avg_col_len", "4"),
-          Row("max_col_len", "4"),
-          Row("histogram", "NULL")))
+
+      Seq("EXTENDED", "FORMATTED").foreach { extended =>
+        val descriptionDf2 = sql(s"DESCRIBE TABLE $extended $tbl key")
+        QueryTest.checkAnswer(
+          descriptionDf2,
+          Seq(
+            Row("col_name", "key"),
+            Row("data_type", "int"),
+            Row("comment", "column_comment"),
+            Row("min", "1"),
+            Row("max", "3"),
+            Row("num_nulls", "1"),
+            Row("distinct_count", "3"),
+            Row("avg_col_len", "4"),
+            Row("max_col_len", "4"),
+            Row("histogram", "NULL")))
+      }
     }
   }
 }

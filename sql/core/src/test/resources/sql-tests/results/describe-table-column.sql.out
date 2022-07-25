@@ -8,23 +8,6 @@ struct<>
 
 
 -- !query
-DESC FORMATTED desc_col_temp_view key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	NULL
-max	NULL
-num_nulls	NULL
-distinct_count	NULL
-avg_col_len	NULL
-max_col_len	NULL
-histogram	NULL
-
-
--- !query
 DESC FORMATTED desc_col_temp_view desc_col_temp_view.key
 -- !query schema
 struct<info_name:string,info_value:string>
@@ -48,58 +31,6 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 DESC TABLE COLUMN does not support nested column: col.x
-
-
--- !query
-CREATE TABLE desc_col_table (key int COMMENT 'column_comment') USING PARQUET
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESC desc_col_table key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-
-
--- !query
-DESC FORMATTED desc_col_table key
--- !query schema
-struct<info_name:string,info_value:string>
--- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	NULL
-max	NULL
-num_nulls	0
-distinct_count	0
-avg_col_len	4
-max_col_len	4
-histogram	NULL
-
-
--- !query
-DESC desc_col_table key1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-Column key1 does not exist
 
 
 -- !query
@@ -174,7 +105,8 @@ INSERT INTO desc_col_table values 1, 2, 3, 4
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+Table not found: desc_col_table; line 1 pos 12
 
 
 -- !query
@@ -182,26 +114,17 @@ ANALYZE TABLE desc_col_table COMPUTE STATISTICS FOR COLUMNS key
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+Table or view not found: desc_col_table; line 1 pos 14
 
 
 -- !query
 DESC EXTENDED desc_col_table key
 -- !query schema
-struct<info_name:string,info_value:string>
+struct<>
 -- !query output
-col_name	key
-data_type	int
-comment	column_comment
-min	1
-max	4
-num_nulls	0
-distinct_count	4
-avg_col_len	4
-max_col_len	4
-histogram	height: 2.0, num_of_bins: 2
-bin_0	lower_bound: 1.0, upper_bound: 2.0, distinct_count: 2
-bin_1	lower_bound: 2.0, upper_bound: 4.0, distinct_count: 2
+org.apache.spark.sql.AnalysisException
+Table or view not found: desc_col_table; line 1 pos 14
 
 
 -- !query
@@ -217,7 +140,8 @@ DROP TABLE desc_col_table
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+Table or view not found: desc_col_table; line 1 pos 11
 
 
 -- !query
