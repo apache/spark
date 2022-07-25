@@ -432,4 +432,20 @@ class EliminateSortsSuite extends AnalysisTest {
       Optimize.execute(testRelation.limit(Literal(1)).orderBy('a.asc).orderBy('a.asc)).analyze,
       testRelation.limit(Literal(1)).analyze)
   }
+
+  test("SPARK-39835: Fix EliminateSorts remove global sort below the local sort") {
+    // global -> local
+    val plan = testRelation.orderBy($"a".asc).sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan), plan)
+
+    // global -> global -> local
+    val plan2 = testRelation.orderBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
+    val expected2 = testRelation.orderBy($"b".asc).sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan2), expected2)
+
+    // local -> global -> local
+    val plan3 = testRelation.sortBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
+    val expected3 = testRelation.orderBy($"b".asc).sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan3), expected3)
+  }
 }
