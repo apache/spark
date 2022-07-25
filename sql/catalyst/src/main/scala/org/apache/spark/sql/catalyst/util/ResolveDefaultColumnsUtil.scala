@@ -107,7 +107,8 @@ object ResolveDefaultColumns {
           if (!allowedTableProviders.contains(givenTableProvider)) {
             throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
           }
-          val analyzed: Expression = analyze(field, statementType)
+          val analyzed: Expression =
+            analyze(field, CURRENT_DEFAULT_COLUMN_METADATA_KEY, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
           field.copy(metadata = newMetadata)
@@ -126,12 +127,14 @@ object ResolveDefaultColumns {
    *
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
    *                      and analyze.
+   * @param metadataKey   which key to look up from the column metadata; generally either
+   *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @return Result of the analysis and constant-folding operation.
    */
-  def analyze(field: StructField, statementType: String): Expression = {
+  def analyze(field: StructField, metadataKey: String, statementType: String): Expression = {
     // Parse the expression.
-    val colText: String = field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+    val colText: String = field.metadata.getString(metadataKey)
     lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
       parser.parseExpression(colText)
@@ -202,7 +205,7 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = analyze(field, "")
+          val expr = analyze(field, EXISTS_DEFAULT_COLUMN_METADATA_KEY, "")
           expr match {
             case _: ExprLiteral | _: Cast => expr
           }

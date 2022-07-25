@@ -158,16 +158,26 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Analyze the default column values.
       val statementType = "CREATE TABLE"
-      assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
-      assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
+      assert(ResolveDefaultColumns
+        .analyze(columnA, ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+          statementType).sql == "42")
+      assert(ResolveDefaultColumns
+        .analyze(columnA, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+          statementType).sql == "41")
+      assert(ResolveDefaultColumns
+        .analyze(columnB, ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+          statementType).sql == "'abc'")
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnC, statementType)
+        ResolveDefaultColumns.analyze(columnC,
+          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, statementType)
       }.getMessage.contains("fails to parse as a valid expression"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnD, statementType)
+        ResolveDefaultColumns.analyze(columnD,
+          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, statementType)
       }.getMessage.contains("subquery expressions are not allowed in DEFAULT values"))
       assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnE, statementType)
+        ResolveDefaultColumns.analyze(columnE,
+          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))
 
       // Make sure that constant-folding default values does not take place when the feature is
