@@ -246,8 +246,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
       // Create new MergedShuffleFileManager if shuffleMergeManager is null.
-      // This is because in the unit test, a customized MergedShuffleFileManager will be created through
-      // setShuffleFileManager method.
+      // This is because in the unit test, a customized MergedShuffleFileManager will
+      // be created through setShuffleFileManager method.
       if (shuffleMergeManager == null) {
         shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
