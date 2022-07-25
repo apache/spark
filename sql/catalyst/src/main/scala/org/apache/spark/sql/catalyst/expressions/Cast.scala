@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.errors.QueryParsingErrors.toSQLExpr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -2363,10 +2362,7 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }
 
-case class CheckOverflowInTableInsert(child: Cast) extends UnaryExpression {
-
-  def inputExpressionName: String = toSQLExpr(child.child)
-
+case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild.asInstanceOf[Cast])
 
@@ -2375,15 +2371,18 @@ case class CheckOverflowInTableInsert(child: Cast) extends UnaryExpression {
   } catch {
     case e: SparkArithmeticException if e.getErrorClass == "CAST_OVERFLOW" =>
       QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
-        inputExpressionName,
         child.child.dataType,
-        child.dataType
-      )
+        child.dataType,
+        columnName)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val exceptionClass = classOf[SparkArithmeticException].getClass
+    val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
+    val fromDt =
+      ctx.addReferenceObj("from", child.child.dataType, child.child.dataType.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", child.dataType, child.dataType.getClass.getName)
+    val col = ctx.addReferenceObj("colName", columnName, "java.lang.String")
     // scalastyle:off line.size.limit
     ev.copy(code = code"""
       boolean ${ev.isNull} = true;
@@ -2393,14 +2392,14 @@ case class CheckOverflowInTableInsert(child: Cast) extends UnaryExpression {
         ${ev.isNull} = ${childGen.isNull};
         ${ev.value} = ${childGen.value};
       } catch ($exceptionClass e) {
-        if (e.getErrorClass == "CAST_OVERFLOW") {
-          QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(${inputExpressionName}, ${child.child.dataType}, ${child.dataType});
+        if (e.getErrorClass() == "CAST_OVERFLOW") {
+          throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert($fromDt, $toDt, $col);
         } else {
           throw e;
         }
       }"""
-    // scalastyle:on line.size.limit
     )
+    // scalastyle:on line.size.limit
   }
 
   override def dataType: DataType = child.dataType

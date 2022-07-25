@@ -253,7 +253,7 @@ object TableOutputResolver {
             ansiEnabled = true)
           cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
           if (canCauseCastOverflow(cast)) {
-            CheckOverflowInTableInsert(cast)
+            CheckOverflowInTableInsert(cast, tableAttr.name)
           } else {
             cast
           }
