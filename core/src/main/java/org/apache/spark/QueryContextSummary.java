@@ -17,14 +17,12 @@
 
 package org.apache.spark;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Private;
 
 /**
  * Build textual summary from a query context.
- *
- * @since 3.4.0
  */
-@Evolving
+@Private
 public interface QueryContextSummary extends QueryContext {
     // Textual summary of the query context
     String summary();
