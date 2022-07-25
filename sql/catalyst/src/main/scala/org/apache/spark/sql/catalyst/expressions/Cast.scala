@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{SqlQueryContext, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -481,7 +481,7 @@ case class Cast(
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  override def initQueryContext(): Option[SqlQueryContext] = if (ansiEnabled) {
+  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
     Some(origin.context)
   } else {
     None
@@ -998,7 +998,7 @@ case class Cast(
   private[this] def toPrecision(
       value: Decimal,
       decimalType: DecimalType,
-      context: Option[SqlQueryContext]): Decimal =
+      context: Option[SQLQueryContext]): Decimal =
     value.toPrecision(
       decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled, context)
 

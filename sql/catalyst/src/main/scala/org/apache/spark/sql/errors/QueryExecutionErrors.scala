@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.{SqlQueryContext, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -95,7 +95,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: Option[SqlQueryContext] = None): ArithmeticException = {
+      context: Option[SQLQueryContext] = None): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(
@@ -110,7 +110,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Any,
       from: DataType,
       to: DataType,
-      context: Option[SqlQueryContext]): Throwable = {
+      context: Option[SQLQueryContext]): Throwable = {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -123,7 +123,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      context: Option[SqlQueryContext]): SparkRuntimeException = {
+      context: Option[SQLQueryContext]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -137,7 +137,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      context: Option[SqlQueryContext]): SparkNumberFormatException = {
+      context: Option[SQLQueryContext]): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -175,7 +175,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(context: Option[SqlQueryContext]): ArithmeticException = {
+  def divideByZeroError(context: Option[SQLQueryContext]): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -185,7 +185,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      context: Option[SqlQueryContext]): ArrayIndexOutOfBoundsException = {
+      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
@@ -198,7 +198,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      context: Option[SqlQueryContext]): ArrayIndexOutOfBoundsException = {
+      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
@@ -212,7 +212,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def mapKeyNotExistError(
       key: Any,
       dataType: DataType,
-      context: Option[SqlQueryContext]): NoSuchElementException = {
+      context: Option[SQLQueryContext]): NoSuchElementException = {
     new SparkNoSuchElementException(
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
@@ -257,11 +257,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: Option[SqlQueryContext]): ArithmeticException = {
+  def overflowInSumOfDecimalError(context: Option[SQLQueryContext]): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: Option[SqlQueryContext]): ArithmeticException = {
+  def overflowInIntegralDivideError(context: Option[SQLQueryContext]): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
@@ -477,7 +477,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
-      context: Option[SqlQueryContext] = None): ArithmeticException = {
+      context: Option[SQLQueryContext] = None): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""

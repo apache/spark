@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import org.apache.spark.QueryContextSummary
 
 /** The class represents error context of a SQL query. */
-case class SqlQueryContext(
+case class SQLQueryContext(
     line: Option[Int],
     startPosition: Option[Int],
     originStartIndex: Option[Int],
