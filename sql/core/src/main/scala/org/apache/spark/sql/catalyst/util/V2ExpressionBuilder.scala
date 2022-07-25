@@ -269,13 +269,6 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case _ => None
   }
 
-  private def isBinaryComparisonOperator(operatorName: String): Boolean = {
-    operatorName match {
-      case ">" | "<" | ">=" | "<=" | "=" | "<=>" => true
-      case _ => false
-    }
-  }
-
   private def flipComparisonOperatorName(operatorName: String): String = {
     operatorName match {
       case ">" => "<"
