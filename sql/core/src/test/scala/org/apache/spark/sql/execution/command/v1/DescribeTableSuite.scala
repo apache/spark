@@ -49,50 +49,6 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       assert(e.message === "Partition not found in table 'table' database 'ns':\nid -> 1")
     }
   }
-}
-
-/**
- * The class contains tests for the `DESCRIBE TABLE` command to check V1 In-Memory
- * table catalog.
- */
-class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
-
-  test("DESCRIBE TABLE EXTENDED of a partitioned table") {
-    withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)" +
-        " TBLPROPERTIES ('bar'='baz')" +
-        " COMMENT 'this is a test table'" +
-        " LOCATION 'file:/tmp/testcat/table_name'")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
-        ("col_name", StringType),
-        ("data_type", StringType),
-        ("comment", StringType)))
-      QueryTest.checkAnswer(
-        descriptionDf.filter("col_name != 'Created Time'"),
-        Seq(
-          Row("data", "string", null),
-          Row("id", "bigint", null),
-          Row("# Partition Information", "", ""),
-          Row("# col_name", "data_type", "comment"),
-          Row("id", "bigint", null),
-          Row("", "", ""),
-          Row("# Detailed Table Information", "", ""),
-          Row("Catalog", SESSION_CATALOG_NAME, ""),
-          Row("Database", "ns", ""),
-          Row("Table", "table", ""),
-          Row("Last Access", "UNKNOWN", ""),
-          Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
-          Row("Type", "EXTERNAL", ""),
-          Row("Provider", getProvider(), ""),
-          Row("Comment", "this is a test table", ""),
-          Row("Table Properties", "[bar=baz]", ""),
-          Row("Location", "file:/tmp/testcat/table_name", ""),
-          Row("Partition Provider", "Catalog", "")))
-    }
-  }
 
   test("describe a non-existent column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
@@ -262,6 +218,50 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
             Row("bin_0", "lower_bound: 1.0, upper_bound: 2.0, distinct_count: 2"),
             Row("bin_1", "lower_bound: 2.0, upper_bound: 3.0, distinct_count: 1")))
       }
+    }
+  }
+}
+
+/**
+ * The class contains tests for the `DESCRIBE TABLE` command to check V1 In-Memory
+ * table catalog.
+ */
+class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
+
+  test("DESCRIBE TABLE EXTENDED of a partitioned table") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)" +
+        " TBLPROPERTIES ('bar'='baz')" +
+        " COMMENT 'this is a test table'" +
+        " LOCATION 'file:/tmp/testcat/table_name'")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf.filter("col_name != 'Created Time'"),
+        Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Catalog", SESSION_CATALOG_NAME, ""),
+          Row("Database", "ns", ""),
+          Row("Table", "table", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
+          Row("Type", "EXTERNAL", ""),
+          Row("Provider", getProvider(), ""),
+          Row("Comment", "this is a test table", ""),
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Location", "file:/tmp/testcat/table_name", ""),
+          Row("Partition Provider", "Catalog", "")))
     }
   }
 }
