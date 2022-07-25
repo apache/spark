@@ -23,7 +23,6 @@ import java.nio.ByteOrder
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -420,9 +419,10 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     }
 
     override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
-      if (overflow) {
-        throw QueryExecutionErrors.useDictionaryEncodingWhenDictionaryOverflowError()
-      }
+      // Once the overflow flag is set from gatherCompressibilityStats compress is never called.
+      // because build method in CompressibleColumnBuilder throws IllegalArgumentException
+      // from ByteBuffer.allocate before calling compress
+      assert (overflow)
 
       to.putInt(DictionaryEncoding.typeId)
         .putInt(dictionary.size)

@@ -882,12 +882,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def unsupportedTypeError(dataType: DataType): Throwable = {
     new Exception(s"Unsupported type: ${dataType.catalogString}")
   }
-
-  def useDictionaryEncodingWhenDictionaryOverflowError(): Throwable = {
-    new IllegalStateException(
-      "Dictionary encoding should not be used because of dictionary overflow.")
-  }
-
+  
   def endOfIteratorError(): Throwable = {
     new NoSuchElementException("End of the iterator")
   }
