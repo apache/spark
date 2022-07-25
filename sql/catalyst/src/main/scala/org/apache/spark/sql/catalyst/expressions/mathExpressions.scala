@@ -175,8 +175,10 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if " +
-    "computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -191,8 +193,10 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`, " +
-    "as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`,
+      as if computed by `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -207,8 +211,10 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if " +
-    "computed by `java.lang.Math._FUNC_`",
+  usage = """
+    _FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -323,8 +329,10 @@ case class RoundCeil(child: Expression, scale: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cosine of `expr`, as if computed by " +
-    "`java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the cosine of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments = """
     Arguments:
       * expr - angle in radians
@@ -362,8 +370,10 @@ case class Sec(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic cosine of `expr`, as if computed by " +
-    "`java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the hyperbolic cosine of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments = """
     Arguments:
       * expr - hyperbolic angle
@@ -864,8 +874,10 @@ case class Cot(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by " +
-    "`java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments = """
     Arguments:
       * expr - hyperbolic angle

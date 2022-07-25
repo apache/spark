@@ -139,7 +139,8 @@ case class TryCast(child: Expression, toType: DataType, timeZoneId: Option[Strin
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the sum of `expr1`and `expr2` and the result is null on overflow. The acceptable input types are the same with the `+` operator.",
+  usage = "_FUNC_(expr1, expr2) - Returns the sum of `expr1`and `expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `+` operator.",
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2);
@@ -173,7 +174,8 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(dividend, divisor) - Returns `dividend`/`divisor`. It always performs floating point division. Its result is always null if `expr2` is 0. `dividend` must be a numeric or an interval. `divisor` must be a numeric.",
+  usage = "_FUNC_(dividend, divisor) - Returns `dividend`/`divisor`. It always performs floating point division. Its result is always null if `expr2` is 0. " +
+    "`dividend` must be a numeric or an interval. `divisor` must be a numeric.",
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);
