@@ -925,7 +925,7 @@ private[spark] object Utils extends Logging {
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       randomizeInPlace(getYarnLocalDirs(conf).split(","))
-    } else if (isRunningInK8sContainer(conf)) {
+    } else if (isRunningInK8sContainer(conf) && conf.getenv("SPARK_LOCAL_DIRS") != null) {
       // Randomizing the shuffle location in case of K8s so that all disk get fair changes to
       // get selected.
       randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))

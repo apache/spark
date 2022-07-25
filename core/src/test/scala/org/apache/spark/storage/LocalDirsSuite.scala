@@ -79,14 +79,14 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
     }.getMessage
     // If any temporary directory could not be retrieved under the given paths above, it should
     // throw an exception with the message that includes the paths.
-    assert(message.contains(s"$path1,$path2") || message.contains(s"$path2,$path1"))
+    assert(message.contains(s"$path1,$path2"))
 
     // These directories should not be created.
     assert(!f1.exists())
     assert(!f2.exists())
   }
 
-  test("SPARK-39755 : Test randomness in SPARK_LOCAL_DIRS for K8s master") {
+  test("SPARK-39755: Test randomness in SPARK_LOCAL_DIRS for K8s master") {
     val path1 = "PATH_ONE"
     val path2 = "PATH_TWO"
     val conf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> "PATH_ONE,PATH_TWO"))
