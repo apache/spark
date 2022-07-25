@@ -20,7 +20,6 @@ import org.apache.hadoop.mapreduce.{Job, OutputCommitter, TaskAttemptContext}
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
-import org.apache.parquet.hadoop.codec.ZstandardCodec
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.internal.Logging
