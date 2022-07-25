@@ -433,7 +433,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case _ => None
       }
 
-      val orderByGroupCols = order.flatMap(findGroupColForSortOrder)
+      lazy val orderByGroupCols = order.flatMap(findGroupColForSortOrder)
       if (sHolder.pushedAggregate.isDefined && orderByGroupCols.length != order.length) {
         return (s, false)
       }
