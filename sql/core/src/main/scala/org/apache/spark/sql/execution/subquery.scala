@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * The base class for subquery that is used in SparkPlan.
