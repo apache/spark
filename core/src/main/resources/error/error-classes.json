@@ -59,6 +59,12 @@
     ],
     "sqlState" : "22005"
   },
+  "CAST_OVERFLOW_IN_TABLE_INSERT" : {
+    "message" : [
+      "<input> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` on the <input> to tolerate overflow and return NULL instead."
+    ],
+    "sqlState" : "22005"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."

@@ -93,6 +93,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = "")
   }
 
+  def castingCauseOverflowErrorInTableInsert(
+      inputExpressionName: String,
+      from: DataType,
+      to: DataType): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      messageParameters = Array(
+        inputExpressionName,
+        toSQLType(from),
+        toSQLType(to)))
+  }
+
   def cannotChangeDecimalPrecisionError(
       value: Decimal,
       decimalPrecision: Int,

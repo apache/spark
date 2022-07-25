@@ -21,6 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.QueryParsingErrors.toSQLExpr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -2359,4 +2361,47 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
+}
+
+case class CheckOverflowInTableInsert(child: Cast) extends UnaryExpression {
+
+  def inputExpressionName: String = toSQLExpr(child.child)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild.asInstanceOf[Cast])
+
+  override def eval(input: InternalRow): Any = try {
+    child.eval(input)
+  } catch {
+    case e: SparkArithmeticException if e.getErrorClass == "CAST_OVERFLOW" =>
+      QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+        inputExpressionName,
+        child.child.dataType,
+        child.dataType
+      )
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val exceptionClass = classOf[SparkArithmeticException].getClass
+    // scalastyle:off line.size.limit
+    ev.copy(code = code"""
+      boolean ${ev.isNull} = true;
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      try {
+        ${childGen.code}
+        ${ev.isNull} = ${childGen.isNull};
+        ${ev.value} = ${childGen.value};
+      } catch ($exceptionClass e) {
+        if (e.getErrorClass == "CAST_OVERFLOW") {
+          QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(${inputExpressionName}, ${child.child.dataType}, ${child.dataType});
+        } else {
+          throw e;
+        }
+      }"""
+    // scalastyle:on line.size.limit
+    )
+  }
+
+  override def dataType: DataType = child.dataType
 }
