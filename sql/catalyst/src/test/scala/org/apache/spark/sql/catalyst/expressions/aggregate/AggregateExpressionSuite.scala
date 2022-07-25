@@ -26,7 +26,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
   test("test references from unresolved aggregate functions") {
     val x = UnresolvedAttribute("x")
     val y = UnresolvedAttribute("y")
-    val actual = AggregateExpression(Sum(Add(x, y)), mode = Complete, isDistinct = false).references
+    val actual = Sum(Add(x, y)).toAggregateExpression().references
     val expected = AttributeSet(x :: y :: Nil)
     assert(expected == actual, s"Expected: $expected. Actual: $actual")
   }

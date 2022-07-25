@@ -132,6 +132,7 @@ Output [3]: [d_date_sk#5, d_year#6, d_qoy#7]
 (5) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_sold_date_sk#3]
 Right keys [1]: [d_date_sk#5]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 2]
@@ -171,6 +172,7 @@ Arguments: [ca_address_sk#8 ASC NULLS FIRST], false, 0
 (14) SortMergeJoin [codegen id : 6]
 Left keys [1]: [ss_addr_sk#1]
 Right keys [1]: [ca_address_sk#8]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 6]
@@ -216,6 +218,7 @@ Output [3]: [d_date_sk#18, d_year#19, d_qoy#20]
 (23) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_sold_date_sk#16]
 Right keys [1]: [d_date_sk#18]
+Join type: Inner
 Join condition: None
 
 (24) Project [codegen id : 8]
@@ -240,6 +243,7 @@ Arguments: [ca_address_sk#21 ASC NULLS FIRST], false, 0
 (29) SortMergeJoin [codegen id : 12]
 Left keys [1]: [ss_addr_sk#14]
 Right keys [1]: [ca_address_sk#21]
+Join type: Inner
 Join condition: None
 
 (30) Project [codegen id : 12]
@@ -271,6 +275,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (35) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#9]
 Right keys [1]: [ca_county#22]
+Join type: Inner
 Join condition: None
 
 (36) Project [codegen id : 42]
@@ -298,6 +303,7 @@ Output [3]: [d_date_sk#30, d_year#31, d_qoy#32]
 (41) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [ss_sold_date_sk#28]
 Right keys [1]: [d_date_sk#30]
+Join type: Inner
 Join condition: None
 
 (42) Project [codegen id : 15]
@@ -322,6 +328,7 @@ Arguments: [ca_address_sk#33 ASC NULLS FIRST], false, 0
 (47) SortMergeJoin [codegen id : 19]
 Left keys [1]: [ss_addr_sk#26]
 Right keys [1]: [ca_address_sk#33]
+Join type: Inner
 Join condition: None
 
 (48) Project [codegen id : 19]
@@ -353,6 +360,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (53) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#9]
 Right keys [1]: [ca_county#34]
+Join type: Inner
 Join condition: None
 
 (54) Project [codegen id : 42]
@@ -380,6 +388,7 @@ Output [3]: [d_date_sk#41, d_year#42, d_qoy#43]
 (59) BroadcastHashJoin [codegen id : 22]
 Left keys [1]: [ws_sold_date_sk#40]
 Right keys [1]: [d_date_sk#41]
+Join type: Inner
 Join condition: None
 
 (60) Project [codegen id : 22]
@@ -404,6 +413,7 @@ Arguments: [ca_address_sk#44 ASC NULLS FIRST], false, 0
 (65) SortMergeJoin [codegen id : 26]
 Left keys [1]: [ws_bill_addr_sk#38]
 Right keys [1]: [ca_address_sk#44]
+Join type: Inner
 Join condition: None
 
 (66) Project [codegen id : 26]
@@ -449,6 +459,7 @@ Output [3]: [d_date_sk#53, d_year#54, d_qoy#55]
 (74) BroadcastHashJoin [codegen id : 28]
 Left keys [1]: [ws_sold_date_sk#52]
 Right keys [1]: [d_date_sk#53]
+Join type: Inner
 Join condition: None
 
 (75) Project [codegen id : 28]
@@ -473,6 +484,7 @@ Arguments: [ca_address_sk#56 ASC NULLS FIRST], false, 0
 (80) SortMergeJoin [codegen id : 32]
 Left keys [1]: [ws_bill_addr_sk#50]
 Right keys [1]: [ca_address_sk#56]
+Join type: Inner
 Join condition: None
 
 (81) Project [codegen id : 32]
@@ -504,6 +516,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (86) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [ca_county#45]
 Right keys [1]: [ca_county#57]
+Join type: Inner
 Join condition: None
 
 (87) Project [codegen id : 41]
@@ -531,6 +544,7 @@ Output [3]: [d_date_sk#64, d_year#65, d_qoy#66]
 (92) BroadcastHashJoin [codegen id : 35]
 Left keys [1]: [ws_sold_date_sk#63]
 Right keys [1]: [d_date_sk#64]
+Join type: Inner
 Join condition: None
 
 (93) Project [codegen id : 35]
@@ -555,6 +569,7 @@ Arguments: [ca_address_sk#67 ASC NULLS FIRST], false, 0
 (98) SortMergeJoin [codegen id : 39]
 Left keys [1]: [ws_bill_addr_sk#61]
 Right keys [1]: [ca_address_sk#67]
+Join type: Inner
 Join condition: None
 
 (99) Project [codegen id : 39]
@@ -586,6 +601,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (104) BroadcastHashJoin [codegen id : 41]
 Left keys [1]: [ca_county#45]
 Right keys [1]: [ca_county#68]
+Join type: Inner
 Join condition: None
 
 (105) Project [codegen id : 41]
@@ -599,6 +615,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [pla
 (107) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#34]
 Right keys [1]: [ca_county#45]
+Join type: Inner
 Join condition: ((CASE WHEN (web_sales#49 > 0.00) THEN (web_sales#60 / web_sales#49) END > CASE WHEN (store_sales#37 > 0.00) THEN (store_sales#13 / store_sales#37) END) AND (CASE WHEN (web_sales#60 > 0.00) THEN (web_sales#71 / web_sales#60) END > CASE WHEN (store_sales#13 > 0.00) THEN (store_sales#25 / store_sales#13) END))
 
 (108) Project [codegen id : 42]
