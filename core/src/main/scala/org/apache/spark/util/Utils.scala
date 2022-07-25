@@ -929,8 +929,7 @@ private[spark] object Utils extends Logging {
       // Randomizing the shuffle location in case of K8s so that all disk get fair changes to
       // get selected.
       randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))
-    }
-    else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
+    } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
       conf.getenv("SPARK_LOCAL_DIRS").split(",")
