@@ -293,6 +293,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveUpCast ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
+      ResolveUnpivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
@@ -513,6 +514,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
+
+      case up: Unpivot if up.child.resolved &&
+        (hasUnresolvedAlias(up.ids) || hasUnresolvedAlias(up.values)) =>
+        up.copy(ids = assignAliases(up.ids), values = assignAliases(up.values))
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -856,6 +861,36 @@ class Analyzer(override val catalogManager: CatalogManager)
       case e: Attribute =>
         throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
       case e => e.children.foreach(checkValidAggregateExpression)
+    }
+  }
+
+  object ResolveUnpivot extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNPIVOT), ruleId) {
+
+      // once children and ids are resolved, we can determine values, if non were given
+      case up: Unpivot if up.childrenResolved && up.ids.forall(_.resolved) && up.values.isEmpty =>
+        up.copy(values = up.child.output.diff(up.ids))
+
+      case up: Unpivot if !up.childrenResolved || !up.ids.forall(_.resolved) ||
+        up.values.isEmpty || !up.values.forall(_.resolved) || !up.valuesTypeCoercioned => up
+
+      // TypeCoercionBase.UnpivotCoercion determines valueType
+      // and casts values once values are set and resolved
+      case Unpivot(ids, values, variableColumnName, valueColumnName, child) =>
+        // construct unpivot expressions for Expand
+        val exprs: Seq[Seq[Expression]] = values.map {
+          value => ids ++ Seq(Literal(value.name), value)
+        }
+
+        // construct output attributes
+        val output = ids.map(_.toAttribute) ++ Seq(
+          AttributeReference(variableColumnName, StringType, nullable = false)(),
+          AttributeReference(valueColumnName, values.head.dataType, values.exists(_.nullable))()
+        )
+
+        // expand the unpivot expressions
+        Expand(exprs, output, child)
     }
   }
 
@@ -1349,6 +1384,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
+      // If the Unpivot ids or values contain Stars, expand them.
+      case up: Unpivot if containsStar(up.ids) || containsStar(up.values) =>
+        up.copy(
+          ids = buildExpandedProjectList(up.ids, up.child),
+          values = buildExpandedProjectList(up.values, up.child)
+        )
 
       case u @ Union(children, _, _)
         // if there are duplicate output columns, give them unique expr ids
