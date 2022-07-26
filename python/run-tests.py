@@ -122,8 +122,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
+    # Delete is always set to False since the cleanup will be either done by removing the whole test dir, or
+    # the test output is retained.
     per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, dir=tmp_dir,
-                                                  suffix=".log", delete=not keep_test_output)
+                                                  suffix=".log", delete=False)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
