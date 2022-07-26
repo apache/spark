@@ -244,3 +244,7 @@ SELECT
 FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
+
+
+SELECT mode(a), mode(b) FROM testData;
+SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a;
