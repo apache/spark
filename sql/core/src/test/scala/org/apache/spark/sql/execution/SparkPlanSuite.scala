@@ -149,7 +149,6 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     import org.apache.spark.sql.SparkSession
     val ss: SparkSession = spark
     import ss.implicits._
-    
     val testJson =
       """{
         | "b": {
