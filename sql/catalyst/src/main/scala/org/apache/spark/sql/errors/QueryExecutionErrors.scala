@@ -102,7 +102,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         toSQLType(from),
         toSQLType(to),
-        toSQLId(columnName))
+        toSQLId(columnName)),
+      context = None,
+      summary = ""
     )
   }
 
