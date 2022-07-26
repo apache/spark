@@ -117,6 +117,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
+        # Adding Spark Connect JAR and Config
+        "--conf", "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin",
+        # FIXME(martin.grund) This path needs to be fixed properly.
+        "--jars", "/Users/martin.grund/Development/spark/connect/target/spark-connect_2.12-3.4.0-SNAPSHOT.jar",
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
