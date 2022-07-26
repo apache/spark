@@ -43,6 +43,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("DataFrame function and SQL functon parity") {
+    // This test compares the available list of DataFrame functions in
+    // org.apache.spark.sql.functions with the SQL function registry. This attempts to verify that
+    // the DataFrame functions are a subset of the functions in the SQL function registry (subject
+    // to exclusions and expectations). It also produces a list of the differences between the two.
+    // See also test_function_parity in test_functions.py.
+    //
+    // NOTE FOR DEVELOPERS:
+    // If this test fails one of the following needs to happen
+    // * If a function was added to org.apache.spark.sql.functions but not the function registry
+    //     add it to the below expectedOnlyDataFrameFunctions set.
+    // * If it's not related to an added function then likely one of the exclusion lists below
+    //     needs to be updated.
+
     val excludedDataFrameFunctions = Set(
       "approxCountDistinct", "bitwiseNOT", "callUDF", "monotonicallyIncreasingId", "shiftLeft",
       "shiftRight", "shiftRightUnsigned", "sumDistinct", "toDegrees", "toRadians",
@@ -68,6 +81,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "reflect", "java_method" // Only needed in SQL
     )
 
+    val expectedOnlyDataFrameFunctions = Set(
+      "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
+      "product", // Discussed in https://github.com/apache/spark/pull/30745
+      "unwrap_udt"
+    )
+
     // We only consider functions matching this pattern, this excludes symbolic and other
     // functions that are not relevant to this comparison
     val word_pattern = """\w*"""
@@ -80,17 +99,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       .toSet
       .filter(_.matches(word_pattern))
       .diff(excludedDataFrameFunctions)
-    log.warn(s"There are ${dataFrameFunctions.size} relevant functions in the DataFrame API")
 
     // Set of SQL functions in the builtin function registry
     val sqlFunctions = FunctionRegistry.functionSet
       .map(f => f.funcName)
       .filter(_.matches(word_pattern))
       .diff(excludedSqlFunctions)
-    log.warn(s"There are ${sqlFunctions.size} relevant functions in the SQL function registry")
 
     val commonCount = dataFrameFunctions.intersect(sqlFunctions).size
-    log.warn(s"Number of functions in both sets: $commonCount")
 
     val onlyDataFrameFunctions = dataFrameFunctions.diff(sqlFunctions)
     val onlySqlFunctions = sqlFunctions.diff(dataFrameFunctions)
@@ -99,16 +115,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(onlyDataFrameFunctions.intersect(excludedSqlFunctions) === Set.empty)
     assert(onlySqlFunctions.intersect(excludedDataFrameFunctions) === Set.empty)
 
+    // Check that only expected functions are left
+    assert(onlyDataFrameFunctions === expectedOnlyDataFrameFunctions)
+
+    // scalastyle:off println
+    println("Report: DataFrame function and SQL functon parity")
+    println(s"  There are ${dataFrameFunctions.size} relevant functions in the DataFrame API")
+    println(s"  There are ${sqlFunctions.size} relevant functions in the SQL function registry")
+    println(s"  Number of functions in both sets: $commonCount")
     if(onlyDataFrameFunctions.nonEmpty) {
       val number = onlyDataFrameFunctions.size
-      val formattedList = onlyDataFrameFunctions.toList.sorted.mkString(", ")
-      log.warn(s"There are $number functions DataFrame API that are not in SQL: $formattedList")
+      val sortedList = onlyDataFrameFunctions.toList.sorted.mkString(", ")
+      println(s"  There are $number DataFrame functions that are not in SQL: $sortedList")
     }
     if(onlySqlFunctions.nonEmpty) {
       val number = onlySqlFunctions.size
-      val formattedList = onlySqlFunctions.toList.sorted.mkString(", ")
-      log.warn(s"There are $number functions SQL that are not in DataFrame API: $formattedList")
+      val sortedList = onlySqlFunctions.toList.sorted.mkString(", ")
+      println(s"  There are $number SQL functions that are not in the DataFrame API: $sortedList")
     }
+    // scalastyle:on println
   }
 
   test("array with column name") {
