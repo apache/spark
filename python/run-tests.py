@@ -123,7 +123,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, dir=tmp_dir,
-                                                  suffix=".log", delete=keep_test_output)
+                                                  suffix=".log", delete=not keep_test_output)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
