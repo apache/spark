@@ -483,7 +483,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 3.4.0
    */
-  def as(schema: StructType): DataFrame = withPlan {
+  def to(schema: StructType): DataFrame = withPlan {
     Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
   }
 
