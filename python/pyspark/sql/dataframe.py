@@ -2305,14 +2305,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         3  2   double   2.2
         """
         if ids is None:
-            ids = []
-        elif type(ids) == tuple:
-            ids = list(ids)
+            id_list = []
+        elif isinstance(ids, tuple):
+            id_list = list(ids)
+        elif isinstance(ids, list):
+            id_list = ids
+        else:
+            id_list = [ids]
 
         if values is None:
-            values = []
-        elif type(values) == tuple:
-            values = list(values)
+            value_list = []
+        elif isinstance(values, tuple):
+            value_list = list(values)
+        elif isinstance(values, list):
+            value_list = values
+        else:
+            value_list = [values]
 
         if variableColumnName is None:
             variableColumnName = "variable"
@@ -2322,7 +2330,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(
             self._jdf._unpivot(
-                self._jcols(ids), self._jcols(values), variableColumnName, valueColumnName
+                self._jcols(*id_list), self._jcols(*value_list), variableColumnName, valueColumnName
             ),
             self.sparkSession,
         )
