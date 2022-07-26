@@ -66,7 +66,7 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None) {
 
-  val context: SQLQueryContext = SQLQueryContext(
+  lazy val context: SQLQueryContext = SQLQueryContext(
     line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
 }
 
