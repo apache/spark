@@ -269,14 +269,14 @@ case class Generate(
   override protected def withNewChildInternal(newChild: LogicalPlan): Generate = {
     // Generally speaking, using index to keep track of unrequired child nodes is not a good idea,
     //   should probably use exprId instead.
-    val unrequiredExprIdSet = unrequiredChildIndex.map(child.output).flatMap {
-      case ua if !ua.resolved =>
-        None // exprId not available if unresolved
-      case a => Option(a.exprId)
-    }.toSet
-    val newUnrequiredChildIndices = newChild.output.indices.filter { idx =>
-      val newAttr = newChild.output(idx)
-      unrequiredExprIdSet.contains(newAttr.exprId)
+    val newUnrequiredChildIndices = if (child.resolved) {
+      val unrequiredExprIdSet = unrequiredChildIndex.map(child.output).map(_.exprId).toSet
+      newChild.output.indices.filter { idx =>
+        val newAttr = newChild.output(idx)
+        unrequiredExprIdSet.contains(newAttr.exprId)
+      }
+    } else {
+      Nil
     }
     copy(child = newChild, unrequiredChildIndex = newUnrequiredChildIndices)
   }
