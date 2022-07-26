@@ -2779,12 +2779,15 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
-    <td><b>One-time micro-batch</b></td>
+    <td><b>One-time micro-batch</b><i>(deprecated)</i></td>
     <td>
         The query will execute <strong>only one</strong> micro-batch to process all the available data and then
         stop on its own. This is useful in scenarios you want to periodically spin up a cluster,
         process everything that is available since the last period, and then shutdown the
         cluster. In some case, this may lead to significant cost savings.
+        Note that this trigger is deprecated and users are encouraged to migrate to <b>Available-now micro-batch</b>,
+        as it provides the better guarantee of processing, fine-grained scale of batches, and better gradual processing
+        of watermark advancement including no-data batch.
     </td>
   </tr>
   <tr>
@@ -2794,6 +2797,15 @@ Here are the different kinds of triggers that are supported.
         stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
         based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
         in better query scalability.
+        <ul>
+            <li>This trigger provides a strong guarantee of processing: regardless of how many batches were
+                left over in previous run, it ensures all available data at the time of execution gets
+                processed before termination. All uncommitted batches will be processed first.</li>
+
+            <li>Watermark gets advanced per each batch, and no-data batch gets executed before termination
+                if the last batch advances the watermark. This helps to maintain smaller and predictable
+                state size and smaller latency on the output of stateful operators.</li>
+        </ul>
     </td>
   </tr>
   <tr>
@@ -2824,7 +2836,7 @@ df.writeStream
   .trigger(Trigger.ProcessingTime("2 seconds"))
   .start()
 
-// One-time trigger
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
@@ -2862,7 +2874,7 @@ df.writeStream
   .trigger(Trigger.ProcessingTime("2 seconds"))
   .start();
 
-// One-time trigger
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
@@ -2898,7 +2910,7 @@ df.writeStream \
   .trigger(processingTime='2 seconds') \
   .start()
 
-# One-time trigger
+# One-time trigger (Deprecated, encouraged to use Available-now trigger)
 df.writeStream \
   .format("console") \
   .trigger(once=True) \

@@ -26,7 +26,6 @@ license: |
   
   - Since Spark 3.4, Number or Number(\*) from Teradata will be treated as Decimal(38,18). In Spark 3.3 or earlier, Number or Number(\*) from Teradata will be treated as Decimal(38, 0), in which case the fractional part will be removed.
   - Since Spark 3.4, v1 database, table, permanent view and function identifier will include 'spark_catalog' as the catalog name if database is defined, e.g. a table identifier will be: `spark_catalog.default.t`. To restore the legacy behavior, set `spark.sql.legacy.v1IdentifierNoCatalog` to `true`.
-  - Since Spark 3.4, the results of casting Decimal values as String type will not contain exponential notations. To restore the legacy behavior, which uses scientific notation if the adjusted exponent is less than -6, set `spark.sql.legacy.castDecimalToString.enabled` to `true`.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 

@@ -109,6 +109,12 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(
       inferSchema.mergeRowTypes(Array(DoubleType),
         Array(LongType)).sameElements(Array(DoubleType)))
+    assert(
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampNTZType)).sameElements(Array(TimestampNTZType)))
+    assert(
+      inferSchema.mergeRowTypes(Array(DateType),
+        Array(TimestampType)).sameElements(Array(TimestampType)))
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
@@ -191,5 +197,54 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     // input like '1,0' is inferred as strings for backward compatibility.
     Seq("en-US").foreach(checkDecimalInfer(_, StringType))
     Seq("ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
+  }
+
+  test("SPARK-39469: inferring date type") {
+    // "yyyy/MM/dd" format
+    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd", "inferDate" -> "true"),
+      false, "UTC")
+    var inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2018/12/02") == DateType)
+    // "MMM yyyy" format
+    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy", "inferDate" -> "true"),
+      false, "GMT")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
+    // Field should strictly match date format to infer as date
+    options = new CSVOptions(
+      Map("dateFormat" -> "yyyy-MM-dd", "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+        "inferDate" -> "true"),
+      columnPruning = false,
+      defaultTimeZoneId = "GMT")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2018-12-03T11:00:00") == TimestampType)
+    assert(inferSchema.inferField(NullType, "2018-12-03") == DateType)
+  }
+
+  test("SPARK-39469: inferring date and timestamp types in a mixed column with inferDate=true") {
+    var options = new CSVOptions(
+      Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy|MM|dd",
+        "timestampNTZFormat" -> "yyyy/MM/dd", "inferDate" -> "true"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    var inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
+    assert(inferSchema.inferField(DateType, "2003|01|01") == TimestampType)
+    // SQL configuration must be set to default to TimestampNTZ
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      assert(inferSchema.inferField(DateType, "2003/02/05") == TimestampNTZType)
+    }
+
+    // inferField should upgrade a date field to timestamp if the typeSoFar is a timestamp
+    assert(inferSchema.inferField(TimestampNTZType, "2012_12_12") == TimestampNTZType)
+    assert(inferSchema.inferField(TimestampType, "2018_12_03") == TimestampType)
+
+    // No errors when Date and Timestamp have the same format. Inference defaults to date
+    options = new CSVOptions(
+      Map("dateFormat" -> "yyyy_MM_dd", "timestampFormat" -> "yyyy_MM_dd"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(DateType, "2012_12_12") == DateType)
   }
 }

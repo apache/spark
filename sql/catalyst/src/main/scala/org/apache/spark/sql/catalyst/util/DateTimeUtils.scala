@@ -563,7 +563,7 @@ object DateTimeUtils {
   /**
    * Converts the local date to the number of days since 1970-01-01.
    */
-  def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
+  def localDateToDays(localDate: LocalDate): Int = MathUtils.toIntExact(localDate.toEpochDay)
 
   /**
    * Obtains an instance of `java.time.LocalDate` from the epoch day count.

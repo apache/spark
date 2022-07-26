@@ -739,7 +739,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  object ResolvePivot extends Rule[LogicalPlan] with AliasHelper {
+  object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(PIVOT), ruleId) {
       case p: Pivot if !p.childrenResolved || !p.aggregates.forall(_.resolved)
@@ -2219,9 +2219,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                   agg.prettyName, "IGNORE NULLS")
             }
-            AggregateExpression(aggFunc, Complete, u.isDistinct, u.filter)
+            aggFunc.toAggregateExpression(u.isDistinct, u.filter)
           } else {
-            AggregateExpression(agg, Complete, u.isDistinct, u.filter)
+            agg.toAggregateExpression(u.isDistinct, u.filter)
           }
         // This function is not an aggregate function, just return the resolved one.
         case other if u.isDistinct =>
@@ -2332,7 +2332,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           aggFunc.name(), "IGNORE NULLS")
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
-      AggregateExpression(aggregator, Complete, u.isDistinct, u.filter)
+      aggregator.toAggregateExpression(u.isDistinct, u.filter)
     }
 
     /**
@@ -2358,7 +2358,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *
    * Note: CTEs are handled in CTESubstitution.
    */
-  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  object ResolveSubquery extends Rule[LogicalPlan] {
     /**
      * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
      * plan. All resolved outer references are wrapped in an [[OuterReference]]
@@ -2531,7 +2531,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * those in a HAVING clause or ORDER BY clause.  These expressions are pushed down to the
    * underlying aggregate operator and then projected away after the original operator.
    */
-  object ResolveAggregateFunctions extends Rule[LogicalPlan] with AliasHelper {
+  object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly

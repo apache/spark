@@ -24,8 +24,8 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -45,6 +45,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
     forTimestampNTZ = true)
+
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
@@ -117,7 +123,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case LongType => tryParseLong(field)
         case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
+        case DateType => tryParseDateTime(field)
+        case TimestampNTZType if options.inferDate => tryParseDateTime(field)
         case TimestampNTZType => tryParseTimestampNTZ(field)
+        case TimestampType if options.inferDate => tryParseDateTime(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
@@ -169,6 +178,16 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private def tryParseDouble(field: String): DataType = {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
+    } else if (options.inferDate) {
+      tryParseDateTime(field)
+    } else {
+      tryParseTimestampNTZ(field)
+    }
+  }
+
+  private def tryParseDateTime(field: String): DataType = {
+    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
+      DateType
     } else {
       tryParseTimestampNTZ(field)
     }
