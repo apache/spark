@@ -83,8 +83,7 @@ class ExecutionListenerManager private[sql](
 
   // SPARK-39864: lazily create the listener bus on the first register() call in order to
   // avoid listener overheads when QueryExecutionListeners aren't used:
-  private val listenerBusInitializationLock = new Object()
-  @volatile private var listenerBus: Option[ExecutionListenerBus] = None
+  private lazy val listenerBus = new ExecutionListenerBus(this, session)
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
@@ -100,12 +99,7 @@ class ExecutionListenerManager private[sql](
    */
   @DeveloperApi
   def register(listener: QueryExecutionListener): Unit = {
-    listenerBusInitializationLock.synchronized {
-      if (listenerBus.isEmpty) {
-        listenerBus = Some(new ExecutionListenerBus(this, session))
-      }
-    }
-    listenerBus.get.addListener(listener)
+    listenerBus.addListener(listener)
   }
 
   /**
@@ -113,7 +107,7 @@ class ExecutionListenerManager private[sql](
    */
   @DeveloperApi
   def unregister(listener: QueryExecutionListener): Unit = {
-    listenerBus.foreach(_.removeListener(listener))
+    listenerBus.removeListener(listener)
   }
 
   /**
@@ -121,12 +115,12 @@ class ExecutionListenerManager private[sql](
    */
   @DeveloperApi
   def clear(): Unit = {
-    listenerBus.foreach(_.removeAllListeners())
+    listenerBus.removeAllListeners()
   }
 
   /** Only exposed for testing. */
   private[sql] def listListeners(): Array[QueryExecutionListener] = {
-    listenerBus.map(_.listeners.asScala.toArray).getOrElse(Array.empty[QueryExecutionListener])
+    listenerBus.listeners.asScala.toArray
   }
 
   /**
@@ -135,7 +129,7 @@ class ExecutionListenerManager private[sql](
   private[sql] def clone(session: SparkSession, sqlConf: SQLConf): ExecutionListenerManager = {
     val newListenerManager =
       new ExecutionListenerManager(session, sqlConf, loadExtensions = false)
-    listenerBus.foreach(_.listeners.asScala.foreach(newListenerManager.register))
+    listenerBus.listeners.asScala.foreach(newListenerManager.register)
     newListenerManager
   }
 }
