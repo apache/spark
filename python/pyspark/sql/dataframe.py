@@ -1427,8 +1427,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns a new :class:`DataFrame` where each row is reconciled to match the specified
         schema.
 
-        Spark will:
-
+        Notes
+        -----
         1, Reorder columns and/or inner fields by name to match the specified schema.
 
         2, Project away columns and/or inner fields that are not needed by the specified schema.
@@ -1469,12 +1469,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+---+
         """
         assert schema is not None
-        sc = self.sparkSession._sc
-        assert sc is not None and sc._jvm is not None
-        _struct_type = getattr(
-            getattr(sc._jvm.org.apache.spark.sql.types, "StructType$"), "MODULE$"
-        )
-        jschema = _struct_type.fromString(schema.json())
+        jschema = self._jdf.sparkSession().parseDataType(schema.json())
         return DataFrame(self._jdf.to(jschema), self.sparkSession)
 
     def alias(self, alias: str) -> "DataFrame":
