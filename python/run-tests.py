@@ -77,10 +77,14 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     Parameters
     ----------
-    target_dir Destination for the Hive and log directory.
-    test_name  Test name.
-    pyspark_python Python version used to run the test.
-    keep_test_output Flag indicating if the test output should be retained after successful execution.
+    target_dir
+        Destination for the Hive and log directory.
+    test_name 
+        Test name.
+    pyspark_python
+        Python version used to run the test.
+    keep_test_output
+        Flag indicating if the test output should be retained after successful execution.
 
     """
     env = dict(os.environ)
