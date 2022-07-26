@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -31,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.config.HISTORY_SERVER_UI_PORT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.jmx.JmxServletUtils
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -123,6 +123,7 @@ class HistoryServer(
     attachPage(new HistoryPage(this))
 
     attachHandler(ApiRootResource.getServletHandler(this))
+    attachHandler(JmxServletUtils.buildServlet("/jmx", "/*"))
 
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
