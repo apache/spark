@@ -1475,7 +1475,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             getattr(sc._jvm.org.apache.spark.sql.types, "StructType$"), "MODULE$"
         )
         jschema = _struct_type.fromString(schema.json())
-        return DataFrame(getattr(self._jdf, "as")(jschema), self.sparkSession)
+        return DataFrame(self._jdf.to(jschema), self.sparkSession)
 
     def alias(self, alias: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` with an alias set.
