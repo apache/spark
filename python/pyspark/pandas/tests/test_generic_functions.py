@@ -119,6 +119,18 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         )
         self._test_interpolate(pdf)
 
+        pdf = pd.DataFrame(
+            [
+                (0.0, np.nan, -1.0, False, np.nan),
+                (np.nan, 2.0, np.nan, True, np.nan),
+                (2.0, 3.0, np.nan, True, np.nan),
+                (np.nan, 4.0, -4.0, False, np.nan),
+                (np.nan, 1.0, np.nan, True, np.nan),
+            ],
+            columns=list("abcde"),
+        )
+        self._test_interpolate(pdf)
+
     def _test_stat_functions(self, stat_func):
         pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
