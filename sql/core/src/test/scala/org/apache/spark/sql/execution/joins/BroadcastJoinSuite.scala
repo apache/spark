@@ -70,6 +70,11 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     }
   }
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
+
   /**
    * Test whether the specified broadcast join updates the peak execution memory accumulator.
    */
