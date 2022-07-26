@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkThrowable, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark._
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -88,14 +88,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLValue(t, from),
         toSQLType(from),
         toSQLType(to),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)))
+        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = None,
+      summary = "")
   }
 
   def cannotChangeDecimalPrecisionError(
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: String): ArithmeticException = {
+      context: Option[SQLQueryContext] = None): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(
@@ -103,14 +105,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidInputInCastToDatetimeError(
       value: Any,
       from: DataType,
       to: DataType,
-      errorContext: String): Throwable = {
+      context: Option[SQLQueryContext]): Throwable = {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -118,12 +121,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = errorContext)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      errorContext: String): SparkRuntimeException = {
+      context: Option[SQLQueryContext]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -131,13 +135,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(BooleanType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = errorContext)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      errorContext: String): SparkNumberFormatException = {
+      context: Option[SQLQueryContext]): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -145,7 +150,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = errorContext)
+      context = context,
+      summary = getSummary(context))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -175,30 +181,32 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(context: String): ArithmeticException = {
+  def divideByZeroError(context: Option[SQLQueryContext]): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      context: String): ArrayIndexOutOfBoundsException = {
+      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
         toSQLValue(index, IntegerType),
         toSQLValue(numElements, IntegerType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      context: String): ArrayIndexOutOfBoundsException = {
+      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
@@ -206,30 +214,39 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
           toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context,
+      summary = getSummary(context))
   }
 
-  def mapKeyNotExistError(key: Any, dataType: DataType, context: String): NoSuchElementException = {
+  def mapKeyNotExistError(
+      key: Any,
+      dataType: DataType,
+      context: Option[SQLQueryContext]): NoSuchElementException = {
     new SparkNoSuchElementException(
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
         toSQLValue(key, dataType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      queryContext = context)
+      context = context,
+      summary = getSummary(context))
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
       errorSubClass = None,
-      Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = None,
+      summary = "")
   }
 
   def ansiDateTimeParseError(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       errorSubClass = None,
-      Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = None,
+      summary = "")
   }
 
   def ansiDateTimeError(e: DateTimeException): DateTimeException = {
@@ -254,11 +271,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: String): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", errorContext = context)
+  def overflowInSumOfDecimalError(context: Option[SQLQueryContext]): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: String): ArithmeticException = {
+  def overflowInIntegralDivideError(context: Option[SQLQueryContext]): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
@@ -474,14 +491,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
-      errorContext: String = ""): ArithmeticException = {
+      context: Option[SQLQueryContext] = None): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
-      queryContext = errorContext)
+      context = context,
+      summary = getSummary(context))
   }
 
   def unaryMinusCauseOverflowError(originValue: Int): ArithmeticException = {
@@ -2019,7 +2037,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Array(
         s"add ${toSQLValue(amount, IntegerType)} $unit to " +
-        s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"))
+        s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"),
+      context = None,
+      summary = "")
   }
 
   def invalidBucketFile(path: String): Throwable = {
