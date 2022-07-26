@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.QueryContextSummary
+import org.apache.spark.QueryContext
 
 /** The class represents error context of a SQL query. */
 case class SQLQueryContext(
@@ -27,7 +27,7 @@ case class SQLQueryContext(
     originStopIndex: Option[Int],
     sqlText: Option[String],
     originObjectType: Option[String],
-    originObjectName: Option[String]) extends QueryContextSummary {
+    originObjectName: Option[String]) extends QueryContext {
 
   override val objectType = originObjectType.getOrElse("")
   override val objectName = originObjectName.getOrElse("")
@@ -40,7 +40,7 @@ case class SQLQueryContext(
    * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
    *                          ^^^^^^^^^^^^^^^
    */
-  override lazy val summary: String = {
+  lazy val summary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
     if (sqlText.isEmpty || originStartIndex.isEmpty || originStopIndex.isEmpty ||
       originStartIndex.get < 0 || originStopIndex.get >= sqlText.get.length ||

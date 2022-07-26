@@ -75,14 +75,14 @@ private[spark] object SparkThrowableHelper {
       errorClass: String,
       errorSubClass: String,
       messageParameters: Array[String]): String = {
-    getMessage(errorClass, errorSubClass, messageParameters, None)
+    getMessage(errorClass, errorSubClass, messageParameters, "")
   }
 
   def getMessage(
       errorClass: String,
       errorSubClass: String,
       messageParameters: Array[String],
-      context: Option[QueryContextSummary]): String = {
+      context: String): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
     val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {
@@ -100,7 +100,7 @@ private[spark] object SparkThrowableHelper {
     val displayMessage = String.format(
       displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
       displayMessageParameters : _*)
-    val displayQueryContext = context.map(q => "\n" + q.summary()).getOrElse("")
+    val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
 
     s"[$displayClass] $displayMessage$displayQueryContext"
   }

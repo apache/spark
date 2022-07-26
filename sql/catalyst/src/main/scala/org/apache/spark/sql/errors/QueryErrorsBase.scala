@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
@@ -94,5 +95,9 @@ private[sql] trait QueryErrorsBase {
 
   def toSQLExpr(e: Expression): String = {
     quoteByDefault(toPrettySQL(e))
+  }
+
+  def getSummary(context: Option[SQLQueryContext]): String = {
+    context.map(_.summary).getOrElse("")
   }
 }
