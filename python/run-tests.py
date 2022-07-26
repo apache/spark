@@ -122,12 +122,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
-
-    if keep_test_output:
-        # The location is unique because the test is already in a unique directory.
-        per_test_output = open(os.path.join(tmp_dir, output_prefix + ".log"), "wb+")
-    else:
-        per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, suffix=".log")
+    per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, dir=tmp_dir,
+                                                  suffix=".log", delete=keep_test_output)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
