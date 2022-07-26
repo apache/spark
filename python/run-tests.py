@@ -122,8 +122,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
-    # Delete is always set to False since the cleanup will be either done by removing the whole test dir, or
-    # the test output is retained.
+    # Delete is always set to False since the cleanup will be either done by removing the
+    # whole test dir, or the test output is retained.
     per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, dir=tmp_dir,
                                                   suffix=".log", delete=False)
     LOGGER.info(
@@ -343,7 +343,8 @@ def main():
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(target_dir, test_goal, python_exec, opts.keep_test_output)
+                run_individual_python_test(target_dir, test_goal,
+                                           python_exec, opts.keep_test_output)
             finally:
                 task_queue.task_done()
 
