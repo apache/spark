@@ -17,7 +17,7 @@ from pyspark.sql.connect.data_frame import DataFrame
 from pyspark.sql.connect.plan import Read, Sql
 
 
-from pyspark.cloudpickle import cloudpickle
+from pyspark import cloudpickle
 import uuid
 
 

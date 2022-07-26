@@ -49,13 +49,14 @@ class SparkConnectTests(SparkConnectSQLTestCase):
         # Check that the limit is applied
         assert len(data.index) == 10
 
-    def notest_simple_udf(self):
+    def test_simple_udf(self):
         def conv_udf(x):
             return "Martin"
 
         u = udf(conv_udf)
         df = self.connect.readTable(self.tbl_name)
         result = df.select(u(df.id)).collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_spark_connect import *  # noqa: F401
@@ -64,4 +65,6 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
+
+    assert testRunner is not None
     unittest.main(testRunner=testRunner, verbosity=2)
