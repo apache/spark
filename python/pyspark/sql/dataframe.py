@@ -2238,6 +2238,139 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return GroupedData(jgd, self)
 
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
+        variableColumnName: Optional[str] = None,
+        valueColumnName: Optional[str] = None,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        This function is useful to massage a DataFrame into a format where some
+        columns are identifier columns ("ids"), while all other columns ("values")
+        are "unpivoted" to the rows, leaving just two non-id columns, named as given
+        by `variableColumnName` and `valueColumnName`.
+
+        When no "id" columns are given, the unpivoted DataFrame consists of only the
+        "variable" and "value" columns.
+
+        All "value" columns must share a least common data type. Unless they are the same data type,
+        all "value" columns are cast to the nearest common data type. For instance, types
+        `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+        do not have a common data type and `unpivot` fails.
+
+        :func:`groupby` is an alias for :func:`groupBy`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : scalar, default 'variable'
+            Name of the variable column. If None it uses 'variable'.
+        valueColumnName : scalar, default 'value'
+            Name of the value column. If None it uses 'value'.
+
+        Returns
+        -------
+        DataFrame
+            Unpivoted DataFrame.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'id': {0: 1, 1: 2},
+        ...                    'int': {0: 11, 1: 21},
+        ...                    'double': {0: 1.2, 1: 2.2}},
+        ...                   columns=['id', 'int', 'double'])
+        >>> df
+           id  int  double
+        0  1    11     1.2
+        1  2    21     2.2
+
+        >>> df.unpivot('id')
+          id variable value
+        0  1      int  11.0
+        1  1   double   1.2
+        2  2      int  21.0
+        3  2   double   2.2
+        """
+        if ids is None:
+            ids = []
+        elif type(ids) == tuple:
+            ids = list(ids)
+
+        if values is None:
+            values = []
+        elif type(values) == tuple:
+            values = list(values)
+
+        if variableColumnName is None:
+            variableColumnName = "variable"
+
+        if valueColumnName is None:
+            valueColumnName = "value"
+
+        return DataFrame(
+            self._jdf._unpivot(
+                self._jcols(ids),
+                self._jcols(values),
+                variableColumnName,
+                valueColumnName
+            ),
+            self.sparkSession,
+        )
+
+    def melt(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
+        variableColumnName: Optional[str] = None,
+        valueColumnName: Optional[str] = None,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        :func:`melt` is an alias for :func:`unpivot`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : scalar, default 'variable'
+            Name of the variable column. If None it uses 'variable'.
+        valueColumnName : scalar, default 'value'
+            Name of the value column. If None it uses 'value'.
+
+        Returns
+        -------
+        DataFrame
+            Unpivoted DataFrame.
+
+        See Also
+        --------
+        DataFrame.unpivot
+        """
+        self.unpivot(ids, values, variableColumnName, valueColumnName)
+
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy().agg()``).

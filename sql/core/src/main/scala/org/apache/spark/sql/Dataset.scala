@@ -2108,6 +2108,15 @@ class Dataset[T] private[sql](
     unpivot(ids, Array.empty, variableColumnName, valueColumnName)
 
   /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   */
+  private[sql] def _unpivot(ids: Seq[Column],
+                            values: Seq[Column],
+                            variableColumnName: String,
+                            valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
    * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
    * which cannot be reversed. This is an alias for `unpivot`.
