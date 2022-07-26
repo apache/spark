@@ -23,8 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.{SupportsRuntimeFiltering, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -79,23 +78,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _, _, _)) =>
-        getFilterableTableScan(resExp, scan.filterAttributes, r)
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
-        getFilterableTableScan(resExp, scan.filterAttributes, r)
+        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
+        if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
+          Some(r)
+        } else {
+          None
+        }
       case _ => None
-    }
-  }
-
-  private def getFilterableTableScan(
-      resExp: Expression,
-      refs: Seq[NamedReference],
-      plan: LogicalPlan): Option[LogicalPlan] = {
-    val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](refs, plan)
-    if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
-      Some(plan)
-    } else {
-      None
     }
   }
 

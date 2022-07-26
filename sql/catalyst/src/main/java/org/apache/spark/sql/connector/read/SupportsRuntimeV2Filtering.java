@@ -25,15 +25,10 @@ import org.apache.spark.sql.sources.Filter;
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface if they can
  * filter initially planned {@link InputPartition}s using predicates Spark infers at runtime.
- *
  * This interface is very similar to {@link SupportsRuntimeFiltering} except it uses
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
- *
  * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
- * and only one of them should be implemented by the Data sources. However, if both of
- * the interfaces are implemented, Spark will filter the planned
- * {@link InputPartition}s first using {@link SupportsRuntimeV2Filtering#filter}
- * and then using {@link SupportsRuntimeFiltering#filter}.
+ * and only one of them should be implemented by the data sources.
  *
  * <p>
  * Note that Spark will push runtime filters only if they are beneficial.
