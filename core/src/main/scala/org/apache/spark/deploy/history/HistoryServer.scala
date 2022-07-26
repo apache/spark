@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.jmx.JmxServletUtils
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -150,6 +151,7 @@ class HistoryServer(
     attachPage(new HistoryPage(this))
 
     attachHandler(ApiRootResource.getServletHandler(this))
+    attachHandler(JmxServletUtils.buildServlet("/jmx", "/*"))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
 
