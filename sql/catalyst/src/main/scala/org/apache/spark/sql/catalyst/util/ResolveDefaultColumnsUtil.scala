@@ -100,12 +100,13 @@ object ResolveDefaultColumns {
       statementType: String,
       addNewColumnToExistingTable: Boolean): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
-      val allowedTableProviders: Array[String] =
+      val keywords: Array[String] =
         SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
           .toLowerCase().split(",").map(_.trim)
+      val allowedTableProviders: Array[String] =
+        keywords.filter(!_.endsWith("*"))
       val addColumnExistingTableBannedProviders: Array[String] =
-        SQLConf.get.getConf(SQLConf.ADD_DEFAULT_COLUMN_EXISTING_TABLE_BANNED_PROVIDERS)
-          .toLowerCase().split(",").map(_.trim)
+        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
