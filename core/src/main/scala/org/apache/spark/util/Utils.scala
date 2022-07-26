@@ -882,8 +882,7 @@ private[spark] object Utils extends Logging {
 
   private[spark] def isRunningInK8sContainer(conf: SparkConf): Boolean = {
     // Master must start with K8s in case of kubernetes
-    conf.contains("spark.master") && conf.get("spark.master") != null &&
-      conf.get("spark.master").startsWith("k8s://")
+    conf.getOption("spark.master").exists(_.startsWith("k8s://"))
   }
 
   /**
@@ -925,10 +924,10 @@ private[spark] object Utils extends Logging {
       // created the directories already, and that they are secured so that only the
       // user has access to them.
       randomizeInPlace(getYarnLocalDirs(conf).split(","))
-    } else if (isRunningInK8sContainer(conf) && conf.getenv("SPARK_LOCAL_DIRS") != null) {
+    } else if (isRunningInK8sContainer(conf)) {
       // Randomizing the shuffle location in case of K8s so that all disk get fair changes to
       // get selected.
-      randomizeInPlace(conf.getenv("SPARK_LOCAL_DIRS").split(","))
+      randomizeInPlace(getK8sLocalDirs(conf))
     } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
       conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
     } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
@@ -990,6 +989,17 @@ private[spark] object Utils extends Logging {
       throw new Exception("Yarn Local dirs can't be empty")
     }
     localDirs
+  }
+
+  private def getK8sLocalDirs(conf: SparkConf): Array[String] = {
+    val directories = if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
+      conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator)
+    } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+      conf.getenv("SPARK_LOCAL_DIRS").split(",")
+    } else {
+      conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",")
+    }
+    directories
   }
 
   /** Used by unit tests. Do not call from other places. */

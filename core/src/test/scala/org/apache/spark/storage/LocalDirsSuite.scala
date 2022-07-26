@@ -87,21 +87,29 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
   }
 
   test("SPARK-39755: Test randomness in SPARK_LOCAL_DIRS for K8s master") {
+    // Randomization will happen only when master is K8s .
     val path1 = "PATH_ONE"
     val path2 = "PATH_TWO"
-    val conf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> "PATH_ONE,PATH_TWO"))
-    conf.set("spark.master", "k8s://test")
-    val index_of_path1 = Array(false, false)
-    for (index <- 0 to 10) {
-      val data = Utils.getConfiguredLocalDirs(conf)
-      if (data(0).equals("PATH_ONE")) {
-        index_of_path1(0) = true
-      }
-      if (data(1).equals("PATH_ONE")) {
-        index_of_path1(1) = true
+    val pathExecutor = path1 + File.pathSeparator + path2
+    val envVariableLocation = Map("SPARK_LOCAL_DIRS" -> "PATH_ONE,PATH_TWO",
+      "SPARK_EXECUTOR_DIRS" -> pathExecutor)
+    for (is_k8_master <- List(true, false)) {
+      for ((envVariable, location) <- envVariableLocation) {
+        val conf = new SparkConfWithEnv(Map(envVariable -> location))
+        if (is_k8_master) conf.set("spark.master", "k8s://test")
+        val index_of_path1 = Array(false, false)
+        for (index <- 0 to 10) {
+          val data = Utils.getConfiguredLocalDirs(conf)
+          if (data(0).equals("PATH_ONE")) {
+            index_of_path1(0) = true
+          }
+          if (data(1).equals("PATH_ONE")) {
+            index_of_path1(1) = true
+          }
+        }
+        assert(index_of_path1(0))
+        if (is_k8_master) assert(index_of_path1(1)) else assert(!index_of_path1(1))
       }
     }
-    assert(index_of_path1(0))
-    assert(index_of_path1(1))
   }
 }
