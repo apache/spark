@@ -189,7 +189,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         ("data_type", StringType),
         ("comment", StringType)))
       QueryTest.checkAnswer(
-        descriptionDf.filter("!(col_name IN ('Created Time', 'Created By'))"),
+        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
         Seq(
           Row("data", "string", null),
           Row("id", "bigint", null),
