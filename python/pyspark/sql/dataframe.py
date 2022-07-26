@@ -2288,21 +2288,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = ps.DataFrame({'id': {0: 1, 1: 2},
-        ...                    'int': {0: 11, 1: 21},
-        ...                    'double': {0: 1.2, 1: 2.2}},
-        ...                   columns=['id', 'int', 'double'])
-        >>> df
-           id  int  double
-        0  1    11     1.2
-        1  2    21     2.2
+        >>> df = spark.createDataFrame(
+        ...     [(1, 11, 1.1), (2, 12, 1.2)],
+        ...     ["id", "int", "double"],
+        ... )
+        >>> df.show()
+        +---+---+------+
+        | id|int|double|
+        +---+---+------+
+        |  1| 11|   1.1|
+        |  2| 12|   1.2|
+        +---+---+------+
 
-        >>> df.unpivot('id')
-          id variable value
-        0  1      int  11.0
-        1  1   double   1.2
-        2  2      int  21.0
-        3  2   double   2.2
+        >>> df.unpivot("id").show()
+        +---+--------+-----+
+        | id|variable|value|
+        +---+--------+-----+
+        |  1|     int| 11.0|
+        |  1|  double|  1.1|
+        |  2|     int| 12.0|
+        |  2|  double|  1.2|
+        +---+--------+-----+
         """
         if ids is None:
             id_list = []
