@@ -412,6 +412,14 @@ object SQLConf {
       .longConf
       .createWithDefault(67108864L)
 
+  val PLANNED_WRITE_ENABLED = buildConf("spark.sql.optimizer.plannedWrite.enabled")
+    .internal()
+    .doc("When set to true, Spark optimizer will add logical sort operators to V1 write commands " +
+      "if needed so that `FileFormatWriter` does not need to insert physical sorts.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3697,17 +3705,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_DECIMAL_TO_STRING =
-    buildConf("spark.sql.legacy.castDecimalToString.enabled")
-      .internal()
-      .doc("When true, casting decimal values as string will use scientific notation if an " +
-        "exponent is needed, which is the same with the method java.math.BigDecimal.toString(). " +
-        "Otherwise, the casting result won't contain an exponent field, which is compliant to " +
-        "the ANSI SQL standard.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_PATH_OPTION_BEHAVIOR =
     buildConf("spark.sql.legacy.pathOptionBehavior.enabled")
       .internal()
@@ -4627,6 +4624,8 @@ class SQLConf extends Serializable with Logging {
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
+  def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 

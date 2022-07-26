@@ -113,7 +113,7 @@
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.32</slf4j.version>
-    <log4j.version>2.17.2</log4j.version>
+    <log4j.version>2.18.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.3</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -159,7 +159,7 @@
     <commons.collections4.version>4.4</commons.collections4.version>
     <scala.version>2.12.16</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
+    <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
     <!--
       This needs to be managed in different profiles to avoid
       errors building different Hadoop versions.

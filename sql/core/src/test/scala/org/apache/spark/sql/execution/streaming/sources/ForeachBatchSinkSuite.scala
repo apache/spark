@@ -169,7 +169,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
       stream.addData(1, 2, 3, 4, 5)
 
-      val query = ds.writeStream.trigger(Trigger.Once()).foreachBatch(writer).start()
+      val query = ds.writeStream.trigger(Trigger.AvailableNow()).foreachBatch(writer).start()
       query.awaitTermination()
 
       assert(planAsserted, "ForeachBatch writer should be called!")
@@ -210,7 +210,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
       stream.addData(1, 2, 3, 4, 5)
 
-      val query = ds.writeStream.trigger(Trigger.Once()).foreachBatch(writer).start()
+      val query = ds.writeStream.trigger(Trigger.AvailableNow()).foreachBatch(writer).start()
       query.awaitTermination()
 
       assert(planAsserted, "ForeachBatch writer should be called!")

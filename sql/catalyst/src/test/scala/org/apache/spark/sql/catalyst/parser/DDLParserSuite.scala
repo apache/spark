@@ -1169,50 +1169,6 @@ class DDLParserSuite extends AnalysisTest {
         isView = true))
   }
 
-  test("describe table column") {
-    comparePlans(parsePlan("DESCRIBE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc.xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc", "xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("a.b", "x.y")),
-        isExtended = false))
-
-    comparePlans(parsePlan("DESCRIBE TABLE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-
-    val caught = intercept[AnalysisException](
-      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
-    assert(caught.getMessage.contains(
-        "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
-  }
-
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",

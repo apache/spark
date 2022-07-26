@@ -29,8 +29,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
@@ -519,18 +520,8 @@ case class DataSource(
       case format: FileFormat =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val resolvedPartCols = cmd.partitionColumns.map { col =>
-          // The partition columns created in `planForWritingFileFormat` should always be
-          // `UnresolvedAttribute` with a single name part.
-          assert(col.isInstanceOf[UnresolvedAttribute])
-          val unresolved = col.asInstanceOf[UnresolvedAttribute]
-          assert(unresolved.nameParts.length == 1)
-          val name = unresolved.nameParts.head
-          outputColumns.find(a => equality(a.name, name)).getOrElse {
-            throw QueryCompilationErrors.cannotResolveAttributeError(
-              name, data.output.map(_.name).mkString(", "))
-          }
-        }
+        val resolvedPartCols =
+          DataSource.resolvePartitionColumns(cmd.partitionColumns, outputColumns, data, equality)
         val resolved = cmd.copy(
           partitionColumns = resolvedPartCols,
           outputColumnNames = outputColumnNames)
@@ -834,6 +825,28 @@ object DataSource extends Logging {
 
     if (hasEmptySchema(schema)) {
       throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
+    }
+  }
+
+  /**
+   * Resolve partition columns using output columns of the query plan.
+   */
+  def resolvePartitionColumns(
+      partitionColumns: Seq[Attribute],
+      outputColumns: Seq[Attribute],
+      plan: LogicalPlan,
+      resolver: Resolver): Seq[Attribute] = {
+    partitionColumns.map { col =>
+      // The partition columns created in `planForWritingFileFormat` should always be
+      // `UnresolvedAttribute` with a single name part.
+      assert(col.isInstanceOf[UnresolvedAttribute])
+      val unresolved = col.asInstanceOf[UnresolvedAttribute]
+      assert(unresolved.nameParts.length == 1)
+      val name = unresolved.nameParts.head
+      outputColumns.find(a => resolver(a.name, name)).getOrElse {
+        throw QueryCompilationErrors.cannotResolveAttributeError(
+          name, plan.output.map(_.name).mkString(", "))
+      }
     }
   }
 }

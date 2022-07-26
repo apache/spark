@@ -95,6 +95,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (9) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [p_partkey#1]
 Right keys [1]: [ps_partkey#5]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 10]
@@ -136,6 +137,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (18) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ps_suppkey#9]
 Right keys [1]: [s_suppkey#11]
+Join type: Inner
 Join condition: None
 
 (19) Project [codegen id : 5]
@@ -163,6 +165,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [s_nationkey#12]
 Right keys [1]: [n_nationkey#13]
+Join type: Inner
 Join condition: None
 
 (25) Project [codegen id : 5]
@@ -194,6 +197,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [pla
 (31) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [n_regionkey#14]
 Right keys [1]: [r_regionkey#15]
+Join type: Inner
 Join condition: None
 
 (32) Project [codegen id : 5]
@@ -229,6 +233,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, decimal(10,0), false], inpu
 (38) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [ps_supplycost#7, p_partkey#1]
 Right keys [2]: [min(ps_supplycost)#20, ps_partkey#8]
+Join type: Inner
 Join condition: None
 
 (39) Project [codegen id : 10]
@@ -256,6 +261,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (44) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ps_suppkey#6]
 Right keys [1]: [s_suppkey#21]
+Join type: Inner
 Join condition: None
 
 (45) Project [codegen id : 10]
@@ -283,6 +289,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (50) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [s_nationkey#24]
 Right keys [1]: [n_nationkey#28]
+Join type: Inner
 Join condition: None
 
 (51) Project [codegen id : 10]
@@ -295,6 +302,7 @@ Output [1]: [r_regionkey#31]
 (53) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [n_regionkey#30]
 Right keys [1]: [r_regionkey#31]
+Join type: Inner
 Join condition: None
 
 (54) Project [codegen id : 10]

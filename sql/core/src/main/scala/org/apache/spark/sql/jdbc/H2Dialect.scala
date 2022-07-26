@@ -25,12 +25,14 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, ShortType, StringType}
 
@@ -110,6 +112,64 @@ private[sql] object H2Dialect extends JdbcDialect {
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
+  // See
+  // https://www.h2database.com/html/systemtables.html?#information_schema_indexes
+  // https://www.h2database.com/html/systemtables.html?#information_schema_index_columns
+  override def listIndexes(
+      conn: Connection,
+      tableIdent: Identifier,
+      options: JDBCOptions): Array[TableIndex] = {
+    val sql = {
+      s"""
+         | SELECT
+         |   i.INDEX_CATALOG AS INDEX_CATALOG,
+         |   i.INDEX_SCHEMA AS INDEX_SCHEMA,
+         |   i.INDEX_NAME AS INDEX_NAME,
+         |   i.INDEX_TYPE_NAME AS INDEX_TYPE_NAME,
+         |   i.REMARKS as REMARKS,
+         |   ic.COLUMN_NAME AS COLUMN_NAME
+         | FROM INFORMATION_SCHEMA.INDEXES i, INFORMATION_SCHEMA.INDEX_COLUMNS ic
+         | WHERE i.TABLE_CATALOG = ic.TABLE_CATALOG
+         | AND i.TABLE_SCHEMA = ic.TABLE_SCHEMA
+         | AND i.TABLE_NAME = ic.TABLE_NAME
+         | AND i.INDEX_CATALOG = ic.INDEX_CATALOG
+         | AND i.INDEX_SCHEMA = ic.INDEX_SCHEMA
+         | AND i.INDEX_NAME = ic.INDEX_NAME
+         | AND i.TABLE_NAME = '${tableIdent.name()}'
+         | AND i.INDEX_SCHEMA = '${tableIdent.namespace().last}'
+         |""".stripMargin
+    }
+    var indexMap: Map[String, TableIndex] = Map()
+    try {
+      JdbcUtils.executeQuery(conn, options, sql) { rs =>
+        while (rs.next()) {
+          val indexName = rs.getString("INDEX_NAME")
+          val colName = rs.getString("COLUMN_NAME")
+          val indexType = rs.getString("INDEX_TYPE_NAME")
+          val indexComment = rs.getString("REMARKS")
+          if (indexMap.contains(indexName)) {
+            val index = indexMap(indexName)
+            val newIndex = new TableIndex(indexName, indexType,
+              index.columns() :+ FieldReference(colName),
+              index.columnProperties, index.properties)
+            indexMap += (indexName -> newIndex)
+          } else {
+            val properties = new util.Properties()
+            if (StringUtils.isNotEmpty(indexComment)) properties.put("COMMENT", indexComment)
+            val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
+              new util.HashMap[NamedReference, util.Properties](), properties)
+            indexMap += (indexName -> index)
+          }
+        }
+      }
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+    }
+
+    indexMap.values.toArray
+  }
+
   private def tableNameWithSchema(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
   }
@@ -161,7 +221,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
         throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+          s"support aggregate function: $funcName with DISTINCT")
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }

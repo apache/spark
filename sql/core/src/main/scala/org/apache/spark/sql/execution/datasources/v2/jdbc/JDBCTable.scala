@@ -83,7 +83,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
 
   override def listIndexes(): Array[TableIndex] = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
-      JdbcUtils.listIndexes(conn, name, jdbcOptions)
+      JdbcUtils.listIndexes(conn, ident, jdbcOptions)
     }
   }
 }
