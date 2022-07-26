@@ -561,7 +561,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     Row(variable="id", value=3.0),
                     Row(variable="int", value=30.0),
                     Row(variable="double", value=3.0),
-                ]
+                ],
             )
 
         with self.subTest(desc="with no identifier column and multiple value columns"):
@@ -570,8 +570,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     with self.subTest(ids=id, values=values):
                         actual = df.unpivot(id, values)
                         self.assertEqual(
-                            actual.schema.simpleString(),
-                            "struct<variable:string,value:double>"
+                            actual.schema.simpleString(), "struct<variable:string,value:double>"
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -582,7 +581,7 @@ class DataFrameTests(ReusedSQLTestCase):
                                 Row(variable="double", value=2.0),
                                 Row(variable="int", value=30.0),
                                 Row(variable="double", value=3.0),
-                            ]
+                            ],
                         )
 
         with self.subTest(desc="with single identifier column and multiple value columns"):
@@ -592,7 +591,7 @@ class DataFrameTests(ReusedSQLTestCase):
                         actual = df.unpivot(id, values)
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,variable:string,value:double>"
+                            "struct<id:bigint,variable:string,value:double>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -603,17 +602,17 @@ class DataFrameTests(ReusedSQLTestCase):
                                 Row(id=2, variable="double", value=2.0),
                                 Row(id=3, variable="int", value=30.0),
                                 Row(id=3, variable="double", value=3.0),
-                            ]
+                            ],
                         )
 
         with self.subTest(desc="with multiple identifier columns and single given value columns"):
             for ids in [["id", "double"], ("id", "double")]:
-                for values in ["str", ["str"], ("str", )]:
+                for values in ["str", ["str"], ("str",)]:
                     with self.subTest(ids=ids, values=values):
                         actual = df.unpivot(ids, values)
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,double:double,variable:string,value:string>"
+                            "struct<id:bigint,double:double,variable:string,value:string>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -621,7 +620,7 @@ class DataFrameTests(ReusedSQLTestCase):
                                 Row(id=1, double=1.0, variable="str", value="one"),
                                 Row(id=2, double=2.0, variable="str", value="two"),
                                 Row(id=3, double=3.0, variable="str", value="three"),
-                            ]
+                            ],
                         )
 
         with self.subTest(desc="with multiple identifier columns but no given value columns"):
@@ -631,7 +630,7 @@ class DataFrameTests(ReusedSQLTestCase):
                         actual = df.unpivot(ids, values)
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,str:string,variable:string,value:double>"
+                            "struct<id:bigint,str:string,variable:string,value:double>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -642,14 +641,13 @@ class DataFrameTests(ReusedSQLTestCase):
                                 Row(id=2, str="two", variable="double", value=2.0),
                                 Row(id=3, str="three", variable="int", value=30.0),
                                 Row(id=3, str="three", variable="double", value=3.0),
-                            ]
+                            ],
                         )
 
         with self.subTest(desc="with custom variable and value column names"):
             actual = df.unpivot("id", ["int", "double"], "var", "val")
             self.assertEqual(
-                actual.schema.simpleString(),
-                "struct<id:bigint,var:string,val:double>"
+                actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
             )
             self.assertEqual(
                 actual.collect(),
@@ -660,14 +658,14 @@ class DataFrameTests(ReusedSQLTestCase):
                     Row(id=2, var="double", val=2.0),
                     Row(id=3, var="int", val=30.0),
                     Row(id=3, var="double", val=3.0),
-                ]
+                ],
             )
 
         with self.subTest(desc="with value columns without common data type"):
             with self.assertRaisesRegex(
                 AnalysisException,
                 r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
-                r"a least common type, some types do not: .*"
+                r"a least common type, some types do not: .*",
             ):
                 df.unpivot("id", ["int", "str"])
 

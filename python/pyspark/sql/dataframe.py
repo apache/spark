@@ -2322,10 +2322,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(
             self._jdf._unpivot(
-                self._jcols(ids),
-                self._jcols(values),
-                variableColumnName,
-                valueColumnName
+                self._jcols(ids), self._jcols(values), variableColumnName, valueColumnName
             ),
             self.sparkSession,
         )
