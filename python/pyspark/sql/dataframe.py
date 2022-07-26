@@ -2380,7 +2380,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         DataFrame.unpivot
         """
-        self.unpivot(ids, values, variableColumnName, valueColumnName)
+        return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Aggregate on the entire :class:`DataFrame` without groups

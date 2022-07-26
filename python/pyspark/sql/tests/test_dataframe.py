@@ -669,6 +669,12 @@ class DataFrameTests(ReusedSQLTestCase):
             ):
                 df.unpivot("id", ["int", "str"])
 
+        with self.subTest(desc="melt alias"):
+            self.assertEqual(
+                df.unpivot("id", ["int", "double"]).collect(),
+                df.melt("id", ["int", "double"]).collect(),
+            )
+
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation
