@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.lang.reflect.Modifier
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -25,7 +26,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -40,6 +41,75 @@ import org.apache.spark.sql.types._
  */
 class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  test("DataFrame function and SQL functon parity") {
+    val excludedDataFrameFunctions = Set(
+      "approxCountDistinct", "bitwiseNOT", "callUDF", "monotonicallyIncreasingId", "shiftLeft",
+      "shiftRight", "shiftRightUnsigned", "sumDistinct", "toDegrees", "toRadians",
+      // all depreciated
+      "asc", "asc_nulls_first", "asc_nulls_last", "desc", "desc_nulls_first", "desc_nulls_last",
+      // sorting in sql is not a function
+      "bitwise_not", // equivalent to ~expression in sql
+      "broadcast", // hints are not done with functions in sql
+      "call_udf", // moot in SQL as you just call the function directly
+      "col", "column", "expr", "lit", "negate", // first class functionality in SQL
+      "countDistinct", "count_distinct", // equivalent to count(distinct foo)
+      "sum_distinct", // equivalent to sum(distinct foo)
+      "typedLit", "typedlit", // Scala only
+      "udaf", "udf" // create function statement in sql
+    )
+
+    val excludedSqlFunctions = Set(
+      "random", "ceiling", "negative", "sign", "first_value", "last_value",
+      "approx_percentile", "std", "array_agg", "char_length", "character_length",
+      "lcase", "position", "printf", "substr", "ucase", "day", "cardinality", "sha",
+      "getbit",
+      // aliases for existing functions
+      "reflect", "java_method" // Only needed in SQL
+    )
+
+    // We only consider functions matching this pattern, this excludes symbolic and other
+    // functions that are not relevant to this comparison
+    val word_pattern = """\w*"""
+
+    // Set of DataFrame functions in org.apache.spark.sql.functions
+    val dataFrameFunctions = functions.getClass
+      .getDeclaredMethods
+      .filter(m => Modifier.isPublic(m.getModifiers))
+      .map(_.getName)
+      .toSet
+      .filter(_.matches(word_pattern))
+      .diff(excludedDataFrameFunctions)
+    log.warn(s"There are ${dataFrameFunctions.size} relevant functions in the DataFrame API")
+
+    // Set of SQL functions in the builtin function registry
+    val sqlFunctions = FunctionRegistry.functionSet
+      .map(f => f.funcName)
+      .filter(_.matches(word_pattern))
+      .diff(excludedSqlFunctions)
+    log.warn(s"There are ${sqlFunctions.size} relevant functions in the SQL function registry")
+
+    val commonCount = dataFrameFunctions.intersect(sqlFunctions).size
+    log.warn(s"Number of functions in both sets: $commonCount")
+
+    val onlyDataFrameFunctions = dataFrameFunctions.diff(sqlFunctions)
+    val onlySqlFunctions = sqlFunctions.diff(dataFrameFunctions)
+
+    // Check that we did not incorrectly exclude any functions leading to false positives
+    assert(onlyDataFrameFunctions.intersect(excludedSqlFunctions) === Set.empty)
+    assert(onlySqlFunctions.intersect(excludedDataFrameFunctions) === Set.empty)
+
+    if(onlyDataFrameFunctions.nonEmpty) {
+      val number = onlyDataFrameFunctions.size
+      val formattedList = onlyDataFrameFunctions.toList.sorted.mkString(", ")
+      log.warn(s"There are $number functions DataFrame API that are not in SQL: $formattedList")
+    }
+    if(onlySqlFunctions.nonEmpty) {
+      val number = onlySqlFunctions.size
+      val formattedList = onlySqlFunctions.toList.sorted.mkString(", ")
+      log.warn(s"There are $number functions SQL that are not in DataFrame API: $formattedList")
+    }
+  }
 
   test("array with column name") {
     val df = Seq((0, 1)).toDF("a", "b")
