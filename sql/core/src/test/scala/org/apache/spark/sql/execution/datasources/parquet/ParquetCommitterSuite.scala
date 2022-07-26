@@ -24,7 +24,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
-import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -45,8 +44,7 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,512]")
-      .config(EXECUTOR_MEMORY.key, "512m")
+      .master("local-cluster[2,1,1024]")
       .appName("testing")
       .getOrCreate()
   }

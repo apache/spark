@@ -22,7 +22,6 @@ import java.util.UUID
 import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
-import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -43,8 +42,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,512]")
-      .config(EXECUTOR_MEMORY.key, "512m")
+      .master("local-cluster[2,1,1024]")
       .appName("testing")
       .getOrCreate()
   }
