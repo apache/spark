@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, Codege
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 /** The mode of an [[AggregateFunction]]. */
 sealed trait AggregateMode
@@ -636,5 +639,69 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   private def getBufferObject(buffer: InternalRow, offset: Int): T = {
     buffer.get(offset, anyObjectType).asInstanceOf[T]
+  }
+}
+
+/**
+ * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
+ * aggregation buffer.
+ */
+abstract class TypedAggregateWithHashMapAsBuffer
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[AnyRef, Long]()
+  }
+
+  protected def child: Expression
+
+  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+
+  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      // Write pairs in counts map to byte buffer.
+      obj.foreach { case (key, count) =>
+        val row = InternalRow.apply(key, count)
+        val unsafeRow = projection.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
+    }
+  }
+
+  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      val counts = new OpenHashMap[AnyRef, Long]
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType)
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        counts.update(key, count)
+        sizeOfNextRow = ins.readInt()
+      }
+
+      counts
+    } finally {
+      ins.close()
+      bis.close()
+    }
   }
 }
