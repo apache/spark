@@ -25,26 +25,34 @@ AS basic_pays(employee_name, department, salary);
 
 SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr;
 
 SELECT
   k,
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 GROUP BY k
 ORDER BY k;
 
 SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr;
 
 SELECT
   k,
   percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
-  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v) FILTER (WHERE k > 0),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) FILTER (WHERE k > 0)
 FROM aggr
 GROUP BY k
 ORDER BY k;

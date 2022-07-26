@@ -22,7 +22,6 @@ import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
@@ -36,13 +35,12 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 /**
  * A reasonable complete test suite (i.e. behaviors) for a [[ExternalCatalog]].
  *
  * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
-abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEach {
+abstract class ExternalCatalogSuite extends SparkFunSuite {
   protected val utils: CatalogTestUtils
   import utils._
 

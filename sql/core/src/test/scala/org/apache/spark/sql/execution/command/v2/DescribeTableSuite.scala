@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -89,6 +90,70 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           Row("Provider", "_", ""),
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
           Row("Table Properties", "[bar=baz]", "")))
+    }
+  }
+
+  test("describe a non-existent column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
+        |$defaultUsing""".stripMargin)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESC $tbl key1").collect()
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        sqlState = "42000",
+        parameters = Map(
+          "objectName" -> "`key1`",
+          "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
+    }
+  }
+
+  test("describe a column in case insensitivity") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        QueryTest.checkAnswer(
+          sql(s"DESC $tbl KEY"),
+          Seq(Row("col_name", "KEY"), Row("data_type", "int"), Row("comment", "comment1")))
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"DESC $tbl KEY").collect()
+          },
+          errorClass = "UNRESOLVED_COLUMN",
+          sqlState = "42000",
+          parameters = Map(
+            "objectName" -> "`KEY`",
+            "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`"))
+      }
+    }
+  }
+
+  // TODO(SPARK-39859): Support v2 `DESCRIBE TABLE EXTENDED` for columns
+  test("describe extended (formatted) a column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key INT COMMENT 'column_comment', col STRING)
+        |$defaultUsing""".stripMargin)
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment")))
     }
   }
 }

@@ -27,7 +27,6 @@ import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
@@ -35,11 +34,10 @@ import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel}
 import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.util.ThreadUtils
 
-
 /**
  * Helper trait for sharing code among [[MemoryManager]] tests.
  */
-private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
+private[memory] trait MemoryManagerSuite extends SparkFunSuite {
 
   protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
 

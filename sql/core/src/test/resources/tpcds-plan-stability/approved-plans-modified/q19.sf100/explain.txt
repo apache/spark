@@ -80,6 +80,7 @@ Condition : ((isnotnull(ss_item_sk#4) AND isnotnull(ss_customer_sk#5)) AND isnot
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [d_date_sk#1]
 Right keys [1]: [ss_sold_date_sk#8]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 2]
@@ -107,6 +108,7 @@ Condition : (isnotnull(c_customer_sk#10) AND isnotnull(c_current_addr_sk#11))
 (15) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_customer_sk#5]
 Right keys [1]: [c_customer_sk#10]
+Join type: Inner
 Join condition: None
 
 (16) Project [codegen id : 4]
@@ -134,6 +136,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (21) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#6]
 Right keys [1]: [s_store_sk#12]
+Join type: Inner
 Join condition: None
 
 (22) Project [codegen id : 4]
@@ -161,6 +164,7 @@ Condition : (isnotnull(ca_address_sk#14) AND isnotnull(ca_zip#15))
 (27) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [c_current_addr_sk#11]
 Right keys [1]: [ca_address_sk#14]
+Join type: Inner
 Join condition: NOT (substr(ca_zip#15, 1, 5) = substr(s_zip#13, 1, 5))
 
 (28) Project [codegen id : 6]
@@ -192,6 +196,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 (34) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_item_sk#4]
 Right keys [1]: [i_item_sk#16]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 6]

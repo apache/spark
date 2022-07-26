@@ -37,6 +37,8 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  */
 private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatch] =>
 
+  protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
+
   protected def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
@@ -66,6 +68,11 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
       }
 
       private var batchLoaded = true
+
+      protected override def handleEndOfDataSection(): Unit = {
+        handleMetadataAfterExec(stream)
+        super.handleEndOfDataSection()
+      }
 
       protected override def read(): ColumnarBatch = {
         if (writerThread.exception.isDefined) {

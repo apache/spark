@@ -26,7 +26,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
   test("test references from unresolved aggregate functions") {
     val x = UnresolvedAttribute("x")
     val y = UnresolvedAttribute("y")
-    val actual = AggregateExpression(Sum(Add(x, y)), mode = Complete, isDistinct = false).references
+    val actual = Sum(Add(x, y)).toAggregateExpression().references
     val expected = AttributeSet(x :: y :: Nil)
     assert(expected == actual, s"Expected: $expected. Actual: $actual")
   }
@@ -43,7 +43,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
     val checkResult3 = RegrR2(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
     assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
     assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, '[0]' is of array<int> type"))
+      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
     assert(RegrR2(Literal(3.0D), Literal(1d)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
@@ -60,7 +60,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
     val checkResult3 = RegrSlope(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
     assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
     assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, '[0]' is of array<int> type"))
+      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
     assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
@@ -77,7 +77,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
     val checkResult3 = RegrIntercept(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
     assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
     assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, '[0]' is of array<int> type"))
+      .contains("argument 2 requires double type, however, 'ARRAY(0)' is of array<int> type"))
     assert(RegrIntercept(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }

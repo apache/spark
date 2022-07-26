@@ -346,6 +346,24 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>DATE_ADD</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DATE_ADD(start_date, num_days)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>DATE_DIFF</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>DATE_DIFF(end_date, start_date)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TRUNC</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TRUNC(date, format)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.

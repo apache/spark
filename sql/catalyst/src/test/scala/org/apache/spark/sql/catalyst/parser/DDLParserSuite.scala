@@ -1169,50 +1169,6 @@ class DDLParserSuite extends AnalysisTest {
         isView = true))
   }
 
-  test("describe table column") {
-    comparePlans(parsePlan("DESCRIBE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc.xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc", "xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("a.b", "x.y")),
-        isExtended = false))
-
-    comparePlans(parsePlan("DESCRIBE TABLE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-
-    val caught = intercept[AnalysisException](
-      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
-    assert(caught.getMessage.contains(
-        "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
-  }
-
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
@@ -2097,7 +2053,7 @@ class DDLParserSuite extends AnalysisTest {
       plan match {
         case create: CreateTable =>
           TableSpec(
-            create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            create.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(create.tableSchema),
             create.partitioning,
             create.tableSpec.properties,
@@ -2109,7 +2065,7 @@ class DDLParserSuite extends AnalysisTest {
             create.tableSpec.external)
         case replace: ReplaceTable =>
           TableSpec(
-            replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            replace.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
             replace.tableSpec.properties,
@@ -2120,7 +2076,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.tableSpec.serde)
         case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            ctas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
             ctas.tableSpec.properties,
@@ -2132,7 +2088,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.tableSpec.external)
         case rtas: ReplaceTableAsSelect =>
           TableSpec(
-            rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            rtas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
             rtas.tableSpec.properties,
@@ -2224,12 +2180,12 @@ class DDLParserSuite extends AnalysisTest {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
     // THese ALTER TABLE statements should parse successfully.

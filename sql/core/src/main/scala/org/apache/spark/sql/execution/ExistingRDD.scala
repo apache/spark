@@ -83,10 +83,16 @@ case class ExternalRDDScanExec[T](
   }
 }
 
-/** Logical plan node for scanning data from an RDD of InternalRow. */
+/**
+ * Logical plan node for scanning data from an RDD of InternalRow.
+ *
+ * It is advised to set the field `originLogicalPlan` if the RDD is directly built from DataFrame,
+ * as the stat can be inherited from `originLogicalPlan`.
+ */
 case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
+    originLogicalPlan: Option[LogicalPlan] = None,
     outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val isStreaming: Boolean = false)(session: SparkSession)
@@ -110,9 +116,20 @@ case class LogicalRDD(
       case e: Attribute => rewrite.getOrElse(e, e)
     }.asInstanceOf[SortOrder])
 
+    val rewrittenOriginLogicalPlan = originLogicalPlan.map { plan =>
+      assert(output == plan.output, "The output columns are expected to the same for output " +
+        s"and originLogicalPlan. output: $output / output in originLogicalPlan: ${plan.output}")
+
+      val projectList = output.map { attr =>
+        Alias(attr, attr.name)(exprId = rewrite(attr).exprId)
+      }
+      Project(projectList, plan)
+    }
+
     LogicalRDD(
       output.map(rewrite),
       rdd,
+      rewrittenOriginLogicalPlan,
       rewrittenPartitioning,
       rewrittenOrdering,
       isStreaming
@@ -121,11 +138,15 @@ case class LogicalRDD(
 
   override protected def stringArgs: Iterator[Any] = Iterator(output, isStreaming)
 
-  override def computeStats(): Statistics = Statistics(
-    // TODO: Instead of returning a default value here, find a way to return a meaningful size
-    // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
-  )
+  override def computeStats(): Statistics = {
+    originLogicalPlan.map(_.stats).getOrElse {
+      Statistics(
+        // TODO: Instead of returning a default value here, find a way to return a meaningful size
+        // estimate for RDDs. See PR 1238 for more discussions.
+        sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
+      )
+    }
+  }
 }
 
 /** Physical plan node for scanning data from an RDD of InternalRow. */

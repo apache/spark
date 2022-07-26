@@ -28,9 +28,9 @@ import org.apache.spark.sql.hive.test.TestHive
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark catalyst test jar>,<spark core test jar>,<spark sql test jar>
  *        <spark hive test jar>
- *   2. build/sbt "hive/test:runMain <this class>"
+ *   2. build/sbt "hive/Test/runMain <this class>"
  *   3. generate result:
- *   SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
+ *   SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/Test/runMain <this class>"
  *      Results will be written to "benchmarks/InsertIntoHiveTableBenchmark-hive2.3-results.txt".
  * }}}
  */

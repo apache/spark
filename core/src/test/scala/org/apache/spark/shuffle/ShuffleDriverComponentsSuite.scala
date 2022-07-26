@@ -22,15 +22,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.collect.ImmutableMap
 import org.scalatest.Assertions._
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents, ShuffleMapOutputWriter}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 
-class ShuffleDriverComponentsSuite
-    extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach {
+class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("test serialization of shuffle initialization conf to executors") {
     val testConf = new SparkConf()

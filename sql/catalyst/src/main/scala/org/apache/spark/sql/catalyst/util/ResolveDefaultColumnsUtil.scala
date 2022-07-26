@@ -202,12 +202,12 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = CatalystSqlParser.parseExpression(text)
+          val expr = analyze(field, "")
           expr match {
             case _: ExprLiteral | _: Cast => expr
           }
         } catch {
-          case _: ParseException | _: MatchError =>
+          case _: AnalysisException | _: MatchError =>
             throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
