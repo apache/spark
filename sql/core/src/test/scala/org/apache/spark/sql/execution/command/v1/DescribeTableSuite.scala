@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -46,6 +47,124 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
         sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
       assert(e.message === "Partition not found in table 'table' database 'ns':\nid -> 1")
+    }
+  }
+
+  test("describe a non-existent column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
+        |$defaultUsing""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"DESC $tbl key1").collect()
+      }.getMessage
+      assert(errMsg === "Column key1 does not exist")
+    }
+  }
+
+  test("describe a column in case insensitivity") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        QueryTest.checkAnswer(
+          sql(s"DESC $tbl KEY"),
+          Seq(Row("col_name", "KEY"), Row("data_type", "int"), Row("comment", "comment1")))
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"DESC $tbl KEY").collect()
+        }.getMessage
+        assert(errMsg === "Column KEY does not exist")
+      }
+    }
+  }
+
+  test("describe extended (formatted) a column") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"""
+        |CREATE TABLE $tbl
+        |(key INT COMMENT 'column_comment', col STRING)
+        |$defaultUsing""".stripMargin)
+      sql(s"INSERT INTO $tbl SELECT 1, 'a'")
+      sql(s"INSERT INTO $tbl SELECT 2, 'b'")
+      sql(s"INSERT INTO $tbl SELECT 3, 'c'")
+      sql(s"INSERT INTO $tbl SELECT null, 'd'")
+
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment"),
+          Row("min", "NULL"),
+          Row("max", "NULL"),
+          Row("num_nulls", "NULL"),
+          Row("distinct_count", "NULL"),
+          Row("avg_col_len", "NULL"),
+          Row("max_col_len", "NULL"),
+          Row("histogram", "NULL")))
+      sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS FOR COLUMNS key")
+
+      Seq("EXTENDED", "FORMATTED").foreach { extended =>
+        val descriptionDf2 = sql(s"DESCRIBE TABLE $extended $tbl key")
+        QueryTest.checkAnswer(
+          descriptionDf2,
+          Seq(
+            Row("col_name", "key"),
+            Row("data_type", "int"),
+            Row("comment", "column_comment"),
+            Row("min", "1"),
+            Row("max", "3"),
+            Row("num_nulls", "1"),
+            Row("distinct_count", "3"),
+            Row("avg_col_len", "4"),
+            Row("max_col_len", "4"),
+            Row("histogram", "NULL")))
+      }
+    }
+  }
+
+  test("describe a column with histogram statistics") {
+    withSQLConf(
+      SQLConf.HISTOGRAM_ENABLED.key -> "true",
+      SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+      withNamespaceAndTable("ns", "tbl") { tbl =>
+        sql(s"""
+          |CREATE TABLE $tbl
+          |(key INT COMMENT 'column_comment', col STRING)
+          |$defaultUsing""".stripMargin)
+        sql(s"INSERT INTO $tbl SELECT 1, 'a'")
+        sql(s"INSERT INTO $tbl SELECT 2, 'b'")
+        sql(s"INSERT INTO $tbl SELECT 3, 'c'")
+        sql(s"INSERT INTO $tbl SELECT null, 'd'")
+        sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS FOR COLUMNS key")
+
+        val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+        QueryTest.checkAnswer(
+          descriptionDf,
+          Seq(
+            Row("col_name", "key"),
+            Row("data_type", "int"),
+            Row("comment", "column_comment"),
+            Row("min", "1"),
+            Row("max", "3"),
+            Row("num_nulls", "1"),
+            Row("distinct_count", "3"),
+            Row("avg_col_len", "4"),
+            Row("max_col_len", "4"),
+            Row("histogram", "height: 1.5, num_of_bins: 2"),
+            Row("bin_0", "lower_bound: 1.0, upper_bound: 2.0, distinct_count: 2"),
+            Row("bin_1", "lower_bound: 2.0, upper_bound: 3.0, distinct_count: 1")))
+      }
     }
   }
 }

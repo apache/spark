@@ -62,7 +62,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    .set(SQLConf.SHUFFLE_PARTITIONS.key, 16.toString)
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))
@@ -105,7 +105,6 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       query: String,
       goldenFile: File,
       conf: Map[String, String]): Unit = {
-    val shouldSortResults = sortMergeJoinConf != conf  // Sort for other joins
     withSQLConf(conf.toSeq: _*) {
       try {
         val (schema, output) = handleExceptions(getNormalizedResult(spark, query))
@@ -143,17 +142,15 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         assertResult(expectedSchema, s"Schema did not match\n$queryString") {
           schema
         }
-        if (shouldSortResults) {
-          val expectSorted = expectedOutput.split("\n").sorted.map(_.trim)
-            .mkString("\n").replaceAll("\\s+$", "")
-          val outputSorted = output.sorted.map(_.trim).mkString("\n").replaceAll("\\s+$", "")
-          assertResult(expectSorted, s"Result did not match\n$queryString") {
-            outputSorted
-          }
-        } else {
-          assertResult(expectedOutput, s"Result did not match\n$queryString") {
-            outputString
-          }
+        // Truncate precisions because they can be vary per how the shuffle is performed.
+        val expectSorted = expectedOutput.split("\n").sorted.map(_.trim)
+          .mkString("\n").replaceAll("\\s+$", "")
+          .replaceAll("""([0-9]+.[0-9]{10})([0-9]*)""", "$1")
+        val outputSorted = output.sorted.map(_.trim).mkString("\n")
+          .replaceAll("\\s+$", "")
+          .replaceAll("""([0-9]+.[0-9]{10})([0-9]*)""", "$1")
+        assertResult(expectSorted, s"Result did not match\n$queryString") {
+          outputSorted
         }
       } catch {
         case e: Throwable =>

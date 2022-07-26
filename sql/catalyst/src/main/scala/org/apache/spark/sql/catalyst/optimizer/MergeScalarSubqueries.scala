@@ -100,7 +100,7 @@ import org.apache.spark.sql.types.DataType
  * :  +- ReusedSubquery Subquery scalar-subquery#242, [id=#125]
  * +- *(1) Scan OneRowRelation[]
  */
-object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
+object MergeScalarSubqueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan match {
       // Subquery reuse needs to be enabled for this optimization.

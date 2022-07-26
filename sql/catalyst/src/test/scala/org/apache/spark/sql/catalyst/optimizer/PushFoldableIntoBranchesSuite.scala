@@ -32,8 +32,7 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, Timesta
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
-class PushFoldableIntoBranchesSuite
-  extends PlanTest with ExpressionEvalHelper with PredicateHelper {
+class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
