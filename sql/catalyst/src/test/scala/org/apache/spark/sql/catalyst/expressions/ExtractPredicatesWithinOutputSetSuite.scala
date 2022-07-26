@@ -22,10 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types.BooleanType
 
-class ExtractPredicatesWithinOutputSetSuite
-  extends SparkFunSuite
-  with PredicateHelper
-  with PlanTest {
+class ExtractPredicatesWithinOutputSetSuite extends SparkFunSuite with PlanTest {
   private val a = AttributeReference("A", BooleanType)(exprId = ExprId(1))
   private val b = AttributeReference("B", BooleanType)(exprId = ExprId(2))
   private val c = AttributeReference("C", BooleanType)(exprId = ExprId(3))

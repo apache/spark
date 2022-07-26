@@ -375,6 +375,18 @@
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
   },
+  "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
+    "message" : [
+      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [
+      "Unpivot value columns must share a least common type, some types do not: [<types>]"
+    ],
+    "sqlState" : "42000"
+  },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type <typeName>"

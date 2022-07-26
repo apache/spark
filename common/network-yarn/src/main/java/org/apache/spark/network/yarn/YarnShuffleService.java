@@ -120,6 +120,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
+  @VisibleForTesting
+  static final String SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME = "sparkShuffleMergeRecovery.ldb";
 
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
@@ -156,7 +158,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private TransportContext transportContext = null;
 
-  private Configuration _conf = null;
+  @VisibleForTesting
+  Configuration _conf = null;
 
   // The recovery path used to shuffle service recovery
   @VisibleForTesting
@@ -166,6 +169,10 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
 
+  // Handles merged shuffle registration, push blocks and finalization
+  @VisibleForTesting
+  MergedShuffleFileManager shuffleMergeManager;
+
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
   File registeredExecutorFile;
@@ -173,6 +180,10 @@ public class YarnShuffleService extends AuxiliaryService {
   // Where to store & reload application secrets for recovering state after an NM restart
   @VisibleForTesting
   File secretsFile;
+
+  // Where to store & reload merge manager info for recovering state after an NM restart
+  @VisibleForTesting
+  File mergeManagerFile;
 
   private DB db;
 
@@ -230,11 +241,16 @@ public class YarnShuffleService extends AuxiliaryService {
       // when it comes back
       if (_recoveryPath != null) {
         registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
+        mergeManagerFile = initRecoveryDb(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME);
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
-      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf);
+      // Create new MergedShuffleFileManager if shuffleMergeManager is null.
+      // This is because in the unit test, a customized MergedShuffleFileManager will
+      // be created through setShuffleFileManager method.
+      if (shuffleMergeManager == null) {
+        shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
+      }
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -286,8 +302,18 @@ public class YarnShuffleService extends AuxiliaryService {
     }
   }
 
+  /**
+   * Set the customized MergedShuffleFileManager for unit testing only
+   * @param mergeManager
+   */
   @VisibleForTesting
-  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
+  void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
+    this.shuffleMergeManager = mergeManager;
+  }
+
+  @VisibleForTesting
+  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(
+      TransportConf conf, File mergeManagerFile) {
     String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
     try {
       Class<?> mergeManagerImplClazz = Class.forName(
@@ -296,10 +322,11 @@ public class YarnShuffleService extends AuxiliaryService {
         mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
       // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
       // will also need the transport configuration.
-      return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
+      return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
+        .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
       defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new NoOpMergedShuffleFileManager(conf);
+      return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
 

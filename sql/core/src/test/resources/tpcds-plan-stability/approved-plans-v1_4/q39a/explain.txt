@@ -81,6 +81,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
 Right keys [1]: [i_item_sk#6]
+Join type: Inner
 Join condition: None
 
 (9) Project [codegen id : 4]
@@ -108,6 +109,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (14) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_warehouse_sk#2]
 Right keys [1]: [w_warehouse_sk#7]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 4]
@@ -120,6 +122,7 @@ Output [2]: [d_date_sk#9, d_moy#10]
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_date_sk#4]
 Right keys [1]: [d_date_sk#9]
+Join type: Inner
 Join condition: None
 
 (18) Project [codegen id : 4]
@@ -173,6 +176,7 @@ Output [1]: [i_item_sk#31]
 (28) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [inv_item_sk#26]
 Right keys [1]: [i_item_sk#31]
+Join type: Inner
 Join condition: None
 
 (29) Project [codegen id : 8]
@@ -185,6 +189,7 @@ Output [2]: [w_warehouse_sk#32, w_warehouse_name#33]
 (31) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [inv_warehouse_sk#27]
 Right keys [1]: [w_warehouse_sk#32]
+Join type: Inner
 Join condition: None
 
 (32) Project [codegen id : 8]
@@ -197,6 +202,7 @@ Output [2]: [d_date_sk#34, d_moy#35]
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [inv_date_sk#29]
 Right keys [1]: [d_date_sk#34]
+Join type: Inner
 Join condition: None
 
 (35) Project [codegen id : 8]
@@ -236,6 +242,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] 
 (42) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [i_item_sk#6, w_warehouse_sk#7]
 Right keys [2]: [i_item_sk#31, w_warehouse_sk#32]
+Join type: Inner
 Join condition: None
 
 (43) Exchange

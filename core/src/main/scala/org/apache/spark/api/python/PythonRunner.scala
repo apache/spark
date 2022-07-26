@@ -84,9 +84,9 @@ private object BasePythonRunner {
  * functions (from bottom to top).
  */
 private[spark] abstract class BasePythonRunner[IN, OUT](
-    funcs: Seq[ChainedPythonFunctions],
-    evalType: Int,
-    argOffsets: Array[Array[Int]])
+    protected val funcs: Seq[ChainedPythonFunctions],
+    protected val evalType: Int,
+    protected val argOffsets: Array[Array[Int]])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")

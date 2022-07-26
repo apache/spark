@@ -79,6 +79,7 @@ Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [pl
 (9) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [p_partkey#1]
 Right keys [1]: [l_partkey#4]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 6]
@@ -106,6 +107,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (15) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_suppkey#5]
 Right keys [1]: [s_suppkey#9]
+Join type: Inner
 Join condition: None
 
 (16) Project [codegen id : 6]
@@ -133,6 +135,7 @@ Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false], input[0, bi
 (21) BroadcastHashJoin [codegen id : 6]
 Left keys [2]: [l_suppkey#5, l_partkey#4]
 Right keys [2]: [ps_suppkey#12, ps_partkey#11]
+Join type: Inner
 Join condition: None
 
 (22) Project [codegen id : 6]
@@ -160,6 +163,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (27) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#3]
 Right keys [1]: [o_orderkey#14]
+Join type: Inner
 Join condition: None
 
 (28) Project [codegen id : 6]
@@ -187,6 +191,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#10]
 Right keys [1]: [n_nationkey#16]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 6]
