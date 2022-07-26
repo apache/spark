@@ -36,9 +36,13 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
 
   // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,
   // we skip them in the TPCDS-related tests.
+  //
   // NOTE: q6" and "q75" can cause flaky test results, so we must exclude them.
   // For more details, see SPARK-35327.
-  private val excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q74", "q75", "q78")
+  //
+  // Note: q72 requires too large memory, and GitHub Actions fails with out-of-memory.
+  // Should ideally fix this, see SPARK-39856.
+  private val excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q72", "q74", "q75", "q78")
 
   val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 
