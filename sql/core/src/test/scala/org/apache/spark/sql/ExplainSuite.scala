@@ -599,6 +599,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |(16) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
+        |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """
