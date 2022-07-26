@@ -227,6 +227,7 @@ object TableOutputResolver {
       containsIntegralOrDecimalType(m.keyType) || containsIntegralOrDecimalType(m.valueType)
     case s: StructType =>
       s.fields.exists(sf => containsIntegralOrDecimalType(sf.dataType))
+    case _ => false
   }
 
   private def canCauseCastOverflow(cast: Cast): Boolean = {
