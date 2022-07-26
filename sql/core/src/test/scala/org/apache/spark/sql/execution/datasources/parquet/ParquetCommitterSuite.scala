@@ -44,7 +44,7 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,1024]")
+      .master("local-cluster[2,1,512]")
       .appName("testing")
       .getOrCreate()
   }

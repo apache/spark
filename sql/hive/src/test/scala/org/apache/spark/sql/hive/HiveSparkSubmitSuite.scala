@@ -74,7 +74,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", TemporaryHiveUDFTest.getClass.getName.stripSuffix("$"),
       "--name", "TemporaryHiveUDFTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -91,7 +91,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", PermanentHiveUDFTest1.getClass.getName.stripSuffix("$"),
       "--name", "PermanentHiveUDFTest1",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -108,7 +108,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", PermanentHiveUDFTest2.getClass.getName.stripSuffix("$"),
       "--name", "PermanentHiveUDFTest2",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -127,7 +127,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSubmitClassLoaderTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -142,7 +142,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.sql.hive.metastore.version=0.12",
@@ -180,7 +180,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -193,7 +193,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -206,7 +206,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_14244.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -219,7 +219,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
       "--name", "SetSparkWarehouseLocationTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -256,7 +256,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
       "--name", "SetHiveWarehouseLocationTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", s"spark.sql.test.expectedWarehouseDir=$hiveWarehouseLocation",
@@ -314,7 +314,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_18360.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18360",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -328,7 +328,7 @@ class HiveSparkSubmitSuite
     val argsForCreateTable = Seq(
       "--class", SPARK_18989_CREATE_TABLE.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18947",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--jars", HiveTestJars.getHiveContribJar().getCanonicalPath,
@@ -338,7 +338,7 @@ class HiveSparkSubmitSuite
     val argsForShowTables = Seq(
       "--class", SPARK_18989_DESC_TABLE.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18947",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
@@ -359,7 +359,7 @@ class HiveSparkSubmitSuite
       val args = Seq(
         "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
         "--name", "SPARK-34772",
-        "--master", "local-cluster[2,1,1024]",
+        "--master", "local-cluster[2,1,512]",
         "--conf", s"${LEGACY_TIME_PARSER_POLICY.key}=LEGACY",
         "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
