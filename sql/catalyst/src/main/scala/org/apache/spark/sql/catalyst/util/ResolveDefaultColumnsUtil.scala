@@ -104,7 +104,7 @@ object ResolveDefaultColumns {
         SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
           .toLowerCase().split(",").map(_.trim)
       val allowedTableProviders: Array[String] =
-        keywords.filter(!_.endsWith("*"))
+        keywords.map(_.stripSuffix("*"))
       val addColumnExistingTableBannedProviders: Array[String] =
         keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
