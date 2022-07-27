@@ -212,7 +212,7 @@
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
     "message" : [
-      "Division by zero."
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
   },
