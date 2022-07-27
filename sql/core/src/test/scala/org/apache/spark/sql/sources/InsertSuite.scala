@@ -1800,7 +1800,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               if (testCase.insertNullsToStorage) {
                 null
               } else {
-                Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr")))
+                Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl")))
               },
               Seq(Map(true -> "xyz"))),
             Row(3,
