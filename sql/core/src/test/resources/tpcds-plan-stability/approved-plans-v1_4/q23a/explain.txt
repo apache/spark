@@ -130,23 +130,23 @@ Join type: Inner
 Join condition: None
 
 (14) Project [codegen id : 3]
-Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression#14]
+Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression_1#14]
 Input [4]: [ss_item_sk#7, d_date#11, i_item_sk#12, i_item_desc#13]
 
 (15) HashAggregate [codegen id : 3]
-Input [3]: [d_date#11, i_item_sk#12, _groupingexpression#14]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [3]: [d_date#11, i_item_sk#12, _groupingexpression_1#14]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#15]
-Results [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
+Results [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
 
 (16) Exchange
-Input [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
-Arguments: hashpartitioning(_groupingexpression#14, i_item_sk#12, d_date#11, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+Input [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
+Arguments: hashpartitioning(_groupingexpression_1#14, i_item_sk#12, d_date#11, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (17) HashAggregate [codegen id : 4]
-Input [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]
 Results [2]: [i_item_sk#12 AS item_sk#18, count(1)#17 AS cnt#19]

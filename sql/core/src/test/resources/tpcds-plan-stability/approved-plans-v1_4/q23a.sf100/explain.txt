@@ -174,19 +174,19 @@ Join type: Inner
 Join condition: None
 
 (19) Project [codegen id : 8]
-Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression#14]
+Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression_1#14]
 Input [4]: [ss_item_sk#7, d_date#11, i_item_sk#12, i_item_desc#13]
 
 (20) HashAggregate [codegen id : 8]
-Input [3]: [d_date#11, i_item_sk#12, _groupingexpression#14]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [3]: [d_date#11, i_item_sk#12, _groupingexpression_1#14]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#15]
-Results [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
+Results [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
 
 (21) HashAggregate [codegen id : 8]
-Input [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]
 Results [2]: [i_item_sk#12 AS item_sk#18, count(1)#17 AS cnt#19]
@@ -367,19 +367,19 @@ Join type: Inner
 Join condition: None
 
 (61) Project [codegen id : 25]
-Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression#14]
+Output [3]: [d_date#11, i_item_sk#12, substr(i_item_desc#13, 1, 30) AS _groupingexpression_1#14]
 Input [4]: [ss_item_sk#7, d_date#11, i_item_sk#12, i_item_desc#13]
 
 (62) HashAggregate [codegen id : 25]
-Input [3]: [d_date#11, i_item_sk#12, _groupingexpression#14]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [3]: [d_date#11, i_item_sk#12, _groupingexpression_1#14]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [partial_count(1)]
 Aggregate Attributes [1]: [count#15]
-Results [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
+Results [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
 
 (63) HashAggregate [codegen id : 25]
-Input [4]: [_groupingexpression#14, i_item_sk#12, d_date#11, count#16]
-Keys [3]: [_groupingexpression#14, i_item_sk#12, d_date#11]
+Input [4]: [_groupingexpression_1#14, i_item_sk#12, d_date#11, count#16]
+Keys [3]: [_groupingexpression_1#14, i_item_sk#12, d_date#11]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]
 Results [2]: [i_item_sk#12 AS item_sk#18, count(1)#17 AS cnt#19]

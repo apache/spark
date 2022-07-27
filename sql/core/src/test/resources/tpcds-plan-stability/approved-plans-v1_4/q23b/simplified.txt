@@ -36,11 +36,11 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                               WholeStageCodegen (4)
                                                 Project [item_sk]
                                                   Filter [cnt]
-                                                    HashAggregate [_groupingexpression,i_item_sk,d_date,count] [count(1),item_sk,cnt,count]
+                                                    HashAggregate [_groupingexpression_1,i_item_sk,d_date,count] [count(1),item_sk,cnt,count]
                                                       InputAdapter
-                                                        Exchange [_groupingexpression,i_item_sk,d_date] #5
+                                                        Exchange [_groupingexpression_1,i_item_sk,d_date] #5
                                                           WholeStageCodegen (3)
-                                                            HashAggregate [_groupingexpression,i_item_sk,d_date] [count,count]
+                                                            HashAggregate [_groupingexpression_1,i_item_sk,d_date] [count,count]
                                                               Project [d_date,i_item_sk,i_item_desc]
                                                                 BroadcastHashJoin [ss_item_sk,i_item_sk]
                                                                   Project [ss_item_sk,d_date]

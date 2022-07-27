@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
  * FROM t
  * GROUP BY c IS NULL
  * Instead, the aggregate expression references a `_groupingexpression` attribute:
- * Aggregate [_groupingexpression#233], [NOT _groupingexpression#233 AS (NOT (c IS NULL))#230]
+ * Aggregate [_groupingexpression_1#233], [NOT _groupingexpression_1#233 AS (NOT (c IS NULL))#230]
  * +- Project [isnull(c#219) AS _groupingexpression#233]
  *    +- LocalRelation [c#219]
  */
@@ -50,10 +50,14 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
     plan.transformWithPruning(_.containsPattern(AGGREGATE)) {
       case a: Aggregate if a.resolved =>
         val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
+        var complexGroupingExpressionIndex = 0
         val newGroupingExpressions = a.groupingExpressions.toIndexedSeq.map {
           case e if !e.foldable && e.children.nonEmpty =>
             complexGroupingExpressionMap
-              .getOrElseUpdate(e.canonicalized, Alias(e, s"_groupingexpression")())
+              .getOrElseUpdate(e.canonicalized, {
+                complexGroupingExpressionIndex += 1
+                Alias(e, s"_groupingexpression_$complexGroupingExpressionIndex")()
+              })
               .toAttribute
           case o => o
         }
