@@ -50,14 +50,23 @@ class OrcDeserializer(
           // Create a RowUpdater instance for converting Orc objects to Catalyst rows. If any fields
           // in the Orc result schema have associated existence default values, maintain a
           // boolean array to track which fields have been explicitly assigned for each row.
-          val rowUpdater: RowUpdater =
+          val writer: (Int, WritableComparable[_]) => Unit =
             if (requiredSchema.hasExistenceDefaultValues) {
               resetExistenceDefaultsBitmask(requiredSchema)
-              new RowUpdaterWithBitmask(resultRow, requiredSchema.existenceDefaultsBitmask)
+              val rowUpdater: RowUpdater =
+                new RowUpdaterWithBitmask(resultRow, requiredSchema.existenceDefaultsBitmask)
+              val writerFunc: (Int, WritableComparable[_]) => Unit =
+                newWriter(f.dataType, rowUpdater)
+              (ordinal, value) =>
+                if (value == null) {
+                  rowUpdater.setNullAt(ordinal)
+                } else {
+                  writerFunc(ordinal, value)
+                }
             } else {
-              new RowUpdater(resultRow)
+              val rowUpdater: RowUpdater = new RowUpdater(resultRow)
+              newWriter(f.dataType, rowUpdater)
             }
-          val writer = newWriter(f.dataType, rowUpdater)
           (value: WritableComparable[_]) => writer(index, value)
         }
       }.toArray
@@ -68,11 +77,7 @@ class OrcDeserializer(
     while (targetColumnIndex < fieldWriters.length) {
       if (fieldWriters(targetColumnIndex) != null) {
         val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
-        if (value == null) {
-          resultRow.setNullAt(targetColumnIndex)
-        } else {
-          fieldWriters(targetColumnIndex)(value)
-        }
+        fieldWriters(targetColumnIndex)(value)
       }
       targetColumnIndex += 1
     }
@@ -85,11 +90,7 @@ class OrcDeserializer(
     while (targetColumnIndex < fieldWriters.length) {
       if (fieldWriters(targetColumnIndex) != null) {
         val value = orcValues(requestedColIds(targetColumnIndex))
-        if (value == null) {
-          resultRow.setNullAt(targetColumnIndex)
-        } else {
-          fieldWriters(targetColumnIndex)(value)
-        }
+        fieldWriters(targetColumnIndex)(value)
       }
       targetColumnIndex += 1
     }
@@ -296,6 +297,10 @@ class OrcDeserializer(
    */
   final class RowUpdaterWithBitmask(
       row: InternalRow, bitmask: Array[Boolean]) extends RowUpdater(row) {
+    override def setNullAt(ordinal: Int): Unit = {
+      bitmask(ordinal) = false
+      super.setNullAt(ordinal)
+    }
     override def set(ordinal: Int, value: Any): Unit = {
       bitmask(ordinal) = false
       super.set(ordinal, value)

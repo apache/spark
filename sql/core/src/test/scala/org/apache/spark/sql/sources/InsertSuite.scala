@@ -1631,8 +1631,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Config(
             None),
           Config(
-            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
-            insertNullsToStorage = false))),
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")))),
       TestCase(
         dataSource = "parquet",
         Seq(
@@ -1673,16 +1672,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with array defaults") {
     // Positive tests: array types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1706,16 +1696,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with struct defaults") {
     // Positive tests: struct types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1739,16 +1720,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with map defaults") {
     // Positive tests: map types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1763,8 +1735,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               s struct<
                 x array<
                   struct<a int, b int>>,
-              y array<
-                map<boolean, string>>>
+                y array<
+                  map<boolean, string>>>
               default struct(
                 array(
                   struct(1, 2)),
@@ -1797,11 +1769,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
               Seq(Map(true -> "xyz"))),
             Row(2,
-              if (testCase.insertNullsToStorage) {
-                null
-              } else {
-                Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl")))
-              },
+              null,
               Seq(Map(true -> "xyz"))),
             Row(3,
               Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
