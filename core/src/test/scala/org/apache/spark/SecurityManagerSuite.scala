@@ -63,7 +63,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(ACLS_ENABLE, true)
     conf.set(UI_VIEW_ACLS_GROUPS, Seq("group1", "group2"))
     // default ShellBasedGroupsMappingProvider is used to resolve user groups
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     // assuming executing user does not belong to group1,group2
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
@@ -98,7 +98,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   test("set security with api") {
     val conf = new SparkConf
     conf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setAcls(false)
@@ -156,7 +156,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val conf = new SparkConf
     conf.set(MODIFY_ACLS, Seq("user1", "user2"))
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled())
     securityManager.setAcls(false)
