@@ -45,7 +45,7 @@ private[sql] object ArrowUtils {
     case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
     case StringType => ArrowType.Utf8.INSTANCE
     case BinaryType => ArrowType.Binary.INSTANCE
-    case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
+    case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale, 128)
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType if timeZoneId == null =>
       throw new IllegalStateException("Missing timezoneId where it is mandatory.")
