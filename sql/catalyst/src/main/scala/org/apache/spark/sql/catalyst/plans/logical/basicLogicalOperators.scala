@@ -1430,6 +1430,10 @@ object Limit {
 /**
  * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
  *
+ * We can not make it inherit [[OrderPreservingUnaryNode]] due to the different strategy of
+ * physical plan. The output ordering of child will be broken if a shuffle exchange comes in
+ * between the child and global limit.
+ *
  * See [[Limit]] for more information.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
