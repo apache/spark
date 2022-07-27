@@ -437,7 +437,7 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "UNRESOLVED_COLUMN",
-      parameters = Map())
+      parameters = Map("objectName" -> "`struct`.`a`", "objectList" -> "`a`, `b`"))
   }
 
   test("UNRESOLVED_COLUMN - SPARK-21335: support un-aliased subquery") {
