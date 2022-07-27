@@ -213,4 +213,14 @@ trait FileScan extends Scan
       name.toLowerCase(Locale.ROOT)
     }
   }
+
+  /**
+   * The name of the scan, which will be shown in the header of a spark plan scan node on SparkUI.
+   * E.g. "scan parquet sample_db.sample_table"
+   * <p>
+   * By default this returns the class name of the implementation. Please override it to provide a
+   * meaningful name.
+   * </p>
+   */
+  override def name(): String = Utils.getSimpleName(this.getClass).replaceAll("Scan$", "")
 }
