@@ -104,7 +104,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             with self.assertWarns(UserWarning):
                 psdf.X = [10, 20, 30, 40, 50, 60, 70, 80, 90]
             # If a new column is created, the following test would fail.
-            # It means that the pandas have changed their behavior, so we'd better track just in case.
+            # It means that the pandas have changed their behavior, so we should follow.
             self.assert_eq(pdf, psdf)
 
     def test_creation_index(self):
