@@ -20,16 +20,22 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
-import org.apache.spark.sql.connector.IntegralAverage
+import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.util.Utils
 
 class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
@@ -38,6 +44,63 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   var conn: java.sql.Connection = null
+
+  val testH2Dialect = new JdbcDialect {
+    override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
+
+    class H2SQLBuilder extends JDBCSQLBuilder {
+      override def visitUserDefinedScalarFunction(
+          funcName: String, canonicalName: String, inputs: Array[String]): String = {
+        canonicalName match {
+          case "h2.char_length" =>
+            s"$funcName(${inputs.mkString(", ")})"
+          case _ => super.visitUserDefinedScalarFunction(funcName, canonicalName, inputs)
+        }
+      }
+
+      override def visitUserDefinedAggregateFunction(
+          funcName: String,
+          canonicalName: String,
+          isDistinct: Boolean,
+          inputs: Array[String]): String = {
+        canonicalName match {
+          case "h2.iavg" =>
+            if (isDistinct) {
+              s"AVG(DISTINCT ${inputs.mkString(", ")})"
+            } else {
+              s"AVG(${inputs.mkString(", ")})"
+            }
+          case _ =>
+            super.visitUserDefinedAggregateFunction(funcName, canonicalName, isDistinct, inputs)
+        }
+      }
+    }
+
+    override def compileExpression(expr: Expression): Option[String] = {
+      val h2SQLBuilder = new H2SQLBuilder()
+      try {
+        Some(h2SQLBuilder.build(expr))
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error occurs while compiling V2 expression", e)
+          None
+      }
+    }
+
+    override def functions: Seq[(String, UnboundFunction)] = H2Dialect.functions
+  }
+
+  case object CharLength extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(StringType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "CHAR_LENGTH"
+    override def canonicalName(): String = "h2.char_length"
+
+    override def produceResult(input: InternalRow): Int = {
+      val s = input.getString(0)
+      s.length
+    }
+  }
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -116,6 +179,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
+    H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
   }
 
   override def afterAll(): Unit = {
@@ -200,9 +264,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .limit(1)
-    checkLimitRemoved(df4, false)
+    checkAggregateRemoved(df4)
+    checkLimitRemoved(df4)
     checkPushedInfo(df4,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 1")
     checkAnswer(df4, Seq(Row(1, 19000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -275,9 +343,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .offset(1)
-    checkOffsetRemoved(df5, false)
+    checkAggregateRemoved(df5)
+    checkLimitRemoved(df5)
     checkPushedInfo(df5,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df5, Seq(Row(2, 22000.00), Row(6, 12000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -412,10 +484,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .groupBy("DEPT").sum("SALARY")
       .limit(2)
       .offset(1)
-    checkLimitRemoved(df10, false)
-    checkOffsetRemoved(df10, false)
+    checkAggregateRemoved(df10)
+    checkLimitRemoved(df10)
+    checkOffsetRemoved(df10)
     checkPushedInfo(df10,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 2",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -547,10 +624,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df9, Seq(Row(2, "david", 10000.00, 1300.0, true)))
 
     val df10 = sql("SELECT dept, sum(salary) FROM h2.test.employee group by dept LIMIT 1 OFFSET 1")
-    checkLimitRemoved(df10, false)
-    checkOffsetRemoved(df10, false)
+    checkAggregateRemoved(df10)
+    checkLimitRemoved(df10)
+    checkOffsetRemoved(df10)
     checkPushedInfo(df10,
-      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByExpressions: [DEPT], ")
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedLimit: LIMIT 2",
+      "PushedOffset: OFFSET 1")
     checkAnswer(df10, Seq(Row(2, 22000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -791,11 +873,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df11 = sql(
       """
         |SELECT * FROM h2.test.employee
-        |WHERE GREATEST(bonus, 1100) > 1200 AND LEAST(salary, 10000) > 9000 AND RAND(1) < 1
+        |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
         |""".stripMargin)
     checkFiltersRemoved(df11)
     checkPushedInfo(df11, "PushedFilters: " +
-      "[(GREATEST(BONUS, 1100.0)) > 1200.0, (LEAST(SALARY, 10000.00)) > 9000.00, RAND(1) < 1.0]")
+      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0, RAND(1) < BONUS]")
     checkAnswer(df11, Row(2, "david", 10000, 1300, true))
 
     val df12 = sql(
@@ -1049,6 +1131,33 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [DATE1 IS NOT NULL, ((EXTRACT(DAY_OF_WEEK FROM DATE1) % 7) + 1) = 4]"
     checkPushedInfo(df8, expectedPlanFragment8)
     checkAnswer(df8, Seq(Row("alex")))
+  }
+
+  test("scan with filter push-down with UDF") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
+      checkFiltersRemoved(df1)
+      checkPushedInfo(df1, "PushedFilters: [CHAR_LENGTH(NAME) > 2],")
+      checkAnswer(df1, Seq(Row("fred", 1), Row("mary", 2)))
+
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df2 = sql(
+          """
+            |SELECT *
+            |FROM h2.test.people
+            |WHERE h2.my_strlen(CASE WHEN NAME = 'fred' THEN NAME ELSE "abc" END) > 2
+          """.stripMargin)
+        checkFiltersRemoved(df2)
+        checkPushedInfo(df2,
+          "PushedFilters: [CHAR_LENGTH(CASE WHEN NAME = 'fred' THEN NAME ELSE 'abc' END) > 2],")
+        checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("scan with column pruning") {
@@ -1620,43 +1729,81 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: VAR_POP VAR_SAMP with filter and group by") {
-    val df = sql("SELECT VAR_POP(bonus), VAR_SAMP(bonus) FROM h2.test.employee WHERE dept > 0" +
-      " GROUP BY DePt")
+    val df = sql(
+      """
+        |SELECT
+        |  VAR_POP(bonus),
+        |  VAR_POP(DISTINCT bonus),
+        |  VAR_SAMP(bonus),
+        |  VAR_SAMP(DISTINCT bonus)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [VAR_POP(BONUS), VAR_SAMP(BONUS)], " +
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+    checkPushedInfo(df,
+     """
+       |PushedAggregates: [VAR_POP(BONUS), VAR_POP(DISTINCT BONUS),
+       |VAR_SAMP(BONUS), VAR_SAMP(DISTINCT BONUS)],
+       |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+       |PushedGroupByExpressions: [DEPT],
+       |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df, Seq(Row(10000d, 10000d, 20000d, 20000d),
+      Row(2500d, 2500d, 5000d, 5000d), Row(0d, 0d, null, null)))
   }
 
   test("scan with aggregate push-down: STDDEV_POP STDDEV_SAMP with filter and group by") {
-    val df = sql("SELECT STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM h2.test.employee" +
-      " WHERE dept > 0 GROUP BY DePt")
+    val df = sql(
+      """
+        |SELECT
+        |  STDDEV_POP(bonus),
+        |  STDDEV_POP(DISTINCT bonus),
+        |  STDDEV_SAMP(bonus),
+        |  STDDEV_SAMP(DISTINCT bonus)
+        |FROM h2.test.employee WHERE dept > 0 GROUP BY DePt""".stripMargin)
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [STDDEV_POP(BONUS), STDDEV_SAMP(BONUS)], " +
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(100d, 141.4213562373095d), Row(50d, 70.71067811865476d), Row(0d, null)))
+    checkPushedInfo(df,
+      """
+        |PushedAggregates: [STDDEV_POP(BONUS), STDDEV_POP(DISTINCT BONUS),
+        |STDDEV_SAMP(BONUS), STDDEV_SAMP(DISTINCT BONUS)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df, Seq(Row(100d, 100d, 141.4213562373095d, 141.4213562373095d),
+      Row(50d, 50d, 70.71067811865476d, 70.71067811865476d), Row(0d, 0d, null, null)))
   }
 
   test("scan with aggregate push-down: COVAR_POP COVAR_SAMP with filter and group by") {
-    val df = sql("SELECT COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
+    val df1 = sql("SELECT COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
       " FROM h2.test.employee WHERE dept > 0 GROUP BY DePt")
-    checkFiltersRemoved(df)
-    checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [COVAR_POP(BONUS, BONUS), COVAR_SAMP(BONUS, BONUS)], " +
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1, "PushedAggregates: [COVAR_POP(BONUS, BONUS), COVAR_SAMP(BONUS, BONUS)], " +
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+    checkAnswer(df1, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+
+    val df2 = sql("SELECT COVAR_POP(DISTINCT bonus, bonus), COVAR_SAMP(DISTINCT bonus, bonus)" +
+      " FROM h2.test.employee WHERE dept > 0 GROUP BY DePt")
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2, false)
+    checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT > 0]")
+    checkAnswer(df2, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
   }
 
   test("scan with aggregate push-down: CORR with filter and group by") {
-    val df = sql("SELECT CORR(bonus, bonus) FROM h2.test.employee WHERE dept > 0" +
+    val df1 = sql("SELECT CORR(bonus, bonus) FROM h2.test.employee WHERE dept > 0" +
       " GROUP BY DePt")
-    checkFiltersRemoved(df)
-    checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [CORR(BONUS, BONUS)], " +
+    checkFiltersRemoved(df1)
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1, "PushedAggregates: [CORR(BONUS, BONUS)], " +
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df, Seq(Row(1d), Row(1d), Row(null)))
+    checkAnswer(df1, Seq(Row(1d), Row(1d), Row(null)))
+
+    val df2 = sql("SELECT CORR(DISTINCT bonus, bonus) FROM h2.test.employee WHERE dept > 0" +
+      " GROUP BY DePt")
+    checkFiltersRemoved(df2)
+    checkAggregateRemoved(df2, false)
+    checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT > 0]")
+    checkAnswer(df2, Seq(Row(1d), Row(1d), Row(null)))
   }
 
   test("scan with aggregate push-down: aggregate over alias push down") {
@@ -1984,17 +2131,51 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("register dialect specific functions") {
-    val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
-    checkAggregateRemoved(df, false)
-    checkAnswer(df, Row(1) :: Nil)
-    val e1 = intercept[AnalysisException] {
-      checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
+  test("scan with aggregate push-down: complete push-down UDAF") {
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
+      checkAggregateRemoved(df1)
+      checkPushedInfo(df1,
+        "PushedAggregates: [iavg(ID)], PushedFilters: [], PushedGroupByExpressions: []")
+      checkAnswer(df1, Seq(Row(1)))
+
+      val df2 = sql("SELECT name, h2.my_avg(id) FROM h2.test.people group by name")
+      checkAggregateRemoved(df2)
+      checkPushedInfo(df2,
+        "PushedAggregates: [iavg(ID)], PushedFilters: [], PushedGroupByExpressions: [NAME]")
+      checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df3 = sql(
+          """
+            |SELECT
+            |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+            |FROM h2.test.people
+          """.stripMargin)
+        checkAggregateRemoved(df3)
+        checkPushedInfo(df3,
+          "PushedAggregates: [iavg(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+            " PushedFilters: [], PushedGroupByExpressions: []")
+        checkAnswer(df3, Seq(Row(2)))
+
+        val df4 = sql(
+          """
+            |SELECT
+            |  name,
+            |  h2.my_avg(CASE WHEN NAME = 'fred' THEN id + 1 ELSE id END)
+            |FROM h2.test.people
+            |GROUP BY name
+          """.stripMargin)
+        checkAggregateRemoved(df4)
+        checkPushedInfo(df4,
+          "PushedAggregates: [iavg(CASE WHEN NAME = 'fred' THEN ID + 1 ELSE ID END)]," +
+            " PushedFilters: [], PushedGroupByExpressions: [NAME]")
+        checkAnswer(df4, Seq(Row("fred", 2), Row("mary", 2)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
     }
-    assert(e1.getMessage.contains("Undefined function: 'my_avg2'"))
-    val e2 = intercept[AnalysisException] {
-      checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
-    }
-    assert(e2.getMessage.contains("Undefined function: my_avg2"))
   }
 }

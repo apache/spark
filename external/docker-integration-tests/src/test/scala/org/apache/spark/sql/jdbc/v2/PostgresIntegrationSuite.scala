@@ -104,4 +104,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   testCovarSamp(true)
   testCorr()
   testCorr(true)
+  testRegrIntercept()
+  testRegrIntercept(true)
+  testRegrSlope()
+  testRegrSlope(true)
+  testRegrR2()
+  testRegrR2(true)
+  testRegrSXY()
+  testRegrSXY(true)
 }
