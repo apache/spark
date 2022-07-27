@@ -30,14 +30,28 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.interpolate(method="quadratic")
 
+        with self.assertRaisesRegex(
+            NotImplementedError, "interpolate currently works only for method='linear'"
+        ):
+            psdf.id.interpolate(method="quadratic")
+
         with self.assertRaisesRegex(ValueError, "limit must be > 0"):
             psdf.interpolate(limit=0)
+
+        with self.assertRaisesRegex(ValueError, "limit must be > 0"):
+            psdf.id.interpolate(limit=0)
 
         with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
             psdf.interpolate(limit_direction="jump")
 
+        with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
+            psdf.id.interpolate(limit_direction="jump")
+
         with self.assertRaisesRegex(ValueError, "invalid limit_area"):
             psdf.interpolate(limit_area="jump")
+
+        with self.assertRaisesRegex(ValueError, "invalid limit_area"):
+            psdf.id.interpolate(limit_area="jump")
 
     def _test_interpolate(self, pobj):
         psobj = ps.from_pandas(pobj)
