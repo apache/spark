@@ -78,6 +78,9 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+  private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
+  private lazy val unsafeProj = UnsafeProjection.create(
+    dedupAttributes, groupingAttributes ++ dedupAttributes)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -95,8 +98,6 @@ case class FlatMapGroupsInPandasWithStateExec(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
     private val stateDeserializer =
       stateEncoder.asInstanceOf[ExpressionEncoder[Row]].createDeserializer()
-
-    private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
 
     def callFunctionAndUpdateState(
         stateData: StateData,
@@ -122,8 +123,6 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateType)
 
       val inputIter = if (hasTimedOut) {
-        lazy val unsafeProj = UnsafeProjection.create(
-          dedupAttributes, groupingAttributes ++ dedupAttributes)
         val joinedKeyRow = unsafeProj(
           new JoinedRow(
             stateData.keyRow,
