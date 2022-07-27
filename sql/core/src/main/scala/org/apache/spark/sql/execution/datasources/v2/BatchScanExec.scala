@@ -137,5 +137,5 @@ case class BatchScanExec(
    * Returns the name of this type of TreeNode.  Defaults to the class name.
    * Note that we remove the "Exec" suffix for physical operators here.
    */
-  override def nodeName: String = s"Scan ${scan.name()}"
+  override def nodeName: String = s"BatchScan ${scan.name()}"
 }
