@@ -3262,7 +3262,19 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
-def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Column:
+@overload  # type: ignore[no-redef]
+def regexp_replace(string: "ColumnOrName", pattern: str, replacement: str) -> Column:
+    ...
+
+
+@overload
+def regexp_replace(string: "ColumnOrName", pattern: Column, replacement: Column) -> Column:
+    ...
+
+
+def regexp_replace(
+    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with rep.
 
     .. versionadded:: 1.5.0
@@ -3273,7 +3285,17 @@ def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Colum
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
     [Row(d='-----')]
     """
-    return _invoke_function("regexp_replace", _to_java_column(str), pattern, replacement)
+
+    if isinstance(pattern, str) and isinstance(replacement, str):
+        return _invoke_function("regexp_replace", _to_java_column(string), pattern, replacement)
+
+    else:
+        return _invoke_function(
+            "regexp_replace",
+            _to_java_column(string),
+            _to_java_column(pattern),
+            _to_java_column(replacement),
+        )
 
 
 def initcap(col: "ColumnOrName") -> Column:
