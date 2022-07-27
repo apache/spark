@@ -775,59 +775,45 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df5,
       Seq(Row(1, "cathy", 9000.00, 1200.0, false), Row(1, "amy", 10000.00, 1000.0, true)))
 
-    val df6 = spark.read
-      .table("h2.test.employee")
-      .groupBy("DEPT").sum("SALARY")
-      .orderBy("DEPT")
-      .limit(1)
-    checkSortRemoved(df6, false)
-    checkLimitRemoved(df6, false)
-    checkPushedInfo(df6,
-      "PushedAggregates: [SUM(SALARY)]",
-      "PushedFilters: []",
-      "PushedGroupByExpressions: [DEPT]")
-    checkAnswer(df6, Seq(Row(1, 19000.00)))
-
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df7 = spark.read
+    val df6 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .sort($"SALARY".desc)
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkSortRemoved(df7, false)
-    checkLimitRemoved(df7, false)
-    checkPushedInfo(df7, "PushedFilters: []")
-    checkAnswer(df7, Seq(Row(10000.00, 1000.0, "amy")))
+    checkSortRemoved(df6, false)
+    checkLimitRemoved(df6, false)
+    checkPushedInfo(df6, "PushedFilters: [], ")
+    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
 
-    val df8 = spark.read
+    val df7 = spark.read
       .table("h2.test.employee")
       .sort(sub($"NAME"))
       .limit(1)
-    checkSortRemoved(df8, false)
-    checkLimitRemoved(df8, false)
-    checkPushedInfo(df8, "PushedFilters: []")
-    checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
+    checkSortRemoved(df7, false)
+    checkLimitRemoved(df7, false)
+    checkPushedInfo(df7, "PushedFilters: [], ")
+    checkAnswer(df7, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
 
-    val df9 = spark.read
+    val df8 = spark.read
       .table("h2.test.employee")
       .select($"DEPT", $"name", $"SALARY",
         when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
       .sort("key", "dept", "SALARY")
       .limit(3)
-    checkSortRemoved(df9)
-    checkLimitRemoved(df9)
-    checkPushedInfo(df9,
-      "PushedFilters: []",
+    checkSortRemoved(df8)
+    checkLimitRemoved(df8)
+    checkPushedInfo(df8, "PushedFilters: [], " +
       "PushedTopN: " +
       "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
       "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
-    checkAnswer(df9,
+    checkAnswer(df8,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
 
-    val df10 = spark.read
+    val df9 = spark.read
       .option("partitionColumn", "dept")
       .option("lowerBound", "0")
       .option("upperBound", "2")
@@ -837,14 +823,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
       .orderBy($"key", $"dept", $"SALARY")
       .limit(3)
-    checkSortRemoved(df10, false)
-    checkLimitRemoved(df10, false)
-    checkPushedInfo(df10,
-      "PushedFilters: []",
+    checkSortRemoved(df9, false)
+    checkLimitRemoved(df9, false)
+    checkPushedInfo(df9, "PushedFilters: [], " +
       "PushedTopN: " +
       "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
       "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
-    checkAnswer(df10,
+    checkAnswer(df9,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
   }
 
@@ -871,6 +856,244 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 1]",
       "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1")
     checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
+  }
+
+  test("scan with aggregate push-down and top N push-down") {
+    val df1 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .orderBy("DEPT")
+      .limit(1)
+    checkSortRemoved(df1)
+    checkLimitRemoved(df1)
+    checkPushedInfo(df1,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df1, Seq(Row(1, 19000.00)))
+
+    val df2 = sql(
+      """
+        |SELECT dept AS my_dept, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY my_dept
+        |LIMIT 1
+        |""".stripMargin)
+    checkSortRemoved(df2)
+    checkLimitRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df2, Seq(Row(1, 19000.00)))
+
+    val df3 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
+      .groupBy("key").sum("SALARY")
+      .orderBy("key")
+      .limit(1)
+    checkSortRemoved(df3)
+    checkLimitRemoved(df3)
+    checkPushedInfo(df3,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: " +
+        "[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [" +
+        "CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+        "ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df3, Seq(Row(0, 44000.00)))
+
+    val df4 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT", "IS_MANAGER").sum("SALARY")
+      .orderBy("DEPT", "IS_MANAGER")
+      .limit(1)
+    checkSortRemoved(df4)
+    checkLimitRemoved(df4)
+    checkPushedInfo(df4,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT, IS_MANAGER]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST, IS_MANAGER ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df4, Seq(Row(1, false, 9000.00)))
+
+    val df5 = sql(
+      """
+        |SELECT dept AS my_dept, is_manager AS my_manager, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY dept, my_manager
+        |ORDER BY my_dept, my_manager
+        |LIMIT 1
+        |""".stripMargin)
+    checkSortRemoved(df5)
+    checkLimitRemoved(df5)
+    checkPushedInfo(df5,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT, IS_MANAGER]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST, IS_MANAGER ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df5, Seq(Row(1, false, 9000.00)))
+
+    val df6 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY", $"IS_MANAGER",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
+      .groupBy("key", "IS_MANAGER").sum("SALARY")
+      .orderBy("key", "IS_MANAGER")
+      .limit(1)
+    checkSortRemoved(df6)
+    checkLimitRemoved(df6)
+    checkPushedInfo(df6,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: " +
+        "[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END, " +
+        "IS_MANAGER]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [" +
+        "CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+        "ASC NULLS FIRST, IS_MANAGER ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df6, Seq(Row(0.00, false, 12000.00)))
+
+    val df7 = sql(
+      """
+        |SELECT dept, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY SUM(SALARY)
+        |LIMIT 1
+        |""".stripMargin)
+    checkSortRemoved(df7, false)
+    checkLimitRemoved(df7, false)
+    checkPushedInfo(df7,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []")
+    checkAnswer(df7, Seq(Row(6, 12000.00)))
+
+    val df8 = sql(
+      """
+        |SELECT dept, SUM(SALARY) AS total FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY total
+        |LIMIT 1
+        |""".stripMargin)
+    checkSortRemoved(df8, false)
+    checkLimitRemoved(df8, false)
+    checkPushedInfo(df8,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []")
+    checkAnswer(df8, Seq(Row(6, 12000.00)))
+  }
+
+  test("scan with aggregate push-down and paging push-down") {
+    val df1 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .orderBy("DEPT")
+      .offset(1)
+      .limit(1)
+    checkSortRemoved(df1)
+    checkLimitRemoved(df1)
+    checkPushedInfo(df1,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST] LIMIT 2")
+    checkAnswer(df1, Seq(Row(2, 22000.00)))
+
+    val df2 = sql(
+      """
+        |SELECT dept AS my_dept, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY my_dept
+        |LIMIT 1
+        |OFFSET 1
+        |""".stripMargin)
+    checkSortRemoved(df2)
+    checkLimitRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST] LIMIT 2")
+    checkAnswer(df2, Seq(Row(2, 22000.00)))
+
+    val df3 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
+      .groupBy("key").sum("SALARY")
+      .orderBy("key")
+      .offset(1)
+      .limit(1)
+    checkSortRemoved(df3)
+    checkLimitRemoved(df3)
+    checkPushedInfo(df3,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: " +
+        "[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1",
+      "PushedTopN: ORDER BY [" +
+        "CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+        "ASC NULLS FIRST] LIMIT 2")
+    checkAnswer(df3, Seq(Row(9000, 9000.00)))
+
+    val df4 = sql(
+      """
+        |SELECT dept AS my_dept, is_manager, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY my_dept, is_manager
+        |ORDER BY my_dept, is_manager
+        |LIMIT 1
+        |OFFSET 1
+        |""".stripMargin)
+    checkSortRemoved(df4)
+    checkLimitRemoved(df4)
+    checkPushedInfo(df4,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT, IS_MANAGER]",
+      "PushedFilters: []",
+      "PushedOffset: OFFSET 1",
+      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST, IS_MANAGER ASC NULLS FIRST] LIMIT 2")
+    checkAnswer(df4, Seq(Row(1, true, 10000.00)))
+
+    val df5 = sql(
+      """
+        |SELECT dept, SUM(SALARY) FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY SUM(SALARY)
+        |LIMIT 1
+        |OFFSET 1
+        |""".stripMargin)
+    checkSortRemoved(df5, false)
+    checkLimitRemoved(df5, false)
+    checkPushedInfo(df5,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []")
+    checkAnswer(df5, Seq(Row(1, 19000.00)))
+
+    val df6 = sql(
+      """
+        |SELECT dept, SUM(SALARY) AS total FROM h2.test.employee
+        |GROUP BY dept
+        |ORDER BY total
+        |LIMIT 1
+        |OFFSET 1
+        |""".stripMargin)
+    checkSortRemoved(df6, false)
+    checkLimitRemoved(df6, false)
+    checkPushedInfo(df6,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []")
+    checkAnswer(df6, Seq(Row(1, 19000.00)))
   }
 
   test("scan with filter push-down") {

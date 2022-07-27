@@ -189,12 +189,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // +- ScanBuilderHolder[group_col_0#10, agg_func_0#21, agg_func_1#22]
       // Later, we build the `Scan` instance and convert ScanBuilderHolder to DataSourceV2ScanRelation.
       // scalastyle:on
-      val groupOutput = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
-        AttributeReference(s"group_col_$i", e.dataType)()
+      val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
+        AttributeReference(s"group_col_$i", e.dataType)() -> e
       }
-      val aggOutput = finalAggExprs.zipWithIndex.map { case (e, i) =>
-        AttributeReference(s"agg_func_$i", e.dataType)()
+      val groupOutput = groupOutputMap.unzip._1
+      val aggOutputMap = finalAggExprs.zipWithIndex.map { case (e, i) =>
+        AttributeReference(s"agg_func_$i", e.dataType)() -> e
       }
+      val aggOutput = aggOutputMap.unzip._1
       val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
@@ -204,6 +206,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       holder.pushedAggregate = Some(translatedAgg)
+      holder.pushedAggregateExpectedOutputMap = (groupOutputMap ++ aggOutputMap).toMap
       holder.output = newOutput
       logInfo(
         s"""
@@ -412,10 +415,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // push-down, and thus can't push down Top-N which needs to know the ordering column names.
         // TODO: we can support simple cases like GROUP BY columns directly and ORDER BY the same
         //       columns, which we know the resulting column names: the original table columns.
-        if sHolder.pushedAggregate.isEmpty &&
-          CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
+        if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
-      val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      def findGroupExprForSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
+        case SortOrder(attr: AttributeReference, _, _, sameOrderExpressions) =>
+          val originAttr = sHolder.pushedAggregateExpectedOutputMap(attr)
+          sortOrder.withNewChildren(originAttr +: sameOrderExpressions).asInstanceOf[SortOrder]
+        case _ => sortOrder
+      }
+
+      val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      val newOrder = if (sHolder.pushedAggregate.isDefined) {
+        aliasReplacedOrder.map(findGroupExprForSortOrder)
+      } else {
+        aliasReplacedOrder
+      }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
@@ -545,6 +559,9 @@ case class ScanBuilderHolder(
   var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
 
   var pushedAggregate: Option[Aggregation] = None
+
+  var pushedAggregateExpectedOutputMap: Map[AttributeReference, Expression] =
+    Map.empty[AttributeReference, Expression]
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
