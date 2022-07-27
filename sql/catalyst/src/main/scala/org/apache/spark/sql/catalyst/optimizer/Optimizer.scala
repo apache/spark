@@ -1963,8 +1963,6 @@ object EliminateLimits extends Rule[LogicalPlan] {
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
 
-    case Limit(IntegerLiteral(0), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case GlobalLimit(IntegerLiteral(0), child) =>
