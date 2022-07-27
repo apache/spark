@@ -211,7 +211,7 @@ function black_test {
 
     # Skip check if black is not installed.
     $PYTHON_EXECUTABLE -c 'import black' &> /dev/null
-    if [[ $? -ne 0 ]]; then
+    if [ $? -ne 0 ]; then
         echo "The $BLACK_BUILD command was not found. Skipping black checks for now."
         echo
         return
