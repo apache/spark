@@ -111,14 +111,15 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
-      val e = intercept[AnalysisException] {
-        sql("select format_string('%0$s', 'Hello')")
-      }
-      checkErrorClass(
-        exception = e,
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select format_string('%0$s', 'Hello')")
+        },
         errorClass = "INVALID_PARAMETER_VALUE",
-        msg = "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
-          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7")
+        parameters = Map(
+          "parameter" -> "strfmt",
+          "functionName" -> "`format_string`",
+          "expected" -> "expects %1$, %2$ and so on, but got %0$."))
     }
   }
 
@@ -208,11 +209,10 @@ class QueryCompilationErrorsSuite
       val e = intercept[AnalysisException] (
         sql(s"SELECT $functionName(123) as value")
       )
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "NO_HANDLER_FOR_UDAF",
-        msg = "No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
-          "Use sparkSession.udf.register(...) instead.; line 1 pos 7")
+        parameters = Map())
     }
   }
 
@@ -425,7 +425,7 @@ class QueryCompilationErrorsSuite
           |order by a, b
           |""".stripMargin), Row(1, 2) :: Nil)
 
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException] {
         sql(
           """select distinct struct.a, struct.b
@@ -437,19 +437,7 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "UNRESOLVED_COLUMN",
-      msg = """A column or function parameter with name `struct`.`a` cannot be resolved. """ +
-        """Did you mean one of the following\? \[`a`, `b`\]; line 6 pos 9;
-           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
-           |\+\- Distinct
-           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
-           |      \+\- SubqueryAlias tmp
-           |         \+\- Union false, false
-           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
-           |            :  \+\- OneRowRelation
-           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
-           |               \+\- OneRowRelation
-           |""".stripMargin,
-      matchMsg = true)
+      parameters = Map())
   }
 
   test("UNRESOLVED_COLUMN - SPARK-21335: support un-aliased subquery") {
@@ -457,21 +445,12 @@ class QueryCompilationErrorsSuite
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
-      checkErrorClass(
+      checkError(
         exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
         errorClass = "UNRESOLVED_COLUMN",
-        msg = "A column or function parameter with name `v`.`i` cannot be resolved. " +
-          """Did you mean one of the following\? """ +
-          """\[`__auto_generated_subquery_name`.`i`\]; line 1 pos 7;
-            |'Project \['v.i\]
-            |\+\- SubqueryAlias __auto_generated_subquery_name
-            |   \+\- Project \[i#\w+\]
-            |      \+\- SubqueryAlias v
-            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
-            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
-            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
-            |""".stripMargin,
-        matchMsg = true)
+        parameters = Map(
+          "objectName" -> "`v`.`i`",
+          "objectList" -> "`__auto_generated_subquery_name`.`i`"))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
@@ -522,10 +501,10 @@ class QueryCompilationErrorsSuite
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t ADD COLUMNS (m.n int)")
       }
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "INVALID_FIELD_NAME",
-        msg = "Field name `m`.`n` is invalid: `m` is not a struct.; line 1 pos 27")
+        parameters = Map("fieldName" -> "`m`.`n`", "path" -> "`m`"))
     }
   }
 
@@ -637,14 +616,14 @@ class QueryCompilationErrorsSuite
           |LATERAL VIEW array_contains(value, 1) AS explodedvalue""".stripMargin).collect()
     )
 
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NOT_GENERATOR"),
-      msg = """The generator is not supported: `array_contains` is expected to be a generator. """ +
-        "However, its class is org.apache.spark.sql.catalyst.expressions.ArrayContains, " +
-        "which is not a generator.; line 4 pos 0"
-    )
+      sqlState = None,
+      parameters = Map(
+        "functionName" -> "`array_contains`",
+        "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"))
   }
 }
 
