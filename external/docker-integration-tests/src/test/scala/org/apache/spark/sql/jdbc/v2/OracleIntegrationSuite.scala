@@ -111,4 +111,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   testCovarPop()
   testCovarSamp()
   testCorr()
+  testRegrIntercept()
+  testRegrSlope()
+  testRegrR2()
+  testRegrSXY()
 }

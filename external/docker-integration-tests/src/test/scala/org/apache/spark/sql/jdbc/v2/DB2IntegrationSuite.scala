@@ -106,4 +106,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   testStddevSamp(true)
   testCovarPop()
   testCovarSamp()
+  testRegrIntercept()
+  testRegrSlope()
+  testRegrR2()
+  testRegrSXY()
 }
