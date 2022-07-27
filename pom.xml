@@ -189,7 +189,7 @@
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.35</jersey.version>
     <joda.version>2.10.10</joda.version>
-    <jodd.version>5.0.5</jodd.version>
+    <jodd.version>5.3.0</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.14.0</libthrift.version>
     <antlr4.version>4.8</antlr4.version>
