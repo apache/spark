@@ -126,11 +126,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         with self.assertRaisesRegex(AttributeError, expected_error_message):
             psidx.__getattr__(item)
 
-    def test_multi_index_basic(self):
-        # Creating MultiIndex without using other methods such as `from_arrays`, `from_tuples`.
-        pmidx = pd.MultiIndex()
-        psmidx = ps.MultiIndex()
-
     def test_to_series(self):
         pidx = self.pdf.index
         psidx = self.psdf.index
