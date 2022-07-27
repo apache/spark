@@ -355,9 +355,22 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), options))
 
-    val optionsWithPattern = new CSVOptions(
-      Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
-    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
+    def optionsWithPattern(enableFallback: Boolean): CSVOptions = new CSVOptions(
+      Map(
+        "timestampFormat" -> "invalid",
+        "dateFormat" -> "invalid",
+        "enableDateTimeParsingFallback" -> s"$enableFallback"),
+      false,
+      "UTC")
+
+    // With fallback enabled, we are still able to parse dates and timestamps.
+    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(true)))
+
+    // With legacy parser disabled, parsing results in error.
+    val err = intercept[IllegalArgumentException] {
+      check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
+    }
+    assert(err.getMessage.contains("Illegal pattern character: n"))
   }
 
   test("SPARK-39469: dates should be parsed correctly in a timestamp column when inferDate=true") {
