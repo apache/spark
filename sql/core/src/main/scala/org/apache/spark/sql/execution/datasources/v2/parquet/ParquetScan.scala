@@ -51,8 +51,8 @@ case class ParquetScan(
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
     pushedAggregate.isEmpty &&
-    // SPARK-39634: Allow file splitting in combination with row index generation once
-    // the fix for PARQUET-2161 is available.
+      // SPARK-39634: Allow file splitting in combination with row index generation once
+      // the fix for PARQUET-2161 is available.
       !RowIndexUtil.isNeededForSchema(readSchema)
   }
 

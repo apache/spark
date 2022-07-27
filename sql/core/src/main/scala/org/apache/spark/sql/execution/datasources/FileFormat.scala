@@ -246,8 +246,8 @@ object FileFormat {
   }
 
   /**
-   * Does the given metadata column always contain identical values for all rows originating from
-   * the same data file?
+   * Returns true if the given metadata column always contains identical values for all rows
+   * originating from the same data file.
    */
   def isConstantMetadataAttr(name: String): Boolean = name match {
     case FILE_PATH | FILE_NAME | FILE_SIZE | FILE_MODIFICATION_TIME => true
