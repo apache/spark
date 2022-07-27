@@ -74,6 +74,8 @@ trait SharedSparkSessionBase
       // this rule may potentially block testing of other optimization rules such as
       // ConstantPropagation etc.
       .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+      // Disable DEFAULT column support until the implementation is complete, enable in tests.
+      .set(SQLConf.ENABLE_DEFAULT_COLUMNS, true)
     conf.set(
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)

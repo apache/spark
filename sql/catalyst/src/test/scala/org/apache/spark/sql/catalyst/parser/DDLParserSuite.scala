@@ -2216,6 +2216,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
     // These CREATE/REPLACE TABLE statements should parse successfully.
+    SQLConf.get.setConf(SQLConf.ENABLE_DEFAULT_COLUMNS, true)
     val schemaWithDefaultColumn = new StructType()
       .add("a", IntegerType, true)
       .add("b", StringType, false,

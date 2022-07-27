@@ -2908,7 +2908,7 @@ object SQLConf {
         "instead.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DEFAULT_COLUMN_ALLOWED_PROVIDERS =
     buildConf("spark.sql.defaultColumn.allowedProviders")
