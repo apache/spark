@@ -20,7 +20,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, resolveArgOffsets}
@@ -121,9 +121,17 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateDeserializer,
         stateType)
 
-      val inputIter =
-        if (hasTimedOut) Iterator.single(Iterator.single(stateData.keyRow))
-        else Iterator.single(valueRowIter)
+      val inputIter = if (hasTimedOut) {
+        lazy val unsafeProj = UnsafeProjection.create(
+          dedupAttributes, groupingAttributes ++ dedupAttributes)
+        val joinedKeyRow = unsafeProj(
+          new JoinedRow(
+            stateData.keyRow,
+            new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
+        Iterator.single(Iterator.single(joinedKeyRow))
+      } else {
+        Iterator.single(valueRowIter)
+      }
 
       val ret = executePython(inputIter, output, runner).toArray
       numOutputRows += ret.length

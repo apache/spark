@@ -31,7 +31,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
 
-  test("flatMapGroupsWithState - streaming") {
+  test("applyInPandasWithState - streaming") {
     assume(shouldTestPandasUDFs)
 
     // Function to maintain running count up to 2, and then remove the count
@@ -107,7 +107,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("flatMapGroupsWithState - streaming + aggregation") {
+  test("applyInPandasWithState - streaming + aggregation") {
     assume(shouldTestPandasUDFs)
 
     // Function to maintain running count up to 2, and then remove the count
@@ -178,7 +178,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("flatMapGroupsWithState - streaming with processing time timeout") {
+  test("applyInPandasWithState - streaming with processing time timeout") {
     assume(shouldTestPandasUDFs)
 
     // Function to maintain the count as state and set the proc. time timeout delay of 10 seconds.
@@ -277,7 +277,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("flatMapGroupsWithState - streaming w/ event time timeout + watermark") {
+  test("applyInPandasWithState - streaming w/ event time timeout + watermark") {
     assume(shouldTestPandasUDFs)
 
     // timestamp_seconds assumes the base timezone is UTC. However, the provided function
