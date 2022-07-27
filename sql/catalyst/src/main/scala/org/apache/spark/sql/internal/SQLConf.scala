@@ -2916,8 +2916,10 @@ object SQLConf {
       .doc("List of table providers wherein SQL commands are permitted to assign DEFAULT column " +
         "values. Comma-separated list, whitespace ignored, case-insensitive. If an asterisk " +
         "appears after any table provider in this list, any command may assign DEFAULT column " +
-        "except ALTER TABLE ... ADD COLUMN. Otherwise, if no asterisk appears, all commands are " +
-        "permitted.")
+        "except `ALTER TABLE ... ADD COLUMN`. Otherwise, if no asterisk appears, all commands " +
+        "are permitted. This is useful because in order for such `ALTER TABLE ... ADD COLUMN` " +
+        "commands to work, the target data source must include support for substituting in the " +
+        "provided values when the corresponding fields are not present in storage.")
       .version("3.4.0")
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
