@@ -1946,7 +1946,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
- * 2. Replace [[Limit]]/[[LocalLimit]]/[[GlobalLimit]] operators to empty [[LocalRelation]]
+ * 2. Replace [[Limit]]/[[LocalLimit]]/[[GlobalLimit]] operators with empty [[LocalRelation]]
  *    if the limit value is zero (0).
  * 3. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
