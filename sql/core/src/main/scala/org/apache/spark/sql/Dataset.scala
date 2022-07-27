@@ -476,14 +476,14 @@ class Dataset[T] private[sql](
    *   int.</li>
    *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
    *   still keep their own metadata if not overwritten by the specified schema.</li>
-   *   <li>Fail if the nullability are not compatible. For example, the column and/or inner field is
+   *   <li>Fail if the nullability is not compatible. For example, the column and/or inner field is
    *   nullable but the specified schema requires them to be not nullable.</li>
    * </ul>
    *
    * @group basic
    * @since 3.4.0
    */
-  def as(schema: StructType): DataFrame = withPlan {
+  def to(schema: StructType): DataFrame = withPlan {
     Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
   }
 
