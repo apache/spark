@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
-import org.apache.spark.sql.util.PredicateUtils;
+import org.apache.spark.sql.internal.connector.PredicateUtils;
+
+import scala.Option;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface if they can
@@ -60,29 +65,17 @@ public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filteri
    */
   void filter(Filter[] filters);
 
-  /**
-   * Filters this scan using runtime predicates.
-   * <p>
-   * The provided expressions must be interpreted as a set of predicates that are ANDed together.
-   * Implementations may use the predicates to prune initially planned {@link InputPartition}s.
-   * <p>
-   * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
-   * the originally reported partitioning during runtime filtering. While applying runtime
-   * predicates, the scan may detect that some {@link InputPartition}s have no matching data. It
-   * can omit such partitions entirely only if it does not report a specific partitioning.
-   * Otherwise, the scan can replace the initially planned {@link InputPartition}s that have no
-   * matching data with empty {@link InputPartition}s but must preserve the overall number of
-   * partitions.
-   * <p>
-   * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
-   *
-   * @param predicates data source V2 predicates used to filter the scan at runtime
-   */
   default void filter(Predicate[] predicates) {
-    Filter[] filters = new Filter[predicates.length];
+    List<Filter> filterList = new ArrayList();
+
     for (int i = 0; i < predicates.length; i++) {
-      filters[i] = PredicateUtils.toV1(predicates[i]).get();
+      Option filter = PredicateUtils.toV1(predicates[i]);
+      if (filter.nonEmpty()) {
+        filterList.add((Filter)filter.get());
+      }
     }
-    this.filter(filters);
+
+    Filter[] filters = new Filter[filterList.size()];
+    this.filter(filterList.toArray(filters));
   }
 }

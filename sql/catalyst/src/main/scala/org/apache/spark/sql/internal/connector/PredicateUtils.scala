@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.expressions.filter. Predicate
 import org.apache.spark.sql.sources.{Filter, In}
 
 private[sql] object PredicateUtils {
@@ -42,8 +41,7 @@ private[sql] object PredicateUtils {
           Some(In(attribute, Array.empty[Any]))
         }
 
-      case _ =>
-        throw QueryExecutionErrors.unsupportedPredicateToFilterConversionError(predicate.name())
+      case _ => None
     }
   }
 }

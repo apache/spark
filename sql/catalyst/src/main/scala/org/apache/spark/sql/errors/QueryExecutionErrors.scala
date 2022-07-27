@@ -2039,9 +2039,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLId(funcName),
         pattern))
   }
-
-  def unsupportedPredicateToFilterConversionError(predicateType: String): Throwable = {
-    new UnsupportedOperationException(s"conversion from data source v2 Predicate to data " +
-      s"source v1 Filter is not supported for this Predicate: ${predicateType}")
-  }
 }
