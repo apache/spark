@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -311,7 +311,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * Simplifies boolean expressions:
  * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
  * 2. Eliminates / extracts common factors.
- * 3. Merge same expressions
+ * 3. Merge same or similar expressions
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
@@ -341,6 +341,21 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
+
+      // The following optimizations are applicable only when the two similar binary comparisons
+      // have the same symbol(e.g., >) and one side is literal and connected with And.
+      // If the literals on the left of binary comparisons, combine them and swap the comparisons.
+      // Such as: 1 < a && 2 < a => a > 2
+      // If the literals on the right of binary comparisons, combine them.
+      // Such as: a > 1 && a > 2 => a > 2
+      case and @ And(
+        op0 @ BinaryComparison(_: Literal, right0), op1 @ BinaryComparison(_: Literal, right1))
+        if right0.semanticEquals(right1) =>
+        combineComparison(swapComparison(op0), swapComparison(op1)).getOrElse(and)
+      case and @ And(
+        op0 @ BinaryComparison(left0, _: Literal), op1 @ BinaryComparison(left1, _: Literal))
+        if left0.semanticEquals(left1) =>
+        combineComparison(op0, op1).getOrElse(and)
 
       // The following optimizations are applicable only when the operands are not nullable,
       // since the three-value logic of AND and OR are different in NULL handling.
@@ -467,6 +482,36 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Not(IsNull(e)) => IsNotNull(e)
       case Not(IsNotNull(e)) => IsNull(e)
     }
+  }
+
+  private def combineComparison(
+      leftC: BinaryComparison,
+      rightC: BinaryComparison): Option[Expression] = (leftC, rightC) match {
+    case (GreaterThan(left0, Literal(v0, _)), GreaterThan(_, Literal(v1, _))) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v0, v1)) {
+        Some(GreaterThan(left0, Literal(v0)))
+      } else {
+        Some(GreaterThan(left0, Literal(v1)))
+      }
+    case (GreaterThanOrEqual(left0, Literal(v0, _)), GreaterThanOrEqual(_, Literal(v1, _))) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v0, v1)) {
+        Some(GreaterThanOrEqual(left0, Literal(v0)))
+      } else {
+        Some(GreaterThanOrEqual(left0, Literal(v1)))
+      }
+    case (LessThan(left0, Literal(v0, _)), LessThan(_, Literal(v1, _))) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v1, v0)) {
+        Some(LessThan(left0, Literal(v0)))
+      } else {
+        Some(LessThan(left0, Literal(v1)))
+      }
+    case (LessThanOrEqual(left0, Literal(v0, _)), LessThanOrEqual(_, Literal(v1, _))) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v1, v0)) {
+        Some(LessThanOrEqual(left0, Literal(v0)))
+      } else {
+        Some(LessThanOrEqual(left0, Literal(v1)))
+      }
+    case _ => None
   }
 }
 

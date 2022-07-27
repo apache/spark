@@ -90,6 +90,17 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(Literal(1) < $"a" && Literal(1) < $"a" && Literal(1) < $"a", Literal(1) < $"a")
   }
 
+  test("simplify binary comparisons") {
+    checkCondition($"a" > Literal(1) && $"a" > Literal(2), $"a" > Literal(2))
+    checkCondition(Literal(1) < $"a" && Literal(2) < $"a", $"a" > Literal(2))
+    checkCondition($"a" >= Literal(1) && $"a" >= Literal(2), $"a" >= Literal(2))
+    checkCondition(Literal(1) <= $"a" && Literal(2) <= $"a", $"a" >= Literal(2))
+    checkCondition($"a" < Literal(1) && $"a" < Literal(2), $"a" < Literal(1))
+    checkCondition(Literal(1) > $"a" && Literal(2) > $"a", $"a" < Literal(1))
+    checkCondition($"a" <= Literal(1) && $"a" <= Literal(2), $"a" <= Literal(1))
+    checkCondition(Literal(1) >= $"a" && Literal(2) >= $"a", $"a" <= Literal(1))
+  }
+
   test("a || a => a") {
     checkCondition(Literal(1) < $"a" || Literal(1) < $"a", Literal(1) < $"a")
     checkCondition(Literal(1) < $"a" || Literal(1) < $"a" || Literal(1) < $"a", Literal(1) < $"a")

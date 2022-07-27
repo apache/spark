@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, DoubleLiteral, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Rand}
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, DoubleLiteral, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, PredicateHelper, Rand}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -30,23 +30,12 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, EXPRE
  * 1. Converts the binary comparison to true literal when the comparison value must be true.
  * 2. Converts the binary comparison to false literal when the comparison value must be false.
  */
-object OptimizeRand extends Rule[LogicalPlan] {
+object OptimizeRand extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsAllPatterns(
       EXPRESSION_WITH_RANDOM_SEED, LITERAL, BINARY_COMPARISON), ruleId) {
       case op @ BinaryComparison(DoubleLiteral(_), _: Rand) => eliminateRand(swapComparison(op))
       case op @ BinaryComparison(_: Rand, DoubleLiteral(_)) => eliminateRand(op)
-  }
-
-  /**
-   * Swaps the left and right sides of some binary comparisons. e.g., transform "a < b" to "b > a"
-   */
-  private def swapComparison(comparison: BinaryComparison): BinaryComparison = comparison match {
-    case a LessThan b => GreaterThan(b, a)
-    case a LessThanOrEqual b => GreaterThanOrEqual(b, a)
-    case a GreaterThan b => LessThan(b, a)
-    case a GreaterThanOrEqual b => LessThanOrEqual(b, a)
-    case o => o
   }
 
   private def eliminateRand(op: BinaryComparison): Expression = op match {

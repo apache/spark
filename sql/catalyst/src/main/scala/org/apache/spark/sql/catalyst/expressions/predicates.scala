@@ -304,6 +304,17 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: MultiLikeBase => true
     case _ => false
   }
+
+  /**
+   * Swaps the left and right sides of some binary comparisons. e.g., transform "a < b" to "b > a"
+   */
+  def swapComparison(comparison: BinaryComparison): BinaryComparison = comparison match {
+    case a LessThan b => GreaterThan(b, a)
+    case a LessThanOrEqual b => GreaterThanOrEqual(b, a)
+    case a GreaterThan b => LessThan(b, a)
+    case a GreaterThanOrEqual b => LessThanOrEqual(b, a)
+    case o => o
+  }
 }
 
 @ExpressionDescription(
