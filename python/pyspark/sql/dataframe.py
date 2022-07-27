@@ -2240,8 +2240,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
-        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]] = None,
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]] = None,
         variableColumnName: Optional[str] = None,
         valueColumnName: Optional[str] = None,
     ) -> "DataFrame":
@@ -2310,23 +2310,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|  double|  1.2|
         +---+--------+-----+
         """
-        if ids is None:
-            id_list = []
-        elif isinstance(ids, tuple):
-            id_list = list(ids)
-        elif isinstance(ids, list):
-            id_list = ids
-        else:
-            id_list = [ids]
-
-        if values is None:
-            value_list = []
-        elif isinstance(values, tuple):
-            value_list = list(values)
-        elif isinstance(values, list):
-            value_list = values
-        else:
-            value_list = [values]
+        def to_jcols(cols) -> JavaObject:
+            l = cols
+            if cols is None:
+                l = []
+            elif isinstance(cols, tuple):
+                l = list(cols)
+            elif not isinstance(cols, list):
+                l = [cols]
+            return self._jcols(*l)
 
         if variableColumnName is None:
             variableColumnName = "variable"
@@ -2336,7 +2328,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         return DataFrame(
             self._jdf._unpivot(
-                self._jcols(*id_list), self._jcols(*value_list), variableColumnName, valueColumnName
+                to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
             ),
             self.sparkSession,
         )

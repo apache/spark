@@ -669,6 +669,24 @@ class DataFrameTests(ReusedSQLTestCase):
             ):
                 df.unpivot("id", ["int", "str"])
 
+        with self.subTest(desc="with columns"):
+            for id in [df.id, [df.id], (df.id,)]:
+                for values in [[df.int, df.double], (df.int, df.double)]:
+                    with self.subTest(ids=id, values=values):
+                        self.assertEqual(
+                            df.unpivot(id, values).collect(),
+                            df.unpivot("id", ["int", "double"]).collect(),
+                        )
+
+        with self.subTest(desc="with column names and columns"):
+            for ids in [[df.id, "str"], (df.id, "str")]:
+                for values in [[df.int, "double"], (df.int, "double")]:
+                    with self.subTest(ids=ids, values=values):
+                        self.assertEqual(
+                            df.unpivot(ids, values).collect(),
+                            df.unpivot(["id", "str"], ["int", "double"]).collect(),
+                        )
+
         with self.subTest(desc="melt alias"):
             self.assertEqual(
                 df.unpivot("id", ["int", "double"]).collect(),
