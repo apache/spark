@@ -45,14 +45,14 @@ SELECT udf(min(udf(a))), udf(udf(max(a))) FROM test_having HAVING udf(min(a)) < 
 
 -- errors: ungrouped column references
 SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a));
-SELECT 1 AS one FROM test_having HAVING udf(a) > 1;
+SELECT a FROM test_having GROUP BY a HAVING udf(a) > 1;
 
 -- the really degenerate case: need not scan table at all
-SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2));
-SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2));
+SELECT a FROM test_having GROUP BY a HAVING udf(udf(1) > udf(2));
+SELECT a FROM test_having GROUP BY a HAVING udf(udf(1) < udf(2));
 
 -- [SPARK-33008] Spark SQL throws an exception
 -- and just to prove that we aren't scanning the table:
-SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2;
+SELECT a FROM test_having WHERE 1/udf(a) = 1  GROUP BY a HAVING 1 < 2;
 
 DROP TABLE test_having;

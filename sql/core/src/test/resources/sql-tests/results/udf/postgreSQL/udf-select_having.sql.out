@@ -144,39 +144,54 @@ grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a
 
 
 -- !query
-SELECT 1 AS one FROM test_having HAVING udf(a) > 1
+SELECT a FROM test_having GROUP BY a HAVING udf(a) > 1
 -- !query schema
-struct<>
+struct<a:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `a` cannot be resolved. Did you mean one of the following? [`one`]; line 1 pos 44
+2
+3
+4
+5
+6
+7
+8
+9
 
 
 -- !query
-SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2))
+SELECT a FROM test_having GROUP BY a HAVING udf(udf(1) > udf(2))
 -- !query schema
-struct<one:int>
+struct<a:int>
 -- !query output
 
 
 
 -- !query
-SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2))
+SELECT a FROM test_having GROUP BY a HAVING udf(udf(1) < udf(2))
 -- !query schema
-struct<one:int>
+struct<a:int>
 -- !query output
+0
 1
+2
+3
+4
+5
+6
+7
+8
+9
 
 
 -- !query
-SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2
+SELECT a FROM test_having WHERE 1/udf(a) = 1  GROUP BY a HAVING 1 < 2
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 40) ==
-...1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2
+== SQL(line 1, position 33) ==
+...SELECT a FROM test_having WHERE 1/udf(a) = 1  GROUP BY a HAVING 1 < 2
                                    ^^^^^^^^
 
 
