@@ -968,7 +968,7 @@ class FunctionsTests(ReusedSQLTestCase):
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(
-            [("100-200", r"(\d+)"), "--"], ["str", "pattern", "replacement"]
+            [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
         )
         self.assertTrue(
             all(
