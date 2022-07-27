@@ -189,7 +189,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         ("data_type", StringType),
         ("comment", StringType)))
       QueryTest.checkAnswer(
-        descriptionDf.filter("col_name != 'Created Time'"),
+        descriptionDf.filter("!(col_name in ('Created Time', 'Created By'))"),
         Seq(
           Row("data", "string", null),
           Row("id", "bigint", null),
@@ -202,7 +202,6 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           Row("Database", "ns", ""),
           Row("Table", "table", ""),
           Row("Last Access", "UNKNOWN", ""),
-          Row("Created By", "Spark 3.4.0-SNAPSHOT", ""),
           Row("Type", "EXTERNAL", ""),
           Row("Provider", getProvider(), ""),
           Row("Comment", "this is a test table", ""),

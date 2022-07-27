@@ -31,10 +31,10 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -2011,7 +2011,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-39748: build the stats for LogicalRDD based on originLogicalPlan") {
+  test("SPARK-39834: build the stats for LogicalRDD based on origin stats") {
     def buildExpectedColumnStats(attrs: Seq[Attribute]): AttributeMap[ColumnStat] = {
       AttributeMap(
         attrs.map {
@@ -2040,7 +2040,8 @@ class DataFrameSuite extends QueryTest
 
     val outputList = Seq(
       AttributeReference("cbool", BooleanType)(),
-      AttributeReference("cbyte", BooleanType)()
+      AttributeReference("cbyte", ByteType)(),
+      AttributeReference("cint", IntegerType)()
     )
 
     val expectedSize = 16
@@ -2052,9 +2053,11 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
 
+      // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+      // there is no matching physical node for OutputListAwareStatsTestPlan.
       val logicalRDD = LogicalRDD(
-        df.logicalPlan.output, spark.sparkContext.emptyRDD, Some(df.queryExecution.analyzed),
-        isStreaming = true)(spark)
+        df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
+        spark, Some(df.queryExecution.optimizedPlan.stats), None)
 
       val stats = logicalRDD.computeStats()
       val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
@@ -2065,12 +2068,50 @@ class DataFrameSuite extends QueryTest
       // reflected as well.
       val newLogicalRDD = logicalRDD.newInstance()
       val newStats = newLogicalRDD.computeStats()
-      // LogicalRDD.newInstance adds projection to originLogicalPlan, which triggers estimation
-      // on sizeInBytes. We don't intend to check the estimated value.
-      val newExpectedStats = Statistics(sizeInBytes = newStats.sizeInBytes, rowCount = Some(2),
+      val newExpectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
         attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
       assert(newStats === newExpectedStats)
     }
+  }
+
+  test("SPARK-39834: build the constraints for LogicalRDD based on origin constraints") {
+    def buildExpectedConstraints(attrs: Seq[Attribute]): ExpressionSet = {
+      val exprs = attrs.flatMap { attr =>
+        attr.dataType match {
+          case BooleanType => Some(EqualTo(attr, Literal(true, BooleanType)))
+          case IntegerType => Some(GreaterThan(attr, Literal(5, IntegerType)))
+          case _ => None
+        }
+      }
+      ExpressionSet(exprs)
+    }
+
+    val outputList = Seq(
+      AttributeReference("cbool", BooleanType)(),
+      AttributeReference("cbyte", ByteType)(),
+      AttributeReference("cint", IntegerType)()
+    )
+
+    val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
+
+    val df = Dataset.ofRows(spark, statsPlan)
+
+    // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+    // there is no matching physical node for OutputListAwareConstraintsTestPlan.
+    val logicalRDD = LogicalRDD(
+      df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
+      spark, None, Some(df.queryExecution.optimizedPlan.constraints))
+
+    val constraints = logicalRDD.constraints
+    val expectedConstraints = buildExpectedConstraints(logicalRDD.output)
+    assert(constraints === expectedConstraints)
+
+    // This method re-issues expression IDs for all outputs. We expect constraints to be
+    // reflected as well.
+    val newLogicalRDD = logicalRDD.newInstance()
+    val newConstraints = newLogicalRDD.constraints
+    val newExpectedConstraints = buildExpectedConstraints(newLogicalRDD.output)
+    assert(newConstraints === newExpectedConstraints)
   }
 
   test("SPARK-10656: completely support special chars") {
@@ -3356,3 +3397,26 @@ case class OutputListAwareStatsTestPlan(
   }
   override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }
+
+/**
+ * This class is used for unit-testing. It's a logical plan whose output is passed in.
+ */
+case class OutputListAwareConstraintsTestPlan(
+    outputList: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+  override def output: Seq[Attribute] = outputList
+
+  override lazy val constraints: ExpressionSet = {
+    val exprs = outputList.flatMap { attr =>
+      attr.dataType match {
+        case BooleanType => Some(EqualTo(attr, Literal(true, BooleanType)))
+        case IntegerType => Some(GreaterThan(attr, Literal(5, IntegerType)))
+        case _ => None
+      }
+    }
+    ExpressionSet(exprs)
+  }
+
+  override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
+}
+
+

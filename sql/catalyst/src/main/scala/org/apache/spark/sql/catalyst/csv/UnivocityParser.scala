@@ -120,6 +120,20 @@ class UnivocityParser(
     new NoopFilters
   }
 
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.timestampFormatInRead.isEmpty
+    }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.dateFormatInRead.isEmpty
+    }
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     val currentContent = tokenizer.getContext.currentParsedContent()
@@ -205,7 +219,10 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
@@ -217,16 +234,17 @@ class UnivocityParser(
           timestampFormatter.parse(datum)
         } catch {
           case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse {
-              // There may be date type entries in timestamp column due to schema inference
-              if (options.inferDate) {
-                daysToMicros(dateFormatter.parse(datum), options.zoneId)
-              } else {
-                throw(e)
+            // There may be date type entries in timestamp column due to schema inference
+            if (options.inferDate) {
+              daysToMicros(dateFormatter.parse(datum), options.zoneId)
+            } else {
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility if enabled.
+              if (!enableParsingFallbackForDateType) {
+                throw e
               }
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
             }
         }
       }

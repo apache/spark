@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException, SparkNoSuchElementException, SparkNumberFormatException}
+import org.apache.spark._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 
@@ -127,5 +127,24 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "message" -> "Text 'abc' could not be parsed at index 0",
         "ansiConfig" -> ansiConf)
     )
+  }
+
+  test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
+    Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(7,2)").foreach { targetType =>
+      val tableName = "overflowTable"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
+        checkError(
+          exception = intercept[SparkException] {
+            sql(s"insert into $tableName values 12345678901234567890D")
+          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
+          errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+          parameters = Map(
+            "sourceType" -> "\"DOUBLE\"",
+            "targetType" -> ("\"" + targetType + "\""),
+            "columnName" -> "`i`")
+        )
+      }
+    }
   }
 }
