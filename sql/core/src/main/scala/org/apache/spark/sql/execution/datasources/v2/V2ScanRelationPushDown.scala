@@ -413,8 +413,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case s @ Sort(order, _, operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder))
         // Without building the Scan, we do not know the resulting column names after aggregate
         // push-down, and thus can't push down Top-N which needs to know the ordering column names.
-        // TODO: we can support simple cases like GROUP BY columns directly and ORDER BY the same
-        //       columns, which we know the resulting column names: the original table columns.
+        // In particular, we push down the simple cases like GROUP BY expressions directly and
+        // ORDER BY the same expressions, which we know the original table columns.
         if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       def findGroupExprForSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
