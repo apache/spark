@@ -486,8 +486,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def combineComparison(
-      leftC: BinaryComparison,
-      rightC: BinaryComparison): Option[Expression] = (leftC, rightC) match {
+      leftComp: BinaryComparison,
+      rightComp: BinaryComparison): Option[Expression] = (leftComp, rightComp) match {
     case (GreaterThan(left0, Literal(v0, _)), GreaterThan(_, Literal(v1, _))) =>
       if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v0, v1)) {
         Some(GreaterThan(left0, Literal(v0)))
