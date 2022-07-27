@@ -204,6 +204,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def intervalDividedByZeroError(context: Option[SQLQueryContext]): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      messageParameters = Array.empty,
+      context = context,
+      summary = getSummary(context))
+  }
+
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,

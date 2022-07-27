@@ -78,7 +78,7 @@
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
-      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
   },
@@ -209,6 +209,12 @@
     "message" : [
       "<message>"
     ]
+  },
+  "INTERVAL_DIVIDED_BY_ZERO" : {
+    "message" : [
+      "Division by zero."
+    ],
+    "sqlState" : "22012"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [

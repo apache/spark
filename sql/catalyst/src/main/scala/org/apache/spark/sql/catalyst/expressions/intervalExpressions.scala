@@ -617,18 +617,22 @@ trait IntervalDivide {
       num: Any,
       context: Option[SQLQueryContext]): Unit = dataType match {
     case _: DecimalType =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError(context)
-    case _ => if (num == 0) throw QueryExecutionErrors.divideByZeroError(context)
+      if (num.asInstanceOf[Decimal].isZero) {
+        throw QueryExecutionErrors.intervalDividedByZeroError(context)
+      }
+    case _ => if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(context)
   }
 
   def divideByZeroCheckCodegen(
       dataType: DataType,
       value: String,
       errorContextReference: String): String = dataType match {
+    // scalastyle:off line.size.limit
     case _: DecimalType =>
-      s"if ($value.isZero()) throw QueryExecutionErrors.divideByZeroError($errorContextReference);"
+      s"if ($value.isZero()) throw QueryExecutionErrors.intervalDividedByZeroError($errorContextReference);"
     case _ =>
-      s"if ($value == 0) throw QueryExecutionErrors.divideByZeroError($errorContextReference);"
+      s"if ($value == 0) throw QueryExecutionErrors.intervalDividedByZeroError($errorContextReference);"
+    // scalastyle:on line.size.limit
   }
 }
 
