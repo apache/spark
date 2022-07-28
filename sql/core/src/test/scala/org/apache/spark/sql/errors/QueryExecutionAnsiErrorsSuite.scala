@@ -48,13 +48,23 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       msg =
         "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
           "If necessary set " +
-        s"""$ansiConf to "false" (except for ANSI interval type) to bypass this error.""" +
+        s"""$ansiConf to "false" to bypass this error.""" +
         """
           |== SQL(line 1, position 8) ==
           |select 6/0
           |       ^^^
           |""".stripMargin,
       sqlState = Some("22012"))
+  }
+
+  test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select interval 1 day / 0").collect()
+      },
+      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      parameters = Map.empty
+    )
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
