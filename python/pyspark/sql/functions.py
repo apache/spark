@@ -3262,7 +3262,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
-@overload  # type: ignore[no-redef]
+@overload
 def regexp_replace(string: "ColumnOrName", pattern: str, replacement: str) -> Column:
     ...
 
