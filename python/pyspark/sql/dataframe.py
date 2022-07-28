@@ -2240,10 +2240,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def unpivot(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]] = None,
-        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]] = None,
-        variableColumnName: Optional[str] = None,
-        valueColumnName: Optional[str] = None,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
     ) -> "DataFrame":
         """
         Unpivot a DataFrame from wide format to long format, optionally leaving
@@ -2271,15 +2271,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         ids : str, Column, tuple, list, optional
             Column(s) to use as identifiers. Can be a single column or column name,
-            or a list for multiple columns.
+            or a list or tuple for multiple columns.
         values : str, Column, tuple, list, optional
-            Column(s) to unpivot. Can be a single column or column name, or a list
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
             for multiple columns. If not specified or empty, uses all columns that
             are not set as `ids`.
-        variableColumnName : scalar, default 'variable'
-            Name of the variable column. If None it uses 'variable'.
-        valueColumnName : scalar, default 'value'
-            Name of the value column. If None it uses 'value'.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
 
         Returns
         -------
@@ -2320,12 +2320,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 l = [cols]
             return self._jcols(*l)
 
-        if variableColumnName is None:
-            variableColumnName = "variable"
-
-        if valueColumnName is None:
-            valueColumnName = "value"
-
         return DataFrame(
             self._jdf._unpivot(
                 to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
@@ -2335,10 +2329,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def melt(
         self,
-        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
-        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName"]]] = None,
-        variableColumnName: Optional[str] = None,
-        valueColumnName: Optional[str] = None,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
     ) -> "DataFrame":
         """
         Unpivot a DataFrame from wide format to long format, optionally leaving
@@ -2353,15 +2347,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         ids : str, Column, tuple, list, optional
             Column(s) to use as identifiers. Can be a single column or column name,
-            or a list for multiple columns.
+            or a list or tuple for multiple columns.
         values : str, Column, tuple, list, optional
-            Column(s) to unpivot. Can be a single column or column name, or a list
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
             for multiple columns. If not specified or empty, uses all columns that
             are not set as `ids`.
-        variableColumnName : scalar, default 'variable'
-            Name of the variable column. If None it uses 'variable'.
-        valueColumnName : scalar, default 'value'
-            Name of the value column. If None it uses 'value'.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
 
         Returns
         -------

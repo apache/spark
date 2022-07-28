@@ -547,8 +547,10 @@ class DataFrameTests(ReusedSQLTestCase):
 
         with self.subTest(desc="with no identifier and no value columns"):
             # select only columns that have common data type (double)
-            actual = df.select("id", "int", "double").unpivot()
-            self.assertEqual(actual.schema.simpleString(), "struct<variable:string,value:double>")
+            actual = df.select("id", "int", "double").unpivot(
+                ids=None, values=None, variableColumnName="var", valueColumnName="val"
+            )
+            self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
             self.assertEqual(
                 actual.collect(),
                 [
@@ -568,9 +570,9 @@ class DataFrameTests(ReusedSQLTestCase):
             for id in [None, [], ()]:
                 for values in [["int", "double"], ("int", "double")]:
                     with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values)
+                        actual = df.unpivot(id, values, "var", "val")
                         self.assertEqual(
-                            actual.schema.simpleString(), "struct<variable:string,value:double>"
+                            actual.schema.simpleString(), "struct<var:string,val:double>"
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -588,10 +590,10 @@ class DataFrameTests(ReusedSQLTestCase):
             for id in ["id", ["id"], ("id",)]:
                 for values in [["int", "double"], ("int", "double")]:
                     with self.subTest(ids=id, values=values):
-                        actual = df.unpivot(id, values)
+                        actual = df.unpivot(id, values, "var", "val")
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,variable:string,value:double>",
+                            "struct<id:bigint,var:string,val:double>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -609,10 +611,10 @@ class DataFrameTests(ReusedSQLTestCase):
             for ids in [["id", "double"], ("id", "double")]:
                 for values in ["str", ["str"], ("str",)]:
                     with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values)
+                        actual = df.unpivot(ids, values, "var", "val")
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,double:double,variable:string,value:string>",
+                            "struct<id:bigint,double:double,var:string,val:string>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -627,10 +629,10 @@ class DataFrameTests(ReusedSQLTestCase):
             for ids in [["id", "str"], ("id", "str")]:
                 for values in [None, [], ()]:
                     with self.subTest(ids=ids, values=values):
-                        actual = df.unpivot(ids, values)
+                        actual = df.unpivot(ids, values, "var", "val")
                         self.assertEqual(
                             actual.schema.simpleString(),
-                            "struct<id:bigint,str:string,variable:string,value:double>",
+                            "struct<id:bigint,str:string,var:string,val:double>",
                         )
                         self.assertEqual(
                             actual.collect(),
@@ -644,38 +646,21 @@ class DataFrameTests(ReusedSQLTestCase):
                             ],
                         )
 
-        with self.subTest(desc="with custom variable and value column names"):
-            actual = df.unpivot("id", ["int", "double"], "var", "val")
-            self.assertEqual(
-                actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
-            )
-            self.assertEqual(
-                actual.collect(),
-                [
-                    Row(id=1, var="int", val=10.0),
-                    Row(id=1, var="double", val=1.0),
-                    Row(id=2, var="int", val=20.0),
-                    Row(id=2, var="double", val=2.0),
-                    Row(id=3, var="int", val=30.0),
-                    Row(id=3, var="double", val=3.0),
-                ],
-            )
-
         with self.subTest(desc="with value columns without common data type"):
             with self.assertRaisesRegex(
                 AnalysisException,
                 r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
                 r"a least common type, some types do not: .*",
             ):
-                df.unpivot("id", ["int", "str"])
+                df.unpivot("id", ["int", "str"], "var", "val")
 
         with self.subTest(desc="with columns"):
             for id in [df.id, [df.id], (df.id,)]:
                 for values in [[df.int, df.double], (df.int, df.double)]:
                     with self.subTest(ids=id, values=values):
                         self.assertEqual(
-                            df.unpivot(id, values).collect(),
-                            df.unpivot("id", ["int", "double"]).collect(),
+                            df.unpivot(id, values, "var", "val").collect(),
+                            df.unpivot("id", ["int", "double"], "var", "val").collect(),
                         )
 
         with self.subTest(desc="with column names and columns"):
@@ -683,14 +668,14 @@ class DataFrameTests(ReusedSQLTestCase):
                 for values in [[df.int, "double"], (df.int, "double")]:
                     with self.subTest(ids=ids, values=values):
                         self.assertEqual(
-                            df.unpivot(ids, values).collect(),
-                            df.unpivot(["id", "str"], ["int", "double"]).collect(),
+                            df.unpivot(ids, values, "var", "val").collect(),
+                            df.unpivot(["id", "str"], ["int", "double"], "var", "val").collect(),
                         )
 
         with self.subTest(desc="melt alias"):
             self.assertEqual(
-                df.unpivot("id", ["int", "double"]).collect(),
-                df.melt("id", ["int", "double"]).collect(),
+                df.unpivot("id", ["int", "double"], "var", "val").collect(),
+                df.melt("id", ["int", "double"], "var", "val").collect(),
             )
 
     def test_observe(self):
