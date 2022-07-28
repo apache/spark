@@ -513,6 +513,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         Some(LessThanOrEqual(left0, literal0))
       }
+    case (EqualTo(left0, literal0: Literal), EqualTo(_, literal1: Literal)) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).equiv(literal0.value, literal1.value)) {
+        Some(EqualTo(left0, literal0))
+      } else {
+        Some(FalseLiteral)
+      }
     case _ => None
   }
 }
