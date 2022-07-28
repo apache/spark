@@ -19,21 +19,24 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter. Predicate
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.sources.{Filter, In}
 
 private[sql] object PredicateUtils {
 
   def toV1(predicate: Predicate): Option[Filter] = {
     predicate.name() match {
-      // Todo: add conversion for other V2 Predicate
-      case "IN" =>
+      // TODO: add conversion for other V2 Predicate
+      case "IN" if (predicate.children()(0).isInstanceOf[NamedReference]) =>
         val attribute = predicate.children()(0)
           .asInstanceOf[NamedReference].fieldNames().mkString(".")
         val values = predicate.children().drop(1)
         if (values.length > 0) {
+          if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return None
           val dataType = values(0).asInstanceOf[LiteralValue[_]].dataType
-          assert(values.forall(_.asInstanceOf[LiteralValue[_]].dataType.sameType(dataType)))
+          if (!values.forall(_.asInstanceOf[LiteralValue[_]].dataType.sameType(dataType))) {
+            return None
+          }
           val inValues = values.map(v =>
             CatalystTypeConverters.convertToScala(v.asInstanceOf[LiteralValue[_]].value, dataType))
           Some(In(attribute, inValues))
