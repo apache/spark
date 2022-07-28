@@ -3243,7 +3243,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 jdf = self._jdf.drop(col._jc)
             else:
                 raise TypeError("col should be a string or a Column")
-            jdf = self._jdf.drop(_to_java_column(col))
         else:
             if all(isinstance(col, str) for col in cols):
                 jdf = self._jdf.drop(self._jseq(cols))
