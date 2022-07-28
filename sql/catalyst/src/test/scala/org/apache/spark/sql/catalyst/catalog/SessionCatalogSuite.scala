@@ -174,7 +174,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // disabled.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE")
+          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE", false)
         val columnEWithFeatureDisabled: StructField = findField("e", result)
         // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
         assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
