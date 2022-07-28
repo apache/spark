@@ -3237,17 +3237,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if len(cols) == 1:
             col = cols[0]
-            if isinstance(col, str):
-                jdf = self._jdf.drop(col)
-            elif isinstance(col, Column):
-                jdf = self._jdf.drop(col._jc)
-            else:
+            if not isinstance(col, (str, Column)):
                 raise TypeError("col should be a string or a Column")
+            jdf = self._jdf.drop(_to_java_column(col))
         else:
-            for col in cols:
-                if not isinstance(col, str):
-                    raise TypeError("each col in the param list should be a string")
-            jdf = self._jdf.drop(self._jseq(cols))
+            if all(isinstance(col, str) for col in cols):
+                jdf = self._jdf.drop(self._jseq(cols))
+            elif all(isinstance(col, Column) for col in cols):
+                jdf = self._jdf
+                for col in cols:
+                    jdf = jdf.drop(col._jc)
+            else:
+                raise TypeError("each col in the param list should be a string or column")
 
         return DataFrame(jdf, self.sparkSession)
 
