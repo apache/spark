@@ -223,12 +223,12 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation
       .select($"a")
       .where($"a" === 1)
-      .where($"a" === 2)
+      .where($"b" === 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where($"a" === 1 && $"a" === 2)
+        .where($"a" === 1 && $"b" === 2)
         .select($"a").analyze
 
     comparePlans(optimized, correctAnswer)

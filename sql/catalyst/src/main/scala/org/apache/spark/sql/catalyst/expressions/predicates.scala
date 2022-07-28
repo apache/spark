@@ -313,6 +313,7 @@ trait PredicateHelper extends AliasHelper with Logging {
     case a LessThanOrEqual b => GreaterThanOrEqual(b, a)
     case a GreaterThan b => LessThan(b, a)
     case a GreaterThanOrEqual b => LessThanOrEqual(b, a)
+    case a EqualTo b => EqualTo(b, a)
     case o => o
   }
 }

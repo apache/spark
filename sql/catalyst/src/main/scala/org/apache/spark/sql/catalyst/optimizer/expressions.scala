@@ -354,6 +354,14 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         if right0.semanticEquals(right1) =>
         combineComparison(swapComparison(op0), swapComparison(op1)).getOrElse(and)
       case and @ And(
+        op0 @ BinaryComparison(left0, _: Literal), op1 @ BinaryComparison(_: Literal, right1))
+        if left0.semanticEquals(right1) =>
+        combineComparison(op0, swapComparison(op1)).getOrElse(and)
+      case and @ And(
+        op0 @ BinaryComparison(_: Literal, right0), op1 @ BinaryComparison(left1, _: Literal))
+        if right0.semanticEquals(left1) =>
+        combineComparison(swapComparison(op0), op1).getOrElse(and)
+      case and @ And(
         op0 @ BinaryComparison(left0, _: Literal), op1 @ BinaryComparison(left1, _: Literal))
         if left0.semanticEquals(left1) =>
         combineComparison(op0, op1).getOrElse(and)
