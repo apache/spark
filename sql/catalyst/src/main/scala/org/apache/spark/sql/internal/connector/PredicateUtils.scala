@@ -27,9 +27,8 @@ private[sql] object PredicateUtils {
   def toV1(predicate: Predicate): Option[Filter] = {
     predicate.name() match {
       // TODO: add conversion for other V2 Predicate
-      case "IN" if (predicate.children()(0).isInstanceOf[NamedReference]) =>
-        val attribute = predicate.children()(0)
-          .asInstanceOf[NamedReference].fieldNames().mkString(".")
+      case "IN" if predicate.children()(0).isInstanceOf[NamedReference] =>
+        val attribute = predicate.children()(0).toString
         val values = predicate.children().drop(1)
         if (values.length > 0) {
           if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return None
