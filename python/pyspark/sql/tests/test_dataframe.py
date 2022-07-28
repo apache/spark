@@ -100,8 +100,6 @@ class DataFrameTests(ReusedSQLTestCase):
 
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
 
-        self.assertEqual(df.drop(col("name"), "age").columns, ["active"])
-
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
