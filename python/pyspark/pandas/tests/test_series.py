@@ -3014,6 +3014,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq((pser + 1).argmin(skipna=False), (psser + 1).argmin(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -3037,6 +3039,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series([]).argmax()
         with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
             psser.argmax(axis=1)
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmin(axis=1)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
