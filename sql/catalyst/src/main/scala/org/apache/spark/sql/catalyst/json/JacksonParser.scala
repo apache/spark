@@ -78,6 +78,20 @@ class JacksonParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in JSONOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.timestampFormatInRead.isEmpty
+    }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.dateFormatInRead.isEmpty
+    }
+
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -257,7 +271,10 @@ class JacksonParser(
           } catch {
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility.
+              // compatibility if enabled.
+              if (!enableParsingFallbackForTimestampType) {
+                throw e
+              }
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
           }
@@ -280,7 +297,10 @@ class JacksonParser(
           } catch {
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility.
+              // compatibility if enabled.
+              if (!enableParsingFallbackForDateType) {
+                throw e
+              }
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToDate(str).getOrElse {
                 // In Spark 1.5.0, we store the data as number of days since epoch in string.

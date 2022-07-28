@@ -63,6 +63,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),true), [plan
 (9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_suppkey#2]
 Right keys [1]: [s_suppkey#3]
+Join type: LeftAnti
 Join condition: None
 
 (10) Scan parquet spark_catalog.default.part
@@ -86,6 +87,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [pl
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ps_partkey#1]
 Right keys [1]: [p_partkey#5]
+Join type: Inner
 Join condition: None
 
 (15) Project [codegen id : 3]

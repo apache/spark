@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException, SparkNoSuchElementException, SparkNumberFormatException}
+import org.apache.spark._
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 
@@ -48,13 +48,23 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       msg =
         "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
           "If necessary set " +
-        s"""$ansiConf to "false" (except for ANSI interval type) to bypass this error.""" +
+        s"""$ansiConf to "false" to bypass this error.""" +
         """
           |== SQL(line 1, position 8) ==
           |select 6/0
           |       ^^^
           |""".stripMargin,
       sqlState = Some("22012"))
+  }
+
+  test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select interval 1 day / 0").collect()
+      },
+      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      parameters = Map.empty
+    )
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
@@ -149,5 +159,24 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "message" -> "Text 'abc' could not be parsed at index 0",
         "ansiConfig" -> ansiConf)
     )
+  }
+
+  test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
+    Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(7,2)").foreach { targetType =>
+      val tableName = "overflowTable"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
+        checkError(
+          exception = intercept[SparkException] {
+            sql(s"insert into $tableName values 12345678901234567890D")
+          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
+          errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+          parameters = Map(
+            "sourceType" -> "\"DOUBLE\"",
+            "targetType" -> ("\"" + targetType + "\""),
+            "columnName" -> "`i`")
+        )
+      }
+    }
   }
 }

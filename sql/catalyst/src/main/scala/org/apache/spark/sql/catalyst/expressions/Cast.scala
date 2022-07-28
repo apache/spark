@@ -21,11 +21,12 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -481,10 +482,10 @@ case class Cast(
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  override def initQueryContext(): String = if (ansiEnabled) {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
+    Some(origin.context)
   } else {
-    ""
+    None
   }
 
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
@@ -995,9 +996,12 @@ case class Cast(
    * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
    * otherwise, an `ArithmeticException` is thrown.
    */
-  private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
+  private[this] def toPrecision(
+      value: Decimal,
+      decimalType: DecimalType,
+      context: Option[SQLQueryContext]): Decimal =
     value.toPrecision(
-      decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled)
+      decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled, context)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -1010,14 +1014,15 @@ case class Cast(
       buildCast[UTF8String](_,
         s => changePrecision(Decimal.fromStringANSI(s, target, queryContext), target))
     case BooleanType =>
-      buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
+      buildCast[Boolean](_,
+        b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target, queryContext))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case dt: DecimalType =>
-      b => toPrecision(b.asInstanceOf[Decimal], target)
+      b => toPrecision(b.asInstanceOf[Decimal], target, queryContext)
     case t: IntegralType =>
       b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
     case x: FractionalType =>
@@ -2355,4 +2360,47 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
+}
+
+/**
+ * Casting a numeric value as another numeric type in store assignment. It can capture the
+ * arithmetic errors and show proper error messages to users.
+ */
+case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild.asInstanceOf[Cast])
+
+  override def eval(input: InternalRow): Any = try {
+    child.eval(input)
+  } catch {
+    case e: SparkArithmeticException =>
+      QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+        child.child.dataType,
+        child.dataType,
+        columnName)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
+    val fromDt =
+      ctx.addReferenceObj("from", child.child.dataType, child.child.dataType.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", child.dataType, child.dataType.getClass.getName)
+    val col = ctx.addReferenceObj("colName", columnName, "java.lang.String")
+    // scalastyle:off line.size.limit
+    ev.copy(code = code"""
+      boolean ${ev.isNull} = true;
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      try {
+        ${childGen.code}
+        ${ev.isNull} = ${childGen.isNull};
+        ${ev.value} = ${childGen.value};
+      } catch ($exceptionClass e) {
+        throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert($fromDt, $toDt, $col);
+      }"""
+    )
+    // scalastyle:on line.size.limit
+  }
+
+  override def dataType: DataType = child.dataType
 }

@@ -59,6 +59,12 @@
     ],
     "sqlState" : "22005"
   },
+  "CAST_OVERFLOW_IN_TABLE_INSERT" : {
+    "message" : [
+      "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
+    ],
+    "sqlState" : "22005"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -72,7 +78,7 @@
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
-      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
   },
@@ -203,6 +209,12 @@
     "message" : [
       "<message>"
     ]
+  },
+  "INTERVAL_DIVIDED_BY_ZERO" : {
+    "message" : [
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
+    ],
+    "sqlState" : "22012"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -374,6 +386,18 @@
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"
     ]
+  },
+  "UNPIVOT_REQUIRES_VALUE_COLUMNS" : {
+    "message" : [
+      "At least one value column needs to be specified for UNPIVOT, all columns specified as ids"
+    ],
+    "sqlState" : "42000"
+  },
+  "UNPIVOT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [
+      "Unpivot value columns must share a least common type, some types do not: [<types>]"
+    ],
+    "sqlState" : "42000"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [

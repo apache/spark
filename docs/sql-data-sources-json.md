@@ -203,6 +203,12 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>enableDateTimeParsingFallback</code></td>
+    <td>Enabled if the time parser policy is legacy or no custom date or timestamp pattern was provided</td>
+    <td>Allows to fall back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>multiLine</code></td>
     <td><code>false</code></td>
     <td>Parse one record, which may span multiple lines, per file. JSON built-in functions ignore this option.</td>

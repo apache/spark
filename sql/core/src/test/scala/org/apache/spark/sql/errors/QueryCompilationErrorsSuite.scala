@@ -208,11 +208,10 @@ class QueryCompilationErrorsSuite
       val e = intercept[AnalysisException] (
         sql(s"SELECT $functionName(123) as value")
       )
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "NO_HANDLER_FOR_UDAF",
-        msg = "No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
-          "Use sparkSession.udf.register(...) instead.; line 1 pos 7")
+        parameters = Map("functionName" -> "org.apache.spark.sql.errors.MyCastToString"))
     }
   }
 
