@@ -62,8 +62,7 @@ class OrcDeserializer(
               if (value == null) {
                 rowUpdater.setNullAt(ordinal)
               } else {
-                val writerFunc: (Int, WritableComparable[_]) => Unit =
-                  newWriter(f.dataType, rowUpdater)
+                val writerFunc = newWriter(f.dataType, rowUpdater)
                 writerFunc(ordinal, value)
               }
           (value: WritableComparable[_]) => writer(index, value)
