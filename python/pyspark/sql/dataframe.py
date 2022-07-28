@@ -3246,7 +3246,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             elif all(isinstance(col, Column) for col in cols):
                 jdf = self._jdf
                 for col in cols:
-                    jdf = jdf.drop(col._jc)
+                    jdf = jdf.drop(col._jc)  # type: ignore[union-attr]
             else:
                 raise TypeError("each col in the param list should be a string or column")
 
