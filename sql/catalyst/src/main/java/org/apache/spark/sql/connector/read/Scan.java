@@ -64,12 +64,12 @@ public interface Scan {
    * The name of the scan, which will be shown in the header of a spark plan scan node on SparkUI.
    * E.g. "scan parquet sample_db.sample_table"
    * <p>
-   * By default this returns the class name of the implementation. Please override it to provide a
-   * meaningful name.
+   * By default this returns the simple class name of the implementation. Please override it to
+   * provide a meaningful name.
    * </p>
    */
   default String name() {
-    return this.getClass().toString();
+    return this.getClass().getSimpleName();
   }
 
   /**
