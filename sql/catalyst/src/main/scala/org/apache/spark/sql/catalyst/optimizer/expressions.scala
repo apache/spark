@@ -488,29 +488,30 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   private def combineComparison(
       leftComp: BinaryComparison,
       rightComp: BinaryComparison): Option[Expression] = (leftComp, rightComp) match {
-    case (GreaterThan(left0, Literal(v0, _)), GreaterThan(_, Literal(v1, _))) =>
-      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v0, v1)) {
-        Some(GreaterThan(left0, Literal(v0)))
+    case (GreaterThan(left0, literal0: Literal), GreaterThan(_, literal1: Literal)) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
+        Some(GreaterThan(left0, literal0))
       } else {
-        Some(GreaterThan(left0, Literal(v1)))
+        Some(GreaterThan(left0, literal1))
       }
-    case (GreaterThanOrEqual(left0, Literal(v0, _)), GreaterThanOrEqual(_, Literal(v1, _))) =>
-      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v0, v1)) {
-        Some(GreaterThanOrEqual(left0, Literal(v0)))
+    case (GreaterThanOrEqual(left0, literal0: Literal),
+      GreaterThanOrEqual(_, literal1: Literal)) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
+        Some(GreaterThanOrEqual(left0, literal0))
       } else {
-        Some(GreaterThanOrEqual(left0, Literal(v1)))
+        Some(GreaterThanOrEqual(left0, literal1))
       }
-    case (LessThan(left0, Literal(v0, _)), LessThan(_, Literal(v1, _))) =>
-      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v1, v0)) {
-        Some(LessThan(left0, Literal(v0)))
+    case (LessThan(left0, literal0: Literal), LessThan(_, literal1: Literal)) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
+        Some(LessThan(left0, literal0))
       } else {
-        Some(LessThan(left0, Literal(v1)))
+        Some(LessThan(left0, literal1))
       }
-    case (LessThanOrEqual(left0, Literal(v0, _)), LessThanOrEqual(_, Literal(v1, _))) =>
-      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(v1, v0)) {
-        Some(LessThanOrEqual(left0, Literal(v0)))
+    case (LessThanOrEqual(left0, literal0: Literal), LessThanOrEqual(_, literal1: Literal)) =>
+      if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
+        Some(LessThanOrEqual(left0, literal0))
       } else {
-        Some(LessThanOrEqual(left0, Literal(v1)))
+        Some(LessThanOrEqual(left0, literal1))
       }
     case _ => None
   }
