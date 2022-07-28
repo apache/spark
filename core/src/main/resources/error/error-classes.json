@@ -33,6 +33,10 @@
     "message" : [ "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <config> to \"false\" to bypass this error." ],
     "sqlState" : "22005"
   },
+  "CAST_OVERFLOW_IN_TABLE_INSERT" : {
+    "message" : [ "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead." ],
+    "sqlState" : "22005"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
