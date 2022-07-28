@@ -201,7 +201,7 @@ object FileFormat {
   /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
-  def createFileMetadataCol(fileFormat: FileFormat = null): AttributeReference = {
+  def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
     val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
       BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType))
     } else {

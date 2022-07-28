@@ -118,4 +118,21 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
       assert(ex.getMessage.contains("No such struct field row_index"))
     }
   }
+
+  for (useVectorizedReader <- Seq(true, false)) {
+    val label = if (useVectorizedReader) "vectorized" else "parquet-mr"
+    test(s"parquet ($label) - use mixed case for column name") {
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString) {
+        withReadDataFrame("parquet") { df =>
+          val mixedCaseRowIndex = "RoW_InDeX"
+          assert(mixedCaseRowIndex.toLowerCase() == FileFormat.ROW_INDEX)
+
+          assert(df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
+            .where(s"$expected_row_idx_col != $mixedCaseRowIndex")
+            .count == 0)
+        }
+      }
+    }
+  }
 }
