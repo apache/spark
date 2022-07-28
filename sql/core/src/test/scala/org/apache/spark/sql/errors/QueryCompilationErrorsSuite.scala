@@ -274,7 +274,6 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = groupingColMismatchEx,
       errorClass = "GROUPING_COLUMN_MISMATCH",
-      errorSubClass = None,
       parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
       sqlState = Some("42000"),
       matchPVals = true)
@@ -287,7 +286,6 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = groupingIdColMismatchEx,
       errorClass = "GROUPING_ID_COLUMN_MISMATCH",
-      errorSubClass = None,
       parameters = Map("groupingIdColumn" -> "earnings.*",
       "groupByColumns" -> "course.*,year.*"),
       sqlState = Some("42000"),
@@ -535,8 +533,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("DATA_TYPE_MISMATCH"),
-      parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""),
-      sqlState = None)
+      parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
   test("UNSUPPORTED_DESERIALIZER: " +
@@ -551,8 +548,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
       parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
-        "ordinal" -> "3"),
-      sqlState = None)
+        "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
@@ -562,8 +558,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
       parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
-        "ordinal" -> "1"),
-      sqlState = None)
+        "ordinal" -> "1"))
   }
 
   test("UNSUPPORTED_GENERATOR: " +
@@ -576,8 +571,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NESTED_IN_EXPRESSIONS"),
-      parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""),
-      sqlState = None)
+      parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""))
   }
 
   test("UNSUPPORTED_GENERATOR: only one generator allowed") {
@@ -590,8 +584,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("MULTI_GENERATOR"),
       parameters = Map("clause" -> "SELECT", "num" -> "2",
-        "generators" -> "\"explode(array(1, 2, 3))\", \"explode(array(1, 2, 3))\""),
-      sqlState = None)
+        "generators" -> "\"explode(array(1, 2, 3))\", \"explode(array(1, 2, 3))\""))
   }
 
   test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
@@ -603,8 +596,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("OUTSIDE_SELECT"),
-      parameters = Map("plan" -> "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"),
-      sqlState = None)
+      parameters = Map("plan" -> "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"))
   }
 
   test("UNSUPPORTED_GENERATOR: not a generator") {
@@ -620,7 +612,6 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_GENERATOR",
       errorSubClass = Some("NOT_GENERATOR"),
-      sqlState = None,
       parameters = Map(
         "functionName" -> "`array_contains`",
         "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"))
