@@ -518,7 +518,10 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
-
+    // First try to get the table metadata directly. If that fails, check for views below.
+    if (catalog.tableExists(tableName)) {
+      return Some(catalog.getTableMetadata(tableName).schema)
+    }
     val lookup: LogicalPlan = try {
       catalog.lookupRelation(tableName)
     } catch {
