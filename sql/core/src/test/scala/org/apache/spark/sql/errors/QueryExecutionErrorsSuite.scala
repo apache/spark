@@ -646,7 +646,7 @@ class QueryExecutionErrorsSuite
         sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
       ),
       errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      Map.empty
+      parameters = Map.empty
     )
   }
 

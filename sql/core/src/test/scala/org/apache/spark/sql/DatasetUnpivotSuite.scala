@@ -308,8 +308,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      errorSubClass = None,
-      sqlState = None,
       parameters = Map(
         "types" ->
           (""""STRING" \(`str1#\d+`\), """ +
@@ -397,8 +395,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      errorSubClass = None,
-      sqlState = None,
       parameters = Map("types" ->
         (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
          """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
@@ -432,8 +428,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      errorSubClass = None,
-      sqlState = None,
       parameters = Map("types" ->
         (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
          """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
