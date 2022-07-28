@@ -2300,25 +2300,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2| 12|   1.2|
         +---+---+------+
 
-        >>> df.unpivot("id").show()
-        +---+--------+-----+
-        | id|variable|value|
-        +---+--------+-----+
-        |  1|     int| 11.0|
-        |  1|  double|  1.1|
-        |  2|     int| 12.0|
-        |  2|  double|  1.2|
-        +---+--------+-----+
+        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        +---+------+----+
+        | id|   var| val|
+        +---+------+----+
+        |  1|   int|11.0|
+        |  1|double| 1.1|
+        |  2|   int|12.0|
+        |  2|double| 1.2|
+        +---+------+----+
         """
-        def to_jcols(cols) -> JavaObject:
-            l = cols
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> JavaObject:
             if cols is None:
-                l = []
+                lst = []
             elif isinstance(cols, tuple):
-                l = list(cols)
-            elif not isinstance(cols, list):
-                l = [cols]
-            return self._jcols(*l)
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return self._jcols(*lst)
 
         return DataFrame(
             self._jdf._unpivot(

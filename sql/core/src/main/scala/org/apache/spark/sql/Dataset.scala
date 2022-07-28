@@ -2109,6 +2109,7 @@ class Dataset[T] private[sql](
 
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
    */
   private[sql] def _unpivot(ids: Seq[Column],
                             values: Seq[Column],
