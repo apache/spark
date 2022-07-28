@@ -389,11 +389,8 @@ private[spark] class TaskSchedulerImpl(
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
       val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
-      val targetExecutorRpID = if (prof.isForTaskOnly) {
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-      } else {
-        taskSetRpID
-      }
+      val targetExecutorRpID = prof.targetExecutorRpId
+
       // make the resource profile id a hard requirement for now - ie only put tasksets
       // on executors where resource profile exactly matches.
       if (targetExecutorRpID == shuffledOffers(i).resourceProfileId) {
@@ -1248,11 +1245,7 @@ private[spark] object TaskSchedulerImpl {
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Int]]): Int = {
     val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-    val targetExecutorRpId = if (resourceProfile.isForTaskOnly) {
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    } else {
-      rpId
-    }
+    val targetExecutorRpId = resourceProfile.targetExecutorRpId
     val coresKnown = resourceProfile.isCoresLimitKnown
     val (limitingResource, limitedByCpu) = {
       val limiting = resourceProfile.limitingResource(conf)

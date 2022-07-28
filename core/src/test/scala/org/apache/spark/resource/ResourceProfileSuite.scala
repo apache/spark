@@ -190,27 +190,22 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(immrprof.isCoresLimitKnown == true)
   }
 
-  test("tasks and limit resource for resource profile for task only") {
+  test("tasks and limit resource for task resource profile") {
     val sparkConf = new SparkConf().setMaster("spark://testing")
-      .set(RESOURCE_PROFILE_FOR_TASK_ONLY, true)
       .set(EXECUTOR_CORES, 2)
       .set("spark.executor.resource.gpu.amount", "2")
       .set("spark.executor.resource.gpu.discoveryScript", "myscript")
     ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
-    val rpBuilder = new ResourceProfileBuilder()
-    val rp1 = rpBuilder.require(new TaskResourceRequests().resource("gpu", 1)).build()
+    val rp1 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 1).requests)
     assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
     assert(rp1.maxTasksPerExecutor(sparkConf) == 2)
     assert(rp1.isCoresLimitKnown)
-    assert(rp1.isForTaskOnly)
 
-    rpBuilder.clearTaskResourceRequests()
-    val rp2 = rpBuilder.require(new TaskResourceRequests().resource("gpu", 2)).build()
+    val rp2 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 2).requests)
     assert(rp2.limitingResource(sparkConf) == "gpu")
     assert(rp2.maxTasksPerExecutor(sparkConf) == 1)
     assert(rp2.isCoresLimitKnown)
-    assert(rp2.isForTaskOnly)
   }
 
   test("Create ResourceProfile") {
@@ -277,6 +272,22 @@ class ResourceProfileSuite extends SparkFunSuite {
     rprof2.setResourceProfileId(rprof.id + 1)
     assert(rprof.id != rprof2.id, "resource profiles should not have same id")
     assert(rprof.resourcesEqual(rprof2), "resource profile resourcesEqual not working")
+  }
+
+  test("test TaskResourceProfiles equal") {
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    rprofBuilder.require(taskReq)
+    val rprof = rprofBuilder.build
+
+    val taskReq1 = new TaskResourceRequests().resource("gpu", 1)
+    val rprof1 = new TaskResourceProfile(taskReq1.requests)
+    assert(!rprof.resourcesEqual(rprof1),
+      "resource profiles having different types should not equal")
+
+    val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
+    val rprof2 = new TaskResourceProfile(taskReq2.requests)
+    assert(rprof1.resourcesEqual(rprof2), "task resource profile resourcesEqual not working")
   }
 
   test("Test ExecutorResourceRequests memory helpers") {

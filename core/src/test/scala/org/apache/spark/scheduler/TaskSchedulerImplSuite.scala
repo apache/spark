@@ -33,7 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
@@ -1833,7 +1833,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
-  test("Scheduler works with resource profiles for task only") {
+  test("Scheduler works with task resource profiles") {
     val taskCpus = 1
     val taskGpus = 1
     val executorGpus = 4
@@ -1843,14 +1843,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       config.CPUS_PER_TASK.key -> taskCpus.toString,
       TASK_GPU_ID.amountConf -> taskGpus.toString,
       EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
-      config.EXECUTOR_CORES.key -> executorCpus.toString,
-      config.RESOURCE_PROFILE_FOR_TASK_ONLY.key -> "true"
+      config.EXECUTOR_CORES.key -> executorCpus.toString
     )
 
     val treqs = new TaskResourceRequests().cpus(2).resource(GPU, 2)
-    val rp = new ResourceProfile(Map.empty, treqs.requests)
+    val rp = new TaskResourceProfile(treqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
-    assert(rp.isForTaskOnly)
     val taskSet = FakeTask.createTaskSet(3)
     val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
       priority = 0, rpId = rp.id)
@@ -1895,7 +1893,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
-  test("Calculate available tasks slots with resource profiles for tasks only") {
+  test("Calculate available tasks slots for task resource profiles") {
     val taskCpus = 1
     val taskGpus = 1
     val executorGpus = 4
@@ -1905,16 +1903,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       config.CPUS_PER_TASK.key -> taskCpus.toString,
       TASK_GPU_ID.amountConf -> taskGpus.toString,
       EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
-      config.EXECUTOR_CORES.key -> executorCpus.toString,
-      config.RESOURCE_PROFILE_FOR_TASK_ONLY.key -> "true"
+      config.EXECUTOR_CORES.key -> executorCpus.toString
     )
 
     val treqs = new TaskResourceRequests().cpus(2).resource(GPU, 2)
-    val rp = new ResourceProfile(Map.empty, treqs.requests)
+    val rp = new TaskResourceProfile(treqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
-    assert(rp.isForTaskOnly)
-    val rpTaskSet = FakeTask.createTaskSet(5, stageId = 1, stageAttemptId = 0,
-      priority = 0, rpId = rp.id)
 
     val resources0 = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
     val resources1 = Map(GPU -> ArrayBuffer("4", "5", "6", "7"))

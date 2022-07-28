@@ -29,7 +29,6 @@ import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
-import org.apache.spark.resource.ResourceProfile.getCustomExecutorResources
 import org.apache.spark.util.Utils
 
 /**
@@ -59,7 +58,6 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
-  private var _forTaskOnly: Boolean = false
 
   /**
    * A unique id of this ResourceProfile
@@ -77,6 +75,11 @@ class ResourceProfile(
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = {
     executorResources.asJava
   }
+
+  /**
+   * Target executor's resource profile id, used for schedule.
+   */
+  def targetExecutorRpId: Int = id
 
   // Note that some cluster managers don't set the executor cores explicitly so
   // be sure to check the Option as required
@@ -135,10 +138,6 @@ class ResourceProfile(
   // grained mesos) don't use the cores config by default so we can't use it to calculate slots.
   private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
 
-  // If true, this profile will only be used to schedule tasks, but not to request new executors
-  // with this profile.
-  private[spark] def isForTaskOnly: Boolean = _forTaskOnly
-
   // The resource that has the least amount of slots per executor. Its possible multiple or all
   // resources result in same number of slots and this could be any of those.
   // If the executor cores config is not present this value is based on the other resources
@@ -149,6 +148,12 @@ class ResourceProfile(
       calculateTasksAndLimitingResource(sparkConf)
       _limitingResource.get
     }
+  }
+
+  // Get target executors' custom resources.
+  private[spark] def getTargetCustomExecutorResources(
+      sparkConf: SparkConf): Map[String, ExecutorResourceRequest] = {
+    ResourceProfile.getCustomExecutorResources(this)
   }
 
   // executor cores config is not set for some masters by default and the default value
@@ -169,10 +174,6 @@ class ResourceProfile(
    * resource address.
    */
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
-    _forTaskOnly = !Utils.isDynamicAllocationEnabled(sparkConf) &&
-      id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID &&
-      sparkConf.get(RESOURCE_PROFILE_FOR_TASK_ONLY)
-
     val shouldCheckExecCores = shouldCheckExecutorCores(sparkConf)
     var (taskLimit, limitingResource) = if (shouldCheckExecCores) {
       val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
@@ -193,13 +194,7 @@ class ResourceProfile(
     numPartsPerResourceMap(ResourceProfile.CORES) = 1
     val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
     taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
-    val execResourceToCheck = if (_forTaskOnly) {
-      // If resource profile describe task resources only, take custom executor resources
-      // from default resource profile.
-      getCustomExecutorResources(ResourceProfile.getOrCreateDefaultProfile(sparkConf))
-    } else {
-      ResourceProfile.getCustomExecutorResources(this)
-    }
+    val execResourceToCheck = getTargetCustomExecutorResources(sparkConf)
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsPerResourceMap(rName) = 1
@@ -258,7 +253,8 @@ class ResourceProfile(
 
   // check that the task resources and executor resources are equal, but id's could be different
   private[spark] def resourcesEqual(rp: ResourceProfile): Boolean = {
-    rp.taskResources == taskResources && rp.executorResources == executorResources
+    rp.taskResources == taskResources && rp.executorResources == executorResources &&
+      rp.getClass == this.getClass
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
@@ -266,6 +262,32 @@ class ResourceProfile(
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${executorResources.mkString(",")}, " +
       s"task resources: ${taskResources.mkString(",")}"
+  }
+}
+
+/**
+ * Resource profile which only contains task resources, used for stage level task schedule when
+ * dynamic allocation is disabled, tasks will be scheduled to executors with default resource
+ * profile based on task resources described by this task resource profile.
+ *
+ * @param taskResources Resource requests for tasks. Mapped from the resource
+ *                      name (e.g., cores, memory, CPU) to its specific request.
+ */
+@Evolving
+@Since("3.4.0")
+class TaskResourceProfile(override val taskResources: Map[String, TaskResourceRequest])
+  extends ResourceProfile(Map.empty, taskResources) {
+
+  /**
+   * Target executor's resource profile id, used for schedule.
+   */
+  override def targetExecutorRpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+
+  // Get target executors' custom resources.
+  override private[spark] def getTargetCustomExecutorResources(
+      sparkConf: SparkConf): Map[String, ExecutorResourceRequest] = {
+    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    ResourceProfile.getCustomExecutorResources(defaultResourceProfile)
   }
 }
 

@@ -57,28 +57,24 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val isStandalone = master.isDefined && master.get.startsWith("spark://")
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
-  private val resourceProfileForTaskOnly = !dynamicEnabled &&
-    sparkConf.get(config.RESOURCE_PROFILE_FOR_TASK_ONLY)
 
   /**
    * If we use anything except the default profile, it's only supported on YARN and Kubernetes
    * with dynamic allocation enabled. Throw an exception if not supported.
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
-    val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    val notYarnOrK8sOrStandaloneAndNotDefaultProfile =
-      isNotDefaultProfile && !(isYarn || isK8s || isStandalone)
-    val YarnOrK8sOrStandaloneNotDynAllocAndNotDefaultProfile =
-      isNotDefaultProfile && (isYarn || isK8s || isStandalone) && !dynamicEnabled
-
-    if (resourceProfileForTaskOnly) {
-      if ((notRunningUnitTests || testExceptionThrown) &&
-        (!isStandalone || (isNotDefaultProfile && rp.executorResources.nonEmpty))) {
-        throw new SparkException("ResourceProfiles for task only are supported for Standalone " +
-          "cluster with dynamic allocation disabled and executor resources should not be " +
-          "specified.")
+    if (rp.isInstanceOf[TaskResourceProfile]) {
+      if ((notRunningUnitTests || testExceptionThrown) && (!isStandalone || dynamicEnabled)) {
+        throw new SparkException("TaskResourceProfiles are only supported for Standalone " +
+          "cluster with dynamic allocation disabled.")
       }
     } else {
+      val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      val notYarnOrK8sOrStandaloneAndNotDefaultProfile =
+        isNotDefaultProfile && !(isYarn || isK8s || isStandalone)
+      val YarnOrK8sOrStandaloneNotDynAllocAndNotDefaultProfile =
+        isNotDefaultProfile && (isYarn || isK8s || isStandalone) && !dynamicEnabled
+
       // We want the exception to be thrown only when we are specifically testing for the
       // exception or in a real application. Otherwise in all other testing scenarios we want
       // to skip throwing the exception so that we can test in other modes to make testing easier.
@@ -88,13 +84,14 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
         throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
           "and Standalone with dynamic allocation enabled.")
       }
-    }
 
-    if (isStandalone && dynamicEnabled && rp.getExecutorCores.isEmpty &&
-      sparkConf.getOption(config.EXECUTOR_CORES.key).isEmpty) {
-      logWarning("Neither executor cores is set for resource profile, nor spark.executor.cores " +
-        "is explicitly set, you may get more executors allocated than expected. It's recommended " +
-        "to set executor cores explicitly. Please check SPARK-30299 for more details.")
+      if (isStandalone && dynamicEnabled && rp.getExecutorCores.isEmpty &&
+        sparkConf.getOption(config.EXECUTOR_CORES.key).isEmpty) {
+        logWarning("Neither executor cores is set for resource profile, nor spark.executor.cores " +
+          "is explicitly set, you may get more executors allocated than expected. " +
+          "It's recommended to set executor cores explicitly. " +
+          "Please check SPARK-30299 for more details.")
+      }
     }
 
     true
