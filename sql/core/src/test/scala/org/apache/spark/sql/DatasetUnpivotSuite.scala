@@ -452,7 +452,7 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e6,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      parameters = Map())
+      parameters = Map.empty)
   }
 
   test("unpivot after pivot") {
