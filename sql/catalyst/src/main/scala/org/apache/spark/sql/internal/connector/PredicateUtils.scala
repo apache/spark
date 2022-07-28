@@ -19,14 +19,14 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.sources.{Filter, In}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate, And => V2And, Not => V2Not, Or => V2Or}
+import org.apache.spark.sql.sources.{AlwaysFalse, AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not, Or, StringContains, StringEndsWith, StringStartsWith}
+import org.apache.spark.sql.types.StringType
 
 private[sql] object PredicateUtils {
 
   def toV1(predicate: Predicate): Option[Filter] = {
     predicate.name() match {
-      // TODO: add conversion for other V2 Predicate
       case "IN" if predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
         val values = predicate.children().drop(1)
@@ -42,6 +42,73 @@ private[sql] object PredicateUtils {
         } else {
           Some(In(attribute, Array.empty[Any]))
         }
+
+      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if predicate.children().length == 2 &&
+          predicate.children()(0).isInstanceOf[NamedReference] &&
+          predicate.children()(1).isInstanceOf[LiteralValue[_]] =>
+        val attribute = predicate.children()(0).toString
+        val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
+        predicate.name() match {
+          case "=" =>
+            Some(EqualTo(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+          case "<=>" =>
+            Some(EqualNullSafe(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+          case ">" =>
+            Some(GreaterThan(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+          case ">=" =>
+            Some(GreaterThanOrEqual(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+          case "<" =>
+            Some(LessThan(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+          case "<=" =>
+            Some(LessThanOrEqual(attribute,
+              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+        }
+
+      case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
+          predicate.children()(0).isInstanceOf[NamedReference] =>
+        val attribute = predicate.children()(0).toString
+        predicate.name() match {
+          case "IS_NULL" => Some(IsNull(attribute))
+          case "IS_NOT_NULL" => Some(IsNotNull(attribute))
+        }
+
+      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if predicate.children().length == 2 &&
+          predicate.children()(0).isInstanceOf[NamedReference] &&
+          predicate.children()(1).isInstanceOf[LiteralValue[_]] =>
+        val attribute = predicate.children()(0).toString
+        val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
+        if (!value.dataType.sameType(StringType)) return None
+        predicate.name() match {
+          case "STARTS_WITH" =>
+            Some(StringStartsWith(attribute, value.value.toString))
+          case "ENDS_WITH" =>
+            Some(StringEndsWith(attribute, value.value.toString))
+          case "CONTAINS" =>
+            Some(StringContains(attribute, value.value.toString))
+        }
+
+      case "ALWAYS_TRUE" | "ALWAYS_FALSE" if predicate.children().isEmpty =>
+        predicate.name() match {
+          case "ALWAYS_TRUE" => Some(AlwaysTrue())
+          case "ALWAYS_FALSE" => Some(AlwaysFalse())
+        }
+
+      case "AND" =>
+        val and = predicate.asInstanceOf[V2And]
+        Some(And(toV1(and.left()).get, toV1(and.right()).get))
+
+      case "OR" =>
+        val or = predicate.asInstanceOf[V2Or]
+        Some(Or(toV1(or.left()).get, toV1(or.right()).get))
+
+      case "NOT" =>
+        val not = predicate.asInstanceOf[V2Not]
+        Some(Not(toV1(not.child()).get))
 
       case _ => None
     }
