@@ -212,7 +212,7 @@ class QueryCompilationErrorsSuite
       checkError(
         exception = e,
         errorClass = "NO_HANDLER_FOR_UDAF",
-        parameters = Map())
+        parameters = Map("functionName" -> "org.apache.spark.sql.errors.MyCastToString"))
     }
   }
 

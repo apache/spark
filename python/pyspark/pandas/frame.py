@@ -6318,10 +6318,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
                 psdf = DataFrame(internal)
         else:
-            if isinstance(values, list):
-                index_values = values[-1]
-            else:
-                index_values = values
+            index_values = values
             index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
@@ -6651,6 +6648,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  2.0
         4  1.0
         5  2.0
+
+        >>> df.select_dtypes(include=['int'], exclude=['float64'])
+           a
+        0  1
+        1  2
+        2  1
+        3  2
+        4  1
+        5  2
 
         >>> df.select_dtypes(exclude=['int'])
                b    c  d
@@ -7275,12 +7281,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b 0  1  2
           1  0  3
 
-        >>> df.sort_index(level=1)  # doctest: +SKIP
+        >>> df.sort_index(level=1)
              A  B
-        a 0  3  0
         b 0  1  2
-        a 1  2  1
+        a 0  3  0
         b 1  0  3
+        a 1  2  1
 
         >>> df.sort_index(level=[1, 0])
              A  B
@@ -10568,6 +10574,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col1    False
         col2     True
         dtype: bool
+
+        Returns empty Series when the DataFrame is empty.
+        >>> df[[]].any()
+        Series([], dtype: bool)
         """
         axis = validate_axis(axis)
         if axis != 0:
@@ -10972,7 +10982,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Whether to return a new DataFrame.
         level : int or level name, default None
             In case of a MultiIndex, only rename labels in the specified level.
-        errors : {'ignore', 'raise}, default 'ignore'
+        errors : {'ignore', 'raise'}, default 'ignore'
             If 'raise', raise a `KeyError` when a dict-like `mapper`, `index`, or `columns`
             contains labels that are not present in the Index being transformed. If 'ignore',
             existing keys will be renamed and extra keys will be ignored.
@@ -11000,6 +11010,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0   1  4
         10  2  5
         20  3  6
+
+        >>> psdf1.rename(columns={"A": "a", "C": "c"}, errors="raise")
+        Traceback (most recent call last):
+            ...
+        KeyError: 'Index include value which is not in the `mapper`'
 
         >>> def str_lower(s) -> str:
         ...     return str.lower(s)
@@ -11116,7 +11131,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             num_indices = len(index_columns)
             if level:
                 if level < 0 or level >= num_indices:
-                    raise ValueError("level should be an integer between [0, num_indices)")
+                    raise ValueError("level should be an integer between [0, %s)" % num_indices)
 
             @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore[call-overload]
             def index_mapper_udf(s: pd.Series) -> pd.Series:
@@ -12747,7 +12762,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if on is None and not isinstance(self.index, DatetimeIndex):
             raise NotImplementedError("resample currently works only for DatetimeIndex")
         if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
-            raise NotImplementedError("resample currently works only for TimestampType")
+            raise NotImplementedError("`on` currently works only for TimestampType")
 
         agg_columns: List[ps.Series] = []
         for column_label in self._internal.column_labels:
@@ -12840,7 +12855,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return self.loc[:, key]
         elif is_list_like(key):
             return self.loc[:, list(key)]
-        raise NotImplementedError(key)
 
     def __setitem__(self, key: Any, value: Any) -> None:
         from pyspark.pandas.series import Series

@@ -144,7 +144,12 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |CREATE TABLE t(i INT, k STRING) USING PARQUET
             |PARTITIONED BY (j INT)
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+        // When planned write is disabled, even though the write plan is already sorted,
+        // the AQE node inserted on top of the write query will remove the original
+        // sort orders. So the ordering will not match. This issue does not exist when
+        // planned write is enabled, because AQE will be applied on top of the write
+        // command instead of on top of the child query plan.
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
           sql("INSERT INTO t SELECT i, k, j FROM t0 ORDER BY j")
         }
       }
@@ -159,7 +164,7 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |CREATE TABLE t(i INT, j INT) USING PARQUET
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
           sql("INSERT INTO t SELECT * FROM t0 ORDER BY k")
         }
       }

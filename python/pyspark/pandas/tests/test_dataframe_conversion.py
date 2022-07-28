@@ -20,6 +20,7 @@ import shutil
 import string
 import tempfile
 import unittest
+import sys
 
 import numpy as np
 import pandas as pd
@@ -187,7 +188,10 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
             self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
-    @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
+    @unittest.skipIf(
+        sys.platform == "linux" or sys.platform == "linux2",
+        "Pyperclip could not find a copy/paste mechanism for Linux.",
+    )
     def test_to_clipboard(self):
         pdf = self.pdf
         psdf = self.psdf

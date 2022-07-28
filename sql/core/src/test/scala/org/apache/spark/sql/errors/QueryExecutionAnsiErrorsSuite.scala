@@ -49,6 +49,16 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       parameters = Map("config" -> ansiConf))
   }
 
+  test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select interval 1 day / 0").collect()
+      },
+      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      parameters = Map.empty
+    )
+  }
+
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {
