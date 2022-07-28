@@ -99,7 +99,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
 
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
-        
+
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
     def test_drop_duplicates(self):
