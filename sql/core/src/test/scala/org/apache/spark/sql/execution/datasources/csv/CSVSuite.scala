@@ -2797,13 +2797,13 @@ abstract class CSVSuite
       "inferSchema" -> "true",
       "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd",
-      "inferDate" -> "true")
+      "preferDate" -> "true")
     val options2 = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "inferDate" -> "true")
+      "preferDate" -> "true")
 
-    // Error should be thrown when attempting to inferDate with Legacy parser
+    // Error should be thrown when attempting to preferDate with Legacy parser
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       val msg = intercept[IllegalArgumentException] {
         spark.read
@@ -2838,6 +2838,17 @@ abstract class CSVSuite
         assert(results.collect().toSeq.map(_.toSeq) == expected)
       }
     }
+  }
+
+  test("SPARK-39904: Fail to prefer dates if inferSchema=false") {
+    val msg = intercept[IllegalArgumentException] {
+      spark.read
+        .format("csv")
+        .option("inferSchema", "false")
+        .option("preferDate", "true")
+        .load(testFile(dateInferSchemaFile))
+    }.getMessage
+    assert(msg.contains("CANNOT_INFER_DATE_WITHOUT_INFER_SCHEMA"))
   }
 
   test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {

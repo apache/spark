@@ -575,6 +575,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
+  def inferDateWithoutInferSchemaError(): Throwable with SparkThrowable = {
+    new SparkIllegalArgumentException(errorClass = "CANNOT_INFER_DATE_WITHOUT_INFER_SCHEMA",
+      messageParameters = Array()
+    )
+  }
+
   def streamedOperatorUnsupportedByDataSourceError(
       className: String, operator: String): Throwable = {
     new UnsupportedOperationException(
