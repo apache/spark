@@ -50,23 +50,22 @@ class OrcDeserializer(
           // Create a RowUpdater instance for converting Orc objects to Catalyst rows. If any fields
           // in the Orc result schema have associated existence default values, maintain a
           // boolean array to track which fields have been explicitly assigned for each row.
-          val writer: (Int, WritableComparable[_]) => Unit =
+          val rowUpdater: RowUpdater =
             if (requiredSchema.hasExistenceDefaultValues) {
               resetExistenceDefaultsBitmask(requiredSchema)
-              val rowUpdater: RowUpdater =
-                new RowUpdaterWithBitmask(resultRow, requiredSchema.existenceDefaultsBitmask)
-              val writerFunc: (Int, WritableComparable[_]) => Unit =
-                newWriter(f.dataType, rowUpdater)
-              (ordinal, value) =>
-                if (value == null) {
-                  rowUpdater.setNullAt(ordinal)
-                } else {
-                  writerFunc(ordinal, value)
-                }
+              new RowUpdaterWithBitmask(resultRow, requiredSchema.existenceDefaultsBitmask)
             } else {
-              val rowUpdater: RowUpdater = new RowUpdater(resultRow)
-              newWriter(f.dataType, rowUpdater)
+              new RowUpdater(resultRow)
             }
+          val writer: (Int, WritableComparable[_]) => Unit =
+            (ordinal, value) =>
+              if (value == null) {
+                rowUpdater.setNullAt(ordinal)
+              } else {
+                val writerFunc: (Int, WritableComparable[_]) => Unit =
+                  newWriter(f.dataType, rowUpdater)
+                writerFunc(ordinal, value)
+              }
           (value: WritableComparable[_]) => writer(index, value)
         }
       }.toArray
