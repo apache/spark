@@ -503,15 +503,15 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       }
     case (LessThan(left0, literal0: Literal), LessThan(_, literal1: Literal)) =>
       if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
-        Some(LessThan(left0, literal0))
-      } else {
         Some(LessThan(left0, literal1))
+      } else {
+        Some(LessThan(left0, literal0))
       }
     case (LessThanOrEqual(left0, literal0: Literal), LessThanOrEqual(_, literal1: Literal)) =>
       if (TypeUtils.getInterpretedOrdering(left0.dataType).gteq(literal0.value, literal1.value)) {
-        Some(LessThanOrEqual(left0, literal0))
-      } else {
         Some(LessThanOrEqual(left0, literal1))
+      } else {
+        Some(LessThanOrEqual(left0, literal0))
       }
     case _ => None
   }
