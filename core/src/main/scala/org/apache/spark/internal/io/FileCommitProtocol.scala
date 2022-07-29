@@ -214,22 +214,33 @@ object FileCommitProtocol extends Logging {
       s" forceUseStagingDir=$forceUseStagingDir")
     val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
+    // dynamicPartitionOverwrite: Boolean, forceUseStagingDir: Boolean).
+    // Second try the constructor with arguments (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
       val ctor = clazz.getDeclaredConstructor(
         classOf[String], classOf[String], classOf[Boolean], classOf[Boolean])
-      logDebug("Using (String, String, Boolean) constructor")
+      logDebug("Using (String, String, Boolean, Boolean) constructor")
       ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
         forceUseStagingDir.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
-        logDebug("Falling back to (String, String) constructor")
-        require(!dynamicPartitionOverwrite,
-          "Dynamic Partition Overwrite is enabled but" +
-            s" the committer ${className} does not have the appropriate constructor")
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
+        try {
+          val ctor = clazz.getDeclaredConstructor(
+            classOf[String], classOf[String], classOf[Boolean])
+          logDebug("Using (String, String, Boolean) constructor")
+          ctor.newInstance(jobId, outputPath,
+            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+        } catch {
+          case _: NoSuchMethodException =>
+            logDebug("Falling back to (String, String) constructor")
+            require(!dynamicPartitionOverwrite,
+              "Dynamic Partition Overwrite is enabled but" +
+                s" the committer ${className} does not have the appropriate constructor")
+            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+            ctor.newInstance(jobId, outputPath)
+        }
     }
   }
 
