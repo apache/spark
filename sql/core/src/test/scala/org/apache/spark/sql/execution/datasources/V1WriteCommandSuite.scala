@@ -20,13 +20,11 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.util.QueryExecutionListener
 
-abstract class V1WriteCommandSuiteBase
-  extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
+abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
 
   import testImplicits._
 
