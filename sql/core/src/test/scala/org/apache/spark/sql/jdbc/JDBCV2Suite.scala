@@ -1009,7 +1009,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df2 = sql(
       """
         |SELECT dept AS my_dept, SUM(SALARY) FROM h2.test.employee
-        |GROUP BY dept
+        |GROUP BY my_dept
         |ORDER BY my_dept
         |LIMIT 1
         |OFFSET 1

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -206,7 +206,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       holder.pushedAggregate = Some(translatedAgg)
-      holder.pushedAggregateExpectedOutputMap = (groupOutputMap ++ aggOutputMap).toMap
+      holder.pushedAggOutputMap = AttributeMap(groupOutputMap ++ aggOutputMap)
       holder.output = newOutput
       logInfo(
         s"""
@@ -419,14 +419,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val aliasMap = getAliasMap(project)
       def findGroupExprForSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
         case SortOrder(attr: AttributeReference, _, _, sameOrderExpressions) =>
-          val originAttr = sHolder.pushedAggregateExpectedOutputMap(attr)
+          val originAttr = sHolder.pushedAggOutputMap(attr)
           sortOrder.withNewChildren(originAttr +: sameOrderExpressions).asInstanceOf[SortOrder]
         case _ => sortOrder
+      }
+      def replaceAggOutput(sortOrder: SortOrder): SortOrder = {
+        sortOrder.transform {
+          case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
+        }.asInstanceOf[SortOrder]
       }
 
       val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
       val newOrder = if (sHolder.pushedAggregate.isDefined) {
-        aliasReplacedOrder.map(findGroupExprForSortOrder)
+        aliasReplacedOrder.map(replaceAggOutput(_))
       } else {
         aliasReplacedOrder
       }
@@ -560,8 +565,7 @@ case class ScanBuilderHolder(
 
   var pushedAggregate: Option[Aggregation] = None
 
-  var pushedAggregateExpectedOutputMap: Map[AttributeReference, Expression] =
-    Map.empty[AttributeReference, Expression]
+  var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
