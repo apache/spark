@@ -152,6 +152,11 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
+  protected def constructUnsupportedMergeException(
+      other: AccumulatorV2[IN, OUT]): UnsupportedOperationException =
+    new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+
   /**
    * Defines the current value of this accumulator
    */
@@ -375,9 +380,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
     case o: LongAccumulator =>
       _sum += o.sum
       _count += o.count
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case _ => throw constructUnsupportedMergeException(other)
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
@@ -453,9 +456,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
     case o: DoubleAccumulator =>
       _sum += o.sum
       _count += o.count
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case _ => throw constructUnsupportedMergeException(other)
   }
 
   private[spark] def setValue(newValue: Double): Unit = _sum = newValue
@@ -500,8 +501,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
   override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
     case o: CollectionAccumulator[T] => this.synchronized(getOrCreate.addAll(o.value))
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case _ => throw constructUnsupportedMergeException(other)
   }
 
   override def value: java.util.List[T] = this.synchronized {
