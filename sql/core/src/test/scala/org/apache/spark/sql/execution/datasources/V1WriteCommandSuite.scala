@@ -243,6 +243,15 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
               |SELECT key, value, value FROM testData
               |""".stripMargin)
         }
+
+        // partition columns are dynamic
+        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1, p2)
+              |SELECT key, value, key, value FROM testData
+              |""".stripMargin)
+        }
       }
     }
   }

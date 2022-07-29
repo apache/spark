@@ -109,9 +109,9 @@ object FileFormatWriter extends Logging {
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String],
-      numStaticPartitions: Int = 0)
+      numStaticPartitionCols: Int = 0)
     : Set[String] = {
-    assert(partitionColumns.size >= numStaticPartitions)
+    require(partitionColumns.size >= numStaticPartitionCols)
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
@@ -165,7 +165,7 @@ object FileFormatWriter extends Logging {
 
     // We should first sort by dynamic partition columns, then bucket id, and finally sorting
     // columns.
-    val requiredOrdering = partitionColumns.drop(numStaticPartitions) ++
+    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     // the sort order doesn't matter
     val actualOrdering = empty2NullPlan.outputOrdering.map(_.child)

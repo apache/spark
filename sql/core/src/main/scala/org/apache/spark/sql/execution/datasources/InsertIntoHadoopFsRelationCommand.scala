@@ -188,7 +188,7 @@ case class InsertIntoHadoopFsRelationCommand(
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
-          numStaticPartitions = staticPartitions.size)
+          numStaticPartitionCols = staticPartitions.size)
 
 
       // update metastore partition metadata
