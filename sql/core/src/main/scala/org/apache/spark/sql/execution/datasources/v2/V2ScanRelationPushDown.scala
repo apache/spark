@@ -417,23 +417,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // ORDER BY the same expressions, which we know the original table columns.
         if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
-      def findGroupExprForSortOrder(sortOrder: SortOrder): SortOrder = sortOrder match {
-        case SortOrder(attr: AttributeReference, _, _, sameOrderExpressions) =>
-          val originAttr = sHolder.pushedAggOutputMap(attr)
-          sortOrder.withNewChildren(originAttr +: sameOrderExpressions).asInstanceOf[SortOrder]
-        case _ => sortOrder
-      }
-      def replaceAggOutput(sortOrder: SortOrder): SortOrder = {
-        sortOrder.transform {
-          case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
-        }.asInstanceOf[SortOrder]
-      }
-
-      val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))
       val newOrder = if (sHolder.pushedAggregate.isDefined) {
-        aliasReplacedOrder.map(replaceAggOutput(_))
+        aliasReplacedOrder.map {
+          _.transform {
+            case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
+          }.asInstanceOf[SortOrder]
+        }
       } else {
-        aliasReplacedOrder
+        aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
       }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
