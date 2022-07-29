@@ -20,6 +20,9 @@ package org.apache.spark.sql.sources
 import java.io.{File, IOException}
 import java.sql.Date
 import java.time.{Duration, Period}
+import java.util.concurrent.Callable
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
@@ -34,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SimpleInsertSource extends SchemaRelationProvider {
   override def createRelation(
@@ -2146,6 +2149,77 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
+    }
+  }
+
+  test("SPARK-37210: Concurrent write partition table") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
+      SQLConf.FORCE_USE_STAGING_DIR.key -> "true",
+      SQLConf.MAX_RECORDS_PER_FILE.key -> "1000") {
+
+      def concurrentWrite(insertStatement: Int => String,
+                          expectedAnswer: Seq[Row],
+                          concurrent: Int = 5): Unit = {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 int, c2 int) USING PARQUET PARTITIONED BY (c3 int, c4 int)")
+          val tasks: Seq[Callable[Unit]] = (1 to concurrent).map(i => {
+            new Callable[Unit] {
+              override def call(): Unit = {
+                sql(insertStatement(i))
+              }
+            }
+          })
+          ThreadUtils.newForkJoinPool("test-thread-pool", concurrent).invokeAll(tasks.toList.asJava)
+          checkAnswer(
+            sql("SELECT count(*), c3, c4 FROM t GROUP BY c3, c4 ORDER BY c3, c4"),
+            expectedAnswer)
+        }
+      }
+
+      // source temp view
+      (1 to 10000).map(i => (i, i)).toDF("_1", "_2").createOrReplaceTempView("s")
+
+      // Concurrent overwrite to different dynamic partitions
+      concurrentWrite(
+        (i: Int) => s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i, c4)" +
+          s" SELECT _1 AS c1, _2 AS c2, 4$i as c4 FROM s LIMIT ${i * 2000}",
+        (1 to 5).map(i => Row(i * 2000, s"3$i".toInt, s"4$i".toInt))
+      )
+
+      // concurrent append to different dynamic partitions
+      concurrentWrite(
+        (i: Int) => s"INSERT INTO TABLE t PARTITION(c3=3$i, c4)" +
+          s" SELECT _1 AS c1, _2 AS c2, 4$i as c4 FROM s LIMIT ${i * 2000}",
+        (1 to 5).map(i => Row(i * 2000, s"3$i".toInt, s"4$i".toInt))
+      )
+
+      // concurrent append to same dynamic partition
+      concurrentWrite(
+        (i: Int) => s"INSERT INTO TABLE t PARTITION(c3=3, c4)" +
+          s" SELECT _1 AS c1, _2 AS c2, 4 as c4 FROM s LIMIT ${i * 2000}",
+        Seq(Row(15 * 2000, 3, 4))
+      )
+
+      // concurrent overwrite to different static partitions
+      concurrentWrite(
+        (i: Int) => s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i, c4=4$i)" +
+          s" SELECT _1 AS c1, _2 AS c2 FROM s LIMIT ${i * 2000}",
+        (1 to 5).map(i => Row(i * 2000, s"3$i".toInt, s"4$i".toInt))
+      )
+
+      // concurrent append to different static partitions
+      concurrentWrite(
+        (i: Int) => s"INSERT INTO TABLE t PARTITION(c3=3$i, c4=4$i)" +
+          s" SELECT _1 AS c1, _2 AS c2 FROM s LIMIT ${i * 2000}",
+        (1 to 5).map(i => Row(i * 2000, s"3$i".toInt, s"4$i".toInt))
+      )
+
+      // concurrent append to same static partition
+      concurrentWrite(
+        (i: Int) => s"INSERT INTO TABLE t PARTITION(c3=3, c4=4)" +
+          s" SELECT _1 AS c1, _2 AS c2 FROM s LIMIT ${i * 2000}",
+        Seq(Row(15 * 2000, 3, 4))
+      )
     }
   }
 }

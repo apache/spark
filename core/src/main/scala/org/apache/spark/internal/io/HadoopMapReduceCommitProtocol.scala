@@ -67,7 +67,8 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    dynamicPartitionOverwrite: Boolean = false,
+    forceUseStagingDir: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -125,22 +126,27 @@ class HadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     val filename = getFilename(taskContext, spec)
 
-    val stagingDir: Path = committer match {
-      // For FileOutputCommitter it has its own staging path called "work path".
-      case f: FileOutputCommitter =>
-        if (dynamicPartitionOverwrite) {
-          assert(dir.isDefined,
-            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-          partitionPaths += dir.get
-        }
-        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
-      case _ => new Path(path)
-    }
+    if (forceUseStagingDir && !dynamicPartitionOverwrite) {
+      val absoluteDir = dir.map(new Path(path, _).toString).getOrElse(path)
+      this.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
+    } else {
+      val stagingDir: Path = committer match {
+        // For FileOutputCommitter it has its own staging path called "work path".
+        case f: FileOutputCommitter =>
+          if (dynamicPartitionOverwrite) {
+            assert(dir.isDefined, "The dataset to be written must be partitioned" +
+              " when dynamicPartitionOverwrite is true.")
+            partitionPaths += dir.get
+          }
+          new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+        case _ => new Path(path)
+      }
 
-    dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
-    }.getOrElse {
-      new Path(stagingDir, filename).toString
+      dir.map { d =>
+        new Path(new Path(stagingDir, d), filename).toString
+      }.getOrElse {
+        new Path(stagingDir, filename).toString
+      }
     }
   }
 

@@ -206,18 +206,22 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
+      dynamicPartitionOverwrite: Boolean = false,
+      forceUseStagingDir: Boolean = false): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
-      s" dynamic=$dynamicPartitionOverwrite")
+      s" dynamic=$dynamicPartitionOverwrite;" +
+      s" forceUseStagingDir=$forceUseStagingDir")
     val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[String], classOf[String], classOf[Boolean], classOf[Boolean])
       logDebug("Using (String, String, Boolean) constructor")
-      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
+        forceUseStagingDir.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
         logDebug("Falling back to (String, String) constructor")

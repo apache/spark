@@ -1455,6 +1455,13 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
+  val FORCE_USE_STAGING_DIR =
+    buildConf("spark.sql.sources.forceUseStagingDir")
+      .version("3.3.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
@@ -4333,6 +4340,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
+
+  def forceUseStagingDir: Boolean = getConf(SQLConf.FORCE_USE_STAGING_DIR)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
