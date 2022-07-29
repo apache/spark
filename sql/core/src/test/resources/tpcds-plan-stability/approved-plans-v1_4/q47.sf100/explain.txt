@@ -74,6 +74,7 @@ Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
 (5) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#4]
 Right keys [1]: [d_date_sk#6]
+Join type: Inner
 Join condition: None
 
 (6) Project [codegen id : 3]
@@ -101,6 +102,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [s_store_sk#9]
+Join type: Inner
 Join condition: None
 
 (12) Project [codegen id : 3]
@@ -140,6 +142,7 @@ Arguments: [i_item_sk#12 ASC NULLS FIRST], false, 0
 (20) SortMergeJoin [codegen id : 7]
 Left keys [1]: [ss_item_sk#1]
 Right keys [1]: [i_item_sk#12]
+Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 7]
@@ -237,6 +240,7 @@ Arguments: [i_category#22 ASC NULLS FIRST, i_brand#23 ASC NULLS FIRST, s_store_n
 (42) SortMergeJoin [codegen id : 24]
 Left keys [5]: [i_category#14, i_brand#13, s_store_name#10, s_company_name#11, rn#20]
 Right keys [5]: [i_category#22, i_brand#23, s_store_name#24, s_company_name#25, (rn#30 + 1)]
+Join type: Inner
 Join condition: None
 
 (43) Project [codegen id : 24]
@@ -269,6 +273,7 @@ Arguments: [i_category#32 ASC NULLS FIRST, i_brand#33 ASC NULLS FIRST, s_store_n
 (50) SortMergeJoin [codegen id : 36]
 Left keys [5]: [i_category#14, i_brand#13, s_store_name#10, s_company_name#11, rn#20]
 Right keys [5]: [i_category#32, i_brand#33, s_store_name#34, s_company_name#35, (rn#38 - 1)]
+Join type: Inner
 Join condition: None
 
 (51) Project [codegen id : 36]

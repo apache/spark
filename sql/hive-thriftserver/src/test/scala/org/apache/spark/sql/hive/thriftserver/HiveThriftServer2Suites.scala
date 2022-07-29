@@ -1388,6 +1388,11 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
        """.stripMargin)
   }
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
+
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     diagnosisBuffer.clear()

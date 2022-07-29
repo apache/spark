@@ -22,33 +22,40 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
+class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reorder columns by name") {
     val schema = new StructType().add("j", StringType).add("i", StringType)
-    val df = Seq("a" -> "b").toDF("i", "j").as(schema)
+    val df = Seq("a" -> "b").toDF("i", "j").to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row("b", "a"))
   }
 
   test("case insensitive: reorder columns by name") {
     val schema = new StructType().add("J", StringType).add("I", StringType)
-    val df = Seq("a" -> "b").toDF("i", "j").as(schema)
+    val df = Seq("a" -> "b").toDF("i", "j").to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row("b", "a"))
   }
 
   test("select part of the columns") {
     val schema = new StructType().add("j", StringType)
-    val df = Seq("a" -> "b").toDF("i", "j").as(schema)
+    val df = Seq("a" -> "b").toDF("i", "j").to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row("b"))
   }
 
-  test("negative: column not found") {
-    val schema = new StructType().add("non_exist", StringType)
-    val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").as(schema))
+  test("nullable column with default null value") {
+    val schema = new StructType().add("non_exist", StringType).add("j", StringType)
+    val df = Seq("a" -> "b").toDF("i", "j").to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Row(null, "b"))
+  }
+
+  test("negative: non-nullable column not found") {
+    val schema = new StructType().add("non_exist", StringType, nullable = false)
+    val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").to(schema))
     checkError(
       exception = e,
       errorClass = "UNRESOLVED_COLUMN",
@@ -59,7 +66,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
 
   test("negative: ambiguous column") {
     val schema = new StructType().add("i", StringType)
-    val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "I").as(schema))
+    val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "I").to(schema))
     checkError(
       exception = e,
       errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
@@ -72,7 +79,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("j", IntegerType)
     val data = Seq("a" -> 1).toDF("i", "j")
     assert(!data.schema.fields(1).nullable)
-    val df = data.as(schema)
+    val df = data.to(schema)
     val finalSchema = new StructType().add("j", IntegerType, nullable = false)
     assert(df.schema == finalSchema)
     checkAnswer(df, Row(1))
@@ -82,7 +89,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("i", IntegerType, nullable = false)
     val data = sql("SELECT i FROM VALUES 1, NULL as t(i)")
     assert(data.schema.fields(0).nullable)
-    val e = intercept[SparkThrowable](data.as(schema))
+    val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -91,14 +98,14 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
 
   test("upcast the original column") {
     val schema = new StructType().add("j", LongType, nullable = false)
-    val df = Seq("a" -> 1).toDF("i", "j").as(schema)
+    val df = Seq("a" -> 1).toDF("i", "j").to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(1L))
   }
 
   test("negative: column cannot upcast") {
     val schema = new StructType().add("i", IntegerType)
-    val e = intercept[SparkThrowable](Seq("a" -> 1).toDF("i", "j").as(schema))
+    val e = intercept[SparkThrowable](Seq("a" -> 1).toDF("i", "j").to(schema))
     checkError(
       exception = e,
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
@@ -113,7 +120,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val metadata1 = new MetadataBuilder().putString("a", "1").putString("b", "2").build()
     val metadata2 = new MetadataBuilder().putString("b", "3").putString("c", "4").build()
     val schema = new StructType().add("i", IntegerType, nullable = true, metadata = metadata2)
-    val df = Seq((1)).toDF("i").select($"i".as("i", metadata1)).as(schema)
+    val df = Seq((1)).toDF("i").select($"i".as("i", metadata1)).to(schema)
     // Metadata "a" remains, "b" gets overwritten by the specified schema, "c" is newly added.
     val resultMetadata = new MetadataBuilder()
       .putString("a", "1").putString("b", "3").putString("c", "4").build()
@@ -124,7 +131,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
   test("reorder inner fields by name") {
     val innerFields = new StructType().add("j", StringType).add("i", StringType)
     val schema = new StructType().add("struct", innerFields, nullable = false)
-    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).as(schema)
+    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Row("b", "a")))
   }
@@ -132,16 +139,24 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
   test("case insensitive: reorder inner fields by name") {
     val innerFields = new StructType().add("J", StringType).add("I", StringType)
     val schema = new StructType().add("struct", innerFields, nullable = false)
-    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).as(schema)
+    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Row("b", "a")))
   }
 
-  test("negative: field not found") {
-    val innerFields = new StructType().add("non_exist", StringType)
+  test("nullable field with default null value") {
+    val innerFields = new StructType().add("J", StringType).add("non_exist", StringType)
+    val schema = new StructType().add("struct", innerFields, nullable = false)
+    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Row(Row("b", null)))
+  }
+
+  test("negative: non-nullable field not found") {
+    val innerFields = new StructType().add("non_exist", StringType, nullable = false)
     val schema = new StructType().add("struct", innerFields, nullable = false)
     val e = intercept[SparkThrowable] {
-      Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).as(schema)
+      Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
     }
     checkError(
       exception = e,
@@ -158,7 +173,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val data = Seq("a" -> 1).toDF("i", "j").select(struct($"i", $"j").as("struct"))
     assert(!data.schema.fields(0).nullable)
     assert(!data.schema.fields(0).dataType.asInstanceOf[StructType].fields(1).nullable)
-    val df = data.as(schema)
+    val df = data.to(schema)
     val finalFields = new StructType().add("j", IntegerType, nullable = false)
     val finalSchema = new StructType().add("struct", finalFields, nullable = false)
     assert(df.schema == finalSchema)
@@ -171,7 +186,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val data = sql("SELECT i FROM VALUES 1, NULL as t(i)").select(struct($"i").as("struct"))
     assert(!data.schema.fields(0).nullable)
     assert(data.schema.fields(0).dataType.asInstanceOf[StructType].fields(0).nullable)
-    val e = intercept[SparkThrowable](data.as(schema))
+    val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -181,7 +196,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
   test("upcast the original field") {
     val innerFields = new StructType().add("j", LongType, nullable = false)
     val schema = new StructType().add("struct", innerFields, nullable = false)
-    val df = Seq("a" -> 1).toDF("i", "j").select(struct($"i", $"j").as("struct")).as(schema)
+    val df = Seq("a" -> 1).toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Row(1L)))
   }
@@ -190,7 +205,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val innerFields = new StructType().add("i", IntegerType)
     val schema = new StructType().add("struct", innerFields, nullable = false)
     val e = intercept[SparkThrowable] {
-      Seq("a" -> 1).toDF("i", "j").select(struct($"i", $"j").as("struct")).as(schema)
+      Seq("a" -> 1).toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
     }
     checkError(
       exception = e,
@@ -210,7 +225,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1)).toDF("i")
       .select($"i".as("i", metadata1))
       .select(struct($"i").as("struct"))
-      .as(schema)
+      .to(schema)
     // Metadata "a" remains, "b" gets overwritten by the specified schema, "c" is newly added.
     val resultMetadata = new MetadataBuilder()
       .putString("a", "1").putString("b", "3").putString("c", "4").build()
@@ -223,7 +238,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("arr", arr, nullable = false)
     val df = Seq("a" -> "b").toDF("i", "j")
       .select(array(struct($"i", $"j")).as("arr"))
-      .as(schema)
+      .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Seq(Row("b", "a"))))
   }
@@ -234,7 +249,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("arr", arr, nullable = false)
     val df = Seq("a" -> 1).toDF("i", "j")
       .select(array(struct($"i", $"j")).as("arr"))
-      .as(schema)
+      .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Seq(Row(1L))))
   }
@@ -244,7 +259,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("arr", arr)
     val data = sql("SELECT i FROM VALUES 1, NULL as t(i)").select(array($"i").as("arr"))
     assert(data.schema.fields(0).dataType.asInstanceOf[ArrayType].containsNull)
-    val e = intercept[SparkThrowable](data.as(schema))
+    val e = intercept[SparkThrowable](data.to(schema))
     checkError(
       exception = e,
       errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
@@ -260,7 +275,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1)).toDF("i")
       .select($"i")
       .select(array(struct($"i")).as("arr", metadata1))
-      .as(schema)
+      .to(schema)
     // Metadata "a" remains, "b" gets overwritten by the specified schema, "c" is newly added.
     val resultMetadata = new MetadataBuilder()
       .putString("a", "1").putString("b", "3").putString("c", "4").build()
@@ -276,7 +291,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val df = Seq((1)).toDF("i")
       .select($"i".as("i", metadata1))
       .select(array(struct($"i")).as("arr"))
-      .as(schema)
+      .to(schema)
     // Metadata "a" remains, "b" gets overwritten by the specified schema, "c" is newly added.
     val resultMetadata = new MetadataBuilder()
       .putString("a", "1").putString("b", "3").putString("c", "4").build()
@@ -290,7 +305,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("map", m, nullable = false)
     val df = Seq("a" -> "b").toDF("i", "j")
       .select(map(struct($"i", $"j"), $"i").as("map"))
-      .as(schema)
+      .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Map(Row("b", "a") -> "a")))
   }
@@ -301,7 +316,7 @@ class DataFrameAsSchemaSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("map", m, nullable = false)
     val df = Seq("a" -> "b").toDF("i", "j")
       .select(map($"i", struct($"i", $"j")).as("map"))
-      .as(schema)
+      .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Map("a" -> Row("b", "a"))))
   }

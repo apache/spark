@@ -328,8 +328,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
-    checkError(e, "AMBIGUOUS_COLUMN_OR_FIELD",
-      Map("name" -> "`S2`.`x`", "n" -> "2"))
+    checkError(
+      exception = e,
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
     // simple map type

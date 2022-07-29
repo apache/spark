@@ -21,7 +21,7 @@ import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang3.{ StringUtils => ACLStringUtils }
+import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -76,7 +76,7 @@ object StringUtils extends Logging {
   private[spark] def orderStringsBySimilarity(
       baseString: String,
       testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortBy(ACLStringUtils.getLevenshteinDistance(_, baseString))
+    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale

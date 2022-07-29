@@ -27,8 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -56,7 +55,7 @@ case class BatchScanExec(
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
+      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
       case _ => None
     }
 
@@ -64,7 +63,7 @@ case class BatchScanExec(
       val originalPartitioning = outputPartitioning
 
       // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
+      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
       filterableScan.filter(dataSourceFilters.toArray)
 
       // call toBatch again to get filtered partitions

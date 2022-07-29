@@ -36,11 +36,12 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -74,6 +75,7 @@ abstract class CSVSuite
   private val simpleSparseFile = "test-data/simple_sparse.csv"
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
+  private val dateInferSchemaFile = "test-data/date-infer-schema.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
@@ -2786,6 +2788,129 @@ abstract class CSVSuite
         val df3 = spark.read.schema(schema).csv(file.getCanonicalPath)
         checkAnswer(df3, df.collect().toSeq)
       }
+    }
+  }
+
+  test("SPARK-39469: Infer schema for date type") {
+    val options1 = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+      "dateFormat" -> "yyyy-MM-dd",
+      "inferDate" -> "true")
+    val options2 = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "inferDate" -> "true")
+
+    // Error should be thrown when attempting to inferDate with Legacy parser
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      val msg = intercept[IllegalArgumentException] {
+        spark.read
+          .format("csv")
+          .options(options1)
+          .load(testFile(dateInferSchemaFile))
+      }.getMessage
+      assert(msg.contains("CANNOT_INFER_DATE"))
+    } else {
+      // 1. Specify date format and timestamp format
+      // 2. Date inference should work with default date format when dateFormat is not provided
+      Seq(options1, options2).foreach {options =>
+        val results = spark.read
+          .format("csv")
+          .options(options)
+          .load(testFile(dateInferSchemaFile))
+
+        val expectedSchema = StructType(List(StructField("date", DateType),
+          StructField("timestamp-date", TimestampType),
+          StructField("date-timestamp", TimestampType)))
+        assert(results.schema == expectedSchema)
+
+        val expected =
+          Seq(
+            Seq(Date.valueOf("2001-9-8"), Timestamp.valueOf("2014-10-27 18:30:0.0"),
+              Timestamp.valueOf("1765-03-28 00:00:0.0")),
+            Seq(Date.valueOf("1941-1-2"), Timestamp.valueOf("2000-09-14 01:01:0.0"),
+              Timestamp.valueOf("1423-11-12 23:41:0.0")),
+            Seq(Date.valueOf("0293-11-7"), Timestamp.valueOf("1995-06-25 00:00:00.0"),
+              Timestamp.valueOf("2016-01-28 20:00:00.0"))
+          )
+        assert(results.collect().toSeq.map(_.toSeq) == expected)
+      }
+    }
+  }
+
+  test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {
+    withTempPath { path =>
+      Seq(
+        "1,2020011,2020011",
+        "2,20201203,20201203").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("id", IntegerType)
+        .add("date", DateType)
+        .add("ts", TimestampType)
+      val output = spark.read
+        .schema(schema)
+        .option("dateFormat", "yyyyMMdd")
+        .option("timestampFormat", "yyyyMMdd")
+        .csv(path.getAbsolutePath)
+
+      def check(mode: String, res: Seq[Row]): Unit = {
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> mode) {
+          checkAnswer(output, res)
+        }
+      }
+
+      check(
+        "legacy",
+        Seq(
+          Row(1, Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")),
+          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
+
+      check(
+        "corrected",
+        Seq(
+          Row(1, null, null),
+          Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))
+        )
+      )
+
+      val err = intercept[SparkException] {
+        check("exception", Nil)
+      }.getCause
+      assert(err.isInstanceOf[SparkUpgradeException])
+    }
+  }
+
+  test("SPARK-39731: Handle date and timestamp parsing fallback") {
+    withTempPath { path =>
+      Seq("2020-01-01,2020-01-01").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("date", DateType)
+        .add("ts", TimestampType)
+
+      def output(enableFallback: Boolean): DataFrame = spark.read
+        .schema(schema)
+        .option("dateFormat", "invalid")
+        .option("timestampFormat", "invalid")
+        .option("enableDateTimeParsingFallback", enableFallback)
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(
+        output(enableFallback = true),
+        Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+      )
+
+      checkAnswer(
+        output(enableFallback = false),
+        Seq(Row(null, null))
+      )
     }
   }
 }
