@@ -27,11 +27,11 @@ import org.apache.spark.ml.classification.ProbabilisticClassifierParams
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, ClassificationLoss => OldClassificationLoss, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Parameters for Decision Tree-based algorithms.

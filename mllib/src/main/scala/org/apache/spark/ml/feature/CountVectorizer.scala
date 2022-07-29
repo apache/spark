@@ -17,11 +17,12 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
-import org.apache.spark.ml.linalg.{VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import java.{util => ju}
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model

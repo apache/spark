@@ -18,9 +18,12 @@
 package org.apache.spark.ml.feature
 
 import java.lang.{Double => JDouble, Integer => JInt}
-import java.util.{NoSuchElementException, Map => JMap}
+import java.util.{Map => JMap, NoSuchElementException}
+
 import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
