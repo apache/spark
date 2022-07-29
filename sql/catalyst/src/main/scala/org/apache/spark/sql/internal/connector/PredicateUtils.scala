@@ -26,17 +26,6 @@ import org.apache.spark.sql.types.StringType
 private[sql] object PredicateUtils {
 
   def toV1(predicate: Predicate): Option[Filter] = {
-
-    def isValidBinaryPredicate(): Boolean = {
-      if (predicate.children().length == 2 &&
-        predicate.children()(0).isInstanceOf[NamedReference] &&
-        predicate.children()(1).isInstanceOf[LiteralValue[_]]) {
-        true
-      } else {
-        false
-      }
-    }
-
     predicate.name() match {
       case "IN" if predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
@@ -54,7 +43,9 @@ private[sql] object PredicateUtils {
           Some(In(attribute, Array.empty[Any]))
         }
 
-      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate =>
+      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if predicate.children().length == 2 &&
+          predicate.children()(0).isInstanceOf[NamedReference] &&
+          predicate.children()(1).isInstanceOf[LiteralValue[_]] =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         predicate.name() match {
@@ -86,7 +77,9 @@ private[sql] object PredicateUtils {
           case "IS_NOT_NULL" => Some(IsNotNull(attribute))
         }
 
-      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate =>
+      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if predicate.children().length == 2 &&
+          predicate.children()(0).isInstanceOf[NamedReference] &&
+          predicate.children()(1).isInstanceOf[LiteralValue[_]] =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         if (!value.dataType.sameType(StringType)) return None
@@ -120,6 +113,4 @@ private[sql] object PredicateUtils {
       case _ => None
     }
   }
-
-
 }
