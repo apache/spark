@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.attribute.NumericAttribute
 import org.apache.spark.ml.feature.Instance
@@ -36,6 +37,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">Decision tree</a>

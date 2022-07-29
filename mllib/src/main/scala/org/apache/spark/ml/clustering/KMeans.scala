@@ -18,10 +18,12 @@
 package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -35,6 +37,7 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 

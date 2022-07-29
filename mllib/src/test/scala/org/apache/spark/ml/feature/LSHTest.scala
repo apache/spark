@@ -20,10 +20,11 @@ package org.apache.spark.ml.feature
 import org.scalatest.Assertions._
 
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.util.{MLTestingUtils, SchemaUtils}
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
+import org.apache.spark.sql.util.SchemaUtils
 
 private[ml] object LSHTest {
   /**

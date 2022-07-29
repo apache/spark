@@ -25,6 +25,7 @@ import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**
