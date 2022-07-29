@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, ExpressionSet, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportDistinctKeys, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -73,6 +75,13 @@ case class DataSourceV2Relation(
       case _ => ""
     }
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $qualifiedTableName $name"
+  }
+
+  override def reportDistinctKeysSet(): Set[ExpressionSet] = {
+    table.asReadable.newScanBuilder(options).build() match {
+      case r: SupportsReportDistinctKeys => DataSourceV2Relation.transformUniqueKeysSet(r, this)
+      case _ => super.reportDistinctKeysSet()
+    }
   }
 
   override def computeStats(): Statistics = {
@@ -134,6 +143,11 @@ case class DataSourceV2ScanRelation(
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
+  override def reportDistinctKeysSet(): Set[ExpressionSet] = scan match {
+    case r: SupportsReportDistinctKeys => DataSourceV2Relation.transformUniqueKeysSet(r, this)
+    case _ => super.reportDistinctKeysSet()
+  }
+
   override def computeStats(): Statistics = {
     scan match {
       case r: SupportsReportStatistics =>
@@ -165,6 +179,11 @@ case class StreamingDataSourceV2Relation(
   override def isStreaming: Boolean = true
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def reportDistinctKeysSet(): Set[ExpressionSet] = scan match {
+    case r: SupportsReportDistinctKeys => DataSourceV2Relation.transformUniqueKeysSet(r, this)
+    case _ => super.reportDistinctKeysSet()
+  }
 
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
@@ -219,5 +238,14 @@ object DataSourceV2Relation {
     Statistics(
       sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
       rowCount = numRows)
+  }
+
+  def transformUniqueKeysSet(
+      r: SupportsReportDistinctKeys,
+      p: LogicalPlan): Set[ExpressionSet] = {
+    val uniqueKeysSet = r.distinctKeysSet().asScala
+    uniqueKeysSet.map { uniqueKeys =>
+      ExpressionSet(V2ExpressionUtils.resolveRefs(uniqueKeys.asScala.toSet, p))
+    }.toSet
   }
 }

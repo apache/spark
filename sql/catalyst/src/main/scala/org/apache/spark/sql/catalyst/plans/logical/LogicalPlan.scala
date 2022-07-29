@@ -167,6 +167,9 @@ abstract class LogicalPlan
 trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
+  /** Return a set of unique keys. */
+  def reportDistinctKeysSet(): Set[ExpressionSet] = Set.empty[ExpressionSet]
+
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics = throw new UnsupportedOperationException
 }

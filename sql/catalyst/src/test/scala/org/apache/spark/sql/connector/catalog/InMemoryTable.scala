@@ -24,6 +24,7 @@ import java.util.OptionalLong
 
 import scala.collection.mutable
 
+import com.google.common.collect.Sets
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -272,9 +273,21 @@ class InMemoryTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
+    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning
+      with SupportsReportDistinctKeys {
 
     override def toBatch: Batch = this
+
+    override def distinctKeysSet(): java.util.Set[java.util.Set[NamedReference]] = {
+      val uniqueKeys = readSchema.fields.collect {
+        case f if f.metadata.contains("unique") => f.name
+      } .map(FieldReference(_))
+        .map(Sets.newHashSet(_))
+
+      Sets.newHashSet(
+        uniqueKeys: _*
+      )
+    }
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {

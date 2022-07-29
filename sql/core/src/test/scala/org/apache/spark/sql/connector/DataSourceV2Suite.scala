@@ -20,10 +20,13 @@ package org.apache.spark.sql.connector
 import java.io.File
 import java.util.OptionalLong
 
+import com.google.common.collect.Sets
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.ExpressionSet
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -596,6 +599,30 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-38932: Datasource v2 support report distinct keys") {
+    def checkUniqueKeys(leaf: LeafNode): Unit = {
+      // Assume all output attributes are unique keys
+      val expected1 = leaf.output.map(attr => ExpressionSet(attr :: Nil)).toSet
+      assert(leaf.reportDistinctKeysSet() == expected1)
+    }
+
+    Seq(classOf[ReportUniqueKeysDataSource], classOf[JavaReportDistinctKeysDataSource]).foreach {
+      cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          val analyzed = df.queryExecution.analyzed.collect {
+            case d: DataSourceV2Relation => d
+          }.head
+          checkUniqueKeys(analyzed)
+
+          val optimized = df.queryExecution.optimizedPlan.collect {
+            case d: DataSourceV2ScanRelation => d
+          }.head
+          checkUniqueKeys(optimized)
+        }
+    }
+  }
 }
 
 
@@ -1095,6 +1122,29 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+    }
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder
+      }
+    }
+  }
+}
+
+class ReportUniqueKeysDataSource extends SimpleWritableDataSource {
+
+  class MyScanBuilder extends SimpleScanBuilder with SupportsReportDistinctKeys {
+    override def distinctKeysSet(): java.util.Set[java.util.Set[NamedReference]] = {
+      Sets.newHashSet(
+        Sets.newHashSet(FieldReference.apply("i")),
+        Sets.newHashSet(FieldReference.apply("j")))
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      Array(RangeInputPartition(0, 1))
     }
   }
 

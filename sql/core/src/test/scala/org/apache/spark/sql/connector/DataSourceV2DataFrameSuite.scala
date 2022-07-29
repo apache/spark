@@ -21,12 +21,12 @@ import java.util.Collections
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, Metadata, StructField, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataSourceV2DataFrameSuite
@@ -251,6 +251,24 @@ class DataSourceV2DataFrameSuite
       checkAnswer(spark.table(t1), df2)
     } finally {
       spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("SPARK-38932: Datasource v2 support report distinct keys") {
+    val t = "testcat.unique.t"
+    withTable(t) {
+      val unique = """ {"unique":""} """.stripMargin
+      val schema = StructType(
+        StructField("key", IntegerType, metadata = Metadata.fromJson(unique)) ::
+          StructField("value", IntegerType) :: Nil)
+      val data = spark.sparkContext.parallelize(Row(1, 1) :: Row(2, 1) :: Nil)
+      spark.createDataFrame(data, schema).writeTo(t).create()
+
+      val qe = spark.table(t).groupBy($"key").agg($"key").queryExecution
+      val analyzed = qe.analyzed
+      val optimized = qe.optimizedPlan
+      assert(analyzed.exists(_.isInstanceOf[Aggregate]))
+      assert(!optimized.exists(_.isInstanceOf[Aggregate]))
     }
   }
 }

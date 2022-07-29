@@ -62,7 +62,10 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     }
   }
 
-  override def default(p: LogicalPlan): Set[ExpressionSet] = Set.empty[ExpressionSet]
+  override def default(p: LogicalPlan): Set[ExpressionSet] = p match {
+    case leaf: LeafNode => leaf.reportDistinctKeysSet()
+    case _ => Set.empty[ExpressionSet]
+  }
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
     // handle group by a, a and global aggregate

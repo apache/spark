@@ -49,6 +49,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     refs.map(ref => resolveRef[T](ref, plan))
   }
 
+  def resolveRefs[T <: NamedExpression](refs: Set[NamedReference], plan: LogicalPlan): Set[T] = {
+    refs.map(ref => resolveRef[T](ref, plan))
+  }
+
   /**
    * Converts the array of input V2 [[V2SortOrder]] into their counterparts in catalyst.
    */
