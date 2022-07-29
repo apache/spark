@@ -1,0 +1,105 @@
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Range iterator size 10:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0        124.5           8.0       1.0X
+Use Utils.getIteratorSize                             1              1           0         99.0          10.1       0.8X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Range iterator size 100:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0        112.3           8.9       1.0X
+Use Utils.getIteratorSize                             1              2           0         67.8          14.8       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Range iterator size 1000:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0        109.2           9.2       1.0X
+Use Utils.getIteratorSize                             7              7           0         14.1          70.9       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Range iterator size 10000:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0        109.8           9.1       1.0X
+Use Utils.getIteratorSize                            69             70           1          1.4         690.9       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Range iterator size 30000:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0        108.9           9.2       1.0X
+Use Utils.getIteratorSize                           201            201           0          0.5        2011.3       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Seq iterator size 10:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     2              2           0         45.6          21.9       1.0X
+Use Utils.getIteratorSize                             3              4           0         29.2          34.3       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Seq iterator size 100:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                    25             25           0          4.0         251.8       1.0X
+Use Utils.getIteratorSize                            29             29           0          3.5         289.5       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Seq iterator size 1000:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                   260            260           0          0.4        2603.5       1.0X
+Use Utils.getIteratorSize                           292            293           0          0.3        2924.5       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Seq iterator size 10000:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                  2608           2608           0          0.0       26080.9       1.0X
+Use Utils.getIteratorSize                          2992           2993           0          0.0       29923.9       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Seq iterator size 30000:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                  7829           7829           1          0.0       78287.7       1.0X
+Use Utils.getIteratorSize                          8983           8983           0          0.0       89833.4       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Array iterator size 10:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              1           0         95.2          10.5       1.0X
+Use Utils.getIteratorSize                             2              2           0         51.7          19.3       0.5X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Array iterator size 100:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                     1              2           3         84.1          11.9       1.0X
+Use Utils.getIteratorSize                             2              3           0         40.6          24.6       0.5X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Array iterator size 1000:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                   396            402           8          0.3        3960.7       1.0X
+Use Utils.getIteratorSize                             8              8           0         12.6          79.2      50.0X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Array iterator size 10000:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                  4256           4268          17          0.0       42558.4       1.0X
+Use Utils.getIteratorSize                            70             70           0          1.4         698.8      60.9X
+
+OpenJDK 64-Bit Server VM 11.0.16+8-LTS on Linux 5.15.0-1014-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Test Array iterator size 30000:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Use Iterator.size                                 12836          12841           7          0.0      128357.4       1.0X
+Use Utils.getIteratorSize                           202            203           0          0.5        2023.6      63.4X
+
