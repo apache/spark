@@ -190,14 +190,9 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     case _ => false
   }
 
-  // Deduplicate and reorder aggregate expressions to avoid some query can't reuse the exchange.
-  // See tpcds-v2.7.0: q57 and q67a
-  private def reorderNamedExpressions(
+  private def deduplicateNamedExpressions(
       aggregateExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
-    ExpressionSet(aggregateExpressions)
-      .toSeq
-      .map(_.asInstanceOf[NamedExpression])
-      .sortBy(_.name)
+    ExpressionSet(aggregateExpressions).toSeq.map(_.asInstanceOf[NamedExpression])
   }
 
   // Rewrite Average to Sum / Count(*). Please see AverageBase.getEvaluateExpression
@@ -212,8 +207,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
               e.dataType match {
                 case _: DecimalType =>
                   Divide(
-                    CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
-                      !useAnsiAdd, avg.queryContext),
+                    CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
                     count.cast(DecimalType.LongDecimal), failOnError = false).cast(avg.dataType)
                 case _ =>
                   Divide(sum.cast(avg.dataType), count.cast(avg.dataType), failOnError = false)
@@ -250,8 +244,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       rowCnt: Alias,
       plan: LogicalPlan): PartialAggregate = {
     val partialGroupingExps = ExpressionSet(joinKeys ++ groupExps).toSeq
-    val partialAggExps = remainingExps ++ (aliasMap.values.toSeq :+ rowCnt) ++ joinKeys ++ groupExps
-    PartialAggregate(partialGroupingExps, reorderNamedExpressions(partialAggExps), plan)
+    val partialAggExps = joinKeys ++ groupExps ++ remainingExps ++ (aliasMap.values.toSeq :+ rowCnt)
+    PartialAggregate(partialGroupingExps, deduplicateNamedExpressions(partialAggExps), plan)
   }
 
   private def pushDistinctThroughJoin(join: Join): Join = {
@@ -278,7 +272,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     val aggregateExpressions = rewrittenAgg.collectAggregateExprs
 
     val (leftProjectList, rightProjectList, remainingProjectList) =
-      split(projectList ++ join.condition.map(_.references.toSeq).getOrElse(Nil),
+      split(join.condition.map(_.references.toSeq).getOrElse(Nil) ++ projectList,
         join.left, join.right)
 
     // remainingProjectList must should be empty. We do not support this case:
@@ -324,9 +318,9 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         val (newRightJoinKeys, complexRightJoinKeys) = pullOutJoinKeys(rightKeys)
 
         val pullOutedLeft = pushedLeftProject
-          .copy(projectList = reorderNamedExpressions(leftProjectList ++ complexLeftJoinKeys))
+          .copy(projectList = deduplicateNamedExpressions(leftProjectList ++ complexLeftJoinKeys))
         val pullOutedRight = pushedRightProject
-          .copy(projectList = reorderNamedExpressions(rightProjectList ++ complexRightJoinKeys))
+          .copy(projectList = deduplicateNamedExpressions(rightProjectList ++ complexRightJoinKeys))
         val newCond = newLeftJoinKeys.zip(newRightJoinKeys)
           .map { case (l, r) => EqualTo(l, r) }
           .reduceLeftOption(And)
