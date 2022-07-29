@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}

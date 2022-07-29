@@ -21,11 +21,11 @@ import scala.annotation.varargs
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.function.Function
-import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a

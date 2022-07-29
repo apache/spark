@@ -21,10 +21,10 @@ import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * FValue test for continuous data.
