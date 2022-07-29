@@ -43,8 +43,16 @@ message Relation {
     Fetch fetch = 8;
     Aggregate aggregate = 9;
     Sql sql = 10;
+
+    Unknown unknown = 999;
   }
 }
+
+/*
+ * Used for testing purposes only.
+ */
+message Unknown {}
+
 /*
  Common metadata of all relations.
  */

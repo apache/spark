@@ -30,9 +30,21 @@ import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{
+  AnalyzeResponse,
+  Request,
+  Response,
+  SparkConnectServiceGrpc
+}
 import org.apache.spark.sql.SparkSession
 
+/**
+ * The SparkConnectService Implementation.
+ *
+ * This class implements the service stub from the generated code of GRPC.
+ *
+ * @param debug delegates debug behavior to the handlers.
+ */
 class SparkConnectService(debug: Boolean) extends SparkConnectServiceGrpc.SparkConnectService {
   override def executePlan(request: Request, responseObserver: StreamObserver[Response]): Unit =
     new SparkConnectStreamHandler(responseObserver).handle(request)
@@ -42,14 +54,30 @@ class SparkConnectService(debug: Boolean) extends SparkConnectServiceGrpc.SparkC
   }
 }
 
+/**
+ * Trivial object used for referring to SparkSessions in the SessionCache.
+ *
+ * @param userId
+ * @param session
+ */
 case class SessionHolder(userId: String, session: SparkSession) {}
 
+/**
+ * Satic instance of the SparkConnectService.
+ *
+ * Used to start the overall SparkConnect service and provides global state to manage the different
+ * SparkSession from different users connecting to the cluster.
+ */
 object SparkConnectService {
 
-  private val userSessionMapping =
-    cacheBuilder(100, 3600).build[String, SessionHolder]()
+  // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
+  // different or complex type easily.
+  type SessionCacheKey = String;
 
-  // Used to create cache instances
+  private val userSessionMapping =
+    cacheBuilder(100, 3600).build[SessionCacheKey, SessionHolder]()
+
+  // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
     if (cacheSize >= 0) {
@@ -61,9 +89,13 @@ object SparkConnectService {
     cacheBuilder
   }
 
-  def getOrCreateIsolatedSession(userId: String): SessionHolder = {
-    userSessionMapping.get(userId, () => {
-      SessionHolder(userId, newIsolatedSession())
+
+  /**
+   * Based on the `key` find or create a new SparkSession.
+   */
+  def getOrCreateIsolatedSession(key: SessionCacheKey): SessionHolder = {
+    userSessionMapping.get(key, () => {
+      SessionHolder(key, newIsolatedSession())
     })
   }
 
@@ -71,6 +103,11 @@ object SparkConnectService {
     SparkSession.active.newSession()
   }
 
+  /**
+   * Starts the GRPC Serivce.
+   *
+   * TODO(martin.grund) Make port number configurable.
+   */
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
     val port = 15001
@@ -80,58 +117,27 @@ object SparkConnectService {
         SparkConnectServiceGrpc
           .bindService(new SparkConnectService(debugMode), ExecutionContext.global))
 
-    // If debug mode is configured,
+    // If debug mode is configured, load the ProtoReflection service so that tools like
+    // grpcurl can introspect the API for debugging.
     if (debugMode) {
       server.addService(ProtoReflectionService.newInstance())
     }
-
     server.build.start
   }
 
-//  def startHttpService(): Unit = {
-//    val bossGroup = new NioEventLoopGroup(1)
-//    val workerGroup = new NioEventLoopGroup()
-//    try {
-//      val b = new ServerBootstrap()
-//      b.group(bossGroup, workerGroup)
-//        .channel(classOf[NioServerSocketChannel])
-//        .handler(new LoggingHandler(LogLevel.DEBUG))
-//        .childHandler(new ChannelInitializer[SocketChannel] {
-//          override def initChannel(c: SocketChannel): Unit = {
-//            val p = c.pipeline()
-//            p.addLast(new HttpRequestDecoder())
-//            p.addLast(new HttpResponseEncoder())
-//            // 10MB max content length
-//            p.addLast(new HttpObjectAggregator(10048576))
-//            p.addLast(new SparkConnectHttpServerHandler())
-//          }
-//        })
-//
-//      val f = b.bind(15001).sync()
-//      f.channel().closeFuture().sync()
-//    } finally {
-//      bossGroup.shutdownGracefully()
-//      workerGroup.shutdownGracefully()
-//    }
-//  }
-
   // Starts the service
   def start(): Unit = {
-    val shouldStartHttpService =
-      SparkEnv.get.conf.getBoolean("spark.connect.http_server", defaultValue = false)
-    if (shouldStartHttpService) {
-//      val t = new Thread {
-//        override def run(): Unit = {
-//          startHttpService()
-//        }
-//      }
-//      t.start()
-    } else {
-      startGRPCService()
-    }
+    startGRPCService()
   }
 }
 
+/**
+ * This is the main entry point for Spark Connect.
+ *
+ * To decouple the build of Spark Connect and it's dependencies from the core of Spark, we implement
+ * it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate JAR is available
+ * in the CLASSPATH and the driver plugin is configured to load this class.
+ */
 class SparkConnectPlugin extends SparkPlugin {
 
   /**
@@ -141,7 +147,9 @@ class SparkConnectPlugin extends SparkPlugin {
    */
   override def driverPlugin(): DriverPlugin = new DriverPlugin {
 
-    override def init(sc: SparkContext, pluginContext: PluginContext): util.Map[String, String] = {
+    override def init(
+        sc: SparkContext,
+        pluginContext: PluginContext): util.Map[String, String] = {
       SparkConnectService.start()
       Map.empty[String, String].asJava
     }

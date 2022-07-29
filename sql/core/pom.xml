@@ -230,7 +230,6 @@
     </dependency>
   </dependencies>
   <build>
-    <!-- Protobuf compilation for Spark Connect -->
     <extensions>
       <extension>
         <groupId>kr.motd.maven</groupId>
@@ -299,37 +298,6 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>
-      <!-- Add protobuf-maven-plugin and provide ScalaPB as a code generation plugin -->
-      <plugin>
-        <groupId>com.github.os72</groupId>
-        <artifactId>protoc-jar-maven-plugin</artifactId>
-        <version>3.11.4</version>
-        <executions>
-          <execution>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <protocArtifact>com.google.protobuf:protoc:3.21.1</protocArtifact>
-          <includeMavenTypes>transitive</includeMavenTypes>
-          <inputDirectories>
-            <include>src/main/protobuf</include>
-          </inputDirectories>
-          <includeDirectories>
-            <include>src/main/protobuf</include>
-          </includeDirectories>
-          <outputTargets>
-            <outputTarget>
-              <type>scalapb</type>
-              <outputOptions>grpc,flat_package</outputOptions> <!-- more scalapb options can be added here -->
-              <pluginArtifact>com.thesamet.scalapb:protoc-gen-scala:0.11.11:sh:unix</pluginArtifact>
-            </outputTarget>
-          </outputTargets>
-        </configuration>
       </plugin>
     </plugins>
   </build>

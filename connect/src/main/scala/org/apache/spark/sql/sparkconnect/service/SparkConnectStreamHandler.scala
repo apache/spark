@@ -19,12 +19,17 @@ package org.apache.spark.sql.sparkconnect.service
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{
+  AdaptiveSparkPlanExec,
+  AdaptiveSparkPlanHelper,
+  QueryStageExec
+}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sparkconnect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner

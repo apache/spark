@@ -32,6 +32,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.types.{ByteType, IntegerType, ShortType}
 
+final case class InvalidPlanInput(
+    private val message: String = "",
+    private val cause: Throwable = None.orNull)
+    extends Exception(message, cause)
+
 case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
@@ -50,11 +55,13 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Relation.RelType.Sort(r) => transformSort(r)
       case proto.Relation.RelType.Aggregate(r) => transformAggregate(r)
       case proto.Relation.RelType.Sql(r) => transformSql(r)
-      case _ => throw new UnsupportedOperationException(s"${rel.relType} not supported.")
+      case proto.Relation.RelType.Empty =>
+        throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
+      case _ => throw InvalidPlanInput(s"${rel.relType} not supported.")
     }
   }
 
-  def transformSql(sql: proto.Sql): LogicalPlan = {
+  private def transformSql(sql: proto.Sql): LogicalPlan = {
     session.sessionState.sqlParser.parsePlan(sql.query)
   }
 
@@ -69,7 +76,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         } else {
           child
         }
-      case _ => throw new UnsupportedOperationException
+      case _ => throw InvalidPlanInput()
     }
     baseRelation
   }
@@ -106,7 +113,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Expression.ExprType.Literal(l) => transformLiteral(l)
       case proto.Expression.ExprType.UnresolvedAttribute(_) => transformUnresolvedExpression(exp)
       case proto.Expression.ExprType.UnresolvedFunction(f) => transformScalarFunction(f)
-      case _ => throw new UnsupportedOperationException
+      case _ => throw InvalidPlanInput()
     }
   }
 
@@ -118,7 +125,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Expression.Literal.LiteralType.I32(v) => expressions.Literal(v)
       case proto.Expression.Literal.LiteralType.I64(v) => expressions.Literal(v)
       case proto.Expression.Literal.LiteralType.String(v) => expressions.Literal(v)
-      case _ => throw new UnsupportedOperationException
+      case _ => throw InvalidPlanInput()
     }
   }
 
@@ -155,7 +162,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Union.UnionType.UNION_TYPE_DISTINCT => logical.Distinct(plan)
       case proto.Union.UnionType.UNION_TYPE_ALL => plan
       case _ =>
-        throw new UnsupportedOperationException(s"Unsupported set operation ${u.unionType}")
+        throw InvalidPlanInput(s"Unsupported set operation ${u.unionType}")
     }
   }
 
@@ -171,6 +178,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformSort(rel: proto.Sort): LogicalPlan = {
+    assert(rel.sortFields.nonEmpty, "SortFields must be present.")
     logical.Sort(
       child = transformRelation(rel.getInput),
       global = true,
