@@ -149,7 +149,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * If sum is not null, then return the sum.
    */
   protected def getEvaluateExpression(
-      context: Option[SQLQueryContext]): Expression = resultType match {
+      context: Array[SQLQueryContext]): Expression = resultType match {
     case d: DecimalType =>
       val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
       If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
@@ -194,10 +194,10 @@ case class Sum(
 
   override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
-    Some(origin.context)
+  override def initQueryContext(): Array[SQLQueryContext] = if (useAnsiAdd) {
+    Array(origin.context)
   } else {
-    None
+    Array.empty
   }
 }
 
@@ -255,9 +255,9 @@ case class TrySum(child: Expression) extends SumBase(child) {
 
   override lazy val evaluateExpression: Expression =
     if (useAnsiAdd) {
-      TryEval(getEvaluateExpression(None))
+      TryEval(getEvaluateExpression(Array.empty))
     } else {
-      getEvaluateExpression(None)
+      getEvaluateExpression(Array.empty)
     }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

@@ -127,7 +127,7 @@ case class CheckOverflow(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      "scala.None$.MODULE$"
+      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
     }
@@ -149,10 +149,10 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
-    Some(origin.context)
+  override def initQueryContext(): Array[SQLQueryContext] = if (!nullOnOverflow) {
+    Array(origin.context)
   } else {
-    None
+    Array.empty
   }
 }
 
@@ -161,7 +161,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: Option[SQLQueryContext] = None) extends UnaryExpression {
+    context: Array[SQLQueryContext] = Array.empty) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -183,7 +183,7 @@ case class CheckOverflowInSum(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = if (nullOnOverflow) {
-      "scala.None$.MODULE$"
+      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
     } else {
       ctx.addReferenceObj("errCtx", context)
     }
@@ -261,12 +261,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    context: Option[SQLQueryContext],
+    context: Array[SQLQueryContext],
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): Option[SQLQueryContext] = context
+  override def initQueryContext(): Array[SQLQueryContext] = context
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {
@@ -287,7 +287,7 @@ case class DecimalDivideWithOverflowCheck(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      "scala.None$.MODULE$"
+      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
     }

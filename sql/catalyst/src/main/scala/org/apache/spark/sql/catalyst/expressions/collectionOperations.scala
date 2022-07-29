@@ -2266,10 +2266,10 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
-    Some(origin.context)
+  override def initQueryContext(): Array[SQLQueryContext] = if (failOnError) {
+    Array(origin.context)
   } else {
-    None
+    Array.empty
   }
 }
 

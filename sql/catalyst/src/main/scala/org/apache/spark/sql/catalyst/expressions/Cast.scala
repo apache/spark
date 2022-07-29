@@ -482,10 +482,10 @@ case class Cast(
 
   override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
-    Some(origin.context)
+  override def initQueryContext(): Array[SQLQueryContext] = if (ansiEnabled) {
+    Array(origin.context)
   } else {
-    None
+    Array.empty
   }
 
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
@@ -999,7 +999,7 @@ case class Cast(
   private[this] def toPrecision(
       value: Decimal,
       decimalType: DecimalType,
-      context: Option[SQLQueryContext]): Decimal =
+      context: Array[SQLQueryContext]): Decimal =
     value.toPrecision(
       decimalType.precision, decimalType.scale, Decimal.ROUND_HALF_UP, !ansiEnabled, context)
 

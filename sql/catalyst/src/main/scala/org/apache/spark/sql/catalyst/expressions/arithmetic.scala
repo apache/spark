@@ -256,11 +256,11 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
-  override def initQueryContext(): Option[SQLQueryContext] = {
+  override def initQueryContext(): Array[SQLQueryContext] = {
     if (failOnError) {
-      Some(origin.context)
+      Array(origin.context)
     } else {
-      None
+      Array.empty
     }
   }
 
@@ -288,7 +288,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       val errorContextCode = if (failOnError) {
         ctx.addReferenceObj("errCtx", queryContext)
       } else {
-        "scala.None$.MODULE$"
+        "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
       }
       val updateIsNull = if (failOnError) {
         ""
@@ -606,7 +606,7 @@ trait DivModLike extends BinaryArithmetic {
     val errorContextCode = if (failOnError) {
       ctx.addReferenceObj("errCtx", queryContext)
     } else {
-      "scala.None$.MODULE$"
+      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
     }
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>

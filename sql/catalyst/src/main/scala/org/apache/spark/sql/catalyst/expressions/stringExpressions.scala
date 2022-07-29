@@ -382,10 +382,10 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
-    Some(origin.context)
+  override def initQueryContext(): Array[SQLQueryContext] = if (failOnError) {
+    Array(origin.context)
   } else {
-    None
+    Array.empty
   }
 }
 
