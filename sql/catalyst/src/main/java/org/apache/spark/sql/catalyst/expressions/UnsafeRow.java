@@ -46,9 +46,9 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
  *
- * Each tuple has three parts: [null tracking portion] [values] [variable length portion]
+ * Each tuple has three parts: [null-tracking portion] [values] [variable length portion]
  *
- * The null tracking portion is used for null tracking and is aligned to 8-byte word boundaries.
+ * The null-tracking portion is used for null tracking and is aligned to 8-byte word boundaries.
  * It stores one bit per field.
  *
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
