@@ -3577,7 +3577,7 @@ setMethod("str",
 #' This is a no-op if schema doesn't contain column name(s).
 #'
 #' @param x a SparkDataFrame.
-#' @param col a character vector of column names or a Column.
+#' @param col a character vector of column names or a Column or list of Columns.
 #' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame.
 #'
@@ -3593,17 +3593,27 @@ setMethod("str",
 #' drop(df, "col1")
 #' drop(df, c("col1", "col2"))
 #' drop(df, df$col1)
+#' drop(df, list(df$col1, df$col2))
 #' }
 #' @note drop since 2.0.0
 setMethod("drop",
           signature(x = "SparkDataFrame"),
           function(x, col) {
-            stopifnot(class(col) == "character" || class(col) == "Column")
+            stopifnot(class(col) == "character" || class(col) == "Column" || class(col) == "list")
 
             if (class(col) == "Column") {
-              sdf <- callJMethod(x@sdf, "drop", col@jc)
-            } else {
+              sdf <- callJMethod(x@sdf, "drop", col@jc, list(col@jc))
+            } else if (class(col) == "character") {
               sdf <- callJMethod(x@sdf, "drop", as.list(col))
+            } else {
+              cols <- lapply(col, function(c) {
+                if (class(c) == "Column") {
+                  c@jc
+                } else {
+                  col(c)@jc
+                }
+              })
+              sdf <- callJMethod(x@sdf, "drop", cols[[1]], cols[-1])
             }
             dataFrame(sdf)
           })

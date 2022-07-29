@@ -828,6 +828,16 @@ class DataFrameSuite extends QueryTest
 
   test("drop unknown column with same name with column reference") {
     val col = Column("key")
+    val randomCol = Column("random")
+    val df = testData.drop(col, randomCol)
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
+  test("drop unknown column with same name with column reference") {
+    val col = Column("key")
     val df = testData.drop(col)
     checkAnswer(
       df,
