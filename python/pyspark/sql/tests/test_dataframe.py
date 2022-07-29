@@ -26,6 +26,7 @@ from typing import cast
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
+from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -1108,8 +1109,9 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
+        cast(str, pandas_requirement_message or pyarrow_requirement_message or
+             "Pyarrow version must be 2.0.0 or higher"),
     )
     def test_to_pandas_for_array_of_struct(self):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
@@ -1120,13 +1122,12 @@ class DataFrameTests(ReusedSQLTestCase):
             [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
             "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
         )
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+        for is_arrow_enabled in [True, False]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": is_arrow_enabled}):
                 pdf = df.toPandas()
                 self.assertEqual(type(pdf), pd.DataFrame)
                 self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
-                if value:
+                if is_arrow_enabled:
                     self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
                 else:
                     self.assertEqual(type(pdf["array_struct_col"][0]), list)

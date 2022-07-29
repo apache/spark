@@ -29,6 +29,7 @@ from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
+from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -134,15 +135,19 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
+    @unittest.skipIf(
+        pyarrow_version_less_than_minimum("2.0.0"),
+        "Pyarrow version must be 2.0.0 or higher",
+    )
     def test_pandas_array_struct(self):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
-        # import numpy as np
+        import numpy as np
 
         @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
         def return_cols(cols):
-            # self.assertEqual(type(cols), pd.Series)
-            # self.assertEqual(type(cols[0]), np.ndarray)
-            # self.assertEqual(type(cols[0][0]), dict)
+            assert type(cols) == pd.Series
+            assert type(cols[0]) == np.ndarray
+            assert type(cols[0][0]) == dict
             return cols
 
         df = self.spark.createDataFrame(
