@@ -579,6 +579,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.fillna(0), pser.fillna(0))
         self.assert_eq(psser.fillna(method="ffill"), pser.fillna(method="ffill"))
         self.assert_eq(psser.fillna(method="bfill"), pser.fillna(method="bfill"))
+        self.assert_eq(psser.fillna(method="backfill"), pser.fillna(method="backfill"))
 
         # inplace fillna on non-nullable column
         pdf = pd.DataFrame({"a": [1, 2, None], "b": [1, 2, 3]})
@@ -599,6 +600,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ValueError, "Must specify a fillna 'value' or 'method' parameter."
         ):
             psser.fillna()
+        with self.assertRaisesRegex(TypeError, "Unsupported type list"):
+            psdf.a.fillna([0])
+        with self.assertRaisesRegex(
+            NotImplementedError, "fillna currently only works for axis=0 or axis='index'"
+        ):
+            psdf.a.fillna(0, axis=1)
+        with self.assertRaisesRegex(
+            NotImplementedError, "limit parameter for value is not support now"
+        ):
+            psdf.a.fillna(0, limit=1)
 
     def test_dropna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
@@ -1460,7 +1471,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(accuracy="a")
         with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
-            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q="a")
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=1)
         with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=["a"])
         with self.assertRaisesRegex(
@@ -2695,6 +2706,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
+        with self.assertRaisesRegex(NotImplementedError, "Series does not support columns axis."):
+            psser.prod(axis=1)
 
     def test_hasnans(self):
         # BooleanType
@@ -3184,6 +3197,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"s1": [0.2, 0.0, 0.6, 0.2, np.nan, 0.5, 0.6]})
         self._test_autocorr(pdf)
 
+        psser = ps.from_pandas(pdf["s1"])
+        with self.assertRaisesRegex(TypeError, r"periods should be an int; however, got"):
+            psser.autocorr(1.0)
+
     def _test_autocorr(self, pdf):
         psdf = ps.from_pandas(pdf)
         for lag in range(-10, 10):
@@ -3202,6 +3219,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
         with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
             psdf["s1"].cov(psdf["s2"])
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+            psdf["s2"].cov(psdf["s1"])
 
         pdf = pd.DataFrame(
             {
@@ -3285,6 +3304,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.eq(other)
         with self.assertRaisesRegex(ValueError, "Lengths must be equal"):
             psser == other
+
+    def test_transform(self):
+        psser = self.psser
+        with self.assertRaisesRegex(
+            NotImplementedError, 'axis should be either 0 or "index" currently.'
+        ):
+            psser.transform(lambda x: x + 1, axis=1)
 
 
 if __name__ == "__main__":

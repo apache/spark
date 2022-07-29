@@ -129,6 +129,11 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.resample("3Y").sum()
 
+        with self.assertRaisesRegex(
+            NotImplementedError, "resample currently works only for DatetimeIndex"
+        ):
+            psdf.id.resample("3Y").sum()
+
         dates = [
             datetime.datetime(2012, 1, 2),
             datetime.datetime(2012, 5, 3),
@@ -149,6 +154,23 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
 
         with self.assertRaisesRegex(ValueError, "invalid label: 'both'"):
             psdf.A.resample("3Y", label="both").sum()
+
+        with self.assertRaisesRegex(
+            NotImplementedError, "`on` currently works only for TimestampType"
+        ):
+            psdf.A.resample("2D", on=psdf.A).sum()
+
+        with self.assertRaisesRegex(
+            NotImplementedError, "`on` currently works only for TimestampType"
+        ):
+            psdf[["A"]].resample("2D", on=psdf.A).sum()
+
+        psdf["B"] = ["a", "b", "c", "d"]
+        with self.assertRaisesRegex(ValueError, "No available aggregation columns!"):
+            psdf.B.resample("2D").sum()
+
+        with self.assertRaisesRegex(ValueError, "No available aggregation columns!"):
+            psdf[[]].resample("2D").sum()
 
     def test_missing(self):
         pdf_r = self.psdf1.resample("3Y")

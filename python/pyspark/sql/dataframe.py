@@ -1422,6 +1422,56 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
+    def to(self, schema: StructType) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
+        schema.
+
+        Notes
+        -----
+        1, Reorder columns and/or inner fields by name to match the specified schema.
+
+        2, Project away columns and/or inner fields that are not needed by the specified schema.
+        Missing columns and/or inner fields (present in the specified schema but not input
+        DataFrame) lead to failures.
+
+        3, Cast the columns and/or inner fields to match the data types in the specified schema,
+        if the types are compatible, e.g., numeric to numeric (error if overflows), but not string
+        to int.
+
+        4, Carry over the metadata from the specified schema, while the columns and/or inner fields
+        still keep their own metadata if not overwritten by the specified schema.
+
+        5, Fail if the nullability is not compatible. For example, the column and/or inner field
+        is nullable but the specified schema requires them to be not nullable.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            Specified schema.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([("a", 1)], ["i", "j"])
+        >>> df.schema
+        StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
+        >>> schema = StructType([StructField("j", StringType()), StructField("i", StringType())])
+        >>> df2 = df.to(schema)
+        >>> df2.schema
+        StructType([StructField('j', StringType(), True), StructField('i', StringType(), True)])
+        >>> df2.show()
+        +---+---+
+        |  j|  i|
+        +---+---+
+        |  1|  a|
+        +---+---+
+        """
+        assert schema is not None
+        jschema = self._jdf.sparkSession().parseDataType(schema.json())
+        return DataFrame(self._jdf.to(jschema), self.sparkSession)
+
     def alias(self, alias: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` with an alias set.
 

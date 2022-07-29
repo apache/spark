@@ -276,7 +276,7 @@ case class TakeOrderedAndProjectExec(
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
     child: SparkPlan,
-    offset: Int = 0) extends UnaryExecNode {
+    offset: Int = 0) extends AliasAwareOutputOrdering {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
@@ -347,7 +347,9 @@ case class TakeOrderedAndProjectExec(
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
+
+  override protected def orderingExpressions: Seq[SortOrder] = sortOrder
 
   override def outputPartitioning: Partitioning = SinglePartition
 

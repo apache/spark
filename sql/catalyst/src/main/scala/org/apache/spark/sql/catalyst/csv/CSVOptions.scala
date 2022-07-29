@@ -190,6 +190,17 @@ class CSVOptions(
   val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
+  // SPARK-39731: Enables the backward compatible parsing behavior.
+  // Generally, this config should be set to false to avoid producing potentially incorrect results
+  // which is the current default (see UnivocityParser).
+  //
+  // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
+  // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
+  // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
+  // the value will be parsed as null.
+  val enableDateTimeParsingFallback: Option[Boolean] =
+    parameters.get("enableDateTimeParsingFallback").map(_.toBoolean)
+
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)

@@ -42,9 +42,7 @@ case class SQLQueryContext(
    */
   lazy val summary: String = {
     // If the query context is missing or incorrect, simply return an empty string.
-    if (sqlText.isEmpty || originStartIndex.isEmpty || originStopIndex.isEmpty ||
-      originStartIndex.get < 0 || originStopIndex.get >= sqlText.get.length ||
-      originStartIndex.get > originStopIndex.get) {
+    if (!isValid) {
       ""
     } else {
       val positionContext = if (line.isDefined && startPosition.isDefined) {
@@ -119,12 +117,17 @@ case class SQLQueryContext(
 
   /** Gets the textual fragment of a SQL query. */
   override lazy val fragment: String = {
-    if (sqlText.isEmpty || originStartIndex.isEmpty || originStopIndex.isEmpty ||
-      originStartIndex.get < 0 || originStopIndex.get >= sqlText.get.length ||
-      originStartIndex.get > originStopIndex.get) {
+    if (!isValid) {
       ""
     } else {
       sqlText.get.substring(originStartIndex.get, originStopIndex.get)
     }
+  }
+
+  private def isValid: Boolean = {
+    sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
+      originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
+      originStartIndex.get <= originStopIndex.get
+
   }
 }
