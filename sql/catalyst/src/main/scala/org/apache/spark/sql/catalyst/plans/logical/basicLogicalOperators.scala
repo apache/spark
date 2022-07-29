@@ -195,7 +195,8 @@ object Project {
         }
 
         val newColumnPath = columnPath :+ matched.head._1
-        val newColumnExpr = reconcileColumnType(columnExpr, newColumnPath, f.dataType, f.nullable, conf)
+        val newColumnExpr = reconcileColumnType(
+          columnExpr, newColumnPath, f.dataType, f.nullable, conf)
         createNewColumn(newColumnExpr, f.name, f.metadata, originalMetadata)
       }
     }
