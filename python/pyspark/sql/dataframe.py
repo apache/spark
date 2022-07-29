@@ -2325,7 +2325,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return self._jcols(*lst)
 
         return DataFrame(
-            self._jdf._unpivot(
+            self._jdf.unpivotWithSeq(
                 to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
             ),
             self.sparkSession,
