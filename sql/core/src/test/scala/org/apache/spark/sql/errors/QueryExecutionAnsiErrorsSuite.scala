@@ -40,21 +40,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select 6/0").collect()
       },
       errorClass = "DIVIDE_BY_ZERO",
-      msg =
-        "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
-          "If necessary set " +
-        s"""$ansiConf to "false" to bypass this error.""" +
-        """
-          |== SQL(line 1, position 8) ==
-          |select 6/0
-          |       ^^^
-          |""".stripMargin,
-      sqlState = Some("22012"))
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -73,25 +65,22 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
       },
       errorClass = "INVALID_FRACTION_OF_SECOND",
-      parameters = Map("ansiConfig" -> ansiConf),
-      sqlState = "22023")
+      sqlState = "22023",
+      parameters = Map("ansiConfig" -> ansiConf))
   }
 
   test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
-      msg =
-        "Decimal(expanded, 66666666666666.666, 17, 3) cannot be represented as Decimal(8, 1). " +
-        s"""If necessary set $ansiConf to "false" to bypass this error.""" +
-        """
-          |== SQL(line 1, position 8) ==
-          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin,
-      sqlState = Some("22005"))
+      sqlState = "22005",
+      parameters = Map(
+        "value" -> "Decimal(expanded, 66666666666666.666, 17, 3)",
+        "precision" -> "8",
+        "scale" -> "1",
+        "config" -> ansiConf))
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
@@ -115,38 +104,27 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
   }
 
   test("MAP_KEY_DOES_NOT_EXIST: key does not exist in element_at") {
-    val e = intercept[SparkNoSuchElementException] {
-      sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
-    }
-    checkErrorClass(
-      exception = e,
+    checkError(
+      exception = intercept[SparkNoSuchElementException] {
+        sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
+      },
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      msg = "Key 3 does not exist. Use `try_element_at` to tolerate non-existent key and return " +
-        "NULL instead. " +
-        s"""If necessary set $ansiConf to "false" to bypass this error.""" +
-        """
-          |== SQL(line 1, position 8) ==
-          |select element_at(map(1, 'a', 2, 'b'), 3)
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin
-    )
+      parameters = Map(
+        "keyValue" -> "3",
+        "config" -> ansiConf))
   }
 
   test("CAST_INVALID_INPUT: cast string to double") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkNumberFormatException] {
         sql("select CAST('111111111111xe23' AS DOUBLE)").collect()
       },
       errorClass = "CAST_INVALID_INPUT",
-      msg = """The value '111111111111xe23' of the type "STRING" cannot be cast to "DOUBLE" """ +
-        "because it is malformed. Correct the value as per the syntax, " +
-        "or change its target type. Use `try_cast` to tolerate malformed input and return " +
-        "NULL instead. If necessary set " +
-        s"""$ansiConf to \"false\" to bypass this error.
-          |== SQL(line 1, position 8) ==
-          |select CAST('111111111111xe23' AS DOUBLE)
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin)
+      parameters = Map(
+        "expression" -> "'111111111111xe23'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf))
   }
 
   test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {
