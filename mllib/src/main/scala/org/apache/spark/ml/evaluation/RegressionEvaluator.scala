@@ -25,6 +25,7 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Evaluator for regression, which expects input columns prediction, label and

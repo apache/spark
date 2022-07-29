@@ -18,10 +18,10 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.stat.Summarizer
@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Params for [[MaxAbsScaler]] and [[MaxAbsScalerModel]].
@@ -132,7 +133,7 @@ class MaxAbsScalerModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(outputCol), maxAbs.size)
     }
     outputSchema

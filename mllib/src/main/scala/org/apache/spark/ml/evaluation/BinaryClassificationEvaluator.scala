@@ -26,6 +26,7 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Evaluator for binary classification, which expects input columns rawPrediction, label and

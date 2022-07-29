@@ -24,13 +24,12 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, NumericType, StructField, StructType}
 
 
 /**
  * Utils for handling schemas.
  *
- * TODO: Merge this file with [[org.apache.spark.ml.util.SchemaUtils]].
  */
 private[spark] object SchemaUtils {
 
@@ -296,5 +295,118 @@ private[spark] object SchemaUtils {
       .replaceAll("\b", "\\\\b")
       .replaceAll("\u000B", "\\\\v")
       .replaceAll("\u0007", "\\\\a")
+  }
+
+  /**
+   * Check whether the given schema contains a column of the required data type.
+   * @param colName  column name
+   * @param dataType  required column data type
+   */
+  def checkColumnType(
+      schema: StructType,
+      colName: String,
+      dataType: DataType,
+      msg: String = ""): Unit = {
+    val actualDataType = schema(colName).dataType
+    val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
+    require(actualDataType.equals(dataType),
+      s"Column $colName must be of type ${dataType.getClass}:${dataType.catalogString} " +
+        s"but was actually ${actualDataType.getClass}:${actualDataType.catalogString}.$message")
+  }
+
+  /**
+   * Check whether the given schema contains a column of one of the require data types.
+   * @param colName  column name
+   * @param dataTypes  required column data types
+   */
+  def checkColumnTypes(
+      schema: StructType,
+      colName: String,
+      dataTypes: Seq[DataType],
+      msg: String = ""): Unit = {
+    val actualDataType = schema(colName).dataType
+    val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
+    require(dataTypes.exists(actualDataType.equals),
+      s"Column $colName must be of type equal to one of the following types: " +
+        s"${dataTypes.map(_.catalogString).mkString("[", ", ", "]")} but was actually of type " +
+        s"${actualDataType.catalogString}.$message")
+  }
+
+  /**
+   * Check whether the given schema contains a column of the numeric data type.
+   * @param colName  column name
+   */
+  def checkNumericType(
+      schema: StructType,
+      colName: String,
+      msg: String = ""): Unit = {
+    val actualDataType = schema(colName).dataType
+    val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
+    require(actualDataType.isInstanceOf[NumericType],
+      s"Column $colName must be of type ${NumericType.simpleString} but was actually of type " +
+      s"${actualDataType.catalogString}.$message")
+  }
+
+  /**
+   * Appends a new column to the input schema. This fails if the given output column already exists.
+   * @param schema input schema
+   * @param colName new column name. If this column name is an empty string "", this method returns
+   *                the input schema unchanged. This allows users to disable output columns.
+   * @param dataType new column data type
+   * @return new schema with the input column appended
+   */
+  def appendColumn(
+      schema: StructType,
+      colName: String,
+      dataType: DataType,
+      nullable: Boolean = false): StructType = {
+    if (colName.isEmpty) return schema
+    appendColumn(schema, StructField(colName, dataType, nullable))
+  }
+
+  /**
+   * Appends a new column to the input schema. This fails if the given output column already exists.
+   * @param schema input schema
+   * @param col New column schema
+   * @return new schema with the input column appended
+   */
+  def appendColumn(schema: StructType, col: StructField): StructType = {
+    require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
+    StructType(schema.fields :+ col)
+  }
+
+  /**
+   * Update the metadata of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param field struct field
+   * @param overwriteMetadata whether to overwrite the metadata. If true, the metadata in the
+   *                          schema will be overwritten. If false, the metadata in `field`
+   *                          and `schema` will be merged to generate output metadata.
+   * @return new schema
+   */
+  def updateField(
+      schema: StructType,
+      field: StructField,
+      overwriteMetadata: Boolean = true): StructType = {
+    if (schema.fieldNames.contains(field.name)) {
+      val newFields = schema.fields.map { f =>
+        if (f.name == field.name) {
+          if (overwriteMetadata) {
+            field
+          } else {
+            val newMeta = new MetadataBuilder()
+              .withMetadata(field.metadata)
+              .withMetadata(f.metadata)
+              .build()
+            StructField(field.name, field.dataType, field.nullable, newMeta)
+          }
+        } else {
+          f
+        }
+      }
+      StructType(newFields)
+    } else {
+      appendColumn(schema, field)
+    }
   }
 }

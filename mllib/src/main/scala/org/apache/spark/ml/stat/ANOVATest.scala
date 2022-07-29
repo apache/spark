@@ -21,7 +21,7 @@ import org.apache.commons.math3.distribution.FDistribution
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._

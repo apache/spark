@@ -18,11 +18,11 @@
 package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.attribute.NumericAttribute
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.IsotonicRegressionModel.IsotonicRegressionModelWriter
@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -262,7 +263,7 @@ class IsotonicRegressionModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+      outputSchema = NumericAttribute.updateNumeric(outputSchema, $(predictionCol))
     }
     outputSchema
   }

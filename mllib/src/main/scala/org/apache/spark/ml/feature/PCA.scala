@@ -18,9 +18,9 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -30,6 +30,7 @@ import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, Vectors => 
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -52,7 +53,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    SchemaUtils.updateAttributeGroupSize(schema, $(outputCol), $(k))
+    AttributeGroup.updateAttributeGroupSize(schema, $(outputCol), $(k))
   }
 }
 
@@ -155,7 +156,7 @@ class PCAModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(outputCol), $(k))
     }
     outputSchema

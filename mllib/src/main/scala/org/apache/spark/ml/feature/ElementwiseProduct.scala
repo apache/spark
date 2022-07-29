@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.util._
@@ -85,7 +86,7 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(outputCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(outputCol), $(scalingVec).size)
     }
     outputSchema

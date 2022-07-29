@@ -18,10 +18,9 @@
 package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
@@ -118,7 +117,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
+    VectorUDT.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -167,7 +166,7 @@ class KMeansModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+      outputSchema = NominalAttribute.updateNumValues(outputSchema,
         $(predictionCol), parentModel.k)
     }
     outputSchema

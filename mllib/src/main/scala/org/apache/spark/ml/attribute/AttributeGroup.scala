@@ -20,7 +20,8 @@ package org.apache.spark.ml.attribute
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Attributes that describe a vector ML column.
@@ -242,5 +243,22 @@ object AttributeGroup {
     } else {
       new AttributeGroup(field.name)
     }
+  }
+
+  /**
+   * Update the size of a ML Vector column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param size number of features
+   * @return new schema
+   */
+  def updateAttributeGroupSize(
+      schema: StructType,
+      colName: String,
+      size: Int): StructType = {
+    require(size > 0)
+    val attrGroup = new AttributeGroup(colName, size)
+    val field = attrGroup.toStructField
+    SchemaUtils.updateField(schema, field, true)
   }
 }

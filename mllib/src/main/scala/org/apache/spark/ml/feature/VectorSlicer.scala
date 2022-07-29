@@ -27,6 +27,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * This class takes a feature vector and outputs a new feature vector with a subarray of the

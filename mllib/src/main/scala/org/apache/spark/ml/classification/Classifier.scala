@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
@@ -26,6 +27,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * (private[spark]) Params for classification.
@@ -81,11 +83,11 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(schema,
+      outputSchema = NominalAttribute.updateNumValues(schema,
         $(predictionCol), numClasses)
     }
     if ($(rawPredictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(rawPredictionCol), numClasses)
     }
     outputSchema

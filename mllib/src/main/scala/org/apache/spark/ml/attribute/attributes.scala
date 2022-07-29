@@ -19,7 +19,8 @@ package org.apache.spark.ml.attribute
 
 import scala.annotation.varargs
 
-import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
+import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Abstract class for ML attributes.
@@ -307,6 +308,21 @@ object NumericAttribute extends AttributeFactory {
     val sparsity = if (metadata.contains(SPARSITY)) Some(metadata.getDouble(SPARSITY)) else None
     new NumericAttribute(name, index, min, max, std, sparsity)
   }
+
+  /**
+   * Update the numeric meta of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @return new schema
+   */
+  def updateNumeric(
+      schema: StructType,
+      colName: String): StructType = {
+    val attr = NumericAttribute.defaultAttr
+      .withName(colName)
+    val field = attr.toStructField
+    SchemaUtils.updateField(schema, field, true)
+  }
 }
 
 /**
@@ -468,6 +484,24 @@ object NominalAttribute extends AttributeFactory {
     val values =
       if (metadata.contains(VALUES)) Some(metadata.getStringArray(VALUES)) else None
     new NominalAttribute(name, index, isOrdinal, numValues, values)
+  }
+
+  /**
+   * Update the number of values of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param numValues number of values.
+   * @return new schema
+   */
+  def updateNumValues(
+      schema: StructType,
+      colName: String,
+      numValues: Int): StructType = {
+    val attr = NominalAttribute.defaultAttr
+      .withName(colName)
+      .withNumValues(numValues)
+    val field = attr.toStructField
+    SchemaUtils.updateField(schema, field, true)
   }
 }
 

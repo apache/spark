@@ -20,8 +20,8 @@ package org.apache.spark.ml.regression
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.NumericAttribute
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -198,7 +198,7 @@ class DecisionTreeRegressionModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(varianceCol))
+      outputSchema = NumericAttribute.updateNumeric(outputSchema, $(varianceCol))
     }
     if ($(leafCol).nonEmpty) {
       outputSchema = SchemaUtils.updateField(outputSchema, getLeafField($(leafCol)))

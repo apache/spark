@@ -20,6 +20,7 @@ package org.apache.spark.ml.linalg
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * User-defined type for [[Vector]] in mllib-local which allows easy interaction with SQL
@@ -97,5 +98,20 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("size", IntegerType, nullable = true),
       StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
+  }
+}
+
+object VectorUDT {
+  /**
+   * Check whether the given column in the schema is one of the supporting vector type: Vector,
+   * Array[Float]. Array[Double]
+   * @param schema input schema
+   * @param colName column name
+   */
+  def validateVectorCompatibleColumn(schema: StructType, colName: String): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+    SchemaUtils.checkColumnTypes(schema, colName, typeCandidates)
   }
 }

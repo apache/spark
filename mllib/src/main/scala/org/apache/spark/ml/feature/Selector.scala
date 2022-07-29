@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
@@ -29,6 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**

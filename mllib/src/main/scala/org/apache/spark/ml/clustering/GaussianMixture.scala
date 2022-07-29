@@ -18,11 +18,11 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
+import org.apache.spark.ml.impl.Utils.{EPSILON, unpackUpperTriangular}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -30,12 +30,12 @@ import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
-  Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix, Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 
 
@@ -68,7 +68,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
+    VectorUDT.validateVectorCompatibleColumn(schema, getFeaturesCol)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
     SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
   }
@@ -152,11 +152,11 @@ class GaussianMixtureModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+      outputSchema = NominalAttribute.updateNumValues(outputSchema,
         $(predictionCol), weights.length)
     }
     if ($(probabilityCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(probabilityCol), weights.length)
     }
     outputSchema

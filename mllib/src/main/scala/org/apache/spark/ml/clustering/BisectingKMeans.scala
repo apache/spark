@@ -18,17 +18,17 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
-  BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -79,7 +79,7 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
+    VectorUDT.validateVectorCompatibleColumn(schema, getFeaturesCol)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -126,7 +126,7 @@ class BisectingKMeansModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+      outputSchema = NominalAttribute.updateNumValues(outputSchema,
         $(predictionCol), parentModel.k)
     }
     outputSchema
@@ -151,7 +151,7 @@ class BisectingKMeansModel private[ml] (
     "ClusteringEvaluator instead. You can also get the cost on the training dataset in the " +
     "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
+    VectorUDT.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
     val data = columnToOldVector(dataset, getFeaturesCol)
     parentModel.computeCost(data)
   }

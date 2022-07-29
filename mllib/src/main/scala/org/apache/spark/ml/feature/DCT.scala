@@ -81,7 +81,7 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     if ($(inputCol).nonEmpty && $(outputCol).nonEmpty) {
       val size = AttributeGroup.fromStructField(schema($(inputCol))).size
       if (size >= 0) {
-        outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
           $(outputCol), size)
       }
     }

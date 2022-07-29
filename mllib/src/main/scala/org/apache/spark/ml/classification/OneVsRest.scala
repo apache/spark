@@ -164,11 +164,11 @@ final class OneVsRestModel private[ml] (
     var outputSchema = validateAndTransformSchema(schema, fitting = false,
       getClassifier.featuresDataType)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(outputSchema,
+      outputSchema = NominalAttribute.updateNumValues(outputSchema,
         $(predictionCol), numClasses)
     }
     if ($(rawPredictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(rawPredictionCol), numClasses)
     }
     outputSchema

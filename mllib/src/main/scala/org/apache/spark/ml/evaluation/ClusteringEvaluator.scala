@@ -18,11 +18,13 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Evaluator for clustering results.
@@ -122,7 +124,7 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   @Since("3.1.0")
   def getMetrics(dataset: Dataset[_]): ClusteringMetrics = {
     val schema = dataset.schema
-    SchemaUtils.validateVectorCompatibleColumn(schema, $(featuresCol))
+    VectorUDT.validateVectorCompatibleColumn(schema, $(featuresCol))
     SchemaUtils.checkNumericType(schema, $(predictionCol))
     if (isDefined(weightCol)) {
       SchemaUtils.checkNumericType(schema, $(weightCol))

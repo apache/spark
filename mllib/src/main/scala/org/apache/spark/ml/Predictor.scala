@@ -18,13 +18,14 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.attribute.NumericAttribute
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -175,7 +176,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+      outputSchema = NumericAttribute.updateNumeric(outputSchema, $(predictionCol))
     }
     outputSchema
   }

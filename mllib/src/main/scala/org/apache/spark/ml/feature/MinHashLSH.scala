@@ -18,15 +18,14 @@
 package org.apache.spark.ml.feature
 
 import scala.util.Random
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function

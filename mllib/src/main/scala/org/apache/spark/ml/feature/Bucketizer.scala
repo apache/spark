@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature
 
 import java.{util => ju}
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
@@ -30,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.

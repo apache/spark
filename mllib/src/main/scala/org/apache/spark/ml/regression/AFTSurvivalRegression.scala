@@ -18,15 +18,14 @@
 package org.apache.spark.ml.regression
 
 import scala.collection.mutable
-
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.attribute.{AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
@@ -450,10 +449,10 @@ class AFTSurvivalRegressionModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = validateAndTransformSchema(schema, fitting = false)
     if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+      outputSchema = NumericAttribute.updateNumeric(outputSchema, $(predictionCol))
     }
     if (isDefined(quantilesCol) && $(quantilesCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+      outputSchema = AttributeGroup.updateAttributeGroupSize(outputSchema,
         $(quantilesCol), $(quantileProbabilities).length)
     }
     outputSchema

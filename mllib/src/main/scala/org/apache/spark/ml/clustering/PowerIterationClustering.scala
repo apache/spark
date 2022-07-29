@@ -26,6 +26,7 @@ import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPower
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Common params for PowerIterationClustering
