@@ -33,7 +33,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
  */
 trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
 
-  protected val isDatasourceTable = true
+  private[sql] lazy val sessionCatalog = spark.sessionState.catalog
 
   private def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
@@ -43,146 +43,25 @@ trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
     props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
   }
 
-  private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
-    if (expectException) intercept[AnalysisException] { body } else body
-  }
-
-  protected def testSetSerde(): Unit = {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      if (!isUsingHiveMetastore) {
-        assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-      }
-      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
-        s"PARTITIONED BY (a, b)")
-
-      val catalog = spark.sessionState.catalog
-      val tableIdent = TableIdentifier("tbl", Some("ns"))
-      def checkSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
-        val serdeProp = catalog.getTableMetadata(tableIdent).storage.properties
-        if (isUsingHiveMetastore) {
-          assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
-        } else {
-          assert(serdeProp == expectedSerdeProps)
-        }
-      }
-      if (isUsingHiveMetastore) {
-        val expectedSerde = if (isDatasourceTable) {
-          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-        } else {
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
-        }
-        assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(expectedSerde))
-      } else {
-        assert(catalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
-      }
-      checkSerdeProps(Map.empty[String, String])
-      // set table serde and/or properties (should fail on datasource tables)
-      if (isDatasourceTable) {
-        val e1 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t SET SERDE 'whatever'")
-        }
-        val e2 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
-            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-        }
-        assert(e1.getMessage.contains("datasource"))
-        assert(e2.getMessage.contains("datasource"))
-      } else {
-        val newSerde = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-        sql(s"ALTER TABLE $t SET SERDE '$newSerde'")
-        assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(newSerde))
-        checkSerdeProps(Map.empty[String, String])
-        val serde2 = "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"
-        sql(s"ALTER TABLE $t SET SERDE '$serde2' " +
-          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-        assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(serde2))
-        checkSerdeProps(Map("k" -> "v", "kay" -> "vee"))
-      }
-      // set serde properties only
-      sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-      checkSerdeProps(Map("k" -> "vvv", "kay" -> "vee"))
-      // set things without explicitly specifying database
-      catalog.setCurrentDatabase("ns")
-      sql("ALTER TABLE tbl SET SERDEPROPERTIES ('kay' = 'veee')")
-      checkSerdeProps(Map("k" -> "vvv", "kay" -> "veee"))
-      // table to alter does not exist
-      intercept[AnalysisException] {
-        sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
-      }
+  private[sql] def checkSerdeProps(tableIdent: TableIdentifier,
+    expectedSerdeProps: Map[String, String]): Unit = {
+    val serdeProp = sessionCatalog.getTableMetadata(tableIdent).storage.properties
+    if (isUsingHiveMetastore) {
+      assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
+    } else {
+      assert(serdeProp == expectedSerdeProps)
     }
   }
 
-  protected def testSetSerdePartition(): Unit = {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      if (!isUsingHiveMetastore) {
-        assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-      }
-      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
-        s"PARTITIONED BY (a, b)")
-      sql(s"INSERT INTO $t PARTITION (a = '1', b = '2') SELECT 1, 'abc'")
-      sql(s"INSERT INTO $t PARTITION (a = '1', b = '3') SELECT 2, 'def'")
-      sql(s"INSERT INTO $t PARTITION (a = '2', b = '2') SELECT 3, 'ghi'")
-      sql(s"INSERT INTO $t PARTITION (a = '2', b = '3') SELECT 4, 'jkl'")
-
-      val catalog = spark.sessionState.catalog
-      val tableIdent = TableIdentifier("tbl", Some("ns"))
-      val spec = Map("a" -> "1", "b" -> "2")
-      def checkPartitionSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
-        val serdeProp = catalog.getPartition(tableIdent, spec).storage.properties
-        if (isUsingHiveMetastore) {
-          assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
-        } else {
-          assert(serdeProp == expectedSerdeProps)
-        }
-      }
-      if (isUsingHiveMetastore) {
-        val expectedSerde = if (isDatasourceTable) {
-          "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-        } else {
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
-        }
-        assert(catalog.getPartition(tableIdent, spec).storage.serde == Some(expectedSerde))
-      } else {
-        assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
-      }
-      checkPartitionSerdeProps(Map.empty[String, String])
-      // set table serde and/or properties (should fail on datasource tables)
-      if (isDatasourceTable) {
-        val e1 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'whatever'")
-        }
-        val e2 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
-            "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-        }
-        assert(e1.getMessage.contains("datasource"))
-        assert(e2.getMessage.contains("datasource"))
-      } else {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.jadoop'")
-        assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.jadoop"))
-        checkPartitionSerdeProps(Map.empty[String, String])
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
-          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-        assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.madoop"))
-        checkPartitionSerdeProps(Map("k" -> "v", "kay" -> "vee"))
-      }
-      // set serde properties only
-      maybeWrapException(isDatasourceTable) {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
-          "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-        checkPartitionSerdeProps(Map("k" -> "vvv", "kay" -> "vee"))
-      }
-      // set things without explicitly specifying database
-      catalog.setCurrentDatabase("ns")
-      maybeWrapException(isDatasourceTable) {
-        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
-        checkPartitionSerdeProps(Map("k" -> "vvv", "kay" -> "veee"))
-      }
-      // table to alter does not exist
-      intercept[AnalysisException] {
-        sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
-      }
-
+  private[sql] def checkPartitionSerdeProps(
+    tableIdent: TableIdentifier,
+    spec: Map[String, String],
+    expectedSerdeProps: Map[String, String]): Unit = {
+    val serdeProp = sessionCatalog.getPartition(tableIdent, spec).storage.properties
+    if (isUsingHiveMetastore) {
+      assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
+    } else {
+      assert(serdeProp == expectedSerdeProps)
     }
   }
 }
@@ -193,11 +72,97 @@ trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
  */
 class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSuiteBase {
 
-  test("datasource table: alter table set serde") {
-    testSetSerde()
+  test("In-Memory catalog - datasource table: alter table set serde") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
+        s"PARTITIONED BY (a, b)")
+
+      val tableIdent = TableIdentifier("tbl", Some("ns"))
+      assert(sessionCatalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
+      checkSerdeProps(tableIdent, Map.empty[String, String])
+
+      // set table serde and/or properties (should fail on datasource tables)
+      val e1 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t SET SERDE 'whatever'")
+      }
+      assert(e1.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET SERDE is not supported for tables created with the datasource API")
+      val e2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
+          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      }
+      assert(e2.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET SERDE is not supported for tables created with the datasource API")
+
+      // set serde properties only
+      sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+      checkSerdeProps(tableIdent, Map("k" -> "vvv", "kay" -> "vee"))
+
+      // set things without explicitly specifying database
+      sessionCatalog.setCurrentDatabase("ns")
+      sql(s"ALTER TABLE tbl SET SERDEPROPERTIES ('kay' = 'veee')")
+      checkSerdeProps(tableIdent, Map("k" -> "vvv", "kay" -> "veee"))
+
+      // table to alter does not exist
+      val e3 = intercept[AnalysisException] {
+        sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+      }
+      assert(e3.getMessage.contains("Table not found: does_not_exist"))
+    }
   }
 
-  test("datasource table: alter table set serde partition") {
-    testSetSerdePartition()
+  test("In-Memory catalog - datasource table: alter table set serde partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing " +
+        s"PARTITIONED BY (a, b)")
+      sql(s"INSERT INTO $t PARTITION (a = '1', b = '2') SELECT 1, 'abc'")
+      sql(s"INSERT INTO $t PARTITION (a = '1', b = '3') SELECT 2, 'def'")
+      sql(s"INSERT INTO $t PARTITION (a = '2', b = '2') SELECT 3, 'ghi'")
+      sql(s"INSERT INTO $t PARTITION (a = '2', b = '3') SELECT 4, 'jkl'")
+
+      val tableIdent = TableIdentifier("tbl", Some("ns"))
+      val spec = Map("a" -> "1", "b" -> "2")
+      assert(sessionCatalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
+      checkPartitionSerdeProps(tableIdent, spec, Map.empty[String, String])
+
+      // set table serde and/or properties (should fail on datasource tables)
+      val e1 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'whatever'")
+      }
+      assert(e1.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
+        "is not supported for tables created with the datasource API")
+      val e2 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
+          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      }
+      assert(e2.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
+        "is not supported for tables created with the datasource API")
+
+      // set serde properties only
+      val e3 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (a=1, b=2) " +
+          "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+      }
+      assert(e3.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
+        "is not supported for tables created with the datasource API")
+
+      // set things without explicitly specifying database
+      sessionCatalog.setCurrentDatabase("ns")
+      val e4 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
+      }
+      assert(e4.getMessage == "Operation not allowed: " +
+        "ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition " +
+        "is not supported for tables created with the datasource API")
+
+      // table to alter does not exist
+      val e5 = intercept[AnalysisException] {
+        sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+      }
+      assert(e5.getMessage.contains("Table not found: does_not_exist"))
+    }
   }
 }
