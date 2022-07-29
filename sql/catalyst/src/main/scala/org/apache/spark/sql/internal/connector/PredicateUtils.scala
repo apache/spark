@@ -107,11 +107,23 @@ private[sql] object PredicateUtils {
 
       case "AND" =>
         val and = predicate.asInstanceOf[V2And]
-        Some(And(toV1(and.left()).get, toV1(and.right()).get))
+        val left = toV1(and.left())
+        val right = toV1(and.right())
+        if (left.nonEmpty && right.nonEmpty) {
+          Some(And(left.get, right.get))
+        } else {
+          None
+        }
 
       case "OR" =>
         val or = predicate.asInstanceOf[V2Or]
-        Some(Or(toV1(or.left()).get, toV1(or.right()).get))
+        val left = toV1(or.left())
+        val right = toV1(or.right())
+        if (left.nonEmpty && right.nonEmpty) {
+          Some(Or(left.get, right.get))
+        } else {
+          None
+        }
 
       case "NOT" =>
         val not = predicate.asInstanceOf[V2Not]
