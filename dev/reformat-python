@@ -25,7 +25,7 @@ BLACK_BUILD="${PYTHON_EXECUTABLE} -m black"
 BLACK_VERSION="22.6.0"
 $PYTHON_EXECUTABLE -c 'import black' 2> /dev/null
 if [ $? -ne 0 ]; then
-    echo "The '$BLACK_BUILD' command was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
+    echo "The Python library providing the 'black' module was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
     exit 1
 fi
 
