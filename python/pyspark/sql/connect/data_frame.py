@@ -238,7 +238,5 @@ class DataFrame(object):
         return self.collect()
 
     def explain(self) -> str:
-        # if self._plan:
-        #     query = self._plan.collect(explain=True)
-        #     return LakehouseEngine.excecute(query)[0][0]
-        return ""
+        query = self._plan.collect(self._session)
+        return self._session.analyze(query).explain_string

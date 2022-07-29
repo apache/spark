@@ -104,10 +104,15 @@ message Response {
   }
 }
 
+// Response to performing analysis of the query. Contains relevant metadata to be able to
+// reason about the performance.
 message AnalyzeResponse {
   string client_id = 1;
   repeated string column_names = 2;
   repeated string column_types = 3;
+
+  // The extended explain string as produced by Spark.
+  string explain_string = 4;
 }
 
 // Main interface for the SparkConnect service.

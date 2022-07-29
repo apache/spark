@@ -1,3 +1,7 @@
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 import pyspark.sql.connect.proto as pb2
 
 import grpc
@@ -79,12 +83,21 @@ class PlanMetrics:
         return self._metrics
 
 
+class AnalyzeResult:
+    def __init__(self, cols, types, explain):
+        self.cols = cols
+        self.types = types
+        self.explain_string = explain
+
+    @classmethod
+    def fromProto(cls, pb):
+        return AnalyzeResult(pb.column_names, pb.column_types, pb.explain_string)
+
+
 class RemoteSparkSession(object):
     """Conceptually the remote spark session that communicates with the server"""
 
-    def __init__(
-        self, host=None, port=15001, user_id="Martin"
-    ):
+    def __init__(self, host=None, port=15001, user_id="Martin"):
         self._host = "localhost" if host is None else host
         self._port = port
         self._user_id = user_id
@@ -132,6 +145,14 @@ class RemoteSparkSession(object):
         req.user_context.user_id = self._user_id
         req.plan.CopyFrom(plan)
         return self._execute_and_fetch(req)
+
+    def analyze(self, plan: pb2.Plan) -> AnalyzeResult:
+        req = pb2.Request()
+        req.user_context.user_id = self._user_id
+        req.plan.CopyFrom(plan)
+
+        resp = self._stub.AnalyzePlan(req)
+        return AnalyzeResult.fromProto(resp)
 
     def _process_batch(self, b):
         if b.batch is not None and len(b.batch.data) > 0:

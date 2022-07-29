@@ -17,26 +17,28 @@
 
 package org.apache.spark.sql.sparkconnect.service
 
-import java.util
-import java.util.concurrent.TimeUnit
-
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+import java.{util => util}
+import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
+import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{
   AnalyzeResponse,
   Request,
   Response,
   SparkConnectServiceGrpc
 }
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.ExtendedMode
+import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.{SparkContext, SparkEnv}
 
 /**
  * The SparkConnectService Implementation.
@@ -50,7 +52,24 @@ class SparkConnectService(debug: Boolean) extends SparkConnectServiceGrpc.SparkC
     new SparkConnectStreamHandler(responseObserver).handle(request)
 
   override def analyzePlan(request: Request): Future[AnalyzeResponse] = {
-    Future.successful(AnalyzeResponse(clientId = request.clientId))
+    val session =
+      SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.userId).session
+
+    val logicalPlan = request.getPlan.opType match {
+      case proto.Plan.OpType.Root(plan) => SparkConnectPlanner(plan, session).transform()
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"${request.getPlan.opType} not supported for analysis.")
+    }
+    val ds = Dataset.ofRows(session, logicalPlan)
+    val explainString = ds.queryExecution.explainString(ExtendedMode)
+
+    val resp = AnalyzeResponse()
+      .withExplainString(explainString)
+      .withClientId(request.clientId)
+      .withColumnTypes(ds.schema.fields.map(_.dataType.sql))
+      .withColumnNames(ds.schema.fields.map(_.name))
+    Future.successful(resp)
   }
 }
 
@@ -88,7 +107,6 @@ object SparkConnectService {
     }
     cacheBuilder
   }
-
 
   /**
    * Based on the `key` find or create a new SparkSession.

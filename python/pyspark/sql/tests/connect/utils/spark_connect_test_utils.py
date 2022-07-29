@@ -19,7 +19,6 @@ class MockRemoteSession:
 
 
 class PlanOnlyTestFixture(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
         cls.connect = MockRemoteSession()

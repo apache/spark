@@ -6,8 +6,7 @@ from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb
 
 
 class SparkConnectServiceStub(object):
-    """Main interface for the SparkConnect service.
-    """
+    """Main interface for the SparkConnect service."""
 
     def __init__(self, channel):
         """Constructor.
@@ -16,89 +15,110 @@ class SparkConnectServiceStub(object):
             channel: A grpc.Channel.
         """
         self.ExecutePlan = channel.unary_stream(
-                '/spark.connect.SparkConnectService/ExecutePlan',
-                request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-                response_deserializer=spark_dot_connect_dot_base__pb2.Response.FromString,
-                )
+            "/spark.connect.SparkConnectService/ExecutePlan",
+            request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.Response.FromString,
+        )
         self.AnalyzePlan = channel.unary_unary(
-                '/spark.connect.SparkConnectService/AnalyzePlan',
-                request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
-                response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.FromString,
-                )
+            "/spark.connect.SparkConnectService/AnalyzePlan",
+            request_serializer=spark_dot_connect_dot_base__pb2.Request.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.FromString,
+        )
 
 
 class SparkConnectServiceServicer(object):
-    """Main interface for the SparkConnect service.
-    """
+    """Main interface for the SparkConnect service."""
 
     def ExecutePlan(self, request, context):
-        """Executes a request that contains the query and returns a stream of [[Response]].
-        """
+        """Executes a request that contains the query and returns a stream of [[Response]]."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
     def AnalyzePlan(self, request, context):
-        """Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
-        """
+        """Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'ExecutePlan': grpc.unary_stream_rpc_method_handler(
-                    servicer.ExecutePlan,
-                    request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
-                    response_serializer=spark_dot_connect_dot_base__pb2.Response.SerializeToString,
-            ),
-            'AnalyzePlan': grpc.unary_unary_rpc_method_handler(
-                    servicer.AnalyzePlan,
-                    request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
-                    response_serializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.SerializeToString,
-            ),
+        "ExecutePlan": grpc.unary_stream_rpc_method_handler(
+            servicer.ExecutePlan,
+            request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.Response.SerializeToString,
+        ),
+        "AnalyzePlan": grpc.unary_unary_rpc_method_handler(
+            servicer.AnalyzePlan,
+            request_deserializer=spark_dot_connect_dot_base__pb2.Request.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.AnalyzeResponse.SerializeToString,
+        ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'spark.connect.SparkConnectService', rpc_method_handlers)
+        "spark.connect.SparkConnectService", rpc_method_handlers
+    )
     server.add_generic_rpc_handlers((generic_handler,))
 
 
- # This class is part of an EXPERIMENTAL API.
+# This class is part of an EXPERIMENTAL API.
 class SparkConnectService(object):
-    """Main interface for the SparkConnect service.
-    """
+    """Main interface for the SparkConnect service."""
 
     @staticmethod
-    def ExecutePlan(request,
+    def ExecutePlan(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_stream(
+            request,
             target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(request, target, '/spark.connect.SparkConnectService/ExecutePlan',
+            "/spark.connect.SparkConnectService/ExecutePlan",
             spark_dot_connect_dot_base__pb2.Request.SerializeToString,
             spark_dot_connect_dot_base__pb2.Response.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
 
     @staticmethod
-    def AnalyzePlan(request,
+    def AnalyzePlan(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
             target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/spark.connect.SparkConnectService/AnalyzePlan',
+            "/spark.connect.SparkConnectService/AnalyzePlan",
             spark_dot_connect_dot_base__pb2.Request.SerializeToString,
             spark_dot_connect_dot_base__pb2.AnalyzeResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )

@@ -17,20 +17,14 @@
 
 package org.apache.spark.sql.sparkconnect.planner
 
-import org.apache.spark.connect.{proto => proto}
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}
-import org.apache.spark.sql.catalyst.analysis.{
-  UnresolvedAlias,
-  UnresolvedAttribute,
-  UnresolvedFunction,
-  UnresolvedRelation,
-  UnresolvedStar
-}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.types.{ByteType, IntegerType, ShortType}
+import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, DoubleType, FloatType, IntegerType, ShortType, TimestampType}
 
 final case class InvalidPlanInput(
     private val message: String = "",
@@ -117,6 +111,13 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     }
   }
 
+  /**
+   * Transforms the protocol buffers literal into the appropriate Catalyst literal expression.
+   *
+   * TODO: Missing support for Instant, BigDecimal, LocalDate, LocalTimestamp, Duration, Period.
+   * @param lit
+   * @return Expression
+   */
   private def transformLiteral(lit: proto.Expression.Literal): Expression = {
     lit.literalType match {
       case proto.Expression.Literal.LiteralType.Boolean(b) => expressions.Literal(b)
@@ -124,8 +125,16 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       case proto.Expression.Literal.LiteralType.I16(v) => expressions.Literal(v, ShortType)
       case proto.Expression.Literal.LiteralType.I32(v) => expressions.Literal(v)
       case proto.Expression.Literal.LiteralType.I64(v) => expressions.Literal(v)
+      case proto.Expression.Literal.LiteralType.Fp32(v) => expressions.Literal(v, FloatType)
+      case proto.Expression.Literal.LiteralType.Fp64(v) => expressions.Literal(v, DoubleType)
       case proto.Expression.Literal.LiteralType.String(v) => expressions.Literal(v)
-      case _ => throw InvalidPlanInput()
+      case proto.Expression.Literal.LiteralType.Binary(v) => expressions.Literal(v, BinaryType)
+      // Microseconds since unix epoch.
+      case proto.Expression.Literal.LiteralType.Timestamp(v) =>
+        expressions.Literal(v, TimestampType)
+      // Days since UNIX epoch.
+      case proto.Expression.Literal.LiteralType.Date(v) => expressions.Literal(v, DateType)
+      case _ => throw InvalidPlanInput("Unsupported Literal Type")
     }
   }
 
