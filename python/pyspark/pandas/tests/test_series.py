@@ -3012,6 +3012,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
         self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
@@ -3025,6 +3027,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+
+        pser2 = pd.Series([np.NaN, 1.0, 2.0, np.NaN])
+        psser2 = ps.from_pandas(pser2)
+        self.assert_eq(pser2.argmin(), psser2.argmin())
+        self.assert_eq(pser2.argmax(), psser2.argmax())
+        self.assert_eq(pser2.argmin(skipna=False), psser2.argmin(skipna=False))
+        self.assert_eq(pser2.argmax(skipna=False), psser2.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())

@@ -6269,8 +6269,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         axis : {{None}}
             Dummy argument for consistency with Series.
         skipna : bool, default True
-            Exclude NA/null values. If the entire Series is NA, the result
-            will be NA.
+            Exclude NA/null values.
 
         Returns
         -------
@@ -6334,8 +6333,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         axis : {{None}}
             Dummy argument for consistency with Series.
         skipna : bool, default True
-            Exclude NA/null values. If the entire Series is NA, the result
-            will be NA.
+            Exclude NA/null values.
 
         Returns
         -------
