@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.impl.Utils.{EPSILON, unpackUpperTriangular}
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -38,7 +38,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
