@@ -719,7 +719,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(LIMIT, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
+    _.containsAnyPattern(LIMIT, LEFT_SEMI_OR_ANTI_JOIN, AGGREGATE), ruleId) {
     // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
     // descendants whose maxRow is larger. This heuristic is valid assuming there does not exist any
     // Limit push-down rule that is unable to infer the value of maxRows.
@@ -757,6 +757,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
+
+    case agg@Aggregate(groupingExpressions, aggregateExpressions, child)
+      if (groupingExpressions ++ aggregateExpressions).map {
+        case Alias(child, _) => child
+        case e => e
+      }.forall(_.foldable) &&
+        !child.isInstanceOf[GlobalLimit] && !child.isInstanceOf[LocalLimit] =>
+      agg.copy(child = Limit(Literal(1), child))
   }
 }
 

@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDF}
-import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{DateType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 class RemoveRedundantAggregatesSuite extends PlanTest {
 
@@ -286,16 +286,5 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("SPARK-36194: Negative case: child distinct keys is empty") {
     val originalQuery = Distinct(x.groupBy($"a", $"b")($"a", TrueLiteral)).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
-  }
-
-  test("SPARK-39893: remove unnecessary data scan if only 0/1 row is returned") {
-    val dataDT = Literal("2022-07-27").cast(DateType)
-    val aliasDT = dataDT.as("DATA_DT")
-    val originalQuery =
-      relation.groupBy(FalseLiteral, dataDT)(TrueLiteral, dataDT, aliasDT).analyze
-    val correctAnswer =
-      relation.limit(1).groupBy(FalseLiteral, dataDT)(TrueLiteral, dataDT, aliasDT).analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
   }
 }

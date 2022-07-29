@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, AttributeSet, ExpressionSet, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, Limit, LocalLimit, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
@@ -51,15 +51,6 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     case agg @ Aggregate(groupingExps, _, child)
         if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
-
-    case agg @ Aggregate(groupingExpressions, aggregateExpressions, child)
-      if (groupingExpressions ++ aggregateExpressions).map {
-        case Alias(child, _) => child
-        case e => e
-      }.forall(_.foldable)
-        && !child.isInstanceOf[GlobalLimit]
-        && !child.isInstanceOf[LocalLimit] =>
-      agg.copy(child = Limit(Literal(1), child))
   }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {

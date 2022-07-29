@@ -21,7 +21,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, Literal}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -297,5 +298,14 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
+  }
+
+  test("SPARK-39893: Push limit 1 to aggregate child if all expressions are foldable") {
+    val dt = Literal("2022-07-27")
+    val aliasDT = dt.as("DATA_DT")
+    val originalQuery = testRelation.groupBy(FalseLiteral, dt)(TrueLiteral, aliasDT).analyze
+    val correctAnswer =
+      testRelation.limit(1).groupBy(FalseLiteral, dt)(TrueLiteral, aliasDT).analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 }
