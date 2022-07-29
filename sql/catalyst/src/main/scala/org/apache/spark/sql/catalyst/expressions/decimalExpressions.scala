@@ -127,7 +127,7 @@ case class CheckOverflow(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
+      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
     }
@@ -183,7 +183,7 @@ case class CheckOverflowInSum(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = if (nullOnOverflow) {
-      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
+      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
     } else {
       ctx.addReferenceObj("errCtx", context)
     }
@@ -287,7 +287,7 @@ case class DecimalDivideWithOverflowCheck(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = if (nullOnOverflow) {
-      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
+      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
     } else {
       ctx.addReferenceObj("errCtx", queryContext)
     }

@@ -288,7 +288,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       val errorContextCode = if (failOnError) {
         ctx.addReferenceObj("errCtx", queryContext)
       } else {
-        "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
+        s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
       }
       val updateIsNull = if (failOnError) {
         ""
@@ -606,7 +606,7 @@ trait DivModLike extends BinaryArithmetic {
     val errorContextCode = if (failOnError) {
       ctx.addReferenceObj("errCtx", queryContext)
     } else {
-      "new org.apache.spark.sql.catalyst.trees.SQLQueryContext[0]"
+      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
     }
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
