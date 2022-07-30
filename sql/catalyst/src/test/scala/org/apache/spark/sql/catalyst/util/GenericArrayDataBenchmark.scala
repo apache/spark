@@ -58,7 +58,7 @@ object GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("arrayOfAnyAsSeq") { _ =>
-      val arr: scala.collection.Seq[Any] = new Array[Any](arraySize)
+      val arr: Seq[Any] = new Array[Any](arraySize)
       var n = 0
       while (n < valuesPerIteration) {
         new GenericArrayData(arr)

@@ -18,22 +18,19 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.immutable
-import scala.collection.mutable
 
 object GenericArrayDataHelper {
 
-  // SPARK-39766: Special treatment of `immutable.ArraySeq.ofRef[_]` and `mutable.ArraySeq.ofRef[_]`
-  // to ensure the scenes similar to `arrayOfAnyAsSeq` in `GenericArrayDataBenchmark` have
+  // SPARK-39766: Special treatment of `immutable.ArraySeq.ofRef[_]` to ensure the
+  // scenes similar to `arrayOfAnyAsSeq` in `GenericArrayDataBenchmark` have
   // the same performance when using Scala 2.12 and Scala 2.13
   def toArray(seq: scala.collection.Seq[Any]): Array[Any] = seq match {
     case ias: immutable.ArraySeq.ofRef[_] => ias.unsafeArray.asInstanceOf[Array[Any]]
-    case mas: mutable.ArraySeq.ofRef[_] => mas.array.asInstanceOf[Array[Any]]
     case other => other.toArray
   }
 
   def toArray(seqOrArray: Any): Array[Any] = seqOrArray match {
     case ias: immutable.ArraySeq.ofRef[_] => ias.unsafeArray.asInstanceOf[Array[Any]]
-    case mas: mutable.ArraySeq.ofRef[_] => mas.array.asInstanceOf[Array[Any]]
     // Specified this as`scala.collection.Seq` because seqOrArray can be
     // `mutable.ArraySeq` in Scala 2.13
     case seq: scala.collection.Seq[Any] => seq.toArray
