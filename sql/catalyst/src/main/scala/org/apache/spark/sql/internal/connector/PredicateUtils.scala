@@ -121,8 +121,10 @@ private[sql] object PredicateUtils {
         val right = toV1(or.right())
         if (left.nonEmpty && right.nonEmpty) {
           Some(Or(left.get, right.get))
+        } else if (left.nonEmpty) {
+          left
         } else {
-          None
+          right
         }
 
       case "NOT" =>

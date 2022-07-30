@@ -291,11 +291,15 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
 
-    val predicate3 = new Or(
-      new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType))),
-      new Predicate("=", Array[Expression](LiteralValue(1, IntegerType),
-        LiteralValue(1, IntegerType))))
-    assert(PredicateUtils.toV1(predicate3) == None)
+    val left = new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
+    val predicate3 = new Or(left,
+      new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))))
+    assert(PredicateUtils.toV1(predicate3) == PredicateUtils.toV1(left))
+
+    val predicate4 = new Or(
+      new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))),
+      new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))))
+    assert(PredicateUtils.toV1(predicate4) == None)
   }
 
   test("StringStartsWith") {
