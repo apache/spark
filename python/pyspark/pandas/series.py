@@ -3170,11 +3170,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         item_3    4
         dtype: int64
         """
-        assert isinstance(prefix, str)
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(SF.lit(prefix), index_spark_column).alias(index_spark_column_name)
+                F.concat(SF.lit(str(prefix)), index_spark_column).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -3225,11 +3224,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3_item    4
         dtype: int64
         """
-        assert isinstance(suffix, str)
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(index_spark_column, SF.lit(suffix)).alias(index_spark_column_name)
+                F.concat(index_spark_column, SF.lit(str(suffix))).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )

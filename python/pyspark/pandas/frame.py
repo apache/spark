@@ -9012,9 +9012,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2      3      5
         3      4      6
         """
-        assert isinstance(prefix, str)
+        f = partial("{prefix}{}".format, prefix=prefix)
         return self._apply_series_op(
-            lambda psser: psser.rename(tuple([prefix + i for i in psser._column_label]))
+            lambda psser: psser.rename(tuple([f(i) for i in psser._column_label]))
         )
 
     def add_suffix(self, suffix: str) -> "DataFrame":
@@ -9057,9 +9057,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2      3      5
         3      4      6
         """
-        assert isinstance(suffix, str)
+        f = partial("{}{suffix}".format, suffix=suffix)
         return self._apply_series_op(
-            lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
+            lambda psser: psser.rename(tuple([f(i) for i in psser._column_label]))
         )
 
     # TODO: include, and exclude should be implemented.

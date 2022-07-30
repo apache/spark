@@ -1293,6 +1293,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([1, 2, 3, 4], name="0")
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.add_prefix("item_"), psser.add_prefix("item_"))
+        self.assert_eq(pser.add_prefix(1.1), psser.add_prefix(1.1))
+        self.assert_eq(pser.add_prefix(False), psser.add_prefix(False))
 
         pser = pd.Series(
             [1, 2, 3],
@@ -1306,6 +1308,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([1, 2, 3, 4], name="0")
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.add_suffix("_item"), psser.add_suffix("_item"))
+        self.assert_eq(pser.add_suffix(1.1), psser.add_suffix(1.1))
+        self.assert_eq(pser.add_suffix(False), psser.add_suffix(False))
 
         pser = pd.Series(
             [1, 2, 3],

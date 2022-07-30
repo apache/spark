@@ -2701,6 +2701,8 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf = pd.DataFrame({"A": [1, 2, 3, 4], "B": [3, 4, 5, 6]}, index=np.random.rand(4))
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.add_prefix("col_"), psdf.add_prefix("col_"))
+        self.assert_eq(pdf.add_prefix(1.1), psdf.add_prefix(1.1))
+        self.assert_eq(pdf.add_prefix(True), psdf.add_prefix(True))
 
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B")])
         pdf.columns = columns
@@ -2711,6 +2713,8 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf = pd.DataFrame({"A": [1, 2, 3, 4], "B": [3, 4, 5, 6]}, index=np.random.rand(4))
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.add_suffix("first_series"), psdf.add_suffix("first_series"))
+        self.assert_eq(pdf.add_suffix(1.1), psdf.add_suffix(1.1))
+        self.assert_eq(pdf.add_suffix(True), psdf.add_suffix(True))
 
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B")])
         pdf.columns = columns
