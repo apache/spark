@@ -157,7 +157,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: SQLQueryContext) extends UnaryExpression {
+    context: SQLQueryContext) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -178,11 +178,7 @@ case class CheckOverflowInSum(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val errorContextCode = if (nullOnOverflow) {
-      "null"
-    } else {
-      ctx.addReferenceObj("errCtx", context)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -212,6 +208,8 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
 }
 
 /**

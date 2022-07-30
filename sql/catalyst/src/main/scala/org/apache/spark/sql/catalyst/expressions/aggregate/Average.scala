@@ -86,7 +86,7 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(context: SQLQueryContext) = child.dataType match {
+  protected def getEvaluateExpression(context: SQLQueryContext = null) = child.dataType match {
     case _: DecimalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, resultType),
@@ -206,7 +206,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression(null))
+    addTryEvalIfNeeded(getEvaluateExpression())
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
