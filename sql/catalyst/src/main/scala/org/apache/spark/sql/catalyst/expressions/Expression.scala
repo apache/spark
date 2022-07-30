@@ -593,9 +593,19 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
  * to executors. It will also be kept after rule transforms.
  */
 trait SupportQueryContext extends Expression with Serializable {
-  protected var queryContext: Array[SQLQueryContext] = initQueryContext()
+  protected var queryContext: Option[SQLQueryContext] = initQueryContext()
 
-  def initQueryContext(): Array[SQLQueryContext]
+  def initQueryContext(): Option[SQLQueryContext]
+
+  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
+
+  def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
+    if (withErrorContext && queryContext.isDefined) {
+      ctx.addReferenceObj("errCtx", queryContext.get)
+    } else {
+      "null"
+    }
+  }
 
   // Note: Even though query contexts are serialized to executors, it will be regenerated from an
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors

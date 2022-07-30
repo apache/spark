@@ -2178,7 +2178,7 @@ case class ElementAt(
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
             throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), queryContext)
+              index, array.numElements(), getContextOrNull())
           } else {
             defaultValueOutOfBound match {
               case Some(value) => value.eval()
@@ -2220,7 +2220,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2266,10 +2266,10 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): Array[SQLQueryContext] = if (failOnError) {
-    Array(origin.context)
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
   } else {
-    Array.empty
+    None
   }
 }
 

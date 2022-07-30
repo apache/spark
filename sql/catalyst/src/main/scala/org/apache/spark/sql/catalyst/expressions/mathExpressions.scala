@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -1521,7 +1520,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (_scale >= 0) {
           s"""
             ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, new ${classOf[SQLQueryContext].getCanonicalName}[0]);
+            Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
        } else {
           s"""

@@ -98,11 +98,11 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(toPrettySQL(e))
   }
 
-  def getSummary(context: Array[SQLQueryContext]): String = {
-    context.headOption.map(_.summary).getOrElse("")
+  def getSummary(sqlContext: SQLQueryContext): String = {
+    if (sqlContext == null) "" else sqlContext.summary
   }
 
-  def getQueryContext(sqlContext: Array[SQLQueryContext]): Array[QueryContext] = {
-    sqlContext.map(_.asInstanceOf[QueryContext])
+  def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
+    if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
   }
 }

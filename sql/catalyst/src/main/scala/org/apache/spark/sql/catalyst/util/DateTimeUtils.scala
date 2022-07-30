@@ -468,14 +468,14 @@ object DateTimeUtils {
   def stringToTimestampAnsi(
       s: UTF8String,
       timeZoneId: ZoneId,
-      context: Array[SQLQueryContext] = Array.empty): Long = {
+      context: SQLQueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, TimestampType, context)
     }
   }
 
-  def doubleToTimestampAnsi(d: Double, context: Array[SQLQueryContext]): Long = {
+  def doubleToTimestampAnsi(d: Double, context: SQLQueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         d, DoubleType, TimestampType, context)
@@ -527,7 +527,7 @@ object DateTimeUtils {
 
   def stringToTimestampWithoutTimeZoneAnsi(
       s: UTF8String,
-      context: Array[SQLQueryContext]): Long = {
+      context: SQLQueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, TimestampNTZType, context)
@@ -648,7 +648,7 @@ object DateTimeUtils {
 
   def stringToDateAnsi(
       s: UTF8String,
-      context: Array[SQLQueryContext] = Array.empty): Int = {
+      context: SQLQueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
         s, StringType, DateType, context)

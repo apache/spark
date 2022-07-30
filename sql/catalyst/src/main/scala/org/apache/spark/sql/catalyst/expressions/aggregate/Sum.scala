@@ -148,8 +148,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  protected def getEvaluateExpression(
-      context: Array[SQLQueryContext]): Expression = resultType match {
+  protected def getEvaluateExpression(context: SQLQueryContext): Expression = resultType match {
     case d: DecimalType =>
       val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
       If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
@@ -192,12 +191,12 @@ case class Sum(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(getContextOrNull())
 
-  override def initQueryContext(): Array[SQLQueryContext] = if (useAnsiAdd) {
-    Array(origin.context)
+  override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
+    Some(origin.context)
   } else {
-    Array.empty
+    None
   }
 }
 
@@ -255,9 +254,9 @@ case class TrySum(child: Expression) extends SumBase(child) {
 
   override lazy val evaluateExpression: Expression =
     if (useAnsiAdd) {
-      TryEval(getEvaluateExpression(Array.empty))
+      TryEval(getEvaluateExpression(null))
     } else {
-      getEvaluateExpression(Array.empty)
+      getEvaluateExpression(null)
     }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

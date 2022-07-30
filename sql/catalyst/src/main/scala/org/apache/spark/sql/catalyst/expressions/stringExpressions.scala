@@ -296,7 +296,8 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, queryContext)
+          throw QueryExecutionErrors.invalidArrayIndexError(
+            index, inputExprs.length, getContextOrNull())
         } else {
           null
         }
@@ -348,7 +349,7 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = getContextOrNullCode(ctx)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
@@ -382,10 +383,10 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def initQueryContext(): Array[SQLQueryContext] = if (failOnError) {
-    Array(origin.context)
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
   } else {
-    Array.empty
+    None
   }
 }
 

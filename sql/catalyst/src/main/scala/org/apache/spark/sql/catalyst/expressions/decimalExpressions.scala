@@ -123,14 +123,10 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      queryContext)
+      getContextOrNull())
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
@@ -149,10 +145,10 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): Array[SQLQueryContext] = if (!nullOnOverflow) {
-    Array(origin.context)
+  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
+    Some(origin.context)
   } else {
-    Array.empty
+    None
   }
 }
 
@@ -161,7 +157,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    context: Array[SQLQueryContext] = Array.empty) extends UnaryExpression {
+    context: SQLQueryContext) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
@@ -183,7 +179,7 @@ case class CheckOverflowInSum(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = if (nullOnOverflow) {
-      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
+      "null"
     } else {
       ctx.addReferenceObj("errCtx", context)
     }
@@ -261,12 +257,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    context: Array[SQLQueryContext],
+    context: SQLQueryContext,
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): Array[SQLQueryContext] = context
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {
@@ -275,22 +271,18 @@ case class DecimalDivideWithOverflowCheck(
       if (nullOnOverflow)  {
         null
       } else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull())
       }
     } else {
       val value2 = right.eval(input)
       dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
         .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
-          queryContext)
+          getContextOrNull())
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      s"new ${classOf[SQLQueryContext].getCanonicalName}[0]"
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
