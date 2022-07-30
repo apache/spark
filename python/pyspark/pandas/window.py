@@ -144,10 +144,15 @@ class RollingLike(RollingAndExpanding[FrameLike]):
         window: int,
         min_periods: Optional[int] = None,
     ):
+        if type(window) is not int:
+            raise ValueError("window must be an integer")
         if window < 0:
             raise ValueError("window must be >= 0")
-        if (min_periods is not None) and (min_periods < 0):
-            raise ValueError("min_periods must be >= 0")
+        if min_periods is not None:
+            if type(min_periods) is not int:
+                raise ValueError("min_periods must be an integer")
+            if min_periods < 0:
+                raise ValueError("min_periods must be >= 0")
         if min_periods is None:
             # TODO: 'min_periods' is not equivalent in pandas because it does not count NA as
             #  a value.

@@ -30,6 +30,10 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             ps.range(10).rolling(window=-1)
         with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
             ps.range(10).rolling(window=1, min_periods=-1)
+        with self.assertRaisesRegex(ValueError, "window must be an integer"):
+            ps.range(10).rolling(window=1.1)
+        with self.assertRaisesRegex(ValueError, "min_periods must be an integer"):
+            ps.range(10).rolling(window=1, min_periods=-1.1)
 
         with self.assertRaisesRegex(
             TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
