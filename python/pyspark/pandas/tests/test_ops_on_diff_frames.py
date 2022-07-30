@@ -1512,9 +1512,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         pser_other = pd.Series([90, 91, 85], index=[0, 1, 3])
         psser_other = ps.from_pandas(pser_other)
+        pser_other2 = pd.Series([90, 91, 85, 100], index=[0, 1, 3, 5])
+        psser_other2 = ps.from_pandas(pser_other2)
 
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
             psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", False), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
+        ):
+            psser.dot(psser_other2)
 
         with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
             ValueError, "matrices are not aligned"

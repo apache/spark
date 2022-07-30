@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import java.util.Locale
+import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql.execution.command
 
@@ -26,30 +26,22 @@ import org.apache.spark.sql.execution.command
  * table catalogs. The tests that cannot run for all V1 catalogs are located in more
  * specific test suites:
  *
- *   - Temporary functions of V1 catalog:
- *     `org.apache.spark.sql.execution.command.v1.ShowTempFunctionsSuite`
- *   - Permanent functions of V1 catalog:
- *     `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowFunctionsSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowFunctionsSuite`
  */
 trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
-  with command.TestsV1AndV2Commands
+  with command.TestsV1AndV2Commands {
+  override protected def createFunction(name: String): Unit = {
+    sql(s"CREATE FUNCTION $name AS '${classOf[MyDoubleSum].getName}'")
+  }
+  override protected def dropFunction(name: String): Unit = {
+    sql(s"DROP FUNCTION IF EXISTS $name")
+  }
+}
 
 /**
- * The class contains tests for the `SHOW FUNCTIONS` command to check temporary functions.
+ * The class contains tests for the `SHOW FUNCTIONS` command to check V1 In-Memory table catalog.
  */
-class ShowTempFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
+class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
-  override protected def isTempFunctions(): Boolean = true
-
-  override protected def createFunction(name: String): Unit = {
-    spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
-  }
-
-  override protected def dropFunction(name: String): Unit = {
-    spark.sessionState.catalog.dropTempFunction(name, false)
-  }
-
-  override protected def showFun(ns: String, name: String): String = {
-    s"$catalog.$ns.$name".toLowerCase(Locale.ROOT)
-  }
 }

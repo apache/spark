@@ -160,7 +160,8 @@ private[spark] class OutputCommitCoordinator(
         if (stageState.authorizedCommitters(partition) == taskId) {
           sc.foreach(_.dagScheduler.stageFailed(stage, s"Authorized committer " +
             s"(attemptNumber=$attemptNumber, stage=$stage, partition=$partition) failed; " +
-            s"but task commit success, data duplication may happen."))
+            s"but task commit success, data duplication may happen. " +
+            s"reason=$reason"))
         }
     }
   }

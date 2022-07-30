@@ -305,14 +305,15 @@ class DatasetUnpivotSuite extends QueryTest
           valueColumnName = "val"
         )
     }
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
-        "\"STRING\" \\(`str1#\\d+`\\), " +
-        "\"INT\" \\(`int1#\\d+`, `int2#\\d+`, `int3#\\d+`, ...\\), " +
-        "\"BIGINT\" \\(`long1#\\d+L`, `long2#\\d+L`\\)\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map(
+        "types" ->
+          (""""STRING" \(`str1#\d+`\), """ +
+           """"INT" \(`int1#\d+`, `int2#\d+`, `int3#\d+`, ...\), """ +
+           """"BIGINT" \(`long1#\d+L`, `long2#\d+L`\)""")),
+      matchPVals = true)
   }
 
   test("unpivot with compatible value types") {
@@ -358,12 +359,12 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e1,
       errorClass = "UNRESOLVED_COLUMN",
-      msg = "A column or function parameter with name `1` cannot be resolved\\. " +
-        "Did you mean one of the following\\? \\[`id`, `int1`, `str1`, `str2`, `long1`\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map(
+        "objectName" -> "`1`",
+        "objectList" -> "`id`, `int1`, `str1`, `str2`, `long1`"))
 
     // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
@@ -374,12 +375,12 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e2,
       errorClass = "UNRESOLVED_COLUMN",
-      msg = "A column or function parameter with name `does` cannot be resolved\\. " +
-        "Did you mean one of the following\\? \\[`id`, `int1`, `long1`, `str1`, `str2`\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map(
+        "objectName" -> "`does`",
+        "objectList" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
 
     // unpivoting with empty list of value columns
     // where potential value columns are of incompatible types
@@ -391,14 +392,14 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
-        "\"INT\" \\(`id#\\d+`, `int1#\\d+`\\), " +
-        "\"STRING\" \\(`str1#\\d+`, `str2#\\d+`\\), " +
-        "\"BIGINT\" \\(`long1#\\d+L`\\)\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map("types" ->
+        (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
+         """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
+         """"BIGINT" \(`long1#\d+L`\)""")),
+      matchPVals = true)
 
     // unpivoting with star id columns so that no value columns are left
     val e4 = intercept[AnalysisException] {
@@ -409,12 +410,10 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e4,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      msg = "At least one value column needs to be specified for UNPIVOT, " +
-        "all columns specified as ids;(\\n.*)*",
-      matchMsg = true)
+      parameters = Map())
 
     // unpivoting with star value columns
     // where potential value columns are of incompatible types
@@ -426,14 +425,14 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      msg = "Unpivot value columns must share a least common type, some types do not: \\[" +
-        "\"INT\" \\(`id#\\d+`, `int1#\\d+`\\), " +
-        "\"STRING\" \\(`str1#\\d+`, `str2#\\d+`\\), " +
-        "\"BIGINT\" \\(`long1#\\d+L`\\)\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map("types" ->
+        (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
+         """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
+         """"BIGINT" \(`long1#\d+L`\)""")),
+      matchPVals = true)
 
     // unpivoting without giving values and no non-id columns
     val e6 = intercept[AnalysisException] {
@@ -444,12 +443,10 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e6,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      msg = "At least one value column needs to be specified for UNPIVOT, " +
-        "all columns specified as ids;(\\n.*)*",
-      matchMsg = true)
+      parameters = Map.empty)
   }
 
   test("unpivot after pivot") {
@@ -499,14 +496,13 @@ class DatasetUnpivotSuite extends QueryTest
         valueColumnName = "val"
       )
     }
-    checkErrorClass(
+    checkError(
       exception = e,
       errorClass = "UNRESOLVED_COLUMN",
       // expected message is wrong: https://issues.apache.org/jira/browse/SPARK-39783
-      msg = "A column or function parameter with name `an`\\.`id` cannot be resolved\\. " +
-        "Did you mean one of the following\\? " +
-        "\\[`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`\\];(\n.*)*",
-      matchMsg = true)
+      parameters = Map(
+        "objectName" -> "`an`.`id`",
+        "objectList" -> "`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`"))
   }
 
   test("unpivot with struct fields") {

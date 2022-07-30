@@ -59,6 +59,12 @@
     ],
     "sqlState" : "22005"
   },
+  "CAST_OVERFLOW_IN_TABLE_INSERT" : {
+    "message" : [
+      "Fail to insert a value of <sourceType> type into the <targetType> type column <columnName> due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead."
+    ],
+    "sqlState" : "22005"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -72,7 +78,7 @@
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
-      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
   },
@@ -203,6 +209,12 @@
     "message" : [
       "<message>"
     ]
+  },
+  "INTERVAL_DIVIDED_BY_ZERO" : {
+    "message" : [
+      "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
+    ],
+    "sqlState" : "22012"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [

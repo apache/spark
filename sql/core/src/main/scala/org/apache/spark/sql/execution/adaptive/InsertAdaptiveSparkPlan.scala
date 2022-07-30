@@ -48,7 +48,8 @@ case class InsertAdaptiveSparkPlan(
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
-    case c: DataWritingCommandExec if !c.cmd.isInstanceOf[V1WriteCommand] =>
+    case c: DataWritingCommandExec
+        if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {

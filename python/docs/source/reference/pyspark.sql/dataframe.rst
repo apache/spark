@@ -102,6 +102,7 @@ DataFrame
     DataFrame.summary
     DataFrame.tail
     DataFrame.take
+    DataFrame.to
     DataFrame.toDF
     DataFrame.toJSON
     DataFrame.toLocalIterator

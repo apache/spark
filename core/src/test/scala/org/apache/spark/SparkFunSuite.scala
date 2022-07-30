@@ -292,9 +292,9 @@ abstract class SparkFunSuite
   protected def checkError(
       exception: SparkThrowable,
       errorClass: String,
-      errorSubClass: Option[String],
-      sqlState: Option[String],
-      parameters: Map[String, String],
+      errorSubClass: Option[String] = None,
+      sqlState: Option[String] = None,
+      parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false): Unit = {
     assert(exception.getErrorClass === errorClass)
     if (exception.getErrorSubClass != null) {
@@ -334,12 +334,6 @@ abstract class SparkFunSuite
       sqlState: String,
       parameters: Map[String, String]): Unit =
     checkError(exception, errorClass, None, Some(sqlState), parameters)
-
-  protected def checkError(
-      exception: SparkThrowable,
-      errorClass: String,
-      parameters: Map[String, String]): Unit =
-    checkError(exception, errorClass, None, None, parameters)
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
