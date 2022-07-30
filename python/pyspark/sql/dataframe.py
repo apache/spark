@@ -3240,7 +3240,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if isinstance(col, str):
                 jdf = self._jdf.drop(col)
             elif isinstance(col, Column):
-                jdf = self._jdf.drop(col._jc, self._jseq([col._jc]))
+                jdf = self._jdf.drop(col._jc)
             else:
                 raise TypeError("col should be a string or a Column")
         else:

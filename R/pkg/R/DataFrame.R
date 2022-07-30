@@ -3602,7 +3602,7 @@ setMethod("drop",
             stopifnot(class(col) == "character" || class(col) == "Column" || class(col) == "list")
 
             if (class(col) == "Column") {
-              sdf <- callJMethod(x@sdf, "drop", col@jc, list(col@jc))
+              sdf <- callJMethod(x@sdf, "drop", col@jc)
             } else if (class(col) == "character") {
               sdf <- callJMethod(x@sdf, "drop", as.list(col))
             } else {

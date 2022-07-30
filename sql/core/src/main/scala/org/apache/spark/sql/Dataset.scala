@@ -2846,14 +2846,29 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset with columns dropped.
-   * This is a no-op if schema doesn't contain column name(s).
+   * Returns a new Dataset with column dropped.
    *
-   * This method can only be used to drop top level columns. the colName string is treated literally
-   * without further interpretation.
+   * This method can only be used to drop top level column.
+   * This version of drop accepts a [[Column]] rather than a name.
+   * This is a no-op if the Dataset doesn't have a column
+   * with an equivalent expression.
    *
    * @group untypedrel
    * @since 2.0.0
+   */
+  def drop(col: Column): DataFrame = {
+    drop(col, Seq(col) : _*)
+  }
+
+  /**
+   * Returns a new Dataset with columns dropped.
+   *
+   * This method can only be used to drop top level columns.
+   * This is a no-op if the Dataset doesn't have a columns
+   * with an equivalent expression.
+   *
+   * @group untypedrel
+   * @since 3.4.0
    */
   @scala.annotation.varargs
   def drop(col: Column, cols: Column*): DataFrame = {
