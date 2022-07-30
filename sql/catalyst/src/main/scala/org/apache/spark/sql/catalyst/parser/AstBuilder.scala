@@ -900,10 +900,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
       if (!ctx.lateralView.isEmpty) {
         throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
       withPivot(ctx.pivotClause, from)
+    } else if (ctx.unpivotClause() != null) {
+      if (!ctx.lateralView.isEmpty) {
+        throw QueryParsingErrors.lateralWithUnpivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(ctx.unpivotClause, from)
     } else {
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
     }
@@ -1102,6 +1110,80 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       e
     }
   }
+
+  /**
+   * Add an [[Unpivot]] to a logical plan.
+   */
+  private def withUnpivot(
+      ctx: UnpivotClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    // TODO: instead of UnresolvedStar, take all child output attributes
+    //  that are not given as unpivotColumns
+    if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
+      val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
+      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val valueColumnName = unpivotClause.unpivotValueColumn().identifier().getText
+      val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn)
+      Unpivot(
+        Seq(UnresolvedStar(None)),
+        unpivotColumns.toSeq,
+        variableColumnName,
+        valueColumnName,
+        query)
+    } else {
+      val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
+      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val valueColumnNames = unpivotClause.unpivotValueColumns.asScala.map(_.identifier().getText)
+      // TODO: find a temporary column name that does not exist in child
+      val valueColumnName = "value"
+      val idColumns = Seq(UnresolvedStar(None))
+      val unpivotColumns = unpivotClause.unpivotColumnSets.asScala.map(
+        createUnpivotColumnStruct(valueColumnNames))
+
+      val unpivoted = Unpivot(idColumns, unpivotColumns, variableColumnName, valueColumnName, query)
+      // project values struct column into individual columns
+      val projection =
+        // select all id columns
+        idColumns :+
+        // followed by the variable column
+        UnresolvedAttribute.quotedString(variableColumnName) :+
+        // expand values struct column into individual columns
+        UnresolvedStar(Some(Seq("value")))
+
+      Project(projection, unpivoted)
+    }
+  }
+
+  /**
+   * Create an Unpivot column with or without an alias.
+   */
+  override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
+    val e = expression(ctx.expression)
+    if (ctx.identifier != null) {
+      Alias(e, ctx.identifier.getText)()
+    } else {
+      UnresolvedAlias(e)
+    }
+  }
+
+  /**
+   * Create an Unpivot struct column with or without an alias.
+   * Each struct field is renamed to the respective value column name.
+   */
+  def createUnpivotColumnStruct(valueColumnNames: Seq[String])
+                               (ctx: UnpivotColumnSetContext): NamedExpression =
+    withOrigin(ctx) {
+      val e = CreateStruct.create(
+        ctx.unpivotColumns.asScala.zip(valueColumnNames).map {
+          case (c, n) => Alias(expression(c.expression), n)()
+        }
+      )
+      if (ctx.identifier != null) {
+        Alias(e, ctx.identifier.getText)()
+      } else {
+        UnresolvedAlias(e)
+      }
+    }
 
   /**
    * Add a [[Generate]] (Lateral View) to a logical plan.

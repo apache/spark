@@ -3898,6 +3898,11 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
+    case Unpivot(ids, values, variableColumnName, valueColumnName, child) =>
+      val cleanedIds = ids.map(trimNonTopLevelAliases)
+      val cleanedValues = values.map(trimNonTopLevelAliases)
+      Unpivot(cleanedIds, cleanedValues, variableColumnName, valueColumnName, child)
+
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
     case o: ObjectConsumer => o

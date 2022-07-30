@@ -579,7 +579,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (COMMA relation)* lateralView* pivotClause?
+    : FROM relation (COMMA relation)* lateralView* pivotClause? unpivotClause?
     ;
 
 temporalClause
@@ -626,6 +626,46 @@ pivotColumn
     ;
 
 pivotValue
+    : expression (AS? identifier)?
+    ;
+
+unpivotClause
+    : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
+        operator=unpivotOperator
+      RIGHT_PAREN (AS? identifier)?
+    ;
+
+unpivotNullClause
+    : (INCLUDE | EXCLUDE) NULLS
+    ;
+
+unpivotOperator
+    : (unpivotSingleValueColumnClause | unpivotMultiValueColumnClause)
+    ;
+
+unpivotSingleValueColumnClause
+    : unpivotValueColumn FOR unpivotNameColumn IN LEFT_PAREN unpivotColumns+=unpivotColumn (COMMA unpivotColumns+=unpivotColumn)* RIGHT_PAREN
+    ;
+
+unpivotMultiValueColumnClause
+    : LEFT_PAREN unpivotValueColumns+=unpivotValueColumn (COMMA unpivotValueColumns+=unpivotValueColumn)* RIGHT_PAREN
+      FOR unpivotNameColumn
+      IN LEFT_PAREN unpivotColumnSets+=unpivotColumnSet (COMMA unpivotColumnSets+=unpivotColumnSet)* RIGHT_PAREN
+    ;
+
+unpivotColumnSet
+    : LEFT_PAREN unpivotColumns+=unpivotColumn (COMMA unpivotColumns+=unpivotColumn)* RIGHT_PAREN (AS? identifier)?
+    ;
+
+unpivotValueColumn
+    : identifier
+    ;
+
+unpivotNameColumn
+    : identifier
+    ;
+
+unpivotColumn
     : expression (AS? identifier)?
     ;
 
@@ -1158,6 +1198,7 @@ ansiNonReserved
     | DROP
     | ESCAPED
     | EXCHANGE
+    | EXCLUDE
     | EXISTS
     | EXPLAIN
     | EXPORT
@@ -1178,6 +1219,7 @@ ansiNonReserved
     | IF
     | IGNORE
     | IMPORT
+    | INCLUDE
     | INDEX
     | INDEXES
     | INPATH
@@ -1299,6 +1341,7 @@ ansiNonReserved
     | UNBOUNDED
     | UNCACHE
     | UNLOCK
+    | UNPIVOT
     | UNSET
     | UPDATE
     | USE
@@ -1419,6 +1462,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EXCHANGE
+    | EXCLUDE
     | EXISTS
     | EXPLAIN
     | EXPORT
@@ -1449,6 +1493,7 @@ nonReserved
     | IGNORE
     | IMPORT
     | IN
+    | INCLUDE
     | INDEX
     | INDEXES
     | INPATH
@@ -1593,6 +1638,7 @@ nonReserved
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNPIVOT
     | UNSET
     | UPDATE
     | USE

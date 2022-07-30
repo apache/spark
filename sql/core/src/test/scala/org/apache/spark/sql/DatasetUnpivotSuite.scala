@@ -308,9 +308,9 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
         "types" ->
-          (""""BIGINT" \(`long1#\d+L`, `long2#\d+L`\), """ +
-           """"INT" \(`int1#\d+`, `int2#\d+`, `int3#\d+`, ...\), """ +
-           """"STRING" \(`str1#\d+`\)""")),
+          (""""BIGINT" \(`long1`, `long2`\), """ +
+           """"INT" \(`int1`, `int2`, `int3`, ...\), """ +
+           """"STRING" \(`str1`\)""")),
       matchPVals = true)
   }
 
@@ -396,9 +396,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map("types" ->
-        (""""BIGINT" \(`long1#\d+L`\), """ +
-         """"INT" \(`id#\d+`, `int1#\d+`\), """ +
-         """"STRING" \(`str1#\d+`, `str2#\d+`\)""")),
+        (""""BIGINT" \(`long1`\), """ +
+         """"INT" \(`id`, `int1`\), """ +
+         """"STRING" \(`str1`, `str2`\)""")),
       matchPVals = true)
 
     // unpivoting with star id columns so that no value columns are left
@@ -429,9 +429,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map("types" ->
-        (""""BIGINT" \(`long1#\d+L`\), """ +
-         """"INT" \(`id#\d+`, `int1#\d+`\), """ +
-         """"STRING" \(`str1#\d+`, `str2#\d+`\)""")),
+        (""""BIGINT" \(`long1`\), """ +
+         """"INT" \(`id`, `int1`\), """ +
+         """"STRING" \(`str1`, `str2`\)""")),
       matchPVals = true)
 
     // unpivoting without giving values and no non-id columns
@@ -534,6 +534,114 @@ class DatasetUnpivotSuite extends QueryTest
         "var",
         "val"),
       longStructDataRows)
+  }
+
+  test("unpivot with struct expressions") {
+    checkAnswer(
+      wideDataDs.unpivot(
+        Array($"id"),
+        Array(
+          struct($"str1".as("str"), $"int1".cast(LongType).as("long")).as("str-int"),
+          struct($"str2".as("str"), $"long1".as("long")).as("str-long")
+        ),
+        "var",
+        "val"),
+      Seq(
+        Row(1, "str-int", Row("one", 1L)),
+        Row(1, "str-long", Row("One", 1L)),
+        Row(2, "str-int", Row("two", null)),
+        Row(2, "str-long", Row(null, 2L)),
+        Row(3, "str-int", Row(null, 3L)),
+        Row(3, "str-long", Row("three", null)),
+        Row(4, "str-int", Row(null, null)),
+        Row(4, "str-long", Row(null, null))
+      )
+    )
+
+    checkAnswer(
+      // struct field types and names must match
+      wideDataDs.unpivot(
+        Array($"id"),
+        Array(
+          struct($"str1".as("str"), $"int1".cast(LongType).as("long")).as("str-int"),
+          struct($"str2".as("str"), $"long1".as("long")).as("str-long")
+        ),
+        "var",
+        "val").select(
+        $"id", $"var", $"val.*"
+      ),
+      Seq(
+        Row(1, "str-int", "one", 1L),
+        Row(1, "str-long", "One", 1L),
+        Row(2, "str-int", "two", null),
+        Row(2, "str-long", null, 2L),
+        Row(3, "str-int", null, 3L),
+        Row(3, "str-long", "three", null),
+        Row(4, "str-int", null, null),
+        Row(4, "str-long", null, null)
+      )
+    )
+
+    // different struct field types and names fail
+    val e1 = intercept[AnalysisException] {
+      wideDataDs.unpivot(
+        Array($"id"),
+        Array(
+          struct($"str1", $"int1").as("str-int"),
+          struct($"str2", $"long1").as("str-long")
+        ),
+        "var",
+        "val"
+      )
+    }
+    checkError(
+      exception = e1,
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      parameters = Map("types" -> (
+        """\"STRUCT<str1: STRING, int1: INT>\" \(`str-int`\), """ +
+        """\"STRUCT<str2: STRING, long1: BIGINT>\" \(`str-long`\)"""
+        )),
+      matchPVals = true)
+
+    // different struct field names fail
+    val e2 = intercept[AnalysisException] {
+      wideDataDs.unpivot(
+        Array($"id"),
+        Array(
+          struct($"str1", $"int1".cast(LongType).as("int1")).as("str-int"),
+          struct($"str2", $"long1").as("str-long")
+        ),
+        "var",
+        "val")
+    }
+    checkError(
+      exception = e2,
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      parameters = Map("types" -> (
+        """\"STRUCT<str1: STRING, int1: BIGINT>\" \(`str-int`\), """ +
+          """\"STRUCT<str2: STRING, long1: BIGINT>\" \(`str-long`\)"""
+        )),
+      matchPVals = true)
+  }
+
+  test("unpivot via sql") {
+    wideDataDs.createOrReplaceTempView("wideData")
+    Seq(
+      // "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
+      // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
+      // "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
+      // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
+      "SELECT * FROM wideData UNPIVOT ((i, l) for variable in ((int1, long1) as `li`))",
+    ).foreach { sql =>
+      println(sql)
+      spark.sql(sql).show(false)
+      println()
+    }
+
+    checkAnswer(
+      spark.sql("SELECT * FROM wideData"),
+      Seq()
+    )
   }
 }
 
