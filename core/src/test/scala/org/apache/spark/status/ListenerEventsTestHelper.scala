@@ -19,8 +19,6 @@ package org.apache.spark.status
 
 import java.util.Properties
 
-import scala.collection.immutable.Map
-
 import org.apache.spark.{AccumulatorSuite, SparkContext, Success, TaskState}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
