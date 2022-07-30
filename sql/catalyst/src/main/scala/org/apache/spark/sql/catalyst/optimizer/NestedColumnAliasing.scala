@@ -184,9 +184,20 @@ object NestedColumnAliasing {
       plan: LogicalPlan,
       nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
-    plan.withNewChildren(plan.children.map { plan =>
-      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
-    }).transformExpressions {
+    val newChildPlan = plan match {
+      case g: Generate =>
+        g.withNewChildren(g.children.map { childPlan =>
+          val origOutput = childPlan.output
+          val fromAlias = childPlan.output.flatMap(a => attrToAliases.getOrElse(a, Nil))
+          Project(origOutput ++ fromAlias, childPlan)
+        })
+      case p =>
+        p.withNewChildren(p.children.map { childPlan =>
+          Project(childPlan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), childPlan)
+        })
+    }
+
+    newChildPlan.transformExpressions {
       case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
         nestedFieldToAlias(f.canonicalized).toAttribute
     }
