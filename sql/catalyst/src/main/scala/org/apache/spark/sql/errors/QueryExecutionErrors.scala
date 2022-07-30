@@ -89,7 +89,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = null,
+      context = Array.empty,
       summary = "")
   }
 
@@ -2061,7 +2061,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         s"add ${toSQLValue(amount, IntegerType)} $unit to " +
         s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"),
-      context = null,
+      context = Array.empty,
       summary = "")
   }
 
