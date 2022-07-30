@@ -1228,9 +1228,7 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = BooleanType
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1331,7 +1329,7 @@ case class ArrayContains(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant {
+  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -1347,8 +1345,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
   } else {
     bruteForceEval _
   }
-
-  override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = {
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
