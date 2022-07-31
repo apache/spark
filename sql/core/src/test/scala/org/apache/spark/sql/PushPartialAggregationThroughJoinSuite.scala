@@ -72,12 +72,19 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
         |  (3, 10002004),
         |  (3, 10002004)
       """.stripMargin)
+
+    sql("ANALYZE TABLE store_sales COMPUTE STATISTICS FOR ALL COLUMNS")
+    sql("ANALYZE TABLE item COMPUTE STATISTICS FOR ALL COLUMNS")
+
+    conf.setConf(SQLConf.CBO_ENABLED, true)
   }
 
   override protected def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS store_sales")
       sql("DROP TABLE IF EXISTS item")
+
+      conf.unsetConf(SQLConf.CBO_ENABLED)
     } finally {
       super.afterAll()
     }
@@ -86,35 +93,46 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("sum") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  SUM(ss_sales_price)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  SUM(ss_sales_price)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            if (ansi) {
-              val error = intercept[SparkException] {
-                df.collect()
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
               }
-              assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
-            } else {
-              checkAnswer(
-                df,
-                Row(10002004, BigDecimal("7999999999999999999999999999999994.2540")) ::
-                Row(10002003, BigDecimal("65516.1909")) ::
-                Row(7003002, null) :: Nil)
+              if (ansi) {
+                val error = intercept[SparkException] {
+                  df.collect()
+                }
+                assert(error.toString contains "[ARITHMETIC_OVERFLOW] Overflow in sum of decimals")
+              } else {
+                checkAnswer(
+                  df,
+                  Row(10002004, BigDecimal("7999999999999999999999999999999994.2540")) ::
+                  Row(10002003, BigDecimal("65516.1909")) ::
+                  Row(7003002, null) :: Nil)
+              }
             }
           }
         }
@@ -125,32 +143,43 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("count") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  count(ss_sales_price),
-                |  count(*),
-                |  count(1),
-                |  count(2)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  count(ss_sales_price),
+                  |  count(*),
+                  |  count(1),
+                  |  count(2)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            checkAnswer(
-              df,
-              Row(10002004, 8, 8, 8, 8) ::
-              Row(10002003, 12, 15, 15, 15) ::
-              Row(7003002, 6, 6, 6, 6) :: Nil)
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
+              }
+              checkAnswer(
+                df,
+                Row(10002004, 8, 8, 8, 8) ::
+                Row(10002003, 12, 15, 15, 15) ::
+                Row(7003002, 6, 6, 6, 6) :: Nil)
+            }
           }
         }
       }
@@ -160,32 +189,43 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("first and last") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  first(ss_sales_price),
-                |  last(ss_sales_price)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  first(ss_sales_price),
+                  |  last(ss_sales_price)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            checkAnswer(
-              df,
-              Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
-                BigDecimal("999999999999999999999999999999999.2823")) ::
-              Row(10002003, BigDecimal("6874.6012"), null) ::
-              Row(7003002, BigDecimal("9999999999999999999999999999999999.6012"),
-                BigDecimal("9999999999999999999999999999999999.2856")) :: Nil)
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
+              }
+              checkAnswer(
+                df,
+                Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
+                  BigDecimal("999999999999999999999999999999999.2823")) ::
+                Row(10002003, BigDecimal("6874.6012"), null) ::
+                Row(7003002, BigDecimal("9999999999999999999999999999999999.6012"),
+                  BigDecimal("9999999999999999999999999999999999.2856")) :: Nil)
+            }
           }
         }
       }
@@ -195,32 +235,43 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("min and max") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  min(ss_sales_price),
-                |  max(ss_sales_price)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  min(ss_sales_price),
+                  |  max(ss_sales_price)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            checkAnswer(
-              df,
-              Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
-                BigDecimal("999999999999999999999999999999999.2823")) ::
-              Row(10002003, BigDecimal("2828.9223"), BigDecimal("6874.6012")) ::
-              Row(7003002, BigDecimal("9999999999999999999999999999999999.2856"),
-                BigDecimal("9999999999999999999999999999999999.9234")) :: Nil)
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
+              }
+              checkAnswer(
+                df,
+                Row(10002004, BigDecimal("999999999999999999999999999999999.2812"),
+                  BigDecimal("999999999999999999999999999999999.2823")) ::
+                Row(10002003, BigDecimal("2828.9223"), BigDecimal("6874.6012")) ::
+                Row(7003002, BigDecimal("9999999999999999999999999999999999.2856"),
+                  BigDecimal("9999999999999999999999999999999999.9234")) :: Nil)
+            }
           }
         }
       }
@@ -230,35 +281,46 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("avg") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  avg(ss_sales_price)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  avg(ss_sales_price)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            if (ansi) {
-              val error = intercept[SparkException] {
-                df.collect()
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
               }
-              assert(error.toString contains "SparkArithmeticException")
-            } else {
-              checkAnswer(
-                df,
-                Row(10002004, null) ::
-                Row(10002003, BigDecimal("5459.68257500")) ::
-                Row(7003002, null) :: Nil)
+              if (ansi) {
+                val error = intercept[SparkException] {
+                  df.collect()
+                }
+                assert(error.toString contains "SparkArithmeticException")
+              } else {
+                checkAnswer(
+                  df,
+                  Row(10002004, null) ::
+                  Row(10002003, BigDecimal("5459.68257500")) ::
+                  Row(7003002, null) :: Nil)
+              }
             }
           }
         }
@@ -269,45 +331,56 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
   test("aggregate with Literal") {
     Seq(-1, 1000000000L).foreach { broadcastThreshold =>
       Seq(true, false).foreach { pushAgg =>
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(
-            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-            SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-            SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-            val df = sql(
-              """
-                |SELECT
-                |  item.i_brand_id,
-                |  count(1),
-                |  count(2),
-                |  sum(0),
-                |  sum(1),
-                |  sum(2),
-                |  sum(2.5),
-                |  sum(3.5BD),
-                |  min(1),
-                |  min(2),
-                |  max(1),
-                |  max(2),
-                |  first(1),
-                |  first(2),
-                |  last(1),
-                |  last(2),
-                |  avg(1),
-                |  avg(2)
-                |FROM store_sales, item
-                |WHERE store_sales.ss_item_sk = item.i_item_sk
-                |GROUP BY item.i_brand_id
-              """.stripMargin)
+        Seq(0.1, 0.5, 1.0).foreach { ratio =>
+          Seq(true, false).foreach { ansi =>
+            withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+              val df = sql(
+                """
+                  |SELECT
+                  |  item.i_brand_id,
+                  |  count(1),
+                  |  count(2),
+                  |  sum(0),
+                  |  sum(1),
+                  |  sum(2),
+                  |  sum(2.5),
+                  |  sum(3.5BD),
+                  |  min(1),
+                  |  min(2),
+                  |  max(1),
+                  |  max(2),
+                  |  first(1),
+                  |  first(2),
+                  |  last(1),
+                  |  last(2),
+                  |  avg(1),
+                  |  avg(2)
+                  |FROM store_sales, item
+                  |WHERE store_sales.ss_item_sk = item.i_item_sk
+                  |GROUP BY item.i_brand_id
+                """.stripMargin)
 
-            val optimizedPlan = df.queryExecution.optimizedPlan
-            assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-            checkAnswer(
-              df,
-              Row(10002004, 8, 8, 0, 8, 16, 20.0, 28.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
-              Row(10002003, 15, 15, 0, 15, 30, 37.5, 52.5, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
-              Row(7003002, 6, 6, 0, 6, 12, 15.0, 21.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) :: Nil)
+              val optimizedPlan = df.queryExecution.optimizedPlan
+              val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+              if (pushAgg) {
+                ratio match {
+                  case 0.1 => assert(partialAggCnt === 0)
+                  case 0.5 => assert(partialAggCnt === 1)
+                  case 1.0 => assert(partialAggCnt === 2)
+                }
+              } else {
+                assert(partialAggCnt === 0)
+              }
+              checkAnswer(
+                df,
+                Row(10002004, 8, 8, 0, 8, 16, 20.0, 28.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
+                Row(10002003, 15, 15, 0, 15, 30, 37.5, 52.5, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) ::
+                Row(7003002, 6, 6, 0, 6, 12, 15.0, 21.0, 1, 2, 1, 2, 1, 2, 1, 2, 1.0, 2.0) :: Nil)
+            }
           }
         }
       }
@@ -319,27 +392,38 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
     test(s"query empty result: $aggExp") {
       Seq(-1, 1000000000L).foreach { broadcastThreshold =>
         Seq(true, false).foreach { pushAgg =>
-          Seq(true, false).foreach { ansi =>
-            withSQLConf(
-              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-              val df = sql(
-                s"""
-                  |SELECT
-                  |  $aggExp
-                  |FROM store_sales, item
-                  |WHERE store_sales.ss_item_sk = item.i_item_sk AND ss_item_sk < 0
-                """.stripMargin)
+          Seq(0.1, 0.5, 1.0).foreach { ratio =>
+            Seq(true, false).foreach { ansi =>
+              withSQLConf(
+                SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+                SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+                SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+                SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+                val df = sql(
+                  s"""
+                    |SELECT
+                    |  $aggExp
+                    |FROM store_sales, item
+                    |WHERE store_sales.ss_item_sk = item.i_item_sk AND ss_item_sk < 0
+                  """.stripMargin)
 
-              val optimizedPlan = df.queryExecution.optimizedPlan
-              if (aggExp.startsWith("cast(count") || aggExp.startsWith("count")) {
-                assert(!optimizedPlan.exists(_.isInstanceOf[PartialAggregate]))
-                checkAnswer(df, Row(0) :: Nil)
-              } else {
-                assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-                checkAnswer(df, Row(null) :: Nil)
+                val optimizedPlan = df.queryExecution.optimizedPlan
+                if (aggExp.startsWith("cast(count") || aggExp.startsWith("count")) {
+                  assert(!optimizedPlan.exists(_.isInstanceOf[PartialAggregate]))
+                  checkAnswer(df, Row(0) :: Nil)
+                } else {
+                  val optimizedPlan = df.queryExecution.optimizedPlan
+                  val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+                  if (broadcastThreshold == -1 && pushAgg) {
+                    ratio match {
+                      case 0.1 | 0.5 => assert(partialAggCnt === 0)
+                      case 1.0 => assert(partialAggCnt === 2)
+                    }
+                  } else {
+                    assert(partialAggCnt === 0)
+                  }
+                  checkAnswer(df, Row(null) :: Nil)
+                }
               }
             }
           }
@@ -350,27 +434,38 @@ class PushPartialAggregationThroughJoinSuite extends QueryTest
     test(s"query empty result and cast to string type: $aggExp") {
       Seq(-1, 1000000000L).foreach { broadcastThreshold =>
         Seq(true, false).foreach { pushAgg =>
-          Seq(true, false).foreach { ansi =>
-            withSQLConf(
-              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
-              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
-              SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0",
-              SQLConf.ANSI_ENABLED.key -> s"$ansi") {
-              val df = sql(
-                s"""
-                   |SELECT
-                   |  cast($aggExp as string)
-                   |FROM store_sales, item
-                   |WHERE store_sales.ss_item_sk = item.i_item_sk AND ss_item_sk < 0
-                """.stripMargin)
+          Seq(0.1, 0.5, 1.0).foreach { ratio =>
+            Seq(true, false).foreach { ansi =>
+              withSQLConf(
+                SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$broadcastThreshold",
+                SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_ENABLED.key -> s"$pushAgg",
+                SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> s"$ratio",
+                SQLConf.ANSI_ENABLED.key -> s"$ansi") {
+                val df = sql(
+                  s"""
+                     |SELECT
+                     |  cast($aggExp as string)
+                     |FROM store_sales, item
+                     |WHERE store_sales.ss_item_sk = item.i_item_sk AND ss_item_sk < 0
+                  """.stripMargin)
 
-              val optimizedPlan = df.queryExecution.optimizedPlan
-              if (aggExp.startsWith("count")) {
-                assert(!optimizedPlan.exists(_.isInstanceOf[PartialAggregate]))
-                checkAnswer(df, Row("0") :: Nil)
-              } else {
-                assert(optimizedPlan.exists(_.isInstanceOf[PartialAggregate]) === pushAgg)
-                checkAnswer(df, Row(null) :: Nil)
+                val optimizedPlan = df.queryExecution.optimizedPlan
+                if (aggExp.startsWith("count")) {
+                  assert(!optimizedPlan.exists(_.isInstanceOf[PartialAggregate]))
+                  checkAnswer(df, Row("0") :: Nil)
+                } else {
+                  val optimizedPlan = df.queryExecution.optimizedPlan
+                  val partialAggCnt = optimizedPlan.collect { case p: PartialAggregate => p }.size
+                  if (broadcastThreshold == -1 && pushAgg) {
+                    ratio match {
+                      case 0.1 | 0.5 => assert(partialAggCnt === 0)
+                      case 1.0 => assert(partialAggCnt === 2)
+                    }
+                  } else {
+                    assert(partialAggCnt === 0)
+                  }
+                  checkAnswer(df, Row(null) :: Nil)
+                }
               }
             }
           }
