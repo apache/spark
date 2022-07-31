@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 from typing import List, Union, cast, get_args, TYPE_CHECKING
 
 import pyspark.sql.connect.proto as proto
@@ -26,6 +43,11 @@ class Expression(object):
 
 
 class LiteralExpression(Expression):
+    """A literal expression.
+
+    The Python types are converted best effort into the relevant proto types. On the Spark Connect
+    server side, the proto types are converted to the Catalyst equivalents."""
+
     def __init__(self, value: PrimitiveType) -> None:  # type: ignore[name-defined]
         super().__init__()
         self._value = value

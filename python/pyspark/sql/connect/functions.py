@@ -15,4 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.column import ColumnRef
+
+
+def col(x: str) -> ColumnRef:
+    return ColumnRef(x)

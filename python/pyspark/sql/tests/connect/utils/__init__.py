@@ -1,0 +1,1 @@
+from pyspark.sql.tests.connect.utils.spark_connect_test_utils import PlanOnlyTestFixture
