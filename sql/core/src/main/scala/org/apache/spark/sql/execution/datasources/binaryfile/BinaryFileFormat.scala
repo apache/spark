@@ -98,6 +98,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
+      .filter(_.isDefined).map(_.get)
     val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
@@ -158,38 +159,57 @@ object BinaryFileFormat {
     StructField(LENGTH, LongType, false) ::
     StructField(CONTENT, BinaryType, true) :: Nil)
 
-  private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
+  private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {
       case And(left, right) =>
-        s => createFilterFunction(left)(s) && createFilterFunction(right)(s)
+        val leftResultOptional = createFilterFunction(left)
+        val rightResultOptional = createFilterFunction(right)
+        (leftResultOptional, rightResultOptional) match {
+          case (Some(leftResult), Some(rightResult)) =>
+            Some(s => leftResult(s) && rightResult(s))
+          case (Some(leftResult), None) => Some(leftResult)
+          case (None, Some(rightResult)) => Some(rightResult)
+          case _ => Some(_ => true)
+        }
       case Or(left, right) =>
-        s => createFilterFunction(left)(s) || createFilterFunction(right)(s)
+        val leftResultOptional = createFilterFunction(left)
+        val rightResultOptional = createFilterFunction(right)
+        (leftResultOptional, rightResultOptional) match {
+          case (Some(leftResult), Some(rightResult)) =>
+            Some(s => leftResult(s) || rightResult(s))
+          case _ => Some(_ => true)
+        }
       case Not(child) =>
-        s => !createFilterFunction(child)(s)
+        val childResultOptional = createFilterFunction(child)
+        childResultOptional match {
+          case Some(childResult) =>
+            Some(s => !childResult(s))
+          case _ => Some(_ => true)
+        }
 
       case LessThan(LENGTH, value: Long) =>
-        _.getLen < value
+        Some(_.getLen < value)
       case LessThanOrEqual(LENGTH, value: Long) =>
-        _.getLen <= value
+        Some(_.getLen <= value)
       case GreaterThan(LENGTH, value: Long) =>
-        _.getLen > value
+        Some(_.getLen > value)
       case GreaterThanOrEqual(LENGTH, value: Long) =>
-        _.getLen >= value
+        Some(_.getLen >= value)
       case EqualTo(LENGTH, value: Long) =>
-        _.getLen == value
+        Some(_.getLen == value)
 
       case LessThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime < value.getTime
+        Some(_.getModificationTime < value.getTime)
       case LessThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime <= value.getTime
+        Some(_.getModificationTime <= value.getTime)
       case GreaterThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime > value.getTime
+        Some(_.getModificationTime > value.getTime)
       case GreaterThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime >= value.getTime
+        Some(_.getModificationTime >= value.getTime)
       case EqualTo(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime == value.getTime
+        Some(_.getModificationTime == value.getTime)
 
-      case _ => (_ => true)
+      case _ => None
     }
   }
 }
