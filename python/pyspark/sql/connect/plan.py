@@ -38,8 +38,13 @@ from pyspark.sql.connect.column import (
     SortOrder,
 )
 
+
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
+
+
+class InputValidationError(Exception):
+    pass
 
 
 class LogicalPlan(object):
@@ -81,7 +86,7 @@ class LogicalPlan(object):
         return test_plan == plan
 
     # TODO(martin.grund) explain , schema
-    def collect(self, session: "RemoteSparkSession", debug: bool = False):
+    def collect(self, session: "RemoteSparkSession" = None, debug: bool = False):
         plan = proto.Plan()
         plan.root.CopyFrom(self.plan(session))
 
@@ -131,6 +136,14 @@ class Project(LogicalPlan):
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias = None
+        self._verify_expressions()
+
+    def _verify_expressions(self):
+        for c in self._raw_columns:
+            if not isinstance(c, Expression):
+                raise InputValidationError(
+                    f"Only Expressions can be used for projections: '{c}'."
+                )
 
     def withAlias(self, alias) -> LogicalPlan:
         self.alias = alias

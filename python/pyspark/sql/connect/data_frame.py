@@ -118,7 +118,7 @@ class DataFrame(object):
         new_frame._session = session
         return new_frame
 
-    def select(self, *cols: ColumnOrName) -> "DataFrame":
+    def select(self, *cols: ColumnRef) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Project(self._plan, *cols), session=self._session
         )
