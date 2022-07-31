@@ -29,12 +29,6 @@
     ],
     "sqlState" : "22007"
   },
-  "CANNOT_INFER_DATE_WITHOUT_INFER_SCHEMA" : {
-    "message" : [
-      "Cannot infer date when schema inference is disabled."
-    ],
-    "sqlState" : "22007"
-  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal"

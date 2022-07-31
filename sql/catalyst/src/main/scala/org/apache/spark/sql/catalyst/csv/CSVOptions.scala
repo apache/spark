@@ -156,21 +156,18 @@ class CSVOptions(
    *
    * The flag is only enabled if inferSchema is set to true.
    */
-  val preferDate = {
-    val preferDateFlag = getBool("preferDate")
-    if (preferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+  val inferDate = {
+    val inferDateFlag = getBool("inferDate")
+    if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
     }
-    if (preferDateFlag && !inferSchemaFlag) {
-      throw QueryExecutionErrors.inferDateWithoutInferSchemaError()
-    }
-    preferDateFlag
+    inferDateFlag
   }
 
-  // Provide a default value for dateFormatInRead when preferDate. This ensures that the
+  // Provide a default value for dateFormatInRead when inferDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
-    if (preferDate) {
+    if (inferDate) {
       Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
     } else {
       parameters.get("dateFormat")
