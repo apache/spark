@@ -14,9 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from pyspark.sql.connect.column import ColumnRef
+from typing import TYPE_CHECKING
+from pyspark.sql.connect.column import ColumnRef, LiteralExpression
+from pyspark.sql.connect.column import PrimitiveType
 
 
 def col(x: str) -> ColumnRef:
     return ColumnRef(x)
+
+
+def lit(x: PrimitiveType) -> LiteralExpression:
+    return LiteralExpression(x)
