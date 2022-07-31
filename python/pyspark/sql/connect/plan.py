@@ -130,6 +130,16 @@ class Read(LogicalPlan):
 
 
 class Project(LogicalPlan):
+    """Logical plan object for a projection.
+
+    All input arguments are directly serialized into the corresponding protocol buffer
+    objects. This class only provides very limited error handling and input validation.
+
+    To be compatible with PySpark, we validate that the input arguments are all
+    expressions to be able to serialize them to the server.
+
+    """
+
     def __init__(
         self, child: Optional["LogicalPlan"], *columns: ExpressionOrString
     ) -> None:
@@ -139,6 +149,7 @@ class Project(LogicalPlan):
         self._verify_expressions()
 
     def _verify_expressions(self):
+        """Ensures that all input arguments are instances of Expression."""
         for c in self._raw_columns:
             if not isinstance(c, Expression):
                 raise InputValidationError(
