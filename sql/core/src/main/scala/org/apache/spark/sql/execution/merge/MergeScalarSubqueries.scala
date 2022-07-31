@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.execution.merge
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
