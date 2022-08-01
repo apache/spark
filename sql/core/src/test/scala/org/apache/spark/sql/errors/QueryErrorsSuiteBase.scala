@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -29,20 +28,8 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       errorSubClass: Option[String] = None,
       sqlState: String,
       parameters: Map[String, String]): Unit = {
-    val exception = intercept[ParseException] {
-      sql(sqlText)
-    }
-    checkParsingError(exception, errorClass, errorSubClass, sqlState, parameters)
-  }
-
-  def checkParsingError(
-      exception: Exception with SparkThrowable,
-      errorClass: String,
-      errorSubClass: Option[String] = None,
-      sqlState: String,
-      parameters: Map[String, String]): Unit = {
     checkError(
-      exception = exception,
+      exception = intercept[ParseException](sql(sqlText)),
       errorClass = errorClass,
       errorSubClass = errorSubClass,
       sqlState = Some(sqlState),

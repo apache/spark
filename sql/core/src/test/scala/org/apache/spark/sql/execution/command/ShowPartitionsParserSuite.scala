@@ -48,7 +48,7 @@ class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
   }
 
   test("empty values in non-optional partition specs") {
-    checkParsingError(
+    checkError(
       exception = intercept[ParseException] {
         new SparkSqlParser().parsePlan("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
       },

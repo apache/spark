@@ -47,7 +47,7 @@ class TruncateTableParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
   }
 
   test("empty values in non-optional partition specs") {
-    checkParsingError(
+    checkError(
       exception = intercept[ParseException] {
         parsePlan("TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)")
       },
