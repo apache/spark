@@ -6266,7 +6266,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        axis : {None}
+        axis : None
             Dummy argument for consistency with Series.
         skipna : bool, default True
             Exclude NA/null values.
@@ -6330,7 +6330,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        axis : {None}
+        axis : None
             Dummy argument for consistency with Series.
         skipna : bool, default True
             Exclude NA/null values.
