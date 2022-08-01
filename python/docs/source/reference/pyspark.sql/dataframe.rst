@@ -113,6 +113,7 @@ DataFrame
     DataFrame.unionAll
     DataFrame.unionByName
     DataFrame.unpersist
+    DataFrame.unpivot
     DataFrame.where
     DataFrame.withColumn
     DataFrame.withColumns
