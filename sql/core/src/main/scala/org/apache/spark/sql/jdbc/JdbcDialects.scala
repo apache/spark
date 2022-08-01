@@ -222,7 +222,7 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
-  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     override def visitLiteral(literal: Literal[_]): String = {
       compileValue(
         CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString

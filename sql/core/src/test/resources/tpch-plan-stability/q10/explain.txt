@@ -151,5 +151,5 @@ Results [8]: [c_custkey#1, c_name#2, sum((l_extendedprice#13 * (1 - l_discount#1
 
 (27) TakeOrderedAndProject
 Input [8]: [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
-Arguments: 20, 0, [revenue#26 DESC NULLS LAST], [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
+Arguments: 20, [revenue#26 DESC NULLS LAST], [c_custkey#1, c_name#2, revenue#26, c_acctbal#6, n_name#18, c_address#3, c_phone#5, c_comment#7]
 

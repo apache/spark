@@ -211,5 +211,5 @@ Results [2]: [s_name#2, count(1)#26 AS numwait#27]
 
 (38) TakeOrderedAndProject
 Input [2]: [s_name#2, numwait#27]
-Arguments: 100, 0, [numwait#27 DESC NULLS LAST, s_name#2 ASC NULLS FIRST], [s_name#2, numwait#27]
+Arguments: 100, [numwait#27 DESC NULLS LAST, s_name#2 ASC NULLS FIRST], [s_name#2, numwait#27]
 

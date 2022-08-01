@@ -171,5 +171,5 @@ Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5
 
 (30) TakeOrderedAndProject
 Input [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#27]
-Arguments: 100, 0, [o_totalprice#5 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#27]
+Arguments: 100, [o_totalprice#5 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#27]
 

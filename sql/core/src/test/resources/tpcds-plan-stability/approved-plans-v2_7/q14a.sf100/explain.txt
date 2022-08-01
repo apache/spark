@@ -811,7 +811,7 @@ Results [6]: [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sum_sa
 
 (143) TakeOrderedAndProject
 Input [6]: [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sum_sales#120, number_sales#121]
-Arguments: 100, 0, [channel#62 ASC NULLS FIRST, i_brand_id#48 ASC NULLS FIRST, i_class_id#49 ASC NULLS FIRST, i_category_id#50 ASC NULLS FIRST], [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sum_sales#120, number_sales#121]
+Arguments: 100, [channel#62 ASC NULLS FIRST, i_brand_id#48 ASC NULLS FIRST, i_class_id#49 ASC NULLS FIRST, i_category_id#50 ASC NULLS FIRST], [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sum_sales#120, number_sales#121]
 
 ===== Subqueries =====
 

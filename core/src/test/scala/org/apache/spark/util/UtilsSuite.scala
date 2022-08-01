@@ -478,8 +478,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
     }
   }
-
-  test("SPARK-35907: createDirectory") {
+  ignore("SPARK-35907: createDirectory") {
     val tmpDir = new File(System.getProperty("java.io.tmpdir"))
     val testDir = new File(tmpDir, "createDirectory" + System.nanoTime())
     val testDirPath = testDir.getCanonicalPath
