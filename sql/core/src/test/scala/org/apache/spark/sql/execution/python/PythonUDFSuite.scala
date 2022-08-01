@@ -125,15 +125,6 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
 
     val grouping = inputAttributes.slice(0, 1)
     val dedupSchema = inputAttributes
-    val outputSchema = StructType(Seq(
-      StructField("key", StructType(Seq(
-        StructField("id", IntegerType)
-      ))),
-      StructField("val", StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("flt", DoubleType),
-      )))
-    ))
 
     val actual = PandasGroupUtils.groupBatchAndProject(
       input, grouping, inputAttributes, dedupSchema, 10000)

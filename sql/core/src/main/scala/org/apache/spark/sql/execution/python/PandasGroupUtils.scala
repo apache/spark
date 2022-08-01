@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.BasePythonRunner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.{GroupBatchIterator, GroupedIterator, SparkPlan}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -78,7 +78,13 @@ private[python] object PandasGroupUtils {
       inputSchema: Seq[Attribute],
       dedupSchema: Seq[Attribute],
       batchSize: Int): Iterator[Iterator[InternalRow]] = {
-    input.grouped(batchSize).map(_.iterator)
+    val groupBatchIter = GroupBatchIterator(input, groupingAttributes, inputSchema, batchSize)
+    // TODO: how to prepend the key column do the dedup projection?
+    // val keyDataType = StructType.fromAttributes(groupingAttributes)
+    // val dedupSchemaWithKey = AttributeReference("_key", keyDataType)() +: dedupSchema
+    // val dedupProj = UnsafeProjection.create(dedupSchemaWithKey, inputSchema)
+    // groupBatchIter.map(_.map(dedupProj))
+    groupBatchIter
   }
 
   /**
