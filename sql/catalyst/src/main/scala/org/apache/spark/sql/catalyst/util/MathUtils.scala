@@ -27,37 +27,37 @@ object MathUtils {
 
   def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Int, b: Int, context: Option[SQLQueryContext]): Int = {
+  def addExact(a: Int, b: Int, context: SQLQueryContext): Int = {
     withOverflow(Math.addExact(a, b), hint = "try_add", context)
   }
 
   def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
 
-  def addExact(a: Long, b: Long, context: Option[SQLQueryContext]): Long = {
+  def addExact(a: Long, b: Long, context: SQLQueryContext): Long = {
     withOverflow(Math.addExact(a, b), hint = "try_add", context)
   }
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Int, b: Int, context: Option[SQLQueryContext]): Int = {
+  def subtractExact(a: Int, b: Int, context: SQLQueryContext): Int = {
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", context)
   }
 
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
 
-  def subtractExact(a: Long, b: Long, context: Option[SQLQueryContext]): Long = {
+  def subtractExact(a: Long, b: Long, context: SQLQueryContext): Long = {
     withOverflow(Math.subtractExact(a, b), hint = "try_subtract", context)
   }
 
   def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Int, b: Int, context: Option[SQLQueryContext]): Int = {
+  def multiplyExact(a: Int, b: Int, context: SQLQueryContext): Int = {
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", context)
   }
 
   def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
 
-  def multiplyExact(a: Long, b: Long, context: Option[SQLQueryContext]): Long = {
+  def multiplyExact(a: Long, b: Long, context: SQLQueryContext): Long = {
     withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", context)
   }
 
@@ -78,7 +78,7 @@ object MathUtils {
   private def withOverflow[A](
       f: => A,
       hint: String = "",
-      context: Option[SQLQueryContext] = None): A = {
+      context: SQLQueryContext = null): A = {
     try {
       f
     } catch {
