@@ -2797,13 +2797,13 @@ abstract class CSVSuite
       "inferSchema" -> "true",
       "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
       "dateFormat" -> "yyyy-MM-dd",
-      "inferDate" -> "true")
+      "prefersDate" -> "true")
     val options2 = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "inferDate" -> "true")
+      "prefersDate" -> "true")
 
-    // Error should be thrown when attempting to inferDate with Legacy parser
+    // Error should be thrown when attempting to prefersDate with Legacy parser
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       val msg = intercept[IllegalArgumentException] {
         spark.read
@@ -2840,7 +2840,7 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-39904: Parse incorrect timestamp values with inferDate=true") {
+  test("SPARK-39904: Parse incorrect timestamp values with prefersDate=true") {
     withTempPath { path =>
       Seq(
         "2020-02-01 12:34:56",
@@ -2855,7 +2855,7 @@ abstract class CSVSuite
 
       val output = spark.read
         .schema(schema)
-        .option("inferDate", "true")
+        .option("prefersDate", "true")
         .csv(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {

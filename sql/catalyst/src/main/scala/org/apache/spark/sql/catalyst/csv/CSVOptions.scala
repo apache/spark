@@ -160,18 +160,18 @@ class CSVOptions(
    * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
    * extra trailing characters.
    */
-  val inferDate = {
-    val inferDateFlag = getBool("inferDate")
+  val prefersDate = {
+    val inferDateFlag = getBool("prefersDate")
     if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
     }
     inferDateFlag
   }
 
-  // Provide a default value for dateFormatInRead when inferDate. This ensures that the
+  // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
-    if (inferDate) {
+    if (prefersDate) {
       Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
     } else {
       parameters.get("dateFormat")
