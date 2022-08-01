@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -150,12 +150,6 @@ class ResourceProfile(
     }
   }
 
-  // Get target executors' custom resources.
-  private[spark] def getTargetCustomExecutorResources(
-      sparkConf: SparkConf): Map[String, ExecutorResourceRequest] = {
-    ResourceProfile.getCustomExecutorResources(this)
-  }
-
   // executor cores config is not set for some masters by default and the default value
   // only applies to yarn/k8s
   private def shouldCheckExecutorCores(sparkConf: SparkConf): Boolean = {
@@ -194,7 +188,7 @@ class ResourceProfile(
     numPartsPerResourceMap(ResourceProfile.CORES) = 1
     val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
     taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
-    val execResourceToCheck = getTargetCustomExecutorResources(sparkConf)
+    val execResourceToCheck = ResourceProfile.getCustomExecutorResources(this)
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsPerResourceMap(rName) = 1
@@ -276,19 +270,14 @@ class ResourceProfile(
 @Evolving
 @Since("3.4.0")
 class TaskResourceProfile(override val taskResources: Map[String, TaskResourceRequest])
-  extends ResourceProfile(ResourceProfile.getOrCreateDefaultProfile(SparkEnv.get.conf).executorResources, taskResources) {
+  extends ResourceProfile(
+    ResourceProfile.getOrCreateDefaultProfile(SparkEnv.get.conf).executorResources,
+    taskResources) {
 
   /**
    * Target executor's resource profile id, used for schedule.
    */
   override def targetExecutorRpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-
-  // Get target executors' custom resources.
-  override private[spark] def getTargetCustomExecutorResources(
-      sparkConf: SparkConf): Map[String, ExecutorResourceRequest] = {
-    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    ResourceProfile.getCustomExecutorResources(defaultResourceProfile)
-  }
 }
 
 object ResourceProfile extends Logging {
