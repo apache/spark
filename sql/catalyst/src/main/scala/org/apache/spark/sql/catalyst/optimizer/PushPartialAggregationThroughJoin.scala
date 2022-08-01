@@ -75,7 +75,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
 
   /**
    * Supported join:
-   * 1. Join will expansion
+   * 1. Join will expansion a lot.
    * 2. It is not broadcast hash join
    */
   private def supportedJoin(join: Join): Boolean = {
@@ -133,34 +133,37 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   private def replaceAliasName(
       expr: NamedExpression,
       currentSideAliasMap: Map[Expression, Alias],
-      currentSideCnt: Option[Attribute],
+      currentSideHasBenefit: Boolean,
       otherSideCnt: Option[Attribute]): NamedExpression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId.
     expr.mapChildren(_.transformUp {
       case e @ Sum(_, useAnsiAdd, dt) if currentSideAliasMap.contains(e.canonicalized) =>
-        val child = currentSideCnt.map(_ => currentSideAliasMap(e.canonicalized).toAttribute)
-          .getOrElse(e.child)
         val resultType = e.dataType
         val countType = if (resultType.isInstanceOf[DecimalType]) LongDecimal else resultType
+        val child = if (currentSideHasBenefit) {
+          currentSideAliasMap(e.canonicalized).toAttribute.cast(resultType)
+        } else {
+          e.child
+        }
         val newChild =
-          otherSideCnt.map(c => Multiply(child.cast(resultType), c.cast(countType), useAnsiAdd)).
-            getOrElse(child.cast(resultType))
+          otherSideCnt.map(c => Multiply(child, c.cast(countType), useAnsiAdd)).getOrElse(child)
         Sum(newChild, useAnsiAdd, Some(dt.getOrElse(resultType)))
       case e: Count if currentSideAliasMap.contains(e.canonicalized) =>
-        val child = currentSideCnt.map(_ => currentSideAliasMap(e.canonicalized).toAttribute)
-          .getOrElse(If(e.children.map(IsNull).reduce(Or), Literal(0L, LongType),
-            Literal(1L, LongType)))
-        val newChild = otherSideCnt.map(c => Multiply(child, c))
-          .getOrElse(currentSideAliasMap(e.canonicalized).toAttribute)
+        val child = if (currentSideHasBenefit) {
+          currentSideAliasMap(e.canonicalized).toAttribute
+        } else {
+          If(e.children.map(IsNull).reduce(Or), Literal(0L, LongType), Literal(1L, LongType))
+        }
+        val newChild = otherSideCnt.map(Multiply(child, _)).getOrElse(child)
         Sum(newChild, conf.ansiEnabled, Some(e.dataType))
-      case e: Min if currentSideCnt.nonEmpty && currentSideAliasMap.contains(e.canonicalized) =>
+      case e: Min if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
         e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: Max if currentSideCnt.nonEmpty && currentSideAliasMap.contains(e.canonicalized) =>
+      case e: Max if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
         e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: First if currentSideCnt.nonEmpty && currentSideAliasMap.contains(e.canonicalized) =>
+      case e: First if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
         e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: Last if currentSideCnt.nonEmpty && currentSideAliasMap.contains(e.canonicalized) =>
+      case e: Last if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
         e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
     }).asInstanceOf[NamedExpression]
   }
@@ -339,8 +342,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         val newJoin = join.copy(left = newLeft, right = newRight, condition = newCond)
 
         val newAggregateExps = rewrittenAgg.aggregateExpressions
-          .map(replaceAliasName(_, leftAliasMap, leftCntAttr, rightCntAttr))
-          .map(replaceAliasName(_, rightAliasMap, rightCntAttr, leftCntAttr))
+          .map(replaceAliasName(_, leftAliasMap, pushLeftHasBenefit, rightCntAttr))
+          .map(replaceAliasName(_, rightAliasMap, pushRightHasBenefit, leftCntAttr))
           .map { expr =>
             expr.mapChildren(_.transformUp {
               case e @ Count(Seq(IntegerLiteral(1))) =>
@@ -363,7 +366,13 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
             }).asInstanceOf[NamedExpression]
           }
 
-        val newAgg = rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
+        val newAgg = if (ExpressionSet(leftKeys).subsetOf(ExpressionSet(leftGroupExps)) ||
+          ExpressionSet(rightKeys).subsetOf(ExpressionSet(rightGroupExps))) {
+          FinalAggregate(rewrittenAgg.groupingExpressions, newAggregateExps, newJoin)
+        } else {
+          rewrittenAgg.copy(aggregateExpressions = newAggregateExps, child = newJoin)
+        }
+
         ResolveTimeZone(SimplifyCasts(CollapseProject(ColumnPruning(newAgg))))
       } else {
         agg

@@ -1197,6 +1197,22 @@ case class PartialAggregate(
     copy(child = newChild)
 }
 
+case class FinalAggregate(
+    override val  groupingExpressions: Seq[Expression],
+    override val  aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
+
+  override def withGroupingExpressions(groupingExpressions: Seq[Expression]): AggregateBase =
+    copy(groupingExpressions = groupingExpressions)
+
+  override def withAggregateExpressions(aggregateExpressions: Seq[NamedExpression]): AggregateBase =
+    copy(aggregateExpressions = aggregateExpressions)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FinalAggregate =
+    copy(child = newChild)
+}
+
 object Aggregate {
   def isAggregateBufferMutable(schema: StructType): Boolean = {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))

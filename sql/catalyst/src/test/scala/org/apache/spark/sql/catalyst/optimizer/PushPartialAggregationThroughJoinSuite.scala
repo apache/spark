@@ -116,8 +116,8 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
   private def sumWithDataType(
       sum: Expression,
       useAnsiAdd: Boolean = conf.ansiEnabled,
-      datatype: Option[DataType] = None): AggregateExpression = {
-    Sum(sum, useAnsiAdd, resultDataType = datatype).toAggregateExpression()
+      dataType: Option[DataType] = None): AggregateExpression = {
+    Sum(sum, useAnsiAdd, resultDataType = dataType).toAggregateExpression()
   }
 
   test("Push down sum") {
@@ -135,7 +135,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       correctLeft.join(correctRight,
         joinType = Inner, condition = Some('a === 'x))
       .select('b, '_pushed_sum_c, 'cnt)
-      .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, datatype = Some(LongType)).as("sum_c"))
+      .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, dataType = Some(LongType)).as("sum_c"))
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
@@ -155,9 +155,8 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
         condition = Some('a === 'x))
       .select('b, $"l.cnt", $"r.cnt")
-      .groupBy('b)(sumWithDataType($"l.cnt" * $"r.cnt", datatype = Some(LongType)).as("cnt"))
+      .groupBy('b)(sumWithDataType($"l.cnt" * $"r.cnt", dataType = Some(LongType)).as("cnt"))
       .analyze
-
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
@@ -169,7 +168,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
-      Seq('a, 'b, sumWithDataType('c, datatype = Some(DoubleType)).as("_pushed_sum_c"),
+      Seq('a, 'b, sumWithDataType('c, dataType = Some(DoubleType)).as("_pushed_sum_c"),
         count('c).as("_pushed_count_c")),
       testRelation1.select('a, 'b, 'c)).as("l")
     val correctRight = PartialAggregate(Seq('x),
@@ -250,10 +249,10 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         joinType = Inner, condition = Some('a === 'x))
         .select('b, $"l.cnt", $"r.cnt")
         .groupBy('b)(sumWithDataType(Literal(2).cast(LongType) * ($"l.cnt" * $"r.cnt"),
-          datatype = Some(LongType)).as("sum_2"),
+          dataType = Some(LongType)).as("sum_2"),
           sumWithDataType(CheckOverflow(Literal(BigDecimal("2.5")).cast(DecimalType(12, 1)) *
             ($"l.cnt" * $"r.cnt").cast(DecimalType(12, 1)), DecimalType(12, 1), !conf.ansiEnabled),
-            conf.ansiEnabled, datatype = Some(DecimalType(12, 1))).as("sum_25"),
+            conf.ansiEnabled, dataType = Some(DecimalType(12, 1))).as("sum_25"),
           avg(Literal(2)).as("avg_2"),
           min(Literal(2)).as("min_2"), max(Literal(2)).as("max_2"),
           first(Literal(2)).as("first_2"), last(Literal(2)).as("last_2"))
@@ -477,7 +476,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       correctLeft.join(correctRight,
         joinType = Inner, condition = Some('a === 'x))
         .select('b, '_pushed_sum_c, 'cnt)
-        .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, datatype = Some(LongType)).as("sum_c"))
+        .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, dataType = Some(LongType)).as("sum_c"))
         .analyzePlan
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
@@ -500,9 +499,31 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       correctLeft.join(correctRight,
         joinType = Inner, condition = Some('a === 'x))
         .select('b, '_pushed_sum_new_c, 'cnt)
-        .groupBy('b)(sumWithDataType('_pushed_sum_new_c * 'cnt, datatype = Some(LongType))
+        .groupBy('b)(sumWithDataType('_pushed_sum_new_c * 'cnt, dataType = Some(LongType))
           .as("sum_new_c"))
         .analyzePlan
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("Skip partial aggregate if if can't reduce data") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('a)(sum('c).as("sum_c"))
+      .analyze
+
+    val correctLeft = PartialAggregate(Seq('a), Seq('a, sum('c).as("_pushed_sum_c")),
+      testRelation1.select('a, 'c)).as("l")
+    val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
+      testRelation2.select('x)).as("r")
+
+    val correctAnswer =
+      FinalAggregate(
+        Seq('a),
+        Seq(sumWithDataType('_pushed_sum_c * 'cnt, dataType = Some(LongType)).as("sum_c")),
+        correctLeft.join(correctRight, joinType = Inner, condition = Some('a === 'x))
+          .select('a, '_pushed_sum_c, 'cnt))
+        .analyze
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
