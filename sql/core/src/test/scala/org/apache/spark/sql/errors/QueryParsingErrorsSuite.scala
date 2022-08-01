@@ -28,8 +28,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("LATERAL_NATURAL_JOIN"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("UNSUPPORTED_FEATURE: LATERAL join with USING join not supported") {
@@ -37,8 +36,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("LATERAL_JOIN_USING"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("UNSUPPORTED_FEATURE: Unsupported LATERAL join type") {
@@ -74,8 +72,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT * FROM a NATURAL CROSS JOIN b",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("NATURAL_CROSS_JOIN"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("INVALID_SQL_SYNTAX: redefine window") {
@@ -107,8 +104,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("TRANSFORM_DISTINCT_ALL"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("UNSUPPORTED_FEATURE: In-memory mode does not support TRANSFORM with serde") {
@@ -117,8 +113,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("TRANSFORM_NON_HIVE"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("INVALID_SQL_SYNTAX: Too many arguments for transform") {
@@ -258,20 +253,17 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      parameters = Map.empty)
+      sqlState = "42000")
 
     validateParsingError(
       sqlText = "   ",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      parameters = Map.empty)
+      sqlState = "42000")
 
     validateParsingError(
       sqlText = " \n",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      parameters = Map.empty)
+      sqlState = "42000")
   }
 
   test("PARSE_SYNTAX_ERROR: no viable input") {
@@ -369,8 +361,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 
   test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
@@ -431,7 +422,6 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = sql,
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
-      sqlState = "0A000",
-      parameters = Map.empty)
+      sqlState = "0A000")
   }
 }

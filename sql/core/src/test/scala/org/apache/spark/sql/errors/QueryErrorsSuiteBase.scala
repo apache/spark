@@ -27,7 +27,7 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       errorClass: String,
       errorSubClass: Option[String] = None,
       sqlState: String,
-      parameters: Map[String, String]): Unit = {
+      parameters: Map[String, String] = Map.empty): Unit = {
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
       errorClass = errorClass,
