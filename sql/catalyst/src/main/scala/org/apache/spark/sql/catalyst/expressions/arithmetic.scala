@@ -265,7 +265,7 @@ abstract class BinaryArithmetic extends BinaryOperator
   }
 
   protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
-    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, queryContext)
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, getContextOrNull())
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -285,11 +285,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = if (failOnError) {
-        ctx.addReferenceObj("errCtx", queryContext)
-      } else {
-        "scala.None$.MODULE$"
-      }
+      val errorContextCode = getContextOrNullCode(ctx, failOnError)
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -334,7 +330,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       })
     case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        val errorContext = getContextOrNullCode(ctx)
         val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
         s"""
            |${ev.value} = $mathUtils.${exactMathMethod.get}($eval1, $eval2, $errorContext);
@@ -414,9 +410,9 @@ case class Add(
     case _: YearMonthIntervalType =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
-      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], getContextOrNull())
     case _ => numeric.plus(input1, input2)
   }
 
@@ -483,9 +479,15 @@ case class Subtract(
     case _: YearMonthIntervalType =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.subtractExact(
+        input1.asInstanceOf[Int],
+        input2.asInstanceOf[Int],
+        getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.subtractExact(
+        input1.asInstanceOf[Long],
+        input2.asInstanceOf[Long],
+        getContextOrNull())
     case _ => numeric.minus(input1, input2)
   }
 
@@ -539,9 +541,15 @@ case class Multiply(
     case DecimalType.Fixed(precision, scale) =>
       checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
     case _: IntegerType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.multiplyExact(
+        input1.asInstanceOf[Int],
+        input2.asInstanceOf[Int],
+        getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.multiplyExact(
+        input1.asInstanceOf[Long],
+        input2.asInstanceOf[Long],
+        getContextOrNull())
     case _ => numeric.times(input1, input2)
   }
 
@@ -578,10 +586,10 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError(queryContext)
+          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
-          throw QueryExecutionErrors.overflowInIntegralDivideError(queryContext)
+          throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
         }
         evalOperation(input1, input2)
       }
@@ -603,11 +611,7 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContextCode = if (failOnError) {
-      ctx.addReferenceObj("errCtx", queryContext)
-    } else {
-      "scala.None$.MODULE$"
-    }
+    val errorContextCode = getContextOrNullCode(ctx, failOnError)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
@@ -962,7 +966,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError(queryContext)
+          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
         }
         pmodFunc(input1, input2)
       }
@@ -979,7 +983,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+    val errorContext = getContextOrNullCode(ctx)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"

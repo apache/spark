@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -278,8 +278,16 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
   }
 
   test("get tables by name") {
-    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", "tbl2"))
-      .map(_.identifier.table) == Seq("tbl1", "tbl2"))
+    val catalog = newBasicCatalog()
+    val tables = catalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
+    assert(tables.map(_.identifier.table).sorted == Seq("tbl1", "tbl2"))
+    assert(tables.forall(_.identifier.catalog.isDefined))
+
+    // After renaming a table, the identifier should still be qualified with catalog.
+    catalog.renameTable("db2", "tbl1", "tblone")
+    val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
+    assert(tables2.map(_.identifier.table).sorted == Seq("tbl2", "tblone"))
+    assert(tables2.forall(_.identifier.catalog.isDefined))
   }
 
   test("get tables by name when some tables do not exists") {
@@ -1029,7 +1037,7 @@ abstract class CatalogTestUtils {
       database: Option[String] = None,
       defaultColumns: Boolean = false): CatalogTable = {
     CatalogTable(
-      identifier = TableIdentifier(name, database),
+      identifier = CatalystIdentifier.attachSessionCatalog(TableIdentifier(name, database)),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
       schema = if (defaultColumns) {
@@ -1073,7 +1081,7 @@ abstract class CatalogTestUtils {
       name: String,
       props: Map[String, String]): CatalogTable = {
     CatalogTable(
-      identifier = TableIdentifier(name, Some(db)),
+      identifier = CatalystIdentifier.attachSessionCatalog(TableIdentifier(name, Some(db))),
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = new StructType()
@@ -1086,7 +1094,10 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[FunctionResource])
+    CatalogFunction(
+      CatalystIdentifier.attachSessionCatalog(FunctionIdentifier(name, database)),
+      funcClass,
+      Seq.empty[FunctionResource])
   }
 
   /**

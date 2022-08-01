@@ -89,7 +89,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = None,
+      context = Array.empty,
       summary = "")
   }
 
@@ -103,7 +103,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLId(columnName)),
-      context = None,
+      context = Array.empty,
       summary = ""
     )
   }
@@ -112,7 +112,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Decimal,
       decimalPrecision: Int,
       decimalScale: Int,
-      context: Option[SQLQueryContext] = None): ArithmeticException = {
+      context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(
@@ -120,7 +120,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
@@ -128,7 +128,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       value: Any,
       from: DataType,
       to: DataType,
-      context: Option[SQLQueryContext]): Throwable = {
+      context: SQLQueryContext): Throwable = {
     new SparkDateTimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -136,13 +136,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def invalidInputSyntaxForBooleanError(
       s: UTF8String,
-      context: Option[SQLQueryContext]): SparkRuntimeException = {
+      context: SQLQueryContext): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -150,14 +150,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(BooleanType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def invalidInputInCastToNumberError(
       to: DataType,
       s: UTF8String,
-      context: Option[SQLQueryContext]): SparkNumberFormatException = {
+      context: SQLQueryContext): SparkNumberFormatException = {
     new SparkNumberFormatException(
       errorClass = "CAST_INVALID_INPUT",
       messageParameters = Array(
@@ -165,7 +165,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(StringType),
         toSQLType(to),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
@@ -196,40 +196,40 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
-  def intervalDividedByZeroError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def intervalDividedByZeroError(context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
       messageParameters = Array.empty,
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
-      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
+      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
       messageParameters = Array(
         toSQLValue(index, IntegerType),
         toSQLValue(numElements, IntegerType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def invalidElementAtIndexError(
       index: Int,
       numElements: Int,
-      context: Option[SQLQueryContext]): ArrayIndexOutOfBoundsException = {
+      context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
@@ -237,20 +237,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
           toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def mapKeyNotExistError(
       key: Any,
       dataType: DataType,
-      context: Option[SQLQueryContext]): NoSuchElementException = {
+      context: SQLQueryContext): NoSuchElementException = {
     new SparkNoSuchElementException(
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(
         toSQLValue(key, dataType),
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
@@ -259,7 +259,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INVALID_FRACTION_OF_SECOND",
       errorSubClass = None,
       Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = None,
+      context = Array.empty,
       summary = "")
   }
 
@@ -268,7 +268,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       errorSubClass = None,
       Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = None,
+      context = Array.empty,
       summary = "")
   }
 
@@ -294,11 +294,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def overflowInSumOfDecimalError(context: SQLQueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
 
-  def overflowInIntegralDivideError(context: Option[SQLQueryContext]): ArithmeticException = {
+  def overflowInIntegralDivideError(context: SQLQueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
@@ -514,14 +514,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def arithmeticOverflowError(
       message: String,
       hint: String = "",
-      context: Option[SQLQueryContext] = None): ArithmeticException = {
+      context: SQLQueryContext = null): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
@@ -2061,7 +2061,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array(
         s"add ${toSQLValue(amount, IntegerType)} $unit to " +
         s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"),
-      context = None,
+      context = Array.empty,
       summary = "")
   }
 

@@ -210,9 +210,9 @@ function black_test {
     local BLACK_STATUS=
 
     # Skip check if black is not installed.
-    $BLACK_BUILD 2> /dev/null
+    $PYTHON_EXECUTABLE -c 'import black' &> /dev/null
     if [ $? -ne 0 ]; then
-        echo "The $BLACK_BUILD command was not found. Skipping black checks for now."
+        echo "The Python library providing 'black' module was not found. Skipping black checks for now."
         echo
         return
     fi
