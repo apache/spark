@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>inferDate</code></td>
     <td>false</td>
-    <td>Whether or not to infer columns that satisfy the <code>dateFormat</code> option as <code>Date</code>. Requires <code>inferSchema</code> to be <code>true</code>. When <code>false</code>, columns with dates will be inferred as <code>String</code> (or as <code>Timestamp</code> if it fits the <code>timestampFormat</code>).</td>
+    <td>Attempts to infer string columns that contain dates or timestamps as <code>Date</code> if the values satisfy <code>dateFormat</code> option and failed to be parsed by the respective formatter during schema inference (<code>inferSchema</code>). When used in conjunction with a user-provided schema, attempts parse timestamp columns as dates using <code>dateFormat</code> if they fail to conform to <code>timestampFormat</code>, the parsed values will be cast to timestamp type afterwards.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -176,8 +176,8 @@ Data source options of CSV can be set via:
   </tr>
   <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
-    <td>Enabled if the time parser policy is legacy or no custom date or timestamp pattern was provided</td>
-    <td>Allows to fall back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
+    <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
+    <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
     <td>read</td>
   </tr>
   <tr>

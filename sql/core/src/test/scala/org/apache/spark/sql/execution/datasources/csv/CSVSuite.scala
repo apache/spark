@@ -2840,15 +2840,40 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-39904: Fail to prefer dates if inferSchema=false") {
-    val msg = intercept[IllegalArgumentException] {
-      spark.read
-        .format("csv")
-        .option("inferSchema", "false")
+  test("SPARK-39904: Parse incorrect timestamp values with inferDate=true") {
+    withTempPath { path =>
+      Seq(
+        "2020-02-01 12:34:56",
+        "2020-02-02",
+        "invalid"
+      ).toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      val schema = new StructType()
+        .add("ts", TimestampType)
+
+      val output = spark.read
+        .schema(schema)
         .option("inferDate", "true")
-        .load(testFile(dateInferSchemaFile))
-    }.getMessage
-    assert(msg.contains("CANNOT_INFER_DATE_WITHOUT_INFER_SCHEMA"))
+        .csv(path.getAbsolutePath)
+
+      if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+        val msg = intercept[IllegalArgumentException] {
+          output.collect()
+        }.getMessage
+        assert(msg.contains("CANNOT_INFER_DATE"))
+      } else {
+        checkAnswer(
+          output,
+          Seq(
+            Row(Timestamp.valueOf("2020-02-01 12:34:56")),
+            Row(Timestamp.valueOf("2020-02-02 00:00:00")),
+            Row(null)
+          )
+        )
+      }
+    }
   }
 
   test("SPARK-39731: Correctly parse dates and timestamps with yyyyMMdd pattern") {
