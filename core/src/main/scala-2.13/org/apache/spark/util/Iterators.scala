@@ -25,7 +25,7 @@ object Iterators {
    * but it can avoid overflowing problem.
    */
   def size(iterator: Iterator[_]): Long = {
-    // For Scala 2.13, add check of `iterator.knownSize` refer to
+    // SPARK-39928: For Scala 2.13, add check of `iterator.knownSize` refer to
     // `IterableOnceOps#size` to reduce the performance gap with `iterator.size`.
     if (iterator.knownSize > 0) iterator.knownSize.toLong
     else {
