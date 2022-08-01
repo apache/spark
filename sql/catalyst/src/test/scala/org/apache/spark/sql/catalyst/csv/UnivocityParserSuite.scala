@@ -373,7 +373,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     assert(err.getMessage.contains("Illegal pattern character: n"))
   }
 
-  test("SPARK-39469: dates should be parsed correctly in a timestamp column when prefersDate=true") {
+  test("SPARK-39469: dates should be parsed correctly in timestamp column when prefersDate=true") {
     def checkDate(dataType: DataType): Unit = {
       val timestampsOptions =
         new CSVOptions(Map("prefersDate" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm",
