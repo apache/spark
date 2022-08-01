@@ -111,11 +111,11 @@ class DateOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
-        self.assertRaises(TypeError, lambda: self.psser ** self.some_date)
+        self.assertRaises(TypeError, lambda: self.psser**1)
+        self.assertRaises(TypeError, lambda: self.psser**self.some_date)
 
         for psser in self.pssers:
-            self.assertRaises(TypeError, lambda: self.psser ** psser)
+            self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -151,8 +151,8 @@ class DateOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
-        self.assertRaises(TypeError, lambda: self.some_date ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
+        self.assertRaises(TypeError, lambda: self.some_date**self.psser)
 
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)

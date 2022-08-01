@@ -457,7 +457,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             col("id").cast("double").alias("c"),
         )
         scalar_add = pandas_udf(lambda x, y: x + y, IntegerType())
-        scalar_power2 = pandas_udf(lambda x: 2 ** x, IntegerType())
+        scalar_power2 = pandas_udf(lambda x: 2**x, IntegerType())
         scalar_mul = pandas_udf(lambda x, y: x * y, DoubleType())
 
         @pandas_udf(IntegerType(), PandasUDFType.SCALAR_ITER)
@@ -468,7 +468,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         @pandas_udf(IntegerType(), PandasUDFType.SCALAR_ITER)
         def iter_power2(it):
             for x in it:
-                yield 2 ** x
+                yield 2**x
 
         @pandas_udf(DoubleType(), PandasUDFType.SCALAR_ITER)
         def iter_mul(it):
