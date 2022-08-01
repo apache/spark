@@ -2400,4 +2400,8 @@ case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends U
   }
 
   override def dataType: DataType = child.dataType
+
+  override def sql: String = child.sql
+
+  override def toString: String = child.toString
 }
