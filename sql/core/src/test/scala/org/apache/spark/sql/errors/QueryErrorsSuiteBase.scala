@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{QueryContext, SparkThrowable}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -50,5 +50,18 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
     assert(exception.getErrorSubClass === errorSubClass.orNull)
     assert(exception.getSqlState === sqlState)
     assert(exception.getMessage === s"""\n[$fullErrorClass] """ + message)
+  }
+
+  case class ExpectedContext(
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String) extends QueryContext
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
+    }
   }
 }

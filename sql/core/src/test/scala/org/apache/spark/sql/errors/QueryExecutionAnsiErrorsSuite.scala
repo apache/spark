@@ -46,7 +46,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "DIVIDE_BY_ZERO",
       sqlState = "22012",
-      parameters = Map("config" -> ansiConf))
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "6/", start = 7, stop = 9))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -55,8 +56,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select interval 1 day / 0").collect()
       },
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
-      parameters = Map.empty
-    )
+      sqlState = "22012",
+      parameters = Map.empty[String, String],
+      context = ExpectedContext(fragment = "interval 1 day / ", start = 7, stop = 24))
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
@@ -80,7 +82,11 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "value" -> "Decimal(expanded, 66666666666666.666, 17, 3)",
         "precision" -> "8",
         "scale" -> "1",
-        "config" -> ansiConf))
+        "config" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1)",
+        start = 7,
+        stop = 49))
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
@@ -89,8 +95,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf)
-    )
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8", start = 7, stop = 29))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
@@ -99,8 +105,11 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf)
-    )
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "element_at(array(1, 2, 3, 4, 5), 8",
+        start = 7,
+        stop = 41))
   }
 
   test("MAP_KEY_DOES_NOT_EXIST: key does not exist in element_at") {
@@ -111,7 +120,11 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "MAP_KEY_DOES_NOT_EXIST",
       parameters = Map(
         "keyValue" -> "3",
-        "config" -> ansiConf))
+        "config" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "element_at(map(1, 'a', 2, 'b'), 3",
+        start = 7,
+        stop = 40))
   }
 
   test("CAST_INVALID_INPUT: cast string to double") {
@@ -124,7 +137,11 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
         "targetType" -> "\"DOUBLE\"",
-        "ansiConfig" -> ansiConf))
+        "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "CAST('111111111111xe23' AS DOUBLE",
+        start = 7,
+        stop = 40))
   }
 
   test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {
