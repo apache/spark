@@ -103,7 +103,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLType(from),
         toSQLType(to),
         toSQLId(columnName)),
-      context = null,
+      context = Array.empty,
       summary = ""
     )
   }
@@ -259,7 +259,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INVALID_FRACTION_OF_SECOND",
       errorSubClass = None,
       Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = null,
+      context = Array.empty,
       summary = "")
   }
 
@@ -268,7 +268,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "CANNOT_PARSE_TIMESTAMP",
       errorSubClass = None,
       Array(e.getMessage, toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = null,
+      context = Array.empty,
       summary = "")
   }
 
