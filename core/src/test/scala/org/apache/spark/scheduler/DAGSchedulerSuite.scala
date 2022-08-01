@@ -307,6 +307,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   var failure: Exception = _
   val jobListener = new JobListener() {
     override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
+    override def stageFailed(): Unit = results.clear()
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
@@ -315,6 +316,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val results = new HashMap[Int, Any]
     var failure: Exception = null
     override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def stageFailed(): Unit = results.clear()
     override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
@@ -702,6 +704,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     var failureReason: Option[Exception] = None
     val fakeListener = new JobListener() {
       override def taskSucceeded(partition: Int, value: Any): Unit = numResults += 1
+      override def stageFailed(): Unit = numResults = 0
       override def jobFailed(exception: Exception): Unit = {
         failureReason = Some(exception)
       }
@@ -1855,6 +1858,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     class FailureRecordingJobListener() extends JobListener {
       var failureMessage: String = _
       override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def stageFailed(): Unit = {}
       override def jobFailed(exception: Exception): Unit = { failureMessage = exception.getMessage }
     }
     val listener1 = new FailureRecordingJobListener()
@@ -3025,15 +3029,47 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("Does not support to rollback result stage since it's not written to the file system") {
-    // Disallow the result stage of finalRDD to retry
-    constructIndeterminateStageFetchFailed()
+  test("SPARK-25342: `isResultStageRetryAllowed` Indicates whether the Result stage can retry") {
+    // When writing to file systems, `isResultStageRetryAllowed` will be set to true
+    // and the result stage will be retried
 
-    // Abort the job since the result stage of finalRdd does not support to retry
-    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+    // 1. Abort the job since the result stage of finalRdd does not support to retry
+    // RDD's `isResultStageRetryAllowed` is false
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+    assertResultStageFailToRollback(shuffleMapRdd)
+
+
+    // 2. Allow result stage to retry since RDD's `isResultStageRetryAllowed` is set to true
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+
+    finalRdd.setResultStageAllowToRetry(true)
+
+    submit(finalRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(taskSets.length - 1, 0, numShufflePartitions = 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // Finish the first task of the result stage
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(0), Success, 42,
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
+
+    // Fail the second task with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"),
+      null))
+
+    assert(scheduler.failedStages.size == 2 &&
+      scheduler.failedStages.map(p => p.id).toSeq === Seq(2, 3) &&
+      scheduler.failedStages.exists(p => p.isInstanceOf[ShuffleMapStage]) &&
+      scheduler.failedStages.exists(p => p.isInstanceOf[ResultStage]))
   }
 
-  test("Retry result stage is supported when writing to the file system") {
+  test("SPARK-25342: cleanup temp messages before retrying result stage") {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
@@ -3055,18 +3091,18 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       localFs.mkdirs(rootOutputPath)
     }
     val attemptOutputPath = localFs.makeQualified(
-      new Path(rootOutputPath.getName + File.separator + "_temporary/0"))
+      new Path(rootOutputPath.toUri.getPath + File.separator + "_temporary/0"))
     if (!localFs.exists(attemptOutputPath)) {
       localFs.mkdirs(attemptOutputPath)
     }
     val taskOutputFile = localFs.makeQualified(
-      new Path(attemptOutputPath.getName + File.separator + "r_000000_0"))
+      new Path(attemptOutputPath.toUri.getPath + File.separator + "r_000000_0"))
     if (!localFs.exists(taskOutputFile)) {
       localFs.createNewFile(taskOutputFile)
     }
     assert(localFs.listStatus(attemptOutputPath).length == 1)
 
-    sc.setLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR, rootOutputPath.getName)
+    sc.setLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR, rootOutputPath.toUri.getPath)
     sc.setLocalProperty(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, String.valueOf(0))
 
     submit(finalRdd, Array(0, 1), properties = sc.localProperties.get)
@@ -3079,14 +3115,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostC", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
-    // The first task of the final stage failed with fetch failure
+    // The first task of the final stage succeed
     runEvent(makeCompletionEvent(
-      taskSets(2).tasks(0),
+      taskSets(2).tasks(0), Success, 11,
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
+
+    // The second task of the final stage failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(1),
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0L, 0, 0, "ignored"),
       null))
 
     // stage 1, 2 will be retried and reran all tasks
-    assert(scheduler.failedStages.toSeq.map(_.id) == Seq(1, 2))
+    assert(scheduler.failedStages.toSeq.map(_.id) == Seq(1, 2) &&
+      scheduler.failedStages.exists(p => p.isInstanceOf[ShuffleMapStage]) &&
+      scheduler.failedStages.exists(p => p.isInstanceOf[ResultStage]))
 
     // Resubmit failed stages
     scheduler.resubmitFailedStages()
@@ -3204,6 +3247,30 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // The job should fail because Spark can't rollback the result stage.
     assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+  }
+
+  private def findAllStagesToRetry(mapRdd: MyRDD): Unit = {
+    val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+
+    finalRdd.setResultStageAllowToRetry(true)
+
+    submit(finalRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(taskSets.length - 1, 0, numShufflePartitions = 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // Finish the first task of the result stage
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(0), Success, 42,
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
+
+    // Fail the second task with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets.last.tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"),
+      null))
   }
 
   test("SPARK-23207: cannot rollback a result stage") {

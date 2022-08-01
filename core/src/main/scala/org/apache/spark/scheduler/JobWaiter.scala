@@ -53,13 +53,6 @@ private[spark] class JobWaiter[T](
     dagScheduler.cancelJob(jobId, None)
   }
 
-  /**
-   * reset the finishedTasks to the initial state
-   */
-  def reset(): Unit = {
-    finishedTasks.getAndSet(0)
-  }
-
   override def taskSucceeded(index: Int, result: Any): Unit = {
     // resultHandler call must be synchronized in case resultHandler itself is not thread safe.
     synchronized {
@@ -68,6 +61,10 @@ private[spark] class JobWaiter[T](
     if (finishedTasks.incrementAndGet() == totalTasks) {
       jobPromise.success(())
     }
+  }
+
+  override def stageFailed(): Unit = {
+    finishedTasks.getAndSet(0)
   }
 
   override def jobFailed(exception: Exception): Unit = {

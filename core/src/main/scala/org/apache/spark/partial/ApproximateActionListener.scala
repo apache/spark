@@ -56,6 +56,10 @@ private[spark] class ApproximateActionListener[T, U, R](
     }
   }
 
+  override def stageFailed(): Unit = {
+    finishedTasks = 0
+  }
+
   override def jobFailed(exception: Exception): Unit = {
     synchronized {
       failure = Some(exception)

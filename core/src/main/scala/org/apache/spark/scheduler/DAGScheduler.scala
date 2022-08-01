@@ -422,7 +422,7 @@ private[spark] class DAGScheduler(
     // cleanup finished partitions
     rs.activeJob.get.resetAllPartitions()
     // cleanup job listener state
-    rs.activeJob.get.listener.asInstanceOf[JobWaiter[Any]].reset()
+    rs.activeJob.get.listener.stageFailed()
     // cleanup stage commit messages
     outputCommitCoordinator.stageEnd(rs.id)
     // cleanup temp directory for writing to hive tables/hdfs
@@ -451,8 +451,20 @@ private[spark] class DAGScheduler(
               s"fail to be deleted after $maxAttempts attempts!")
           }
           logWarning(s"Job attempt dir: ${jobAttemptPath.getName} " +
-            s"fail to be deleted at ${attempts}th retry, not reach the max: $maxAttempts yet," +
+            s"fail to be deleted at the ${attempts}th retry, not reach the max: $maxAttempts yet," +
             s" will retry again in 1000 ms")
+          Thread.sleep(1000)
+        }
+        attempts = 0
+        while (!fs.mkdirs(jobAttemptPath)) {
+          attempts += 1
+          if (attempts > maxAttempts) {
+            throw new IOException(s"Job attempt dir: ${jobAttemptPath.getName} " +
+              s"fail to be recreate after $maxAttempts attempts!")
+          }
+          logWarning(s"Job attempt dir: ${jobAttemptPath.getName} " +
+            s"fail to be recreate at the ${attempts}th retry, " +
+            s"not reach the max: $maxAttempts yet, will retry again in 1000 ms")
           Thread.sleep(1000)
         }
         logInfo(s"Job attempt dir: ${jobAttemptPath.getName} has be cleaned")
