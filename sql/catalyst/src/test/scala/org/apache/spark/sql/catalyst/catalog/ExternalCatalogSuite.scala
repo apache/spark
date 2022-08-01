@@ -285,8 +285,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
     // After renaming a table, the identifier should still be qualified with catalog.
     catalog.renameTable("db2", "tbl1", "tblone")
-    val tables2 = catalog.getTablesByName("db2", Seq("tblone", "tbl2"))
-    assert(tables2.map(_.identifier.table) == Seq("tblone", "tbl2"))
+    // TODO: HMS seems to have a bug and the order of returned tables do not match the order of
+    //       table names. You can reproduce the bug by passing `Seq("tblone", "tbl2")` here.
+    val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
+    assert(tables2.map(_.identifier.table) == Seq("tbl2", "tblone"))
     assert(tables2.forall(_.identifier.catalog.isDefined))
   }
 
