@@ -607,8 +607,7 @@ trait IntervalDivide {
       context: SQLQueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(
-          "Interval value overflows after being divided by -1", "try_divide", context)
+        throw QueryExecutionErrors.overflowInIntegralDivideError(context)
       }
     }
   }
