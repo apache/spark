@@ -365,13 +365,16 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       PhysicalWriteInfoImpl(rdd.getNumPartitions))
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
-    val totalNumRowsAccumulator = new LongAccumulator()
+    val totalNumRowsAccumulator = Some(new LongAccumulator())
 
     logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics
+
+    rdd.setResultStageAllowToRetry(true)
+    rdd.totalNumRowsAccumulator = totalNumRowsAccumulator
 
     try {
       sparkContext.runJob(
@@ -383,7 +386,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
         (index, result: DataWritingSparkTaskResult) => {
           val commitMessage = result.writerCommitMessage
           messages(index) = commitMessage
-          totalNumRowsAccumulator.add(result.numRows)
+          totalNumRowsAccumulator.get.add(result.numRows)
           batchWrite.onDataWriterCommit(commitMessage)
         }
       )
@@ -391,7 +394,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       logInfo(s"Data source write support $batchWrite is committing.")
       batchWrite.commit(messages)
       logInfo(s"Data source write support $batchWrite committed.")
-      commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
+      commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.get.value))
     } catch {
       case cause: Throwable =>
         logError(s"Data source write support $batchWrite is aborting.")

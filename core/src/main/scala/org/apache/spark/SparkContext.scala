@@ -2775,6 +2775,13 @@ object SparkContext extends Logging {
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
 
+  // just used to record the temporary output directory of HDFS or HIVE
+  private[spark] val MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR =
+    "mapreduce.output.fileoutputformat.outputdir"
+  private[spark] val MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID =
+    "mapreduce.job.application.attempt.id"
+
+
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
    * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see

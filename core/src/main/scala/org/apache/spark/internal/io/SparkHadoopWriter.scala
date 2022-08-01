@@ -31,6 +31,7 @@ TaskAttemptContext => NewTaskAttemptContext, TaskAttemptID => NewTaskAttemptID, 
 import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemptContextImpl}
 
 import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
+import org.apache.spark.SparkContext.{MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -77,6 +78,13 @@ object SparkHadoopWriter extends Logging {
 
     val committer = config.createCommitter(commitJobId)
     committer.setupJob(jobContext)
+
+    rdd.context.setLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR,
+      jobContext.getConfiguration().get(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR))
+    rdd.context.setLocalProperty(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID,
+      jobContext.getConfiguration().getInt(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, 0).toString)
+
+    rdd.setResultStageAllowToRetry(true)
 
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {

@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
+import org.apache.spark.SparkContext.{MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.shuffle.FetchFailedException
@@ -199,6 +200,11 @@ object FileFormatWriter extends Logging {
     //    V1 write command will be empty).
     if (Utils.isTesting) outputOrderingMatched = orderingMatched
 
+    sparkSession.sparkContext.setLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR,
+      job.getConfiguration().get(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR))
+    sparkSession.sparkContext.setLocalProperty(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID,
+      job.getConfiguration().getInt(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, 0).toString)
+
     try {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
         (empty2NullPlan.execute(), None)
@@ -230,6 +236,8 @@ object FileFormatWriter extends Logging {
       } else {
         rdd
       }
+
+      rddWithNonEmptyPartitions.setResultStageAllowToRetry(true)
 
       val jobIdInstant = new Date().getTime
       val ret = new Array[WriteTaskResult](rddWithNonEmptyPartitions.partitions.length)

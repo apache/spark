@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.NotSerializableException
+import java.io.{IOException, NotSerializableException}
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeoutException, TimeUnit }
 import java.util.concurrent.atomic.AtomicInteger
@@ -30,8 +30,10 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{Futures, SettableFuture}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
+import org.apache.spark.SparkContext.{MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -414,6 +416,55 @@ private[spark] class DAGScheduler(
 
   private def clearCacheLocs(): Unit = cacheLocs.synchronized {
     cacheLocs.clear()
+  }
+
+  private def unregisterAllResultOutput(rs: ResultStage): Unit = {
+    // cleanup finished partitions
+    rs.activeJob.get.resetAllPartitions()
+    // cleanup job listener state
+    rs.activeJob.get.listener.asInstanceOf[JobWaiter[Any]].reset()
+    // cleanup stage commit messages
+    outputCommitCoordinator.stageEnd(rs.id)
+    // cleanup temp directory for writing to hive tables/hdfs
+    cleanupJobAttemptPath()
+    // cleanup accumulator state for datasource v2 commands
+    rs.rdd.reset
+  }
+
+  private def cleanupJobAttemptPath(): Unit = {
+    val outputDir = sc.getLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR)
+    val jobAttemptId = sc.getLocalProperty(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID)
+
+    if (outputDir != null && outputDir.nonEmpty) {
+      val jobAttemptPath = new Path(getPendingJobAttemptsPath(new Path(outputDir)),
+        String.valueOf(jobAttemptId))
+
+      val fs = jobAttemptPath.getFileSystem(sc.hadoopConfiguration)
+
+      if (fs.exists(jobAttemptPath)) {
+        var attempts = 0
+        val maxAttempts = 10
+        while (!fs.delete(jobAttemptPath, true)) {
+          attempts += 1
+          if (attempts > maxAttempts) {
+            throw new IOException(s"Job attempt dir: ${jobAttemptPath.getName} " +
+              s"fail to be deleted after $maxAttempts attempts!")
+          }
+          logWarning(s"Job attempt dir: ${jobAttemptPath.getName} " +
+            s"fail to be deleted at ${attempts}th retry, not reach the max: $maxAttempts yet," +
+            s" will retry again in 1000 ms")
+          Thread.sleep(1000)
+        }
+        logInfo(s"Job attempt dir: ${jobAttemptPath.getName} has be cleaned")
+      } else {
+        logInfo(s"Job attempt dir: ${jobAttemptPath.getName} does not exist " +
+          s"and does not need to be cleaned")
+      }
+    }
+  }
+
+  def getPendingJobAttemptsPath(out: Path): Path = {
+    new Path(out, "_temporary")
   }
 
   /**
@@ -1964,8 +2015,9 @@ private[spark] class DAGScheduler(
                 def generateErrorMessage(stage: Stage): String = {
                   "A shuffle map stage with indeterminate output was failed and retried. " +
                     s"However, Spark cannot rollback the $stage to re-process the input data, " +
-                    "and has to fail this job. Please eliminate the indeterminacy by " +
-                    "checkpointing the RDD before repartition and try again."
+                    "and has to fail this job In the scenario of writing to database. " +
+                    "Please eliminate the indeterminacy by checkpointing the RDD " +
+                    "before repartition and try again."
                 }
 
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
@@ -1991,8 +2043,18 @@ private[spark] class DAGScheduler(
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
                     val numMissingPartitions = resultStage.findMissingPartitions().length
                     if (numMissingPartitions < resultStage.numTasks) {
-                      // TODO: support to rollback result tasks.
-                      abortStage(resultStage, generateErrorMessage(resultStage), None)
+                      if (resultStage.rdd.isResultStageRetryAllowed) {
+                        rollingBackStages += resultStage
+                        // FetchFailed from a indeterminate mapStage,
+                        // so the result stage should be reran all tasks.
+                        // if FetchFailed from a determinate mapStage,
+                        // the result stage should not be rollback all partitions
+                        unregisterAllResultOutput(resultStage)
+                      } else {
+                        // TODO: support to rollback result tasks
+                        //  in the scenario of writing to database.
+                        abortStage(resultStage, generateErrorMessage(resultStage), None)
+                      }
                     }
 
                   case _ =>

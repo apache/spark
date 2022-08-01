@@ -46,7 +46,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.{AccumulatorV2, BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
   Utils => collectionUtils}
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -2081,6 +2081,21 @@ abstract class RDD[T: ClassTag](
       DeterministicLevel.DETERMINATE
     } else {
       deterministicLevelCandidates.maxBy(_.id)
+    }
+  }
+
+  private[spark] var isResultStageRetryAllowed = false
+
+  private[spark] def setResultStageAllowToRetry(isRetryAllowed: Boolean): Unit = {
+    isResultStageRetryAllowed = isRetryAllowed
+  }
+
+  private[spark] var totalNumRowsAccumulator: Option[AccumulatorV2[_, _]] = None
+
+  private[spark]  def reset(): Unit = {
+    totalNumRowsAccumulator match {
+      case Some(accumulatorV2) => accumulatorV2.reset()
+      case _ =>
     }
   }
 

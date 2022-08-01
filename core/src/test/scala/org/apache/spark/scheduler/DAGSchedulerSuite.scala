@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.File
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, Delayed, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
@@ -25,6 +26,7 @@ import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.mockito.Mockito._
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
@@ -32,6 +34,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.SparkContext.{MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
@@ -3020,6 +3023,91 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
+  }
+
+  test("Does not support to rollback result stage since it's not written to the file system") {
+    // Disallow the result stage of finalRDD to retry
+    constructIndeterminateStageFetchFailed()
+
+    // Abort the job since the result stage of finalRdd does not support to retry
+    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+  }
+
+  test("Retry result stage is supported when writing to the file system") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleId2 = shuffleDep2.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+
+    // Allow the result stage of finalRDD to retry
+    finalRdd.setResultStageAllowToRetry(true)
+
+    // Create a temporary directory as the temporary output of the job
+    val localFs = FileSystem.getLocal(sc.hadoopConfiguration)
+    val rootOutputPath = localFs.makeQualified(
+      new Path(System.getProperty("java.io.tmpdir") + File.separator + "output"))
+    if (!localFs.exists(rootOutputPath)) {
+      localFs.mkdirs(rootOutputPath)
+    }
+    val attemptOutputPath = localFs.makeQualified(
+      new Path(rootOutputPath.getName + File.separator + "_temporary/0"))
+    if (!localFs.exists(attemptOutputPath)) {
+      localFs.mkdirs(attemptOutputPath)
+    }
+    val taskOutputFile = localFs.makeQualified(
+      new Path(attemptOutputPath.getName + File.separator + "r_000000_0"))
+    if (!localFs.exists(taskOutputFile)) {
+      localFs.createNewFile(taskOutputFile)
+    }
+    assert(localFs.listStatus(attemptOutputPath).length == 1)
+
+    sc.setLocalProperty(MAPREDUCE_OUTPUT_FILEOUTPUTFORMAT_OUTPUTDIR, rootOutputPath.getName)
+    sc.setLocalProperty(MAPREDUCE_JOB_APPLICATION_ATTEMPT_ID, String.valueOf(0))
+
+    submit(finalRdd, Array(0, 1), properties = sc.localProperties.get)
+
+    // Finish the first shuffle map stage.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    // Finish the second shuffle map stage.
+    completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostC", "hostD"))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // The first task of the final stage failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0L, 0, 0, "ignored"),
+      null))
+
+    // stage 1, 2 will be retried and reran all tasks
+    assert(scheduler.failedStages.toSeq.map(_.id) == Seq(1, 2))
+
+    // Resubmit failed stages
+    scheduler.resubmitFailedStages()
+
+    // First shuffle map stage resubmitted and reran all tasks.
+    assert(taskSets(3).stageId == 1)
+    assert(taskSets(3).stageAttemptId == 1)
+    assert(taskSets(3).tasks.length == 2)
+
+    // Finish mapStage 1
+    completeShuffleMapStageSuccessfully(1, 1, 2, Seq("hostE", "hostF"))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // Result stage success, all job ended.
+    complete(taskSets(4), Seq((Success, 11), (Success, 12)))
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
+
+    assert(localFs.exists(attemptOutputPath) && localFs.listStatus(attemptOutputPath).length == 0)
+    localFs.delete(rootOutputPath.getParent, true)
   }
 
   test("SPARK-25341: continuous indeterminate stage roll back") {
