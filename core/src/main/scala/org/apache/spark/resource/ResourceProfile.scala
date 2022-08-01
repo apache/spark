@@ -276,7 +276,7 @@ class ResourceProfile(
 @Evolving
 @Since("3.4.0")
 class TaskResourceProfile(override val taskResources: Map[String, TaskResourceRequest])
-  extends ResourceProfile(Map.empty, taskResources) {
+  extends ResourceProfile(ResourceProfile.getOrCreateDefaultProfile(SparkEnv.get.conf).executorResources, taskResources) {
 
   /**
    * Target executor's resource profile id, used for schedule.
