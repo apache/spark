@@ -598,6 +598,8 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
+        assert(currentNextAttrPairs.size == AttributeSet(currentNextAttrPairs.map(_._1)).size,
+          "Attribute mapping keys should be unique.")
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
