@@ -160,18 +160,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   }
 
   test("SPARK-22431: illegal nested type") {
-    val queries = Seq(
-      "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
-      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-
-    queries.foreach(query => {
-      val err = intercept[SparkException] {
-        spark.sql(query)
-      }.getMessage
-      assert(err.contains("Cannot recognize hive type string"))
-    })
-
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(sql("SELECT q.`a`, q.b FROM v"), Row("a", 1) :: Nil)
@@ -2386,10 +2374,6 @@ class HiveDDLSuite
         "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
         "Parquet data source does not support void data type")
 
-      assertAnalysisError(
-        "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
-        "Unknown field type: void")
-
       sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
       checkAnswer(sql("SELECT * FROM t3"), Row(null))
     }
@@ -2399,10 +2383,6 @@ class HiveDDLSuite
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
         "Parquet data source does not support void data type")
-
-      assertAnalysisError(
-        "CREATE TABLE t2 (v VOID) STORED AS PARQUET",
-        "Unknown field type: void")
 
       sql("CREATE TABLE t3 (v VOID) USING hive")
       checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
