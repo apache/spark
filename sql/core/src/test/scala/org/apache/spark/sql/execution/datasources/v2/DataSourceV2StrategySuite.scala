@@ -172,7 +172,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       // ABS(cint) - 2 <= 1
       testTranslateFilter(LessThanOrEqual(
         // Expressions are not supported
-        // Functions such as 'Abs' are not supported
+        // Functions such as 'Abs' are not pushed down with ANSI mode off
         Subtract(Abs(attrInt, failOnError = false), 2), 1), None)
 
       // (cin1 > 1 AND cint < 10) OR (cint > 50 AND cint > 100)
@@ -199,7 +199,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       testTranslateFilter(Or(
         And(
           GreaterThan(attrInt, 1),
-          // Functions such as 'Abs' are not supported
+          // Functions such as 'Abs' are not pushed down with ANSI mode off
           LessThan(Abs(attrInt, failOnError = false), 10)
         ),
         And(
@@ -210,7 +210,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       testTranslateFilter(Not(And(
         Or(
           LessThanOrEqual(attrInt, 1),
-          // Functions such as 'Abs' are not supported
+          // Functions such as 'Abs' are not pushed down with ANSI mode off
           GreaterThanOrEqual(Abs(attrInt, failOnError = false), 10)
         ),
         Or(
@@ -240,7 +240,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       testTranslateFilter(Or(
         Or(
           EqualTo(attrInt, 1),
-          // Functions such as 'Abs' are not supported
+          // Functions such as 'Abs' are not pushed down with ANSI mode off
           EqualTo(Abs(attrInt, failOnError = false), 10)
         ),
         Or(
@@ -276,7 +276,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
           LessThan(attrInt, 10)
         ),
         And(
-          // Functions such as 'Abs' are not supported
+          // Functions such as 'Abs' are not pushed down with ANSI mode off
           EqualTo(Abs(attrInt, failOnError = false), 6),
           IsNotNull(attrInt))), None)
 
@@ -306,7 +306,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
           LessThan(attrInt, 10)
         ),
         Or(
-          // Functions such as 'Abs' are not supported
+          // Functions such as 'Abs' are not pushed down with ANSI mode off
           EqualTo(Abs(attrInt, failOnError = false), 6),
           IsNotNull(attrInt))), None)
     }
