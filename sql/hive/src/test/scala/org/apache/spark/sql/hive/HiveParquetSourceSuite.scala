@@ -378,4 +378,15 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
       }
     }
   }
+
+  test("Create view with dashes in column type") {
+    sql(
+      """
+        |CREATE TABLE tbl (f array<struct<`date-of-creation`:string>>) USING parquet
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE VIEW tblView AS SELECT f FROM tbl
+        |""".stripMargin)
+  }
 }
