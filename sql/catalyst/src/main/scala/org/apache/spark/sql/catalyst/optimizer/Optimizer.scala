@@ -534,7 +534,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
    * A set of excludes is used to prevent the removal of:
    * - seemingly redundant aliases used to deduplicate the input for a (self) join,
    * - top-level subquery attributes and
-   * - attributes of a Union's first child
+   * - attributes of `Alias`es that fix conflicting attributes in an `Union`'s first `Project` child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -566,7 +566,24 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         plan.mapChildren { child =>
           if (first) {
             first = false
-            removeRedundantAliases(child, excluded ++ child.outputSet)
+            child match {
+              case p: Project =>
+                var passThroughAttributes =
+                  AttributeSet(p.projectList.filter(_.isInstanceOf[Attribute]))
+                val keepAliasAttributes = AttributeSet(p.projectList.filter {
+                  case Alias(attr: Attribute, _) =>
+                    if (passThroughAttributes.contains(attr)) {
+                      true
+                    } else {
+                      passThroughAttributes += attr
+                      false
+                    }
+                  case _ => false
+                })
+
+                removeRedundantAliases(child, excluded ++ keepAliasAttributes)
+              case _ => removeRedundantAliases(child, excluded ++ child.outputSet)
+            }
           } else {
             removeRedundantAliases(child, excluded)
           }
