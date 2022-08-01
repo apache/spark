@@ -7766,6 +7766,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         a  1
         d  2
         """
+        assert type(n) is int
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 

@@ -877,6 +877,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.nsmallest(), pser.nsmallest())
         self.assert_eq((psser + 1).nsmallest(), (pser + 1).nsmallest())
 
+        with self.assertRaises(AssertionError):
+            psser.nsmallest("String")
+        with self.assertRaises(AssertionError):
+            psser.nsmallest(0.1)
+
     def test_nlargest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
         pser = pd.Series(sample_lst, name="x")

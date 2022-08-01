@@ -3417,6 +3417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    3.0
         dtype: float64
         """
+        assert type(n) is int
         return self.sort_values(ascending=True).head(n)
 
     def nlargest(self, n: int = 5) -> "Series":

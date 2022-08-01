@@ -1765,6 +1765,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         with self.assertRaisesRegex(ValueError, "nsmallest do not support multi-index now"):
             psdf.set_index(["a", "b"]).groupby(["c"])["d"].nsmallest(1)
+        with self.assertRaises(AssertionError):
+            psdf.groupby(["a"])["b"].nsmallest(0.1).sort_index()
+        with self.assertRaises(AssertionError):
+            psdf.groupby(["a"])["b"].nsmallest(False).sort_index()
 
     def test_nlargest(self):
         pdf = pd.DataFrame(

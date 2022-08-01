@@ -3574,6 +3574,7 @@ class SeriesGroupBy(GroupBy[Series]):
         3  6    3
         Name: b, dtype: int64
         """
+        assert type(n) is int
         if self._psser._internal.index_level > 1:
             raise ValueError("nsmallest do not support multi-index now")
 

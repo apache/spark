@@ -1907,6 +1907,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         msg = 'keep must be either "first", "last" or "all".'
         with self.assertRaisesRegex(ValueError, msg):
             psdf.nlargest(5, columns=["c"], keep="xx")
+        with self.assertRaises(AssertionError):
+            psdf.nsmallest("test", columns=["c"], keep="last")
+        with self.assertRaises(AssertionError):
+            psdf.nsmallest(0.1, columns=["c"], keep="last")
 
     def test_xs(self):
         d = {
