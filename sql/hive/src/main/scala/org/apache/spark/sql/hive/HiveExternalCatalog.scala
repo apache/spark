@@ -283,7 +283,22 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // columns etc. in table properties, so that we can work around the Hive metastore issue
         // about not case preserving and make Hive serde table and view support mixed-case column
         // names.
-        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition)
+      )
+      try {
+        client.createTable(tableWithDataSourceProps, ignoreIfExists)
+      } catch {
+        case NonFatal(e) =>
+          // If for some reason we fail to store the schema we store it as empty there
+          // since we already store the real schema in the table properties. This try-catch
+          // should only be necessary for Spark views which are incompatible with Hive
+          client.createTable(
+            tableWithDataSourceProps.copy(
+              schema = StructType(EMPTY_DATA_SCHEMA ++ tableDefinition.partitionSchema)
+            ),
+            ignoreIfExists
+          )
+      }
       client.createTable(tableWithDataSourceProps, ignoreIfExists)
     }
   }
