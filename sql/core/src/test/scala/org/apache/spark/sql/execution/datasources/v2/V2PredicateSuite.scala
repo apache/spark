@@ -248,6 +248,11 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get == v1Filter)
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
+
+    val predicate3 = new Not(
+      new Predicate("=", Array[Expression](LiteralValue(1, IntegerType),
+        LiteralValue(1, IntegerType))))
+    assert(PredicateUtils.toV1(predicate3) == None)
   }
 
   test("And") {

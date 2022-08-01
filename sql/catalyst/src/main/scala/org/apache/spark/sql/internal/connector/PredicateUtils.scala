@@ -57,53 +57,47 @@ private[sql] object PredicateUtils {
       case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
-        predicate.name() match {
-          case "=" =>
-            Some(EqualTo(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
-          case "<=>" =>
-            Some(EqualNullSafe(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
-          case ">" =>
-            Some(GreaterThan(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
-          case ">=" =>
-            Some(GreaterThanOrEqual(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
-          case "<" =>
-            Some(LessThan(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
-          case "<=" =>
-            Some(LessThanOrEqual(attribute,
-              CatalystTypeConverters.convertToScala(value.value, value.dataType)))
+        val v1Value = CatalystTypeConverters.convertToScala(value.value, value.dataType)
+        val v1Filter = predicate.name() match {
+          case "=" => EqualTo(attribute, v1Value)
+          case "<=>" => EqualNullSafe(attribute, v1Value)
+          case ">" => GreaterThan(attribute, v1Value)
+          case ">=" => GreaterThanOrEqual(attribute, v1Value)
+          case "<" => LessThan(attribute, v1Value)
+          case "<=" => LessThanOrEqual(attribute, v1Value)
         }
+        Some(v1Filter)
 
       case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
           predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
-        predicate.name() match {
-          case "IS_NULL" => Some(IsNull(attribute))
-          case "IS_NOT_NULL" => Some(IsNotNull(attribute))
+        val v1Filter = predicate.name() match {
+          case "IS_NULL" => IsNull(attribute)
+          case "IS_NOT_NULL" => IsNotNull(attribute)
         }
+        Some(v1Filter)
 
       case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         if (!value.dataType.sameType(StringType)) return None
-        predicate.name() match {
+        val v1Value = value.value.toString
+        val v1Filter = predicate.name() match {
           case "STARTS_WITH" =>
-            Some(StringStartsWith(attribute, value.value.toString))
+            StringStartsWith(attribute, v1Value)
           case "ENDS_WITH" =>
-            Some(StringEndsWith(attribute, value.value.toString))
+            StringEndsWith(attribute, v1Value)
           case "CONTAINS" =>
-            Some(StringContains(attribute, value.value.toString))
+            StringContains(attribute, v1Value)
         }
+        Some(v1Filter)
 
       case "ALWAYS_TRUE" | "ALWAYS_FALSE" if predicate.children().isEmpty =>
-        predicate.name() match {
-          case "ALWAYS_TRUE" => Some(AlwaysTrue())
-          case "ALWAYS_FALSE" => Some(AlwaysFalse())
+        val v1Filter = predicate.name() match {
+          case "ALWAYS_TRUE" => AlwaysTrue()
+          case "ALWAYS_FALSE" => AlwaysFalse()
         }
+        Some(v1Filter)
 
       case "AND" =>
         val and = predicate.asInstanceOf[V2And]
@@ -128,8 +122,12 @@ private[sql] object PredicateUtils {
         }
 
       case "NOT" =>
-        val not = predicate.asInstanceOf[V2Not]
-        Some(Not(toV1(not.child()).get))
+        val child = toV1(predicate.asInstanceOf[V2Not].child())
+        if (child.nonEmpty) {
+          Some(Not(child.get))
+        } else {
+          None
+        }
 
       case _ => None
     }
