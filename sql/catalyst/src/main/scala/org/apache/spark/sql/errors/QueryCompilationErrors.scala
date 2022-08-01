@@ -536,6 +536,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
   }
 
+  def invalidCacheHintParameterError(hintName: String, invalidParams: Seq[Any]): Throwable = {
+    new AnalysisException(s"$hintName Hint does not accept any parameter, but " +
+      s"${invalidParams.mkString(", ")} found")
+  }
+
   def attributeNameSyntaxError(name: String): Throwable = {
     new AnalysisException(s"syntax error in attribute name: $name")
   }

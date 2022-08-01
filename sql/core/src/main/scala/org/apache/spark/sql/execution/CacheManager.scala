@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.analysis.ResolveCacheHints.NO_RESULT_CACHE_TAG
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
@@ -253,6 +254,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
+
+      case tagged if tagged.getTagValue(NO_RESULT_CACHE_TAG).contains(true) =>
+        tagged
 
       case currentFragment =>
         lookupCachedData(currentFragment).map { cached =>
