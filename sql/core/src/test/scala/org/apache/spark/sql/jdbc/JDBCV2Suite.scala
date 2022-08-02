@@ -786,7 +786,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // LIMIT is pushed down only if all the filters are pushed down
     checkSortRemoved(df6, false)
     checkLimitRemoved(df6, false)
-    checkPushedInfo(df6, "PushedFilters: [], ")
+    checkPushedInfo(df6, "PushedFilters: []")
     checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
 
     val df7 = spark.read
@@ -795,7 +795,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limit(1)
     checkSortRemoved(df7, false)
     checkLimitRemoved(df7, false)
-    checkPushedInfo(df7, "PushedFilters: [], ")
+    checkPushedInfo(df7, "PushedFilters: []")
     checkAnswer(df7, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
 
     val df8 = spark.read
@@ -806,10 +806,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limit(3)
     checkSortRemoved(df8)
     checkLimitRemoved(df8)
-    checkPushedInfo(df8, "PushedFilters: [], " +
-      "PushedTopN: " +
-      "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
-      "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
+    checkPushedInfo(df8,
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY " +
+        "[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END" +
+        " ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3")
     checkAnswer(df8,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
 
@@ -825,10 +826,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limit(3)
     checkSortRemoved(df9, false)
     checkLimitRemoved(df9, false)
-    checkPushedInfo(df9, "PushedFilters: [], " +
-      "PushedTopN: " +
-      "ORDER BY [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
-      "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3,")
+    checkPushedInfo(df9,
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY " +
+        "[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END " +
+        "ASC NULLS FIRST, DEPT ASC NULLS FIRST, SALARY ASC NULLS FIRST] LIMIT 3")
     checkAnswer(df9,
       Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
   }
