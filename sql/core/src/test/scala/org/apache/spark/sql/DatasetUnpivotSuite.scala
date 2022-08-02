@@ -76,7 +76,7 @@ class DatasetUnpivotSuite extends QueryTest
     val ds = wideDataDs.select($"id", $"str1", $"str2")
     checkAnswer(
       ds.unpivot(Array($"id"), "var", "val"),
-      ds.unpivot(Array($"id"), Array.empty, "var", "val"))
+      ds.unpivot(Array($"id"), Array($"str1", $"str2"), "var", "val"))
   }
 
   test("unpivot with single id") {
@@ -137,14 +137,18 @@ class DatasetUnpivotSuite extends QueryTest
     assert(unpivoted.schema === longSchema)
     checkAnswer(unpivoted, longDataRows)
 
-    val unpivoted2 = wideDataDs.select($"id", $"str1", $"str2")
-      .unpivot(
-        Array($"id"),
-        Array.empty,
-        variableColumnName = "var",
-        valueColumnName = "val")
-    assert(unpivoted2.schema === longSchema)
-    checkAnswer(unpivoted2, longDataRows)
+    val e = intercept[AnalysisException] {
+      wideDataDs.select($"id", $"str1", $"str2")
+        .unpivot(
+          Array($"id"),
+          Array.empty,
+          variableColumnName = "var",
+          valueColumnName = "val")
+    }
+    checkError(
+      exception = e,
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      parameters = Map())
 
     val unpivotedRows = Seq(
       Row(1, "id", 1L),
@@ -164,7 +168,6 @@ class DatasetUnpivotSuite extends QueryTest
     val unpivoted3 = wideDataDs.select($"id", $"int1", $"long1")
       .unpivot(
         Array($"id" * 2),
-        Array.empty,
         variableColumnName = "var",
         valueColumnName = "val")
     assert(unpivoted3.schema === StructType(Seq(
@@ -178,7 +181,6 @@ class DatasetUnpivotSuite extends QueryTest
     val unpivoted4 = wideDataDs.select($"id", $"int1", $"long1")
       .unpivot(
         Array($"id".as("uid")),
-        Array.empty,
         variableColumnName = "var",
         valueColumnName = "val")
     assert(unpivoted4.schema === StructType(Seq(
@@ -193,13 +195,25 @@ class DatasetUnpivotSuite extends QueryTest
     val unpivoted = wideDataDs.select($"str1", $"str2")
       .unpivot(
         Array.empty,
-        Array.empty,
         variableColumnName = "var",
         valueColumnName = "val")
     assert(unpivoted.schema === StructType(Seq(
       StructField("var", StringType, nullable = false),
       StructField("val", StringType, nullable = true))))
     checkAnswer(unpivoted, longDataWithoutIdRows)
+
+    val e = intercept[AnalysisException] {
+      wideDataDs.select($"str1", $"str2")
+        .unpivot(
+          Array.empty,
+          Array.empty,
+          variableColumnName = "var",
+          valueColumnName = "val")
+    }
+    checkError(
+      exception = e,
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      parameters = Map())
   }
 
   test("unpivot with star values") {
@@ -298,7 +312,6 @@ class DatasetUnpivotSuite extends QueryTest
         )
         .unpivot(
           Array($"id"),
-          Array(),
           variableColumnName = "var",
           valueColumnName = "val"
         )
@@ -382,11 +395,9 @@ class DatasetUnpivotSuite extends QueryTest
         "objectName" -> "`does`",
         "proposal" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
 
-    // unpivoting with empty list of value columns
-    // where potential value columns are of incompatible types
+    // unpivoting without values where potential value columns are of incompatible types
     val e3 = intercept[AnalysisException] {
       wideDataDs.unpivot(
-        Array.empty,
         Array.empty,
         variableColumnName = "var",
         valueColumnName = "val"
@@ -405,7 +416,6 @@ class DatasetUnpivotSuite extends QueryTest
     val e4 = intercept[AnalysisException] {
       wideDataDs.unpivot(
         Array($"*"),
-        Array.empty,
         variableColumnName = "var",
         valueColumnName = "val"
       )
@@ -438,7 +448,6 @@ class DatasetUnpivotSuite extends QueryTest
     val e6 = intercept[AnalysisException] {
       wideDataDs.select($"id", $"str1", $"str2").unpivot(
         Array($"id", $"str1", $"str2"),
-        Array.empty,
         variableColumnName = "var",
         valueColumnName = "val"
       )
@@ -559,6 +568,26 @@ class DatasetUnpivotSuite extends QueryTest
     )
 
     checkAnswer(
+      wideDataDs.unpivotValues(
+        Array(
+          struct($"str1".as("str"), $"int1".cast(LongType).as("long")).as("str-int"),
+          struct($"str2".as("str"), $"long1".as("long")).as("str-long")
+        ),
+        "var",
+        "val"),
+      Seq(
+        Row(1, "str-int", Row("one", 1L)),
+        Row(1, "str-long", Row("One", 1L)),
+        Row(2, "str-int", Row("two", null)),
+        Row(2, "str-long", Row(null, 2L)),
+        Row(3, "str-int", Row(null, 3L)),
+        Row(3, "str-long", Row("three", null)),
+        Row(4, "str-int", Row(null, null)),
+        Row(4, "str-long", Row(null, null))
+      )
+    )
+
+    checkAnswer(
       // struct field types and names must match
       wideDataDs.unpivot(
         Array($"id"),
@@ -628,7 +657,7 @@ class DatasetUnpivotSuite extends QueryTest
     wideDataDs.createOrReplaceTempView("wideData")
     Seq(
       // "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
-      // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
+      "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
       // "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
       // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
       "SELECT * FROM wideData UNPIVOT ((i, l) for variable in ((int1, long1) as `li`))",

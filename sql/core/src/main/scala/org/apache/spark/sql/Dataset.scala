@@ -2076,8 +2076,8 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
-      ids.map(_.named),
-      values.map(_.named),
+      Some(ids.map(_.named)),
+      Some(values.map(_.named)),
       variableColumnName,
       valueColumnName,
       logicalPlan
@@ -2104,8 +2104,28 @@ class Dataset[T] private[sql](
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): DataFrame =
-    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      Some(ids.map(_.named)),
+      None,
+      variableColumnName,
+      valueColumnName,
+      logicalPlan
+    )
+  }
+
+  def unpivotValues(
+      values: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      None,
+      Some(values.map(_.named)),
+      variableColumnName,
+      valueColumnName,
+      logicalPlan
+    )
+  }
 
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].

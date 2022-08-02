@@ -1124,9 +1124,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
       val valueColumnName = unpivotClause.unpivotValueColumn().identifier().getText
       val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn)
+
       Unpivot(
-        Seq(UnresolvedStar(None)),
-        unpivotColumns.toSeq,
+        None,
+        Some(unpivotColumns.toSeq),
         variableColumnName,
         valueColumnName,
         query)
@@ -1136,11 +1137,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val valueColumnNames = unpivotClause.unpivotValueColumns.asScala.map(_.identifier().getText)
       // TODO: find a temporary column name that does not exist in child
       val valueColumnName = "value"
-      val idColumns = Seq(UnresolvedStar(None))
       val unpivotColumns = unpivotClause.unpivotColumnSets.asScala.map(
         createUnpivotColumnStruct(valueColumnNames))
+      // val idColumns = detectIdColumns(unpivotColumns, query.output)
 
-      val unpivoted = Unpivot(idColumns, unpivotColumns, variableColumnName, valueColumnName, query)
+      val unpivoted = Unpivot(
+        None,
+        Some(unpivotColumns),
+        variableColumnName,
+        valueColumnName,
+        query
+      )
+      /**
       // project values struct column into individual columns
       val projection =
         // select all id columns
@@ -1151,7 +1159,23 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         UnresolvedStar(Some(Seq("value")))
 
       Project(projection, unpivoted)
+      */
+      // TODO: drop "value" column
+      Project(Seq(UnresolvedStar(None), UnresolvedStar(Some(Seq("value")))), unpivoted)
     }
+  }
+
+  /**
+   * Returns all columns that are not referenced by any unpivot column.
+   */
+  private def detectIdColumns(unpivotColumns: Seq[NamedExpression],
+                              allColumns: Seq[Attribute]): Seq[NamedExpression] = {
+    // val resolver = sparkSession.sessionState.analyzer.resolver
+    // val allColumns = queryExecution.analyzed.output
+    // val remainingCols = allColumns.filter { attribute =>
+    //   colNames.forall(n => !resolver(attribute.name, n))
+    // }.map(attribute => Column(attribute))
+    allColumns
   }
 
   /**

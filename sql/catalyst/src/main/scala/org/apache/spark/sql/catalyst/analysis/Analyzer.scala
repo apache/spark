@@ -517,8 +517,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
       case up: Unpivot if up.child.resolved &&
-        (hasUnresolvedAlias(up.ids) || hasUnresolvedAlias(up.values)) =>
-        up.copy(ids = assignAliases(up.ids), values = assignAliases(up.values))
+        (up.ids.exists(hasUnresolvedAlias) || up.values.exists(hasUnresolvedAlias)) =>
+        up.copy(ids = up.ids.map(assignAliases), values = up.values.map(assignAliases))
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -869,16 +869,22 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNPIVOT), ruleId) {
 
-      // once children and ids are resolved, we can determine values, if non were given
-      case up: Unpivot if up.childrenResolved && up.ids.forall(_.resolved) && up.values.isEmpty =>
-        up.copy(values = up.child.output.diff(up.ids))
+      // once children are resolved, we can determine values from ids and vice versa
+      // if only either is given
+      case up: Unpivot if up.childrenResolved &&
+        up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
+        up.copy(values = Some(up.child.output.diff(up.ids.get)))
+      case up: Unpivot if up.childrenResolved &&
+        up.values.exists(_.forall(_.resolved)) && up.ids.isEmpty =>
+        up.copy(ids = Some(up.child.output.diff(up.values.get)))
 
-      case up: Unpivot if !up.childrenResolved || !up.ids.forall(_.resolved) ||
-        up.values.isEmpty || !up.values.forall(_.resolved) || !up.valuesTypeCoercioned => up
+      case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
+        !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.resolved)) ||
+        !up.valuesTypeCoercioned => up
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Unpivot(ids, values, variableColumnName, valueColumnName, child) =>
+      case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnName, child) =>
         // construct unpivot expressions for Expand
         val exprs: Seq[Seq[Expression]] = values.map {
           value => ids ++ Seq(Literal(value.name), value)
@@ -1396,10 +1402,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
       // If the Unpivot ids or values contain Stars, expand them.
-      case up: Unpivot if containsStar(up.ids) || containsStar(up.values) =>
+      case up: Unpivot if up.ids.exists(containsStar) || up.values.exists(containsStar) =>
         up.copy(
-          ids = buildExpandedProjectList(up.ids, up.child),
-          values = buildExpandedProjectList(up.values, up.child)
+          ids = up.ids.map(buildExpandedProjectList(_, up.child)),
+          values = up.values.map(buildExpandedProjectList(_, up.child))
         )
 
       case u @ Union(children, _, _)
@@ -3898,10 +3904,10 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
-    case Unpivot(ids, values, variableColumnName, valueColumnName, child) =>
+    case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnName, child) =>
       val cleanedIds = ids.map(trimNonTopLevelAliases)
       val cleanedValues = values.map(trimNonTopLevelAliases)
-      Unpivot(cleanedIds, cleanedValues, variableColumnName, valueColumnName, child)
+      Unpivot(Some(cleanedIds), Some(cleanedValues), variableColumnName, valueColumnName, child)
 
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.

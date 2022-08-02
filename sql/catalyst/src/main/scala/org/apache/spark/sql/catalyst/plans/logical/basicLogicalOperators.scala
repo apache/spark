@@ -1379,7 +1379,13 @@ case class Pivot(
  * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
  * during the query analysis.
  *
- * An empty values array will be replaced during analysis with all resolved outputs of child except
+ * Either ids or values array must be set. The ids array can be empty,
+ * the values array must not be empty if not None.
+ *
+ * A None ids array will be replaced during analysis with all resolved outputs of child except
+ * the values. This expansion allows to easily select all non-value columns as id columns.
+ *
+ * A None values array will be replaced during analysis with all resolved outputs of child except
  * the ids. This expansion allows to easily unpivot all non-id columns.
  *
  * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveUnpivot`
@@ -1397,8 +1403,8 @@ case class Pivot(
  * @param child              Child operator
  */
 case class Unpivot(
-    ids: Seq[NamedExpression],
-    values: Seq[NamedExpression],
+    ids: Option[Seq[NamedExpression]],
+    values: Option[Seq[NamedExpression]],
     variableColumnName: String,
     valueColumnName: String,
     child: LogicalPlan) extends UnaryNode {
@@ -1410,8 +1416,10 @@ case class Unpivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
     copy(child = newChild)
 
-  def valuesTypeCoercioned: Boolean = values.nonEmpty && values.forall(_.resolved) &&
-    values.tail.forall(v => v.dataType.sameType(values.head.dataType))
+  def canBeCoercioned: Boolean = values.exists(_.nonEmpty) && values.exists(_.forall(_.resolved))
+
+  def valuesTypeCoercioned: Boolean = canBeCoercioned &&
+    values.get.tail.forall(v => v.dataType.sameType(values.get.head.dataType))
 }
 
 /**
