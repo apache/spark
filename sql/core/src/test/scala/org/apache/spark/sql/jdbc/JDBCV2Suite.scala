@@ -909,25 +909,26 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "ASC NULLS FIRST] LIMIT 1")
     checkAnswer(df3, Seq(Row(0, 44000.00)))
 
-    val df4 = spark.read
-      .table("h2.test.employee")
-      .groupBy("DEPT", "IS_MANAGER").sum("SALARY")
-      .orderBy("DEPT", "IS_MANAGER")
-      .limit(1)
-    checkSortRemoved(df4)
-    checkLimitRemoved(df4)
-    checkPushedInfo(df4,
-      "PushedAggregates: [SUM(SALARY)]",
-      "PushedGroupByExpressions: [DEPT, IS_MANAGER]",
-      "PushedFilters: []",
-      "PushedTopN: ORDER BY [DEPT ASC NULLS FIRST, IS_MANAGER ASC NULLS FIRST] LIMIT 1")
-    checkAnswer(df4, Seq(Row(1, false, 9000.00)))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df4 = spark.read
+        .table("h2.test.employee")
+        .groupBy("dept").sum("SALARY")
+        .orderBy($"dept" + 1)
+        .limit(1)
+      checkSortRemoved(df4)
+      checkLimitRemoved(df4)
+      checkPushedInfo(df4,
+        "PushedAggregates: [SUM(SALARY)]",
+        "PushedGroupByExpressions: [DEPT]",
+        "PushedFilters: []",
+        "PushedTopN: ORDER BY [DEPT + 1 ASC NULLS FIRST] LIMIT 1")
+      checkAnswer(df4, Seq(Row(1, 19000.00)))
+    }
 
     val df5 = spark.read
       .table("h2.test.employee")
-      .select($"DEPT".as("my_dept"), $"IS_MANAGER".as("my_manager"), $"SALARY")
-      .groupBy("my_dept", "my_manager").sum("SALARY")
-      .orderBy("my_dept", "my_manager")
+      .groupBy("DEPT", "IS_MANAGER").sum("SALARY")
+      .orderBy("DEPT", "IS_MANAGER")
       .limit(1)
     checkSortRemoved(df5)
     checkLimitRemoved(df5)

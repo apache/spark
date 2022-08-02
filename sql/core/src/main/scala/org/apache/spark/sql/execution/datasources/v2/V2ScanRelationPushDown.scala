@@ -411,14 +411,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       (operation, isPushed && !isPartiallyPushed)
     case s @ Sort(order, _, operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder))
-        // Without building the Scan, we do not know the resulting column names after aggregate
-        // push-down, and thus can't push down Top-N which needs to know the ordering column names.
-        // In particular, we push down the simple cases like GROUP BY expressions directly and
-        // ORDER BY the same expressions, which we know the original table columns.
-        if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
+      if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))
       val newOrder = if (sHolder.pushedAggregate.isDefined) {
+        // Without building the Scan, Aggregate push-down give the expected output starts with
+        // `group_col_` or `agg_func_`. When Aggregate push-down working with Sort for top n
+        // push-down, we need replace these expected output with the origin expressions.
         aliasReplacedOrder.map {
           _.transform {
             case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
@@ -429,6 +428,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      // Because V2ExpressionBuilder can't translate aggregate functions, so we can't
+      // translate the sort with aggregate functions.
+      // TODO V2ExpressionBuilder could translate aggregate functions.
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
         val (isPushed, isPartiallyPushed) =
