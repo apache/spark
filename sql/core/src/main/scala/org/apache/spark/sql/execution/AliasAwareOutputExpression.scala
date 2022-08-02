@@ -90,7 +90,7 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
       child.outputPartitioning match {
         case e: Expression =>
           normalizeExpression(e).asInstanceOf[Seq[Partitioning]] match {
-            case p :: Nil => p
+            case Seq(p) => p
             case ps => PartitioningCollection(ps)
           }
         case other => other
