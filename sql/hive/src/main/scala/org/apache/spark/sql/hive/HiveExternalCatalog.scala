@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, _}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
@@ -284,8 +284,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // columns etc. in table properties, so that we can work around the Hive metastore issue
         // about not case preserving and make Hive serde table and view support mixed-case column
         // names.
-        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition)
-      )
+        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
       try {
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } catch {
@@ -295,11 +294,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // should only be necessary for Spark views which are incompatible with Hive
           client.createTable(
             tableWithDataSourceProps.copy(schema = EMPTY_DATA_SCHEMA),
-            ignoreIfExists
-          )
+            ignoreIfExists)
       }
       client.createTable(tableWithDataSourceProps, ignoreIfExists)
-    }
   }
 
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
