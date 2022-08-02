@@ -40,7 +40,7 @@ object IntervalMathUtils {
       f
     } catch {
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(e.getMessage, hint)
+        throw QueryExecutionErrors.intervalArithmeticOverflowError(e.getMessage, hint, null)
     }
   }
 }

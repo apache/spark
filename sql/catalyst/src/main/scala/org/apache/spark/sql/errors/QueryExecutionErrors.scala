@@ -538,14 +538,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def intervalArithmeticOverflowError(
       message: String,
       hint: String = "",
-      context: Option[SQLQueryContext] = None): ArithmeticException = {
+      context: SQLQueryContext): ArithmeticException = {
     val alternative = if (hint.nonEmpty) {
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW",
       messageParameters = Array(message, alternative),
-      context = context,
+      context = getQueryContext(context),
       summary = getSummary(context))
   }
 
