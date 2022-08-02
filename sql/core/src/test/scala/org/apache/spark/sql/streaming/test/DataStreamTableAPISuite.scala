@@ -474,7 +474,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           query.processAllAvailable()
           checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2), Row(3, 4)))
 
-          assert(query.exception.isEmpty, s"No exception should happen in streaming query: " +
+          assert(query.exception.isEmpty, "No exception should happen in streaming query: " +
             s"exception - ${query.exception}")
         } finally {
           query.stop()
