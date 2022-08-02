@@ -535,6 +535,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"${toSQLValue(eval1, ShortType)} $symbol ${toSQLValue(eval2, ShortType)} caused overflow")
   }
 
+  def intervalArithmeticOverflowError(
+      message: String,
+      hint: String = "",
+      context: SQLQueryContext): ArithmeticException = {
+    val alternative = if (hint.nonEmpty) {
+      s" Use '$hint' to tolerate overflow and return NULL instead."
+    } else ""
+    new SparkArithmeticException(
+      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW",
+      messageParameters = Array(message, alternative),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def failedToCompileMsg(e: Exception): String = {
     s"failed to compile: $e"
   }
