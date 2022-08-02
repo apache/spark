@@ -315,17 +315,6 @@
     </extraJavaTestArgs>
   </properties>
   <repositories>
-    <!-- ASF Staging for testing -->
-    <repository>
-      <id>ASF Staging</id>
-      <url>https://repository.apache.org/content/groups/staging/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
     <repository>
       <id>gcs-maven-central-mirror</id>
       <!--
