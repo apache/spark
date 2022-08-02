@@ -295,7 +295,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             tableWithDataSourceProps.copy(schema = EMPTY_DATA_SCHEMA),
             ignoreIfExists)
       }
-      client.createTable(tableWithDataSourceProps, ignoreIfExists)
     }
   }
 
