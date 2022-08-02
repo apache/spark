@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  private lazy val aliasMap: mutable.Map[Expression, mutable.Buffer[Attribute]] = {
+  private lazy val aliasMap = {
     val aliases = mutable.Map[Expression, mutable.Buffer[Attribute]]()
     // Add aliases to the map. If multiple alias is defined for a source attribute then add all.
     outputExpressions.foreach {
       case a @ Alias(child, _) =>
-        aliases.getOrElseUpdate(child.canonicalized, mutable.ArrayBuffer.empty[Attribute]) +=
+        aliases.getOrElseUpdate(child.canonicalized, mutable.ArrayBuffer.empty) +=
         a.toAttribute
       case _ =>
     }
@@ -75,7 +75,7 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
 
   protected def normalizeExpression(exp: Expression): Seq[Expression] = {
     generate(exp) {
-      case e: Expression => aliasMap.getOrElse(e.canonicalized, Seq(e))
+      case e: Expression => aliasMap.get(e.canonicalized).map(_.toSeq).getOrElse(Seq(e))
     }
   }
 }
