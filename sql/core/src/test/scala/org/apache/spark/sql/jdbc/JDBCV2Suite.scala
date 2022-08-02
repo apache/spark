@@ -913,7 +913,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       val df4 = spark.read
         .table("h2.test.employee")
         .groupBy("dept").sum("SALARY")
-        .orderBy($"dept" + 1)
+        .orderBy($"dept" + 100)
         .limit(1)
       checkSortRemoved(df4)
       checkLimitRemoved(df4)
@@ -921,7 +921,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "PushedAggregates: [SUM(SALARY)]",
         "PushedGroupByExpressions: [DEPT]",
         "PushedFilters: []",
-        "PushedTopN: ORDER BY [DEPT + 1 ASC NULLS FIRST] LIMIT 1")
+        "PushedTopN: ORDER BY [DEPT + 100 ASC NULLS FIRST] LIMIT 1")
       checkAnswer(df4, Seq(Row(1, 19000.00)))
     }
 
