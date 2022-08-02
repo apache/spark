@@ -564,6 +564,7 @@ class RelationalGroupedDataset protected[sql](
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val groupingNamedExpressions = groupingExprs.map {
+      case a: Attribute => Alias(a, a.name)()
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
@@ -596,11 +597,13 @@ class RelationalGroupedDataset protected[sql](
       s"The returnType of the udf must be a ${StructType.simpleString}")
 
     val leftGroupingNamedExpressions = groupingExprs.map {
+      case a: Attribute => Alias(a, a.name)()
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
 
     val rightGroupingNamedExpressions = r.groupingExprs.map {
+      case a: Attribute => Alias(a, a.name)()
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
