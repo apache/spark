@@ -909,21 +909,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "ASC NULLS FIRST] LIMIT 1")
     checkAnswer(df3, Seq(Row(0, 44000.00)))
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val df4 = spark.read
-        .table("h2.test.employee")
-        .groupBy("dept").sum("SALARY")
-        .orderBy($"dept" + 100)
-        .limit(1)
-      checkSortRemoved(df4)
-      checkLimitRemoved(df4)
-      checkPushedInfo(df4,
-        "PushedAggregates: [SUM(SALARY)]",
-        "PushedGroupByExpressions: [DEPT]",
-        "PushedFilters: []",
-        "PushedTopN: ORDER BY [DEPT + 100 ASC NULLS FIRST] LIMIT 1")
-      checkAnswer(df4, Seq(Row(1, 19000.00)))
-    }
+    val df4 = spark.read
+      .table("h2.test.employee")
+      .groupBy("dept").sum("SALARY")
+      .orderBy($"dept".gt(1))
+      .limit(1)
+    checkSortRemoved(df4)
+    checkLimitRemoved(df4)
+    checkPushedInfo(df4,
+      "PushedAggregates: [SUM(SALARY)]",
+      "PushedGroupByExpressions: [DEPT]",
+      "PushedFilters: []",
+      "PushedTopN: ORDER BY [DEPT > 1 ASC NULLS FIRST] LIMIT 1")
+    checkAnswer(df4, Seq(Row(1, 19000.00)))
 
     val df5 = spark.read
       .table("h2.test.employee")
