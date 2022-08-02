@@ -310,9 +310,9 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
         "types" ->
-          (""""STRING" \(`str1#\d+`\), """ +
+          (""""BIGINT" \(`long1#\d+L`, `long2#\d+L`\), """ +
            """"INT" \(`int1#\d+`, `int2#\d+`, `int3#\d+`, ...\), """ +
-           """"BIGINT" \(`long1#\d+L`, `long2#\d+L`\)""")),
+           """"STRING" \(`str1#\d+`\)""")),
       matchPVals = true)
   }
 
@@ -396,9 +396,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map("types" ->
-        (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
-         """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
-         """"BIGINT" \(`long1#\d+L`\)""")),
+        (""""BIGINT" \(`long1#\d+L`\), """ +
+         """"INT" \(`id#\d+`, `int1#\d+`\), """ +
+         """"STRING" \(`str1#\d+`, `str2#\d+`\)""")),
       matchPVals = true)
 
     // unpivoting with star id columns so that no value columns are left
@@ -429,9 +429,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map("types" ->
-        (""""INT" \(`id#\d+`, `int1#\d+`\), """ +
-         """"STRING" \(`str1#\d+`, `str2#\d+`\), """ +
-         """"BIGINT" \(`long1#\d+L`\)""")),
+        (""""BIGINT" \(`long1#\d+L`\), """ +
+         """"INT" \(`id#\d+`, `int1#\d+`\), """ +
+         """"STRING" \(`str1#\d+`, `str2#\d+`\)""")),
       matchPVals = true)
 
     // unpivoting without giving values and no non-id columns
