@@ -126,45 +126,55 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     }.toMap[Expression, Alias]
   }
 
-  // Replace the current Aggregate's aggregate expression references with pushed attribute.
-  // Please note that:
-  // 1. Replace the sum with the current side sum * the other side row count
-  // 2. Replace the count with the current side row count * the other side row count
+  // Replace the current Aggregate's aggregate expression references with pushed attribute:
+  // 1. hasBenefit = true and otherSideCnt is not empty:
+  //   - Replace the sum child with the current side pushed sum * the other side row count.
+  //     e.g. sum(a) -> sum(_pushed_sum_a * cnt)
+  //   - Rewrite the count child with the current side pushed count * the other side row count and
+  //     sum it.
+  //     e.g. count(a) -> sum(_pushed_count_a * cnt)
+  // 2. hasBenefit = true and otherSideCnt is empty:
+  //   - Replace the sum child with the current side pushed sum.
+  //     e.g. sum(a) -> sum(_pushed_sum_a)
+  //   - Rewrite the count child with the current side row count and sum it.
+  //     e.g. count(a) -> sum(_pushed_count_a)
+  // 3. hasBenefit = false and otherSideCnt is not empty:
+  //   - Replace the sum child with the current side sum child * other side row count.
+  //     e.g. sum(a) -> sum(a * cnt)
+  //   - Rewrite the count child with if(child is null, 0, 1) * other side row count and sum it.
+  //     e.g. count(a) -> sum(if(a is null, 0, 1) * cnt)
   private def replaceAliasName(
       expr: NamedExpression,
-      currentSideAliasMap: Map[Expression, Alias],
-      currentSideHasBenefit: Boolean,
+      aliasMap: Map[Expression, Alias],
+      hasBenefit: Boolean,
       otherSideCnt: Option[Attribute]): NamedExpression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId.
     expr.mapChildren(_.transformUp {
-      case e @ Sum(_, useAnsiAdd, dt) if currentSideAliasMap.contains(e.canonicalized) =>
+      case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
         val resultType = e.dataType
         val countType = if (resultType.isInstanceOf[DecimalType]) LongDecimal else resultType
-        val child = if (currentSideHasBenefit) {
-          currentSideAliasMap(e.canonicalized).toAttribute.cast(resultType)
-        } else {
-          e.child
-        }
+        val child = if (hasBenefit) aliasMap(e.canonicalized).toAttribute else e.child
         val newChild =
-          otherSideCnt.map(c => Multiply(child, c.cast(countType), useAnsiAdd)).getOrElse(child)
+          otherSideCnt.map(c => Multiply(child.cast(resultType), c.cast(countType), useAnsiAdd))
+            .getOrElse(child)
         Sum(newChild, useAnsiAdd, Some(dt.getOrElse(resultType)))
-      case e: Count if currentSideAliasMap.contains(e.canonicalized) =>
-        val child = if (currentSideHasBenefit) {
-          currentSideAliasMap(e.canonicalized).toAttribute
+      case e: Count if aliasMap.contains(e.canonicalized) =>
+        val child = if (hasBenefit) {
+          aliasMap(e.canonicalized).toAttribute
         } else {
           If(e.children.map(IsNull).reduce(Or), Literal(0L, LongType), Literal(1L, LongType))
         }
         val newChild = otherSideCnt.map(Multiply(child, _)).getOrElse(child)
         Sum(newChild, conf.ansiEnabled, Some(e.dataType))
-      case e: Min if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
-        e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: Max if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
-        e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: First if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
-        e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
-      case e: Last if currentSideHasBenefit && currentSideAliasMap.contains(e.canonicalized) =>
-        e.copy(child = currentSideAliasMap(e.canonicalized).toAttribute)
+      case e: Min if hasBenefit && aliasMap.contains(e.canonicalized) =>
+        e.copy(child = aliasMap(e.canonicalized).toAttribute)
+      case e: Max if hasBenefit && aliasMap.contains(e.canonicalized) =>
+        e.copy(child = aliasMap(e.canonicalized).toAttribute)
+      case e: First if hasBenefit && aliasMap.contains(e.canonicalized) =>
+        e.copy(child = aliasMap(e.canonicalized).toAttribute)
+      case e: Last if hasBenefit && aliasMap.contains(e.canonicalized) =>
+        e.copy(child = aliasMap(e.canonicalized).toAttribute)
     }).asInstanceOf[NamedExpression]
   }
 
@@ -203,7 +213,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
               e.dataType match {
                 case _: DecimalType =>
                   Divide(
-                    CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
+                    CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType], !useAnsiAdd,
+                      avg.getContextOrNull()),
                     count.cast(DecimalType.LongDecimal), failOnError = false).cast(avg.dataType)
                 case _ =>
                   Divide(sum.cast(avg.dataType), count.cast(avg.dataType), failOnError = false)

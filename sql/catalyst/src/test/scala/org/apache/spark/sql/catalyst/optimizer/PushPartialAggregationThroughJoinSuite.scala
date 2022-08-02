@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.scalatest.GivenWhenThen
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Sum}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, CheckOverflow, CheckOverflowInSum, Divide, Expression, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Average, Sum}
 import org.apache.spark.sql.catalyst.optimizer.customAnalyze._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DecimalType, DoubleType, LongType}
@@ -72,7 +75,8 @@ object customAnalyze { // scalastyle:ignore
   }
 }
 
-class PushPartialAggregationThroughJoinSuite extends PlanTest {
+class PushPartialAggregationThroughJoinSuite
+  extends StatsEstimationTestBase with PlanTest with GivenWhenThen {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -105,8 +109,35 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         PushPartialAggregationThroughJoin) :: Nil
   }
 
-  private val testRelation1 = LocalRelation($"a".int, $"b".int, $"c".int)
-  private val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
+  private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
+    attr("a") -> ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(100),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("b") -> ColumnStat(distinctCount = Some(100), min = Some(1), max = Some(100),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("c") -> ColumnStat(distinctCount = Some(1000), min = Some(1), max = Some(1000),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("x") -> ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(100),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("y") -> ColumnStat(distinctCount = Some(100), min = Some(1), max = Some(100),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("z") -> ColumnStat(distinctCount = Some(1000), min = Some(1), max = Some(1000),
+      nullCount = Some(4), avgLen = Some(4), maxLen = Some(4))))
+
+  private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
+  private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
+    columnInfo.map(kv => kv._1.name -> kv)
+
+  val rowCount = 1000
+  private val testRelation1 = StatsTestPlan(
+    outputList = Seq("a", "b", "c").map(nameToAttr),
+    rowCount,
+    size = Some(rowCount * (8 + 4)),
+    attributeStats = AttributeMap(Seq("a", "b", "c").map(nameToColInfo)))
+  private val testRelation2 = StatsTestPlan(
+    outputList = Seq("x", "y", "z").map(nameToAttr),
+    rowCount,
+    size = Some(rowCount * (8 + 4)),
+    attributeStats = AttributeMap(Seq("x", "y", "z").map(nameToColInfo)))
 
   private val testRelation3 =
     LocalRelation($"a".decimal(17, 2), $"b".decimal(17, 2), $"c".decimal(17, 2))
@@ -121,73 +152,226 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
   }
 
   test("Push down sum") {
-    val originalQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(sum('c).as("sum_c"))
-      .analyze
+    Given("Push both side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(sum('c).as("sum_c"))
+        .analyze
 
-    val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, sum('c).as("_pushed_sum_c")),
-      testRelation1.select('a, 'b, 'c)).as("l")
-    val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
-      testRelation2.select('x)).as("r")
+      val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, sum('c).as("_pushed_sum_c")),
+        testRelation1.select('a, 'b, 'c)).as("l")
+      val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
 
-    val correctAnswer =
-      correctLeft.join(correctRight,
-        joinType = Inner, condition = Some('a === 'x))
-      .select('b, '_pushed_sum_c, 'cnt)
-      .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, dataType = Some(LongType)).as("sum_c"))
-      .analyze
+      val correctAnswer =
+        correctLeft.join(correctRight,
+          joinType = Inner, condition = Some('a === 'x))
+          .select('b, '_pushed_sum_c, 'cnt)
+          .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, dataType = Some(LongType))
+            .as("sum_c"))
+          .analyze
 
-    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push right side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(sum('c).as("sum_c"))
+        .analyze
+
+      val correctLeft = testRelation1.select('a, 'b, 'c).as("l")
+      val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
+
+      val correctAnswer =
+        correctLeft.join(correctRight,
+          joinType = Inner, condition = Some('a === 'x))
+          .select('b, 'c, 'cnt)
+          .groupBy('b)(sumWithDataType('c * 'cnt, dataType = Some(LongType)).as("sum_c"))
+          .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push left side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('y)(sum('z).as("sum_z"))
+        .analyze
+
+      val correctLeft = PartialAggregate(Seq('a), Seq('a, count(1).as("cnt")),
+        testRelation1.select('a)).as("l")
+      val correctRight = testRelation2.select('x, 'y, 'z).as("r")
+
+      val correctAnswer =
+        correctLeft.join(correctRight,
+          joinType = Inner, condition = Some('a === 'x))
+          .select('cnt, 'y, 'z)
+          .groupBy('y)(sumWithDataType('z.cast(LongType) * 'cnt, dataType = Some(LongType))
+            .as("sum_z"))
+          .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
   }
 
   test("Push down count") {
-    val originalQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(count(1).as("cnt"))
-      .analyze
+    Given("Push both side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(count('c).as("cnt"))
+        .analyze
 
-    val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, count(1).as("cnt")),
-      testRelation1.select('a, 'b)).as("l")
-    val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
-      testRelation2.select('x)).as("r")
+      val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, count('c).as("_pushed_count_c")),
+        testRelation1.select('a, 'b, 'c)).as("l")
+      val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
 
-    val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
+      val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
         condition = Some('a === 'x))
-      .select('b, $"l.cnt", $"r.cnt")
-      .groupBy('b)(sumWithDataType($"l.cnt" * $"r.cnt", dataType = Some(LongType)).as("cnt"))
-      .analyze
+        .select('b, $"l._pushed_count_c", $"r.cnt")
+        .groupBy('b)(sumWithDataType($"l._pushed_count_c" * $"r.cnt",
+          dataType = Some(LongType)).as("cnt"))
+        .analyze
 
-    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push right side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(count('c).as("cnt"))
+        .analyze
+
+      val correctLeft = testRelation1.select('a, 'b, 'c).as("l")
+      val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
+
+      val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
+        condition = Some('a === 'x))
+        .select('b, 'c, $"r.cnt")
+        .groupBy('b)(sumWithDataType(
+          If(IsNull('c), Literal(0L, LongType), Literal(1L, LongType)) * $"r.cnt",
+          dataType = Some(LongType)).as("cnt"))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push left side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('y)(count('z).as("cnt"))
+        .analyze
+
+      val correctLeft = PartialAggregate(Seq('a), Seq('a, count(1).as("cnt")),
+        testRelation1.select('a)).as("l")
+      val correctRight = testRelation2.select('x, 'y, 'z).as("r")
+
+      val correctAnswer =
+        correctLeft.join(correctRight,
+          joinType = Inner, condition = Some('a === 'x))
+          .select('cnt, 'y, 'z)
+          .groupBy('y)(sumWithDataType(
+            If(IsNull('z), Literal(0L, LongType), Literal(1L, LongType)) * $"l.cnt",
+            dataType = Some(LongType)).as("cnt"))
+          .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
   }
 
   test("Push down avg") {
-    val originalQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
-      .groupBy('b)(avg('c).as("avg_c"))
-      .analyze
+    Given("Push both side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "1.0") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(avg('c).as("avg_c"))
+        .analyze
 
-    val correctLeft = PartialAggregate(Seq('a, 'b),
-      Seq('a, 'b, sumWithDataType('c, dataType = Some(DoubleType)).as("_pushed_sum_c"),
-        count('c).as("_pushed_count_c")),
-      testRelation1.select('a, 'b, 'c)).as("l")
-    val correctRight = PartialAggregate(Seq('x),
-      Seq('x, count(1).as("cnt")),
-      testRelation2.select('x)).as("r")
-    val newAvg =
-      Divide(Sum($"l._pushed_sum_c" * $"r.cnt".cast(DoubleType), resultDataType = Some(DoubleType))
-        .toAggregateExpression(),
-        Sum($"l._pushed_count_c" * $"r.cnt", resultDataType = Some(LongType))
-          .toAggregateExpression().cast(DoubleType),
-        failOnError = false)
+      val correctLeft = PartialAggregate(Seq('a, 'b),
+        Seq('a, 'b, sumWithDataType('c, dataType = Some(DoubleType)).as("_pushed_sum_c"),
+          count('c).as("_pushed_count_c")),
+        testRelation1.select('a, 'b, 'c)).as("l")
+      val correctRight = PartialAggregate(Seq('x),
+        Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
+      val newAvg =
+        Divide(Sum($"l._pushed_sum_c" * $"r.cnt".cast(DoubleType),
+          resultDataType = Some(DoubleType))
+          .toAggregateExpression(),
+          Sum($"l._pushed_count_c" * $"r.cnt", resultDataType = Some(LongType))
+            .toAggregateExpression().cast(DoubleType),
+          failOnError = false)
 
-    val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
-      condition = Some('a === 'x))
-      .select('b, $"l._pushed_sum_c", $"l._pushed_count_c", $"r.cnt")
-      .groupBy('b)(newAvg.as("avg_c"))
-      .analyze
+      val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
+        condition = Some('a === 'x))
+        .select('b, $"l._pushed_sum_c", $"l._pushed_count_c", $"r.cnt")
+        .groupBy('b)(newAvg.as("avg_c"))
+        .analyze
 
-    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push right side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('b)(avg('c).as("avg_c"))
+        .analyze
+
+      val correctLeft = testRelation1.select('a, 'b, 'c).as("l")
+      val correctRight = PartialAggregate(Seq('x),
+        Seq('x, count(1).as("cnt")),
+        testRelation2.select('x)).as("r")
+      val newAvg =
+        Divide(Sum($"l.c".cast(DoubleType) * $"r.cnt".cast(DoubleType),
+          resultDataType = Some(DoubleType)).toAggregateExpression(),
+          Sum(If(IsNull('c), Literal(0L, LongType), Literal(1L, LongType)) * $"r.cnt",
+            resultDataType = Some(LongType)).toAggregateExpression().cast(DoubleType),
+          failOnError = false)
+
+      val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
+        condition = Some('a === 'x))
+        .select('b, $"l.c", $"r.cnt")
+        .groupBy('b)(newAvg.as("avg_c"))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+
+    Given("Push left side")
+    withSQLConf(SQLConf.PARTIAL_AGGREGATION_OPTIMIZATION_BENEFIT_RATIO.key -> "0.3") {
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+        .groupBy('y)(avg('z).as("avg_z"))
+        .analyze
+
+      val correctLeft = PartialAggregate(Seq('a), Seq('a, count(1).as("cnt")),
+        testRelation1.select('a)).as("l")
+      val correctRight = testRelation2.select('x, 'y, 'z).as("r")
+      val newAvg =
+        Divide(Sum($"r.z".cast(DoubleType) * $"l.cnt".cast(DoubleType),
+          resultDataType = Some(DoubleType)).toAggregateExpression(),
+          Sum(If(IsNull('z), Literal(0L, LongType), Literal(1L, LongType)) * $"l.cnt",
+            resultDataType = Some(LongType)).toAggregateExpression().cast(DoubleType),
+          failOnError = false)
+
+      val correctAnswer = correctLeft.join(correctRight, joinType = Inner,
+        condition = Some('a === 'x))
+        .select($"l.cnt", 'y, $"r.z")
+        .groupBy('y)(newAvg.as("avg_z"))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
   }
 
   test("Push down first and last") {
@@ -443,6 +627,10 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         val correctRight = PartialAggregate(Seq('x), Seq('x, count(1).as("cnt")),
           testRelation4.select('x)).as("r")
 
+        val context = originalQuery.analyzePlan.asInstanceOf[Aggregate]
+          .aggregateExpressions
+          .flatMap(_.collect { case average: Average => average }).head.getContextOrNull
+
         val correctAnswer =
           correctLeft.join(correctRight,
             joinType = Inner, condition = Some('a === 'x))
@@ -450,7 +638,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
             .groupBy('b)(Cast(Divide(CheckOverflowInSum(
               sumWithDataType($"_pushed_sum_c" * Cast($"r.cnt", DecimalType.LongDecimal),
                 ansiEnabled, Some(DecimalType(27, 2))),
-              DecimalType(27, 2), !ansiEnabled),
+              DecimalType(27, 2), !ansiEnabled, context),
               Cast(sumWithDataType($"l._pushed_count_c" * $"r.cnt", ansiEnabled,
                 Some(LongType)), DecimalType(20, 0)), failOnError = false),
               DecimalType(21, 6)).as("avg_c"))

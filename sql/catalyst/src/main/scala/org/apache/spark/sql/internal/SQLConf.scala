@@ -852,7 +852,7 @@ object SQLConf {
       .version("3.4.0")
       .doubleConf
       .checkValue(r => r >= 0 && r <= 1.0, "The benefit ratio must be positive number.")
-      .createWithDefault(0.1)
+      .createWithDefault(0.3)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
