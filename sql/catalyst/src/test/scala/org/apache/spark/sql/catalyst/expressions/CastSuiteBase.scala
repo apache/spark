@@ -1305,4 +1305,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         Cast(child, DecimalType.USER_DEFAULT), it)
     }
   }
+
+  test("SPARK-39865: toString() and sql() methods of CheckOverflowInTableInsert") {
+    val cast = Cast(Literal(1.0), IntegerType)
+    val expr = CheckOverflowInTableInsert(cast, "column_1")
+    assert(expr.sql == cast.sql)
+    assert(expr.toString == cast.toString)
+  }
 }
