@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
-
 import java.util
 import java.util.Locale
 
@@ -33,8 +32,8 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -288,7 +287,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       try {
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } catch {
-        case NonFatal(e) if tableDefinition.tableType == CatalogTableType.VIEW =>
+        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW) =>
           // If for some reason we fail to store the schema we store it as empty there
           // since we already store the real schema in the table properties. This try-catch
           // should only be necessary for Spark views which are incompatible with Hive
@@ -297,6 +296,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             ignoreIfExists)
       }
       client.createTable(tableWithDataSourceProps, ignoreIfExists)
+    }
   }
 
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
