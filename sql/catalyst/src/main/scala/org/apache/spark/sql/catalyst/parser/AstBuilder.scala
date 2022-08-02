@@ -1148,6 +1148,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         valueColumnName,
         query
       )
+
+      /**
+       * cannot drop column value as it does not exist at this stage, only after analysis is done
+       */
+      // val allColumns = unpivoted.output
+      // val remainingCols = allColumns.filter { attribute =>
+      //   !conf.resolver(attribute.name, valueColumnName)
+      // }
+      // Project(remainingCols :+ UnresolvedStar(Some(Seq("value"))), unpivoted)
+
       /**
       // project values struct column into individual columns
       val projection =
@@ -1163,19 +1173,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       // TODO: drop "value" column
       Project(Seq(UnresolvedStar(None), UnresolvedStar(Some(Seq("value")))), unpivoted)
     }
-  }
-
-  /**
-   * Returns all columns that are not referenced by any unpivot column.
-   */
-  private def detectIdColumns(unpivotColumns: Seq[NamedExpression],
-                              allColumns: Seq[Attribute]): Seq[NamedExpression] = {
-    // val resolver = sparkSession.sessionState.analyzer.resolver
-    // val allColumns = queryExecution.analyzed.output
-    // val remainingCols = allColumns.filter { attribute =>
-    //   colNames.forall(n => !resolver(attribute.name, n))
-    // }.map(attribute => Column(attribute))
-    allColumns
   }
 
   /**

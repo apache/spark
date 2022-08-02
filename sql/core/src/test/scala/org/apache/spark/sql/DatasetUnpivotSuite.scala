@@ -128,6 +128,22 @@ class DatasetUnpivotSuite extends QueryTest
     checkAnswer(unpivoted, longDataWithoutIdRows)
   }
 
+  test("unpivot with all non-value ids") {
+    checkAnswer(
+      wideDataDs
+        .unpivotValues(
+          Array($"str1", $"str2"),
+          variableColumnName = "var",
+          valueColumnName = "val"),
+      wideDataDs
+        .unpivot(
+          Array($"id", $"int1", $"long1"),
+          Array($"str1", $"str2"),
+          variableColumnName = "var",
+          valueColumnName = "val")
+    )
+  }
+
   test("unpivot without values") {
     val unpivoted = wideDataDs.select($"id", $"str1", $"str2")
       .unpivot(
@@ -175,8 +191,12 @@ class DatasetUnpivotSuite extends QueryTest
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true)
     )))
-    checkAnswer(unpivoted3, unpivotedRows.map(row =>
-      Row(row.getInt(0) * 2, row.get(1), row.get(2))))
+    checkAnswer(
+      unpivoted3,
+      unpivotedRows
+        .filter(row => row.getString(1) != "id")
+        .map(row => Row(row.getInt(0) * 2, row.get(1), row.get(2)))
+    )
 
     val unpivoted4 = wideDataDs.select($"id", $"int1", $"long1")
       .unpivot(
@@ -188,7 +208,7 @@ class DatasetUnpivotSuite extends QueryTest
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true)
     )))
-    checkAnswer(unpivoted4, unpivotedRows)
+    checkAnswer(unpivoted4, unpivotedRows.filter(row => row.getString(1) != "id"))
   }
 
   test("unpivot without ids or values") {
@@ -657,13 +677,13 @@ class DatasetUnpivotSuite extends QueryTest
     wideDataDs.createOrReplaceTempView("wideData")
     Seq(
       // "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
-      "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
+      //"SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
       // "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
       // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
       "SELECT * FROM wideData UNPIVOT ((i, l) for variable in ((int1, long1) as `li`))",
     ).foreach { sql =>
       println(sql)
-      spark.sql(sql).show(false)
+      spark.sql(sql).drop("value").show(false)
       println()
     }
 

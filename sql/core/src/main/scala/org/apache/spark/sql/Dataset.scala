@@ -2094,6 +2094,22 @@ class Dataset[T] private[sql](
    * This is equivalent to calling `Dataset#unpivot(Array, Array, String, String)`
    * where `values` is set to all non-id columns that exist in the DataFrame.
    *
+   * Note: A column that is referenced by an id column expression is considered an id column itself.
+   * For instance `$"id" * 2` references column `id`, so `id` is not considered a value column:
+   * {{{
+   *   val df = Seq((1, 11, 12L), (2, 21, 22L)).toDF("id", "int", "long")
+   *   df.unpivot(Array($"id" * 2), "var", "val").show()
+   *   // output:
+   *   // +--------+--------+-----+
+   *   // |(id * 2)|variable|value|
+   *   // +--------+--------+-----+
+   *   // |       2|     int|   11|
+   *   // |       2|    long|   12|
+   *   // |       4|     int|   21|
+   *   // |       4|    long|   22|
+   *   // +--------+--------+-----+
+   * }}}
+   *
    * @param ids Id columns
    * @param variableColumnName Name of the variable column
    * @param valueColumnName Name of the value column

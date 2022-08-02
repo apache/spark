@@ -873,10 +873,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       // if only either is given
       case up: Unpivot if up.childrenResolved &&
         up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
-        up.copy(values = Some(up.child.output.diff(up.ids.get)))
+        up.copy(values = Some(up.child.output.diff(up.ids.get.flatMap(_.references))))
       case up: Unpivot if up.childrenResolved &&
         up.values.exists(_.forall(_.resolved)) && up.ids.isEmpty =>
-        up.copy(ids = Some(up.child.output.diff(up.values.get)))
+        up.copy(ids = Some(up.child.output.diff(up.values.get.flatMap(_.references))))
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
         !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.resolved)) ||
