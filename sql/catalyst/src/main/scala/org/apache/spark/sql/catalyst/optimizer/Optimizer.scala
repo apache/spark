@@ -601,7 +601,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val newChild = removeRedundantAliases(w.child, excluded)
         val mapping = AttributeMap(createAttributeMapping(w.child, newChild))
         Window(removeRedundantAliases(mapAttributes(w.windowExpressions, mapping), excluded),
-          mapAttributes(w.partitionSpec, mapping), w.orderSpec, newChild)
+          mapAttributes(w.partitionSpec, mapping), mapAttributes(w.orderSpec, mapping), newChild)
 
       case _ =>
         // Remove redundant aliases in the subtree(s).
