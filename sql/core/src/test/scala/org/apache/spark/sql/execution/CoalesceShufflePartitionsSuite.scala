@@ -339,12 +339,12 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       //     ShuffleQueryStage 0
       //   ShuffleQueryStage 2
       //     ReusedQueryStage 0
-      val grouped = df.groupBy("key").agg(max("value").as("value"))
+      val grouped = df.groupBy((col("key") + 1).as("key")).agg(max("value").as("value"))
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
-      QueryTest.checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Row(2, 1) :: Row(3, 1) ::
-        Row(3, 2) :: Row(4, 2) :: Row(4, 3) :: Row(5, 3) :: Row(5, 4) :: Row(6, 4) :: Row(6, 5) ::
-        Row(7, 5) :: Nil)
+      QueryTest.checkAnswer(resultDf2, Row(2, 0) :: Row(3, 0) :: Row(3, 1) :: Row(4, 1) ::
+        Row(4, 2) :: Row(5, 2) :: Row(5, 3) :: Row(6, 3) :: Row(6, 4) :: Row(7, 4) :: Row(7, 5) ::
+        Row(8, 5) :: Nil)
 
       val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
