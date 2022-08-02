@@ -153,11 +153,11 @@ class BooleanOps(DataTypeOps):
             )
         if isinstance(right, numbers.Number):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-            return left ** right
+            return left**right
         else:
             assert isinstance(right, IndexOpsMixin)
             left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
-            return left ** right
+            return left**right
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
@@ -217,7 +217,7 @@ class BooleanOps(DataTypeOps):
         _sanitize_list_like(right)
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
             left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
-            return right ** left
+            return right**left
         else:
             raise TypeError(
                 "Exponentiation can not be applied to %s and the given type." % self.pretty_name

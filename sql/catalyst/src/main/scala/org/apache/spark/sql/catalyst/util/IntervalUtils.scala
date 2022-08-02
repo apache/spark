@@ -733,7 +733,7 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value or divided by zero
    */
   def divideExact(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(None)
+    if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(null)
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 

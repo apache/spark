@@ -680,7 +680,14 @@ class MicroBatchExecution(
     val batchSinkProgress: Option[StreamWriterCommitProgress] = reportTimeTaken("addBatch") {
       SQLExecution.withNewExecutionId(lastExecution) {
         sink match {
-          case s: Sink => s.addBatch(currentBatchId, nextBatch)
+          case s: Sink =>
+            s.addBatch(currentBatchId, nextBatch)
+            // DSv2 write node has a mechanism to invalidate DSv2 relation, but there is no
+            // corresponding one for DSv1. Given we have an information of catalog table for sink,
+            // we can refresh the catalog table once the write has succeeded.
+            plan.catalogTable.foreach { tbl =>
+              sparkSession.catalog.refreshTable(tbl.identifier.quotedString)
+            }
           case _: SupportsWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()

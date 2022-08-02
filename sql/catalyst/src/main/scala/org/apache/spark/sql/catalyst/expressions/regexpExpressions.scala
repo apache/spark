@@ -39,12 +39,11 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 abstract class StringRegexExpression extends BinaryExpression
-  with ImplicitCastInputTypes with NullIntolerant {
+  with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
-  override def dataType: DataType = BooleanType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   // try cache foldable pattern
@@ -250,15 +249,13 @@ case class ILike(
 }
 
 sealed abstract class MultiLikeBase
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   protected def patterns: Seq[UTF8String]
 
   protected def isNotSpecified: Boolean
 
   override def inputTypes: Seq[DataType] = StringType :: Nil
-
-  override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = true
 

@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -115,11 +115,10 @@ case class InSubqueryExec(
     shouldBroadcast: Boolean = false,
     private var resultBroadcast: Broadcast[Array[Any]] = null,
     @transient private var result: Array[Any] = null)
-  extends ExecSubqueryExpression with UnaryLike[Expression] {
+  extends ExecSubqueryExpression with UnaryLike[Expression] with Predicate {
 
   @transient private lazy val inSet = InSet(child, result.toSet)
 
-  override def dataType: DataType = BooleanType
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)

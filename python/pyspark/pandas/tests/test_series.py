@@ -206,12 +206,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.rename(["0", "1"])
 
         # Function index
-        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
-        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+        self.assert_eq(psser.rename(lambda x: x**2), pser.rename(lambda x: x**2))
+        self.assert_eq((psser + 1).rename(lambda x: x**2), (pser + 1).rename(lambda x: x**2))
 
         expected_error_message = "inplace True is not supported yet for a function 'index'"
         with self.assertRaisesRegex(ValueError, expected_error_message):
-            psser.rename(lambda x: x ** 2, inplace=True)
+            psser.rename(lambda x: x**2, inplace=True)
 
         unsupported_index_inputs = (pd.Series([2, 3, 4, 5, 6, 7, 8]), {0: "zero", 1: "one"})
         for index in unsupported_index_inputs:
@@ -3012,8 +3012,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
         self.assert_eq((pser + 1).argmax(skipna=False), (psser + 1).argmax(skipna=False))
+        self.assert_eq(pser.argmin(skipna=False), psser.argmin(skipna=False))
+        self.assert_eq((pser + 1).argmin(skipna=False), (psser + 1).argmin(skipna=False))
 
         # MultiIndex
         pser.index = pd.MultiIndex.from_tuples(
@@ -3023,6 +3027,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.argmin(), psser.argmin())
         self.assert_eq(pser.argmax(), psser.argmax())
         self.assert_eq(pser.argmax(skipna=False), psser.argmax(skipna=False))
+
+        pser2 = pd.Series([np.NaN, 1.0, 2.0, np.NaN])
+        psser2 = ps.from_pandas(pser2)
+        self.assert_eq(pser2.argmin(), psser2.argmin())
+        self.assert_eq(pser2.argmax(), psser2.argmax())
+        self.assert_eq(pser2.argmin(skipna=False), psser2.argmin(skipna=False))
+        self.assert_eq(pser2.argmax(skipna=False), psser2.argmax(skipna=False))
 
         # Null Series
         self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
@@ -3037,6 +3048,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series([]).argmax()
         with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
             psser.argmax(axis=1)
+        with self.assertRaisesRegex(ValueError, "axis can only be 0 or 'index'"):
+            psser.argmin(axis=1)
 
     def test_backfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
@@ -3082,9 +3095,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         self.assert_eq(pser.pow(np.nan), psser.pow(np.nan))
-        self.assert_eq(pser ** np.nan, psser ** np.nan)
+        self.assert_eq(pser**np.nan, psser**np.nan)
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
-        self.assert_eq(1 ** pser, 1 ** psser)
+        self.assert_eq(1**pser, 1**psser)
 
     def test_between(self):
         pser = pd.Series([np.nan, 1, 2, 3, 4])
