@@ -226,9 +226,9 @@ case class CaseWhen(
       i += 1
     }
     if (elseValue.isDefined) {
-      return elseValue.get.eval(input)
+      elseValue.get.eval(input)
     } else {
-      return null
+      null
     }
   }
 

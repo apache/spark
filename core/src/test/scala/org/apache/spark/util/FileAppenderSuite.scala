@@ -34,10 +34,10 @@ import org.mockito.Mockito.{atLeast, mock, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
-class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
 
   val testFile = new File(Utils.createTempDir(), "FileAppenderSuite-test").getAbsoluteFile
 

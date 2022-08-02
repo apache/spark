@@ -199,6 +199,21 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Widens the data types of the [[Unpivot]] values.
+   */
+  object UnpivotCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case up: Unpivot
+        if up.values.nonEmpty && up.values.forall(_.resolved) && !up.valuesTypeCoercioned =>
+        val valueDataType = findWiderTypeWithoutStringPromotion(up.values.map(_.dataType))
+        val values = valueDataType.map(valueType =>
+          up.values.map(value => Alias(Cast(value, valueType), value.name)())
+        ).getOrElse(up.values)
+        up.copy(values = values)
+      }
+  }
+
+  /**
    * Widens the data types of the children of Union/Except/Intersect.
    * 1. When ANSI mode is off:
    *   Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -806,6 +821,7 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::

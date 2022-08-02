@@ -22,6 +22,7 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -225,6 +226,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
+  def toPlainString: String = toBigDecimal.bigDecimal.toPlainString
+
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
       s"Decimal(expanded, $decimalVal, $precision, $scale)"
@@ -364,7 +367,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       scale: Int,
       roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
       nullOnOverflow: Boolean = true,
-      context: String = ""): Decimal = {
+      context: SQLQueryContext = null): Decimal = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
@@ -629,7 +632,7 @@ object Decimal {
   def fromStringANSI(
       str: UTF8String,
       to: DecimalType = DecimalType.USER_DEFAULT,
-      errorContext: String = ""): Decimal = {
+      context: SQLQueryContext = null): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
@@ -642,7 +645,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, errorContext)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, context)
     }
   }
 

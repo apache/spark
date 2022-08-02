@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
+from pyspark.pandas.exceptions import PandasNotImplementedError
 
 import pandas as pd
 import pandas.core.groupby as pdg
@@ -131,7 +132,7 @@ def _create_supported_by_module(
     pd_module = getattr(pd_module_group, module_name) if module_name else pd_module_group
     try:
         ps_module = getattr(ps_module_group, module_name) if module_name else ps_module_group
-    except AttributeError:
+    except (AttributeError, PandasNotImplementedError):
         # module not implemented
         return {}
 
@@ -262,7 +263,7 @@ def _transform_missing(
 
 def _get_pd_modules(pd_module_group: Any) -> List[str]:
     """
-    Returns sorted pandas memeber list from pandas module path.
+    Returns sorted pandas member list from pandas module path.
 
     Parameters
     ----------

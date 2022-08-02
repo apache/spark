@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -465,6 +464,29 @@ class Dataset[T] private[sql](
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
+   * Returns a new DataFrame where each row is reconciled to match the specified schema. Spark will:
+   * <ul>
+   *   <li>Reorder columns and/or inner fields by name to match the specified schema.</li>
+   *   <li>Project away columns and/or inner fields that are not needed by the specified schema.
+   *   Missing columns and/or inner fields (present in the specified schema but not input DataFrame)
+   *   lead to failures.</li>
+   *   <li>Cast the columns and/or inner fields to match the data types in the specified schema, if
+   *   the types are compatible, e.g., numeric to numeric (error if overflows), but not string to
+   *   int.</li>
+   *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
+   *   still keep their own metadata if not overwritten by the specified schema.</li>
+   *   <li>Fail if the nullability is not compatible. For example, the column and/or inner field is
+   *   nullable but the specified schema requires them to be not nullable.</li>
+   * </ul>
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def to(schema: StructType): DataFrame = withPlan {
+    Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
+  }
+
+  /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
    * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
    * meaningful names. For example:
@@ -687,28 +709,10 @@ class Dataset[T] private[sql](
         internalRdd.doCheckpoint()
       }
 
-      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-      // joins.
-      @scala.annotation.tailrec
-      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-        partitioning match {
-          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-          case p => p
-        }
-      }
-
-      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
       Dataset.ofRows(
         sparkSession,
-        LogicalRDD(
-          logicalPlan.output,
-          internalRdd,
-          outputPartitioning,
-          physicalPlan.outputOrdering,
-          isStreaming
-        )(sparkSession)).as[T]
+        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+      ).as[T]
     }
   }
 
@@ -1041,7 +1045,7 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
    *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
-   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, `left_anti`.
    *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
@@ -2011,6 +2015,153 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed.
+   *
+   * This function is useful to massage a DataFrame into a format where some
+   * columns are identifier columns ("ids"), while all other columns ("values")
+   * are "unpivoted" to the rows, leaving just two non-id columns, named as given
+   * by `variableColumnName` and `valueColumnName`.
+   *
+   * {{{
+   *   val df = Seq((1, 11, 12L), (2, 21, 22L)).toDF("id", "int", "long")
+   *   df.show()
+   *   // output:
+   *   // +---+---+----+
+   *   // | id|int|long|
+   *   // +---+---+----+
+   *   // |  1| 11|  12|
+   *   // |  2| 21|  22|
+   *   // +---+---+----+
+   *
+   *   df.unpivot(Array($"id"), Array($"int", $"long"), "variable", "value").show()
+   *   // output:
+   *   // +---+--------+-----+
+   *   // | id|variable|value|
+   *   // +---+--------+-----+
+   *   // |  1|     int|   11|
+   *   // |  1|    long|   12|
+   *   // |  2|     int|   21|
+   *   // |  2|    long|   22|
+   *   // +---+--------+-----+
+   *   // schema:
+   *   //root
+   *   // |-- id: integer (nullable = false)
+   *   // |-- variable: string (nullable = false)
+   *   // |-- value: long (nullable = true)
+   * }}}
+   *
+   * When no "id" columns are given, the unpivoted DataFrame consists of only the
+   * "variable" and "value" columns.
+   *
+   * All "value" columns must share a least common data type. Unless they are the same data type,
+   * all "value" columns are cast to the nearest common data type. For instance,
+   * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+   * do not have a common data type and `unpivot` fails.
+   *
+   * @param ids Id columns
+   * @param values Value columns to unpivot
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def unpivot(
+      ids: Array[Column],
+      values: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      ids.map(_.named),
+      values.map(_.named),
+      variableColumnName,
+      valueColumnName,
+      logicalPlan
+    )
+  }
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * This is equivalent to calling `Dataset#unpivot(Array, Array, String, String)`
+   * where `values` is set to all non-id columns that exist in the DataFrame.
+   *
+   * @param ids Id columns
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def unpivot(
+      ids: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      values: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed. This is an alias for `unpivot`.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * @param ids Id columns
+   * @param values Value columns to unpivot
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def melt(
+      ids: Array[Column],
+      values: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, values, variableColumnName, valueColumnName)
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed. This is an alias for `unpivot`.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * This is equivalent to calling `Dataset#unpivot(Array, Array, String, String)`
+   * where `values` is set to all non-id columns that exist in the DataFrame.
+   *
+   * @param ids Id columns
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def melt(
+      ids: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, variableColumnName, valueColumnName)
 
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset

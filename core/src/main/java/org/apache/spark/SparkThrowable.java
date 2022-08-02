@@ -59,4 +59,6 @@ public interface SparkThrowable {
   default String[] getParameterNames() {
     return SparkThrowableHelper.getParameterNames(this.getErrorClass(), this.getErrorSubClass());
   }
+
+  default QueryContext[] getQueryContext() { return new QueryContext[0]; }
 }

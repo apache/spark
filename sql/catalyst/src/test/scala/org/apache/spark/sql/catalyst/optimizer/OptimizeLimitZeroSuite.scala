@@ -32,7 +32,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val batches =
       Batch("OptimizeLimitZero", Once,
         ReplaceIntersectWithSemiJoin,
-        OptimizeLimitZero,
+        EliminateLimits,
         PropagateEmptyRelation) :: Nil
   }
 

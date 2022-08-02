@@ -41,10 +41,10 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -149,7 +149,7 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, tableDesc.provider, "CREATE TABLE")
+          tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
       val newTableDesc = tableDesc.copy(schema = newSchema)
       CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
@@ -653,25 +653,6 @@ object DataSourceStrategy
   }
 
   /**
-   * Translates a runtime filter into a data source filter.
-   *
-   * Runtime filters usually contain a subquery that must be evaluated before the translation.
-   * If the underlying subquery hasn't completed yet, this method will throw an exception.
-   */
-  protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
-    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
-      val values = in.values().getOrElse {
-        throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
-      }
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      Some(sources.In(name, values.map(toScala)))
-
-    case other =>
-      logWarning(s"Can't translate $other to source filter, unsupported expression")
-      None
-  }
-
-  /**
    * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
    * and can be handled by `relation`.
    *
@@ -727,30 +708,28 @@ object DataSourceStrategy
           }
         case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, agg.isDistinct))
         case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, agg.isDistinct))
-        case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "VAR_POP", agg.isDistinct, Array(FieldReference.column(name))))
-        case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "VAR_SAMP", agg.isDistinct, Array(FieldReference.column(name))))
-        case aggregate.StddevPop(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "STDDEV_POP", agg.isDistinct, Array(FieldReference.column(name))))
-        case aggregate.StddevSamp(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "STDDEV_SAMP", agg.isDistinct, Array(FieldReference.column(name))))
-        case aggregate.CovPopulation(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_POP", agg.isDistinct,
-            Array(FieldReference.column(left), FieldReference.column(right))))
-        case aggregate.CovSample(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_SAMP", agg.isDistinct,
-            Array(FieldReference.column(left), FieldReference.column(right))))
-        case aggregate.Corr(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
-            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.VariancePop(PushableExpression(expr), _) =>
+          Some(new GeneralAggregateFunc("VAR_POP", agg.isDistinct, Array(expr)))
+        case aggregate.VarianceSamp(PushableExpression(expr), _) =>
+          Some(new GeneralAggregateFunc("VAR_SAMP", agg.isDistinct, Array(expr)))
+        case aggregate.StddevPop(PushableExpression(expr), _) =>
+          Some(new GeneralAggregateFunc("STDDEV_POP", agg.isDistinct, Array(expr)))
+        case aggregate.StddevSamp(PushableExpression(expr), _) =>
+          Some(new GeneralAggregateFunc("STDDEV_SAMP", agg.isDistinct, Array(expr)))
+        case aggregate.CovPopulation(PushableExpression(left), PushableExpression(right), _) =>
+          Some(new GeneralAggregateFunc("COVAR_POP", agg.isDistinct, Array(left, right)))
+        case aggregate.CovSample(PushableExpression(left), PushableExpression(right), _) =>
+          Some(new GeneralAggregateFunc("COVAR_SAMP", agg.isDistinct, Array(left, right)))
+        case aggregate.Corr(PushableExpression(left), PushableExpression(right), _) =>
+          Some(new GeneralAggregateFunc("CORR", agg.isDistinct, Array(left, right)))
+        case aggregate.RegrIntercept(PushableExpression(left), PushableExpression(right)) =>
+          Some(new GeneralAggregateFunc("REGR_INTERCEPT", agg.isDistinct, Array(left, right)))
+        case aggregate.RegrR2(PushableExpression(left), PushableExpression(right)) =>
+          Some(new GeneralAggregateFunc("REGR_R2", agg.isDistinct, Array(left, right)))
+        case aggregate.RegrSlope(PushableExpression(left), PushableExpression(right)) =>
+          Some(new GeneralAggregateFunc("REGR_SLOPE", agg.isDistinct, Array(left, right)))
+        case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
+          Some(new GeneralAggregateFunc("REGR_SXY", agg.isDistinct, Array(left, right)))
         case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
           val translatedExprs = children.flatMap(PushableExpression.unapply(_))
           if (translatedExprs.length == children.length) {

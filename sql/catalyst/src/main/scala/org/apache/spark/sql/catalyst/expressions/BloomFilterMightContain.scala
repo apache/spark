@@ -40,13 +40,12 @@ import org.apache.spark.util.sketch.BloomFilter
  */
 case class BloomFilterMightContain(
     bloomFilterExpression: Expression,
-    valueExpression: Expression) extends BinaryExpression {
+    valueExpression: Expression) extends BinaryExpression with Predicate {
 
   override def nullable: Boolean = true
   override def left: Expression = bloomFilterExpression
   override def right: Expression = valueExpression
   override def prettyName: String = "might_contain"
-  override def dataType: DataType = BooleanType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {

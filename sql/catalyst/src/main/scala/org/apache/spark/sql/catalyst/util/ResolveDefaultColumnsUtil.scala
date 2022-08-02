@@ -90,22 +90,36 @@ object ResolveDefaultColumns {
    * @param tableSchema   represents the names and types of the columns of the statement to process.
    * @param tableProvider provider of the target table to store default values for, if any.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
+   * @param addNewColumnToExistingTable true if the statement being processed adds a new column to
+   *                                    a table that already exists.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
       tableSchema: StructType,
       tableProvider: Option[String],
-      statementType: String): StructType = {
+      statementType: String,
+      addNewColumnToExistingTable: Boolean): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
-      val allowedTableProviders: Array[String] =
+      val keywords: Array[String] =
         SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
           .toLowerCase().split(",").map(_.trim)
+      val allowedTableProviders: Array[String] =
+        keywords.map(_.stripSuffix("*"))
+      val addColumnExistingTableBannedProviders: Array[String] =
+        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
       val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
           // Make sure that the target table has a provider that supports default column values.
           if (!allowedTableProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(givenTableProvider)
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInDataSource(statementType, givenTableProvider)
+          }
+          if (addNewColumnToExistingTable &&
+            givenTableProvider.nonEmpty &&
+            addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
+            throw QueryCompilationErrors
+              .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
           }
           val analyzed: Expression = analyze(field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
@@ -127,11 +141,16 @@ object ResolveDefaultColumns {
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
    *                      and analyze.
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
+   * @param metadataKey   which key to look up from the column metadata; generally either
+   *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
    * @return Result of the analysis and constant-folding operation.
    */
-  def analyze(field: StructField, statementType: String): Expression = {
+  def analyze(
+      field: StructField,
+      statementType: String,
+      metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
     // Parse the expression.
-    val colText: String = field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+    val colText: String = field.metadata.getString(metadataKey)
     lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
       parser.parseExpression(colText)
@@ -202,12 +221,12 @@ object ResolveDefaultColumns {
       val defaultValue: Option[String] = field.getExistenceDefaultValue()
       defaultValue.map { text: String =>
         val expr = try {
-          val expr = CatalystSqlParser.parseExpression(text)
+          val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
           expr match {
             case _: ExprLiteral | _: Cast => expr
           }
         } catch {
-          case _: ParseException | _: MatchError =>
+          case _: AnalysisException | _: MatchError =>
             throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast

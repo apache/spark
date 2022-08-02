@@ -92,6 +92,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
+  def unpivotRequiresValueColumns(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
+      messageParameters = Array.empty)
+  }
+
+  def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
+    val dataTypes = values
+      .groupBy(_.dataType)
+      .mapValues(values => values.map(value => toSQLId(value.toString)).sorted)
+      .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
+      .toList.sortBy(_._1.sql)
+      .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
+
+    new AnalysisException(
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      messageParameters = Array(dataTypes.mkString(", ")))
+  }
+
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
@@ -154,6 +173,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = errorClass,
       messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
       origin = origin)
+  }
+
+  def unresolvedColumnError(
+      columnName: String,
+      proposal: Seq[String]): Throwable = {
+    val proposalStr = proposal.map(toSQLId).mkString(", ")
+    new AnalysisException(
+      errorClass = "UNRESOLVED_COLUMN",
+      messageParameters = Array(toSQLId(columnName), proposalStr))
+  }
+
+  def unresolvedFieldError(
+      fieldName: String,
+      columnPath: Seq[String],
+      proposal: Seq[String]): Throwable = {
+    val proposalStr = proposal.map(toSQLId).mkString(", ")
+    new AnalysisException(
+      errorClass = "UNRESOLVED_FIELD",
+      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
   }
 
   def dataTypeMismatchForDeserializerError(
@@ -1395,12 +1433,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def ambiguousFieldNameError(
-      fieldName: Seq[String], numMatches: Int, context: Origin): Throwable = {
+  def ambiguousColumnOrFieldError(
+      name: Seq[String], numMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
-      errorClass = "AMBIGUOUS_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted, numMatches.toString),
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name), numMatches.toString),
       origin = context)
+  }
+
+  def ambiguousColumnOrFieldError(
+      name: Seq[String], numMatches: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name), numMatches.toString))
   }
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
@@ -2471,14 +2516,44 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "literal value")
   }
 
-  def defaultReferencesNotAllowedInDataSource(dataSource: String): Throwable = {
+  def defaultReferencesNotAllowedInDataSource(
+      statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      s"Failed to execute command because DEFAULT values are not supported for target data " +
-        "source with table provider: \"" + dataSource + "\"")
+      s"Failed to execute $statementType command because DEFAULT values are not supported for " +
+        "target data source with table provider: \"" + dataSource + "\"")
+  }
+
+  def addNewDefaultColumnToExistingTableNotAllowed(
+      statementType: String, dataSource: String): Throwable = {
+    new AnalysisException(
+      s"Failed to execute $statementType command because DEFAULT values are not supported when " +
+        "adding new columns to previously existing target data source with table " +
+        "provider: \"" + dataSource + "\"")
   }
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
+  }
+
+  def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_COLUMN_OR_FIELD",
+      messageParameters = Array(toSQLId(name)))
+  }
+
+  def nullableArrayOrMapElementError(path: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NULLABLE_ARRAY_OR_MAP_ELEMENT",
+      messageParameters = Array(toSQLId(path)))
+  }
+
+  def invalidColumnOrFieldDataTypeError(
+      name: Seq[String],
+      dt: DataType,
+      expected: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+      messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
 }

@@ -28,13 +28,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.util.{DependencyUtils, Utils}
 
-class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class SparkSubmitUtilsSuite extends SparkFunSuite {
 
   private var tempIvyPath: String = _
 

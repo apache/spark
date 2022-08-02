@@ -32,11 +32,11 @@ jobs:
       java: 8
       branch: master
       hadoop: hadoop2
+      # TODO(SPARK-39684): Reenable "docker-integration-tests": "true"
       jobs: >-
         {
           "build": "true",
           "pyspark": "true",
           "sparkr": "true",
-          "tpcds-1g": "true",
-          "docker-integration-tests": "true"
+          "tpcds-1g": "true"
         }

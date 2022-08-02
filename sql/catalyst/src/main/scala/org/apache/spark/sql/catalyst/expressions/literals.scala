@@ -68,6 +68,7 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
+    case s: UTF8String => Literal(s, StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
@@ -485,6 +486,31 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)
+    case (data: GenericArrayData, arrayType: ArrayType) =>
+      val arrayValues: Array[String] =
+        data.array.map {
+          Literal(_, arrayType.elementType).sql
+        }
+      s"ARRAY(${arrayValues.mkString(", ")})"
+    case (row: GenericInternalRow, structType: StructType) =>
+      val structNames: Array[String] = structType.fields.map(_.name)
+      val structValues: Array[String] =
+        row.values.zip(structType.fields.map(_.dataType)).map { kv =>
+          Literal(kv._1, kv._2).sql
+        }
+      val structFields: Array[String] =
+        structNames.zip(structValues).map {
+          kv => s"'${kv._1}', ${kv._2}"
+        }
+      s"NAMED_STRUCT(${structFields.mkString(", ")})"
+    case (data: ArrayBasedMapData, mapType: MapType) =>
+      val keyData = data.keyArray.asInstanceOf[GenericArrayData]
+      val valueData = data.valueArray.asInstanceOf[GenericArrayData]
+      val keysAndValues: Array[String] =
+        keyData.array.zip(valueData.array).map { kv =>
+          s"${Literal(kv._1, mapType.keyType).sql}, ${Literal(kv._2, mapType.valueType).sql}"
+        }
+      s"MAP(${keysAndValues.mkString(", ")})"
     case _ => value.toString
   }
 }

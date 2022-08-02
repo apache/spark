@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -86,11 +86,16 @@ abstract class AverageBase
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression(queryContext: String) = child.dataType match {
+  protected def getEvaluateExpression(context: SQLQueryContext = null) = child.dataType match {
     case _: DecimalType =>
-      Divide(
-        CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd, queryContext),
-        count.cast(DecimalType.LongDecimal), failOnError = false).cast(resultType)
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, resultType),
+        DecimalDivideWithOverflowCheck(
+          sum,
+          count.cast(DecimalType.LongDecimal),
+          resultType.asInstanceOf[DecimalType],
+          context,
+          !useAnsiAdd))
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
@@ -136,12 +141,12 @@ case class Average(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(getContextOrNull())
 
-  override def initQueryContext(): String = if (useAnsiAdd) {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
+    Some(origin.context)
   } else {
-    ""
+    None
   }
 }
 
@@ -201,7 +206,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression(""))
+    addTryEvalIfNeeded(getEvaluateExpression())
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

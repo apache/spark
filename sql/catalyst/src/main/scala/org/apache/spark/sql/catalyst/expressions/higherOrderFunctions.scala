@@ -620,7 +620,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -637,8 +637,6 @@ case class ArrayExists(
     } else {
       super.nullable
     }
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -708,12 +706,10 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   override def nullable: Boolean =
       super.nullable || function.nullable
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -976,6 +972,7 @@ case class TransformValues(
  * Merges two given maps into a single map by applying function to the pair of values with
  * the same key.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     """
@@ -988,6 +985,8 @@ case class TransformValues(
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
        {1:"ax",2:"by"}
+      > SELECT _FUNC_(map('a', 1, 'b', 2), map('b', 3, 'c', 4), (k, v1, v2) -> coalesce(v1, 0) + coalesce(v2, 0));
+       {"a":1,"b":5,"c":4}
   """,
   since = "3.0.0",
   group = "lambda_funcs")

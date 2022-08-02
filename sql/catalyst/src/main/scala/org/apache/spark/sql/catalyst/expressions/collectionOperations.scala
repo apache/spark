@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1228,9 +1228,7 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = BooleanType
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1331,7 +1329,7 @@ case class ArrayContains(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant {
+  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -1347,8 +1345,6 @@ case class ArraysOverlap(left: Expression, right: Expression)
   } else {
     bruteForceEval _
   }
-
-  override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = {
     left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
@@ -2178,7 +2174,7 @@ case class ElementAt(
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
             throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), queryContext)
+              index, array.numElements(), getContextOrNull())
           } else {
             defaultValueOutOfBound match {
               case Some(value) => value.eval()
@@ -2220,7 +2216,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2266,10 +2262,10 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): String = if (failOnError) {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
   } else {
-    ""
+    None
   }
 }
 

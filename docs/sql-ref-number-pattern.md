@@ -46,11 +46,12 @@ Each number format string can contain the following elements (case insensitive):
 
   A sequence of 0 or 9 in the format string matches a sequence of digits with the same or smaller
   size. If the 0/9 sequence starts with 0 and is before the decimal point, it requires matching the
-  number of digits: when parsing, it matches only a digit sequence of the same size; when
+  number of digits exactly: when parsing, it matches only a digit sequence of the same size; when
   formatting, the result string adds left-padding with zeros to the digit sequence to reach the
   same size. Otherwise, the 0/9 sequence matches any digit sequence with the same or smaller size
-  when parsing, and pads the digit sequence with spaces in the result string when formatting. Note
-  that the digit sequence will become a '#' sequence if the size is larger than the 0/9 sequence.
+  when parsing, and pads the digit sequence with spaces (if before the decimal point) or zeros (if
+  after the decimal point) in the result string when formatting. Note that the digit sequence will
+  become a '#' sequence when formatting if the size is larger than the 0/9 sequence.
 
 - **`.`** or **`D`**
 
@@ -93,14 +94,13 @@ returns the corresponding Decimal value.
 * The `try_to_number` function accepts an input string and a format string argument. It works the
 same as the `to_number` function except that it returns NULL instead of raising an error if the
 input string does not match the given number format.
-* The `to_char` function accepts an input decimal and a format string argument. It requires that
-the input decimal matches the provided format and raises an error otherwise. The function then
+* The `to_char` function accepts an input decimal and a format string argument. The function then
 returns the corresponding string value.
 * All functions will fail if the given format string is invalid.
 
 ### Examples
 
-The following examples use the `to_number`, `try_to_number`, `to_char`, and `try_to_char` SQL
+The following examples use the `to_number`, `try_to_number`, and `to_char` SQL
 functions.
 
 Note that the format string used in most of these examples expects:
@@ -165,8 +165,8 @@ Note that the format string used in most of these examples expects:
   " 1.0"
 
 -- '000' left-pads 0 for digit sequence with a smaller size.
-> SELECT to_char(decimal(45.00), '000.00');
-  "045.00"
+> SELECT to_char(decimal(45.1), '000.00');
+  "045.10"
 
 > SELECT to_char(decimal(12454), '99,999');
   "12,454"
@@ -176,11 +176,11 @@ Note that the format string used in most of these examples expects:
   "$#.##"
 
 -- 'S' can be at the end.
-> SELECT try_to_char(decimal(-12454.8), '99,999.9S');
+> SELECT to_char(decimal(-12454.8), '99,999.9S');
   "12,454.8-"
 
-> SELECT try_to_char(decimal(12454.8), 'L99,999.9');
-  Error: cannot resolve 'try_to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
+> SELECT to_char(decimal(12454.8), 'L99,999.9');
+  Error: cannot resolve 'to_char(Decimal(12454.8), 'L99,999.9')' due to data type mismatch:
   Unexpected character 'L' found in the format string 'L99,999.9'; the structure of the format
   string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]; line 1 pos 25
 ```

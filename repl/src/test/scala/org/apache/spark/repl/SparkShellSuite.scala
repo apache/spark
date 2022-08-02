@@ -26,14 +26,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
-class SparkShellSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class SparkShellSuite extends SparkFunSuite {
   /**
    * Run a spark-shell operation and expect all the script and expected answers to be returned.
    * This method refers to [[runCliWithin()]] method in [[CliSuite]].

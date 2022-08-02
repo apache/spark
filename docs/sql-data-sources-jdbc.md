@@ -281,7 +281,16 @@ logging into the data sources.
     <td><code>pushDownLimit</code></td>
     <td><code>false</code></td>
     <td>
-     The option to enable or disable LIMIT push-down into V2 JDBC data source. The LIMIT push-down also includes LIMIT + SORT , a.k.a. the Top N operator. The default value is false, in which case Spark does not push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to true, LIMIT or LIMIT with SORT is pushed down to the JDBC data source. If <code>numPartitions</code> is greater than 1, SPARK still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, SPARK will not apply LIMIT or LIMIT with SORT on the result from data source.
+     The option to enable or disable LIMIT push-down into V2 JDBC data source. The LIMIT push-down also includes LIMIT + SORT , a.k.a. the Top N operator. The default value is false, in which case Spark does not push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to true, LIMIT or LIMIT with SORT is pushed down to the JDBC data source. If <code>numPartitions</code> is greater than 1, Spark still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, Spark will not apply LIMIT or LIMIT with SORT on the result from data source.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
+    <td><code>pushDownOffset</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable OFFSET push-down into V2 JDBC data source. The default value is false, in which case Spark will not push down OFFSET to the JDBC data source. Otherwise, if sets to true, Spark will try to push down OFFSET to the JDBC data source. If <code>pushDownOffset</code> is true and <code>numPartitions</code> is equal to 1, OFFSET will be pushed down to the JDBC data source. Otherwise, OFFSET will not be pushed down and Spark still applies OFFSET on the result from data source.
     </td>
     <td>read</td>
   </tr>

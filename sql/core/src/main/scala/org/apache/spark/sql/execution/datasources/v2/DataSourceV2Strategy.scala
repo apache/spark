@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -31,14 +32,14 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDelete, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -169,50 +170,50 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
-    case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
+    case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, tableSpec.provider, "CREATE TABLE")
-      CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema,
+          schema, tableSpec.provider, "CREATE TABLE", false)
+      CreateTableExec(catalog.asTableCatalog, ident, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
+    case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
         options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(staging, ident.asIdentifier, parts, query, planLater(query),
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
             qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog.asTableCatalog, ident.asIdentifier, parts, query,
+          CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
             planLater(query), qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
-    case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
+    case ReplaceTable(ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate) =>
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, tableSpec.provider, "CREATE TABLE")
+          schema, tableSpec.provider, "CREATE TABLE", false)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(staging, ident.asIdentifier, newSchema, parts,
+          AtomicReplaceTableExec(staging, ident, newSchema, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
-          ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema, parts,
+          ReplaceTableExec(catalog.asTableCatalog, ident, newSchema, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
-    case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
+    case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
             staging,
-            ident.asIdentifier,
+            ident,
             parts,
             query,
             planLater(query),
@@ -223,7 +224,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ =>
           ReplaceTableAsSelectExec(
             catalog.asTableCatalog,
-            ident.asIdentifier,
+            ident,
             parts,
             query,
             planLater(query),
@@ -352,11 +353,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CreateNamespace(ResolvedDBObjectName(catalog, name), ifNotExists, properties) =>
+    case CreateNamespace(ResolvedNamespace(catalog, ns), ifNotExists, properties) =>
       val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
         properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
       }.getOrElse(properties)
-      CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, finalProperties) :: Nil
+      CreateNamespaceExec(catalog.asNamespaceCatalog, ns, ifNotExists, finalProperties) :: Nil
 
     case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
@@ -367,7 +368,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
-    case SetCatalogAndNamespace(ResolvedDBObjectName(catalog, ns)) =>
+    case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
       val catalogManager = session.sessionState.catalogManager
       val namespace = if (ns.nonEmpty) Some(ns) else None
       SetCatalogAndNamespaceExec(catalogManager, Some(catalog.name()), namespace) :: Nil
@@ -498,7 +499,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 }
 
-private[sql] object DataSourceV2Strategy {
+private[sql] object DataSourceV2Strategy extends Logging {
 
   private def translateLeafNodeFilterV2(predicate: Expression): Option[Predicate] = {
     predicate match {
@@ -581,6 +582,25 @@ private[sql] object DataSourceV2Strategy {
         translatedFilterToExpr.getOrElse(predicate,
           throw new IllegalStateException("Failed to rebuild Expression for filter: " + predicate))
     }
+  }
+
+  /**
+   * Translates a runtime filter into a data source v2 Predicate.
+   *
+   * Runtime filters usually contain a subquery that must be evaluated before the translation.
+   * If the underlying subquery hasn't completed yet, this method will throw an exception.
+   */
+  protected[sql] def translateRuntimeFilterV2(expr: Expression): Option[Predicate] = expr match {
+    case in @ InSubqueryExec(PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
+      val values = in.values().getOrElse {
+        throw new IllegalStateException(s"Can't translate $in to v2 Predicate, no subquery result")
+      }
+      val literals = values.map(LiteralValue(_, in.child.dataType))
+      Some(new Predicate("IN", FieldReference(name) +: literals))
+
+    case other =>
+      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      None
   }
 }
 

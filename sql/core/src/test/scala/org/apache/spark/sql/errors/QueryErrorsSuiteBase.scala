@@ -17,31 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{QueryContext, SparkThrowable}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait QueryErrorsSuiteBase extends SharedSparkSession {
-  def checkErrorClass(
-      exception: Exception with SparkThrowable,
-      errorClass: String,
-      errorSubClass: Option[String] = None,
-      msg: String,
-      sqlState: Option[String] = None,
-      matchMsg: Boolean = false): Unit = {
-    assert(exception.getErrorClass === errorClass)
-    sqlState.foreach(state => exception.getSqlState === state)
-    val fullErrorClass = if (errorSubClass.isDefined) {
-      errorClass + "." + errorSubClass.get
-    } else {
-     errorClass
-    }
-    if (matchMsg) {
-      assert(exception.getMessage.matches(s"""\\[$fullErrorClass\\] """ + msg))
-    } else {
-      assert(exception.getMessage === s"""[$fullErrorClass] """ + msg)
-    }
-  }
 
   def validateParsingError(
       sqlText: String,
@@ -70,5 +50,18 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
     assert(exception.getErrorSubClass === errorSubClass.orNull)
     assert(exception.getSqlState === sqlState)
     assert(exception.getMessage === s"""\n[$fullErrorClass] """ + message)
+  }
+
+  case class ExpectedContext(
+      objectType: String,
+      objectName: String,
+      startIndex: Int,
+      stopIndex: Int,
+      fragment: String) extends QueryContext
+
+  object ExpectedContext {
+    def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
+      ExpectedContext("", "", start, stop, fragment)
+    }
   }
 }

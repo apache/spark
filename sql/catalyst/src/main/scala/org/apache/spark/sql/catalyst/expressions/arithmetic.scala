@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -255,16 +256,16 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
-  override def initQueryContext(): String = {
+  override def initQueryContext(): Option[SQLQueryContext] = {
     if (failOnError) {
-      origin.context
+      Some(origin.context)
     } else {
-      ""
+      None
     }
   }
 
   protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
-    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, queryContext)
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, getContextOrNull())
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
@@ -284,11 +285,7 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = if (failOnError) {
-        ctx.addReferenceObj("errCtx", queryContext)
-      } else {
-        "\"\""
-      }
+      val errorContextCode = getContextOrNullCode(ctx, failOnError)
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -333,7 +330,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       })
     case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+        val errorContext = getContextOrNullCode(ctx)
         val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
         s"""
            |${ev.value} = $mathUtils.${exactMathMethod.get}($eval1, $eval2, $errorContext);
@@ -413,9 +410,9 @@ case class Add(
     case _: YearMonthIntervalType =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
-      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], getContextOrNull())
     case _ => numeric.plus(input1, input2)
   }
 
@@ -482,9 +479,15 @@ case class Subtract(
     case _: YearMonthIntervalType =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.subtractExact(
+        input1.asInstanceOf[Int],
+        input2.asInstanceOf[Int],
+        getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.subtractExact(
+        input1.asInstanceOf[Long],
+        input2.asInstanceOf[Long],
+        getContextOrNull())
     case _ => numeric.minus(input1, input2)
   }
 
@@ -538,9 +541,15 @@ case class Multiply(
     case DecimalType.Fixed(precision, scale) =>
       checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
     case _: IntegerType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], queryContext)
+      MathUtils.multiplyExact(
+        input1.asInstanceOf[Int],
+        input2.asInstanceOf[Int],
+        getContextOrNull())
     case _: LongType if failOnError =>
-      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], queryContext)
+      MathUtils.multiplyExact(
+        input1.asInstanceOf[Long],
+        input2.asInstanceOf[Long],
+        getContextOrNull())
     case _ => numeric.times(input1, input2)
   }
 
@@ -577,10 +586,10 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError(queryContext)
+          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
-          throw QueryExecutionErrors.overflowInIntegralDivideError(queryContext)
+          throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
         }
         evalOperation(input1, input2)
       }
@@ -602,17 +611,13 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = if (failOnError) {
-      ctx.addReferenceObj("errCtx", queryContext)
-    } else {
-      "\"\""
-    }
+    val errorContextCode = getContextOrNullCode(ctx, failOnError)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
            |} else {
@@ -624,7 +629,7 @@ trait DivModLike extends BinaryArithmetic {
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContextCode);
         |""".stripMargin
     } else {
       ""
@@ -633,7 +638,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -651,7 +656,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContextCode);"
       } else {
         ""
       }
@@ -961,7 +966,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError(queryContext)
+          throw QueryExecutionErrors.divideByZeroError(getContextOrNull())
         }
         pmodFunc(input1, input2)
       }
@@ -978,11 +983,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = if (failOnError) {
-      ctx.addReferenceObj("errCtx", queryContext)
-    } else {
-      "\"\""
-    }
+    val errorContext = getContextOrNullCode(ctx)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"

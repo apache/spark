@@ -96,6 +96,132 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
 object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
+
+  def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
+    assert(plan.resolved)
+    val projectList = reorderFields(plan.output.map(a => (a.name, a)), schema.fields, Nil, conf)
+    Project(projectList, plan)
+  }
+
+  private def reconcileColumnType(
+      col: Expression,
+      columnPath: Seq[String],
+      dt: DataType,
+      nullable: Boolean,
+      conf: SQLConf): Expression = {
+    if (col.nullable && !nullable) {
+      throw QueryCompilationErrors.nullableColumnOrFieldError(columnPath)
+    }
+    (col.dataType, dt) match {
+      case (StructType(fields), expected: StructType) =>
+        val newFields = reorderFields(
+          fields.zipWithIndex.map { case (f, index) =>
+            (f.name, GetStructField(col, index))
+          },
+          expected.fields,
+          columnPath,
+          conf)
+        if (col.nullable) {
+          If(IsNull(col), Literal(null, dt), CreateStruct(newFields))
+        } else {
+          CreateStruct(newFields)
+        }
+
+      case (ArrayType(et, containsNull), expected: ArrayType) =>
+        if (containsNull & !expected.containsNull) {
+          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+        }
+        val param = NamedLambdaVariable("x", et, containsNull)
+        val reconciledElement = reconcileColumnType(
+          param, columnPath :+ "element", expected.elementType, expected.containsNull, conf)
+        val func = LambdaFunction(reconciledElement, Seq(param))
+        ArrayTransform(col, func)
+
+      case (MapType(kt, vt, valueContainsNull), expected: MapType) =>
+        if (valueContainsNull & !expected.valueContainsNull) {
+          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+        }
+        val keyParam = NamedLambdaVariable("key", kt, nullable = false)
+        val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
+        val reconciledKey = reconcileColumnType(
+          keyParam, columnPath :+ "key", expected.keyType, false, conf)
+        val reconciledValue = reconcileColumnType(
+          valueParam, columnPath :+ "value", expected.valueType, expected.valueContainsNull, conf)
+        val keyFunc = LambdaFunction(reconciledKey, Seq(keyParam))
+        val valueFunc = LambdaFunction(reconciledValue, Seq(valueParam))
+        val newKeys = ArrayTransform(MapKeys(col), keyFunc)
+        val newValues = ArrayTransform(MapValues(col), valueFunc)
+        MapFromArrays(newKeys, newValues)
+
+      case (other, target) =>
+        if (other == target) {
+          col
+        } else if (Cast.canANSIStoreAssign(other, target)) {
+          Cast(col, target, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+        } else {
+          throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
+        }
+    }
+  }
+
+  private def reorderFields(
+      fields: Seq[(String, Expression)],
+      expected: Seq[StructField],
+      columnPath: Seq[String],
+      conf: SQLConf): Seq[NamedExpression] = {
+    expected.map { f =>
+      val matched = fields.filter(field => conf.resolver(field._1, f.name))
+      if (matched.isEmpty) {
+        if (f.nullable) {
+          val columnExpr = Literal.create(null, f.dataType)
+          // Fill nullable missing new column with null value.
+          createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
+        } else {
+          if (columnPath.isEmpty) {
+            throw QueryCompilationErrors.unresolvedColumnError(f.name, fields.map(_._1))
+          } else {
+            throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
+          }
+        }
+      } else if (matched.length > 1) {
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(
+          columnPath :+ f.name, matched.length)
+      } else {
+        val columnExpr = matched.head._2
+        val originalMetadata = columnExpr match {
+          case ne: NamedExpression => ne.metadata
+          case g: GetStructField => g.childSchema(g.ordinal).metadata
+          case _ => Metadata.empty
+        }
+
+        val newColumnPath = columnPath :+ matched.head._1
+        val newColumnExpr = reconcileColumnType(
+          columnExpr, newColumnPath, f.dataType, f.nullable, conf)
+        createNewColumn(newColumnExpr, f.name, f.metadata, originalMetadata)
+      }
+    }
+  }
+
+  private def createNewColumn(
+      col: Expression,
+      name: String,
+      newMetadata: Metadata,
+      originalMetadata: Metadata): NamedExpression = {
+    val metadata = new MetadataBuilder()
+      .withMetadata(originalMetadata)
+      .withMetadata(newMetadata)
+      .build()
+
+    col match {
+      case a: Attribute => a.withName(name).withMetadata(metadata)
+      case other =>
+        if (metadata == Metadata.empty) {
+          Alias(other, name)()
+        } else {
+          Alias(other, name)(explicitMetadata = Some(metadata))
+        }
+    }
+  }
 }
 
 /**
@@ -1243,6 +1369,45 @@ case class Pivot(
   final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
+}
+
+/**
+ * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
+ * during the query analysis.
+ *
+ * An empty values array will be replaced during analysis with all resolved outputs of child except
+ * the ids. This expansion allows to easily unpivot all non-id columns.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveUnpivot`
+ *
+ * The type of the value column is derived from all value columns during analysis once all values
+ * are resolved. All values' types have to be compatible, otherwise the result value column cannot
+ * be assigned the individual values and an AnalysisException is thrown.
+ *
+ * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.UnpivotCoercion`
+ *
+ * @param ids                Id columns
+ * @param values             Value columns to unpivot
+ * @param variableColumnName Name of the variable column
+ * @param valueColumnName    Name of the value column
+ * @param child              Child operator
+ */
+case class Unpivot(
+    ids: Seq[NamedExpression],
+    values: Seq[NamedExpression],
+    variableColumnName: String,
+    valueColumnName: String,
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved = false  // Unpivot will be replaced after being resolved.
+  override def output: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
+    copy(child = newChild)
+
+  def valuesTypeCoercioned: Boolean = values.nonEmpty && values.forall(_.resolved) &&
+    values.tail.forall(v => v.dataType.sameType(values.head.dataType))
 }
 
 /**

@@ -338,6 +338,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
 
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
     withTempDir { dir =>
       testStream(mapped)(
@@ -435,6 +436,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25)
     )
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1, 2) ++ (10 to 25) ++ (100 to 125)
     withTempDir { dir =>
       testStream(mapped)(
@@ -537,6 +539,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
 
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1, 2) ++ (10 to 30) ++ (100 to 128)
     withTempDir { dir =>
       testStream(mapped)(
