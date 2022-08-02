@@ -426,10 +426,9 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      parameters = Map("types" ->
-        (""""BIGINT" \(`long1`\), """ +
-         """"INT" \(`id`, `int1`\), """ +
-         """"STRING" \(`str1`, `str2`\)""")),
+      parameters = Map(
+        "types" -> """"BIGINT" \(`long1`\), "INT" \(`id`, `int1`\), "STRING" \(`str1`, `str2`\)"""
+      ),
       matchPVals = true)
 
     // unpivoting with star id columns so that no value columns are left
@@ -458,10 +457,9 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      parameters = Map("types" ->
-        (""""BIGINT" \(`long1`\), """ +
-         """"INT" \(`id`, `int1`\), """ +
-         """"STRING" \(`str1`, `str2`\)""")),
+      parameters = Map(
+        "types" -> """"BIGINT" \(`long1`\), "INT" \(`id`, `int1`\), "STRING" \(`str1`, `str2`\)"""
+      ),
       matchPVals = true)
 
     // unpivoting without giving values and no non-id columns
@@ -676,21 +674,22 @@ class DatasetUnpivotSuite extends QueryTest
   test("unpivot via sql") {
     wideDataDs.createOrReplaceTempView("wideData")
     Seq(
-      // "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
-      //"SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
-      // "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
-      // "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
-      "SELECT * FROM wideData UNPIVOT ((i, l) for variable in ((int1, long1) as `li`))",
+      "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
+      "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
+      "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
+      "SELECT * FROM wideData UNPIVOT " +
+        "(values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
+      "SELECT * FROM wideData UNPIVOT " +
+        "((i, l) for variable in ((int1, long1) as `li`, (long1, int1), (long1, long1)))",
+      "SELECT * FROM wideData UNPIVOT ((i, l) for variable in (" +
+        "(int1, long1) as `li`, " +
+        "(long1, int1) as `il`, " +
+        "(long1, long1) as `ll`))"
     ).foreach { sql =>
       println(sql)
-      spark.sql(sql).drop("value").show(false)
+      spark.sql(sql).show(false)
       println()
     }
-
-    checkAnswer(
-      spark.sql("SELECT * FROM wideData"),
-      Seq()
-    )
   }
 }
 

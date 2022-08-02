@@ -564,6 +564,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNPIVOT_VALUE_SIZE_MISMATCH" : {
+    "message" : [
+      "Unpivot value columns must have the same size: [<sizes>]"
+    ],
+    "sqlState" : "42000"
+  },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type <typeName>"

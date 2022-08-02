@@ -2077,9 +2077,10 @@ class Dataset[T] private[sql](
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
       Some(ids.map(_.named)),
-      Some(values.map(_.named)),
+      Some(values.map(v => Seq(v.named))),
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }
@@ -2124,8 +2125,9 @@ class Dataset[T] private[sql](
     Unpivot(
       Some(ids.map(_.named)),
       None,
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }
@@ -2136,9 +2138,10 @@ class Dataset[T] private[sql](
       valueColumnName: String): DataFrame = withPlan {
     Unpivot(
       None,
-      Some(values.map(_.named)),
+      Some(values.map(v => Seq(v.named))),
+      None,
       variableColumnName,
-      valueColumnName,
+      Seq(valueColumnName),
       logicalPlan
     )
   }

@@ -20,11 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -41,7 +39,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, quoteIdentifier, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -517,8 +515,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
 
       case up: Unpivot if up.child.resolved &&
-        (up.ids.exists(hasUnresolvedAlias) || up.values.exists(hasUnresolvedAlias)) =>
-        up.copy(ids = up.ids.map(assignAliases), values = up.values.map(assignAliases))
+        (up.ids.exists(hasUnresolvedAlias) || up.values.exists(_.exists(hasUnresolvedAlias))) =>
+        up.copy(ids = up.ids.map(assignAliases), values = up.values.map(_.map(assignAliases)))
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
@@ -873,28 +871,41 @@ class Analyzer(override val catalogManager: CatalogManager)
       // if only either is given
       case up: Unpivot if up.childrenResolved &&
         up.ids.exists(_.forall(_.resolved)) && up.values.isEmpty =>
-        up.copy(values = Some(up.child.output.diff(up.ids.get.flatMap(_.references))))
+        up.copy(values = Some(up.child.output.diff(up.ids.get.flatMap(_.references)).map(Seq(_))))
       case up: Unpivot if up.childrenResolved &&
-        up.values.exists(_.forall(_.resolved)) && up.ids.isEmpty =>
-        up.copy(ids = Some(up.child.output.diff(up.values.get.flatMap(_.references))))
+        up.values.exists(_.forall(_.forall(_.resolved))) && up.ids.isEmpty =>
+        up.copy(ids = Some(up.child.output.diff(up.values.get.flatMap(_.flatMap(_.references)))))
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
-        !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.resolved)) ||
+        !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.forall(_.resolved))) ||
         !up.valuesTypeCoercioned => up
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
-      case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnName, child) =>
+      case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
+
+        def toString(values: Seq[NamedExpression]): String =
+          "(" + values.map(v => quoteIdentifier(v.name)).mkString(",") + ")"
+
         // construct unpivot expressions for Expand
-        val exprs: Seq[Seq[Expression]] = values.map {
-          value => ids ++ Seq(Literal(value.name), value)
-        }
+        val exprs: Seq[Seq[Expression]] =
+          values.zip(aliases.getOrElse(values.map(_ => None))).map {
+            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
+            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
+            // there are more than on value in vals
+            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
+          }
 
         // construct output attributes
-        val output = ids.map(_.toAttribute) ++ Seq(
-          AttributeReference(variableColumnName, StringType, nullable = false)(),
-          AttributeReference(valueColumnName, values.head.dataType, values.exists(_.nullable))()
-        )
+        val variableAttr = AttributeReference(variableColumnName, StringType, nullable = false)()
+        val valueAttrs = valueColumnNames.zipWithIndex.map {
+          case (valueColumnName, idx) =>
+            AttributeReference(
+              valueColumnName,
+              values.head(idx).dataType,
+              values.map(_(idx)).exists(_.nullable))()
+        }
+        val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
 
         // expand the unpivot expressions
         Expand(exprs, output, child)
@@ -1402,10 +1413,15 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
       // If the Unpivot ids or values contain Stars, expand them.
-      case up: Unpivot if up.ids.exists(containsStar) || up.values.exists(containsStar) =>
+      case up: Unpivot if up.ids.exists(containsStar) ||
+        // Only expand Stars in one-dimensional values
+        up.values.exists(values => values.exists(_.length == 1) && values.exists(containsStar)) =>
         up.copy(
           ids = up.ids.map(buildExpandedProjectList(_, up.child)),
-          values = up.values.map(buildExpandedProjectList(_, up.child))
+          // The inner Seq in Option[Seq[Seq[NamedExpression]]] is one-dimensional, e.g.
+          // Optional[[["*"]]]. The inner NamedExpression turns into Seq[NamedExpression], e.g.
+          // Optional[[["col1", "col2"]]], which we here turn into Optional[[["col1"], ["col2"]]]
+          values = up.values.map(_.flatMap(buildExpandedProjectList(_, up.child)).map(Seq(_)))
         )
 
       case u @ Union(children, _, _)
@@ -3904,10 +3920,16 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedMetrics = metrics.map(trimNonTopLevelAliases)
       CollectMetrics(name, cleanedMetrics, child)
 
-    case Unpivot(Some(ids), Some(values), variableColumnName, valueColumnName, child) =>
+    case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
       val cleanedIds = ids.map(trimNonTopLevelAliases)
-      val cleanedValues = values.map(trimNonTopLevelAliases)
-      Unpivot(Some(cleanedIds), Some(cleanedValues), variableColumnName, valueColumnName, child)
+      val cleanedValues = values.map(_.map(trimNonTopLevelAliases))
+      Unpivot(
+        Some(cleanedIds),
+        Some(cleanedValues),
+        aliases,
+        variableColumnName,
+        valueColumnNames,
+        child)
 
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.

@@ -1127,51 +1127,27 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
       Unpivot(
         None,
-        Some(unpivotColumns.toSeq),
+        Some(unpivotColumns.map(Seq(_)).toSeq),
+        None,
         variableColumnName,
-        valueColumnName,
-        query)
+        Seq(valueColumnName),
+        query
+      )
     } else {
       val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
       val valueColumnNames = unpivotClause.unpivotValueColumns.asScala.map(_.identifier().getText)
-      // TODO: find a temporary column name that does not exist in child
-      val valueColumnName = "value"
-      val unpivotColumns = unpivotClause.unpivotColumnSets.asScala.map(
-        createUnpivotColumnStruct(valueColumnNames))
-      // val idColumns = detectIdColumns(unpivotColumns, query.output)
+      val (unpivotColumns, unpivotAliases) =
+        unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).unzip
 
-      val unpivoted = Unpivot(
+      Unpivot(
         None,
         Some(unpivotColumns),
+        Some(unpivotAliases),
         variableColumnName,
-        valueColumnName,
+        valueColumnNames,
         query
       )
-
-      /**
-       * cannot drop column value as it does not exist at this stage, only after analysis is done
-       */
-      // val allColumns = unpivoted.output
-      // val remainingCols = allColumns.filter { attribute =>
-      //   !conf.resolver(attribute.name, valueColumnName)
-      // }
-      // Project(remainingCols :+ UnresolvedStar(Some(Seq("value"))), unpivoted)
-
-      /**
-      // project values struct column into individual columns
-      val projection =
-        // select all id columns
-        idColumns :+
-        // followed by the variable column
-        UnresolvedAttribute.quotedString(variableColumnName) :+
-        // expand values struct column into individual columns
-        UnresolvedStar(Some(Seq("value")))
-
-      Project(projection, unpivoted)
-      */
-      // TODO: drop "value" column
-      Project(Seq(UnresolvedStar(None), UnresolvedStar(Some(Seq("value")))), unpivoted)
     }
   }
 
@@ -1191,19 +1167,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create an Unpivot struct column with or without an alias.
    * Each struct field is renamed to the respective value column name.
    */
-  def createUnpivotColumnStruct(valueColumnNames: Seq[String])
-                               (ctx: UnpivotColumnSetContext): NamedExpression =
+  override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext):
+      (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
-      val e = CreateStruct.create(
-        ctx.unpivotColumns.asScala.zip(valueColumnNames).map {
-          case (c, n) => Alias(expression(c.expression), n)()
-        }
-      )
-      if (ctx.identifier != null) {
-        Alias(e, ctx.identifier.getText)()
-      } else {
-        UnresolvedAlias(e)
-      }
+      val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn)
+      val alias = Option(ctx.identifier).map(_.getText)
+      (exprs, alias)
     }
 
   /**

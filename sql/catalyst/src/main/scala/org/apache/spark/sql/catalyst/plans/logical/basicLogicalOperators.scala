@@ -1390,6 +1390,31 @@ case class Pivot(
  *
  * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveUnpivot`
  *
+ * Multiple columns can be unpivoted into one row by providing multiple value column names
+ * and the same number of value expressions per unpivot value:
+ * {{{
+ *   // single value column
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1"), Seq("val2")
+ *     )),
+ *     "var",
+ *     Seq("val")
+ *   )
+ *
+ *   // two value columns
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2"))
+ *     ),
+ *     "var",
+ *     Seq("val1", "val2")
+ *   )
+ * }}}
+ *
  * The type of the value column is derived from all value columns during analysis once all values
  * are resolved. All values' types have to be compatible, otherwise the result value column cannot
  * be assigned the individual values and an AnalysisException is thrown.
@@ -1398,15 +1423,17 @@ case class Pivot(
  *
  * @param ids                Id columns
  * @param values             Value columns to unpivot
+ * @param aliases            Optional aliases for values
  * @param variableColumnName Name of the variable column
- * @param valueColumnName    Name of the value column
+ * @param valueColumnNames   Names of the value columns
  * @param child              Child operator
  */
 case class Unpivot(
     ids: Option[Seq[NamedExpression]],
-    values: Option[Seq[NamedExpression]],
+    values: Option[Seq[Seq[NamedExpression]]],
+    aliases: Option[Seq[Option[String]]],
     variableColumnName: String,
-    valueColumnName: String,
+    valueColumnNames: Seq[String],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false  // Unpivot will be replaced after being resolved.
   override def output: Seq[Attribute] = Nil
@@ -1416,10 +1443,14 @@ case class Unpivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
     copy(child = newChild)
 
-  def canBeCoercioned: Boolean = values.exists(_.nonEmpty) && values.exists(_.forall(_.resolved))
+  def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
+    values.exists(_.forall(_.forall(_.resolved)))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    values.get.tail.forall(v => v.dataType.sameType(values.get.head.dataType))
+    // all inner values at position idx must have the same data type
+    values.get.head.zipWithIndex.forall { case (v, idx) =>
+      values.get.tail.forall(vals => vals(idx).dataType.sameType(v.dataType))
+    }
 }
 
 /**
