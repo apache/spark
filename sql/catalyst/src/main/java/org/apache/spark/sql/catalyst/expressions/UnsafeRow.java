@@ -48,7 +48,7 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  *
  * Each tuple has three parts: [null-tracking bit set] [values] [variable length portion]
  *
- * The null-tracking portion is used for null tracking and is aligned to 8-byte word boundaries.
+ * The null-tracking bit set is used for null tracking and is aligned to 8-byte word boundaries.
  * It stores one bit per field.
  *
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
