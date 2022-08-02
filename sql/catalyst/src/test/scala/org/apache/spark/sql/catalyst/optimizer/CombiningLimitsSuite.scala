@@ -111,7 +111,7 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized1, expected1)
 
     // test child max row > limit.
-    val query2 = testRelation.select().groupBy()(count(1)).limit(0).analyze
+    val query2 = testRelation2.select($"x").groupBy($"x")(count(1)).limit(1).analyze
     val optimized2 = Optimize.execute(query2)
     comparePlans(optimized2, query2)
 

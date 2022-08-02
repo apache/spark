@@ -166,8 +166,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
-    Batch("OptimizeLimitZero", Once,
-      OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -1954,7 +1952,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
- * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ * 2. Replace [[Limit]]/[[LocalLimit]]/[[GlobalLimit]] operators with empty [[LocalRelation]]
+ *    if the limit value is zero (0).
+ * 3. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
 object EliminateLimits extends Rule[LogicalPlan] {
@@ -1968,6 +1968,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+
+    case LocalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case GlobalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
@@ -2402,40 +2407,5 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
-  }
-}
-
-/**
- * Replaces GlobalLimit 0 and LocalLimit 0 nodes (subtree) with empty Local Relation, as they don't
- * return any rows.
- */
-object OptimizeLimitZero extends Rule[LogicalPlan] {
-  // returns empty Local Relation corresponding to given plan
-  private def empty(plan: LogicalPlan) =
-    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LIMIT, LITERAL)) {
-    // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
-    // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
-    // semantically equivalent to an empty relation.
-    //
-    // In such cases, the effects of Limit 0 can be propagated through the Logical Plan by replacing
-    // the (Global/Local) Limit subtree with an empty LocalRelation, thereby pruning the subtree
-    // below and triggering other optimization rules of PropagateEmptyRelation to propagate the
-    // changes up the Logical Plan.
-    //
-    // Replace Global Limit 0 nodes with empty Local Relation
-    case gl @ GlobalLimit(IntegerLiteral(0), _) =>
-      empty(gl)
-
-    // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
-    // GlobalLimit 0 node would also exist. Thus, the above case would be sufficient to handle
-    // almost all cases. However, if a user explicitly creates a Logical Plan with LocalLimit 0 node
-    // then the following rule will handle that case as well.
-    //
-    // Replace Local Limit 0 nodes with empty Local Relation
-    case ll @ LocalLimit(IntegerLiteral(0), _) =>
-      empty(ll)
   }
 }
