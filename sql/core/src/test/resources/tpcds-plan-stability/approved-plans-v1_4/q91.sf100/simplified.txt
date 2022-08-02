@@ -3,14 +3,14 @@ WholeStageCodegen (9)
     InputAdapter
       Exchange [Returns_Loss] #1
         WholeStageCodegen (8)
-          HashAggregate [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status,_pushed_sum_cr_net_loss,cnt] [sum((_pushed_sum_cr_net_lossL * cntL)),Call_Center,Call_Center_Name,Manager,Returns_Loss,sum]
+          HashAggregate [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status,sum] [sum(UnscaledValue(cr_net_loss)),Call_Center,Call_Center_Name,Manager,Returns_Loss,sum]
             InputAdapter
               Exchange [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status] #2
                 WholeStageCodegen (7)
-                  Project [_pushed_sum_cr_net_loss,cd_education_status,cd_marital_status,cc_call_center_id,cc_manager,cc_name,cnt]
-                    BroadcastHashJoin [cr_call_center_sk,cc_call_center_sk]
-                      HashAggregate [cr_call_center_sk,cd_marital_status,cd_education_status,cr_net_loss] [sum(UnscaledValue(cr_net_loss)),_pushed_sum_cr_net_loss,sum]
-                        Project [cr_net_loss,cd_marital_status,cd_education_status,cr_call_center_sk]
+                  HashAggregate [cc_call_center_id,cc_name,cc_manager,cd_marital_status,cd_education_status,cr_net_loss] [sum,sum]
+                    Project [cc_call_center_id,cc_name,cc_manager,cr_net_loss,cd_marital_status,cd_education_status]
+                      BroadcastHashJoin [cr_call_center_sk,cc_call_center_sk]
+                        Project [cd_marital_status,cd_education_status,cr_call_center_sk,cr_net_loss]
                           BroadcastHashJoin [c_customer_sk,cr_returning_customer_sk]
                             Project [c_customer_sk,cd_marital_status,cd_education_status]
                               BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
@@ -64,10 +64,9 @@ WholeStageCodegen (9)
                                                             Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #7
-                      InputAdapter
-                        BroadcastExchange #8
-                          WholeStageCodegen (6)
-                            HashAggregate [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager] [count(1),cnt,count]
+                        InputAdapter
+                          BroadcastExchange #8
+                            WholeStageCodegen (6)
                               Filter [cc_call_center_sk]
                                 ColumnarToRow
                                   InputAdapter

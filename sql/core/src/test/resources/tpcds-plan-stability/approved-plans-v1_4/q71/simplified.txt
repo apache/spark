@@ -3,13 +3,13 @@ WholeStageCodegen (11)
     InputAdapter
       Exchange [ext_price,brand_id] #1
         WholeStageCodegen (10)
-          HashAggregate [i_brand,i_brand_id,t_hour,t_minute,_pushed_sum_ext_price,cnt] [sum((_pushed_sum_ext_priceL * cntL)),brand_id,brand,ext_price,sum]
+          HashAggregate [i_brand,i_brand_id,t_hour,t_minute,sum] [sum(UnscaledValue(ext_price)),brand_id,brand,ext_price,sum]
             InputAdapter
               Exchange [i_brand,i_brand_id,t_hour,t_minute] #2
                 WholeStageCodegen (9)
-                  Project [_pushed_sum_ext_price,i_brand,i_brand_id,cnt,t_hour,t_minute]
-                    BroadcastHashJoin [time_sk,t_time_sk]
-                      HashAggregate [time_sk,i_brand,i_brand_id,ext_price] [sum(UnscaledValue(ext_price)),_pushed_sum_ext_price,sum]
+                  HashAggregate [i_brand,i_brand_id,t_hour,t_minute,ext_price] [sum,sum]
+                    Project [i_brand_id,i_brand,ext_price,t_hour,t_minute]
+                      BroadcastHashJoin [time_sk,t_time_sk]
                         Project [i_brand_id,i_brand,ext_price,time_sk]
                           BroadcastHashJoin [i_item_sk,sold_item_sk]
                             InputAdapter
@@ -59,11 +59,10 @@ WholeStageCodegen (11)
                                               ReusedSubquery [d_date_sk] #1
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
-                      InputAdapter
-                        BroadcastExchange #5
-                          WholeStageCodegen (8)
-                            HashAggregate [t_time_sk,t_hour,t_minute] [count(1),cnt,count]
-                              Project [t_hour,t_minute,t_time_sk]
+                        InputAdapter
+                          BroadcastExchange #5
+                            WholeStageCodegen (8)
+                              Project [t_time_sk,t_hour,t_minute]
                                 Filter [t_meal_time,t_time_sk]
                                   ColumnarToRow
                                     InputAdapter

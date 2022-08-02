@@ -1,13 +1,13 @@
 TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee)]
   WholeStageCodegen (15)
-    HashAggregate [r_reason_desc,_pushed_sum_ws_quantity,cnt,cnt,_pushed_sum_wr_refunded_cash,_pushed_sum_wr_fee] [sum((_pushed_sum_ws_quantity * cast(cntL as double))),sum((cntL * cntL)),sum((_pushed_sum_wr_refunded_cash * cast(cntL as double))),sum((_pushed_sum_wr_fee * cast(cntL as double))),substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee),sum,sum,sum,sum]
+    HashAggregate [r_reason_desc,sum,count,sum,count,sum,count] [avg(ws_quantity),avg(UnscaledValue(wr_refunded_cash)),avg(UnscaledValue(wr_fee)),substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee),sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [r_reason_desc] #1
           WholeStageCodegen (14)
-            Project [_pushed_sum_wr_fee,_pushed_sum_wr_refunded_cash,_pushed_sum_ws_quantity,cnt,cnt,r_reason_desc]
-              BroadcastHashJoin [wr_reason_sk,r_reason_sk]
-                HashAggregate [wr_reason_sk,wr_fee,wr_refunded_cash,ws_quantity] [sum(UnscaledValue(wr_fee)),sum(UnscaledValue(wr_refunded_cash)),sum(ws_quantity),count(1),_pushed_sum_wr_fee,_pushed_sum_wr_refunded_cash,_pushed_sum_ws_quantity,cnt,sum,sum,sum,count]
-                  Project [ws_quantity,wr_fee,wr_refunded_cash,wr_reason_sk]
+            HashAggregate [r_reason_desc,ws_quantity,wr_refunded_cash,wr_fee] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+              Project [ws_quantity,wr_fee,wr_refunded_cash,r_reason_desc]
+                BroadcastHashJoin [wr_reason_sk,r_reason_sk]
+                  Project [ws_quantity,wr_reason_sk,wr_fee,wr_refunded_cash]
                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                       Project [ws_quantity,ws_sold_date_sk,wr_reason_sk,wr_fee,wr_refunded_cash]
                         BroadcastHashJoin [wr_refunded_addr_sk,ca_address_sk,ca_state,ws_net_profit]
@@ -108,10 +108,9 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                         Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
                       InputAdapter
                         ReusedExchange [d_date_sk] #4
-                InputAdapter
-                  BroadcastExchange #12
-                    WholeStageCodegen (13)
-                      HashAggregate [r_reason_sk,r_reason_desc] [count(1),cnt,count]
+                  InputAdapter
+                    BroadcastExchange #12
+                      WholeStageCodegen (13)
                         Filter [r_reason_sk]
                           ColumnarToRow
                             InputAdapter
