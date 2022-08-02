@@ -417,7 +417,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (db != null) {
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
-        db.delete(key);
+        if (db.get(key) != null) {
+          db.delete(key);
+        }
       } catch (Exception e) {
         logger.error("Failed to remove the application attempt {} local path in DB",
             appAttemptId, e);

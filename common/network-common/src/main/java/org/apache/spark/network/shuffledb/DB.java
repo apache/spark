@@ -22,6 +22,7 @@ import java.util.Map;
 
 public interface DB {
     void put(byte[] key, byte[] value) throws RuntimeException;
+    byte[] get(byte[] key) throws RuntimeException;
     void delete(byte[] key) throws RuntimeException;
     void close() throws IOException;
     Map<String, byte[]> readKVToMap(String prefix) throws IOException;
