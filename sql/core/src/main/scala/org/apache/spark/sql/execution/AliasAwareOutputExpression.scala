@@ -27,52 +27,57 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-    private lazy val aliasMap: mutable.Map[Expression, mutable.Buffer[Attribute]] = {
-      val aliases = mutable.Map[Expression, mutable.Buffer[Attribute]]()
-      outputExpressions.foreach {
-        case a @ Alias(child, _) =>
-          aliases.getOrElseUpdate(child.canonicalized, mutable.ArrayBuffer.empty[Attribute]) +=
-          a.toAttribute
-        case _ =>
-      }
-      outputExpressions.foreach {
-        case a: Attribute if aliases.contains(a.canonicalized) => aliases(a.canonicalized) += a
-        case _ =>
-      }
-      aliases
+  private lazy val aliasMap: mutable.Map[Expression, mutable.Buffer[Attribute]] = {
+    val aliases = mutable.Map[Expression, mutable.Buffer[Attribute]]()
+    // Add aliases to the map. If multiple alias is defined for a source attribute then add all.
+    outputExpressions.foreach {
+      case a @ Alias(child, _) =>
+        aliases.getOrElseUpdate(child.canonicalized, mutable.ArrayBuffer.empty[Attribute]) +=
+        a.toAttribute
+      case _ =>
     }
+    // Add identity mapping of an attribute to the map, if both the attribute and its aliased
+    // version can be found in `outputExpressions`.
+    outputExpressions.foreach {
+      case a: Attribute if aliases.contains(a.canonicalized) => aliases(a.canonicalized) += a
+      case _ =>
+    }
+    aliases
+  }
 
-    protected def hasAlias: Boolean = aliasMap.nonEmpty
+  protected def hasAlias: Boolean = aliasMap.nonEmpty
 
-    def generate(e: Expression)(
-        rule: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
-      val afterRules: Seq[Expression] = rule.applyOrElse(e, (e: Expression) => Seq(e))
-      afterRules.flatMap { afterRule =>
+  // This is an alternative to `TreeNode.transform` but it accepts rules that can transform a node
+  // to multiple alternatives and so this function returns alternative expressions in the end.
+  private def generate(e: Expression)(
+      rule: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
+    val afterRules: Seq[Expression] = rule.applyOrElse(e, (e: Expression) => Seq(e))
+    afterRules.flatMap { afterRule =>
 
-        def generateChildrenSeq(children: Seq[Expression]) = {
-          var childrenSeq = Seq(Seq.empty[Expression])
-          children.reverse.foreach { child =>
-            childrenSeq = for {
-              c <- generate(child)(rule);
-              cs <- childrenSeq
-            } yield (c +: cs)
-          }
-          childrenSeq
+      def generateChildrenSeq(children: Seq[Expression]) = {
+        var childrenSeq = Seq(Seq.empty[Expression])
+        children.reverse.foreach { child =>
+          childrenSeq = for {
+            c <- generate(child)(rule);
+            cs <- childrenSeq
+          } yield c +: cs
         }
+        childrenSeq
+      }
 
-        if (e fastEquals afterRule) {
-          generateChildrenSeq(e.children).map(e.withNewChildren)
-        } else {
-          generateChildrenSeq(afterRule.children).map(afterRule.withNewChildren)
-        }
+      if (e fastEquals afterRule) {
+        generateChildrenSeq(e.children).map(e.withNewChildren)
+      } else {
+        generateChildrenSeq(afterRule.children).map(afterRule.withNewChildren)
       }
     }
+  }
 
-    protected def normalizeExpression(exp: Expression): Seq[Expression] = {
-      generate(exp) {
-        case e: Expression => aliasMap.getOrElse(e.canonicalized, Seq(e))
-      }
+  protected def normalizeExpression(exp: Expression): Seq[Expression] = {
+    generate(exp) {
+      case e: Expression => aliasMap.getOrElse(e.canonicalized, Seq(e))
     }
+  }
 }
 
 /**
