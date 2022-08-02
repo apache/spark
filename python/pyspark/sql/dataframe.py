@@ -2263,8 +2263,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
         do not have a common data type and `unpivot` fails.
 
-        :func:`groupby` is an alias for :func:`groupBy`.
-
         .. versionadded:: 3.4.0
 
         Parameters
@@ -2309,6 +2307,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|   int|12.0|
         |  2|double| 1.2|
         +---+------+----+
+
+        See Also
+        --------
+        DataFrame.melt
         """
 
         def to_jcols(

@@ -73,6 +73,7 @@ DataFrame
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.mapInArrow
+    DataFrame.melt
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
