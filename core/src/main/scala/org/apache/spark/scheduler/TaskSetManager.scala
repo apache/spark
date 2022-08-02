@@ -1067,11 +1067,14 @@ private[spark] class TaskSetManager(
       }
     }
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
+      // If the task is launching, this indicates that Driver has sent LaunchTask to Executor,
+      // but Executor has not sent StatusUpdate(TaskState.RUNNING) to Driver. Hence, we assume that
+      // the task is not running, and it is NetworkFailure rather than TaskFailure.
       val exitCausedByApp: Boolean = reason match {
-        case exited: ExecutorExited => exited.exitCausedByApp
+        case ExecutorExited(_, false, _) => false
         case ExecutorKilled | ExecutorDecommission(_) => false
         case ExecutorProcessLost(_, _, false) => false
-        case _ => true
+        case _ => !info.launching
       }
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,
         Some(reason.toString)))
