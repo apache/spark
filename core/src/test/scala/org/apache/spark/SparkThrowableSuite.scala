@@ -168,7 +168,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
-        "(except for ANSI interval type) to bypass this error.")
+        "to bypass this error.")
   }
 
   test("Error message is formatted") {

@@ -534,6 +534,150 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
+    def test_unpivot(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no identifier and no value columns"):
+            # select only columns that have common data type (double)
+            actual = df.select("id", "int", "double").unpivot(
+                ids=None, values=None, variableColumnName="var", valueColumnName="val"
+            )
+            self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
+            self.assertEqual(
+                actual.collect(),
+                [
+                    Row(variable="id", value=1.0),
+                    Row(variable="int", value=10.0),
+                    Row(variable="double", value=1.0),
+                    Row(variable="id", value=2.0),
+                    Row(variable="int", value=20.0),
+                    Row(variable="double", value=2.0),
+                    Row(variable="id", value=3.0),
+                    Row(variable="int", value=30.0),
+                    Row(variable="double", value=3.0),
+                ],
+            )
+
+        with self.subTest(desc="with no identifier column and multiple value columns"):
+            for id in [None, [], ()]:
+                for values in [["int", "double"], ("int", "double")]:
+                    with self.subTest(ids=id, values=values):
+                        actual = df.unpivot(id, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(), "struct<var:string,val:double>"
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(variable="int", value=10.0),
+                                Row(variable="double", value=1.0),
+                                Row(variable="int", value=20.0),
+                                Row(variable="double", value=2.0),
+                                Row(variable="int", value=30.0),
+                                Row(variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with single identifier column and multiple value columns"):
+            for id in ["id", ["id"], ("id",)]:
+                for values in [["int", "double"], ("int", "double")]:
+                    with self.subTest(ids=id, values=values):
+                        actual = df.unpivot(id, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,var:string,val:double>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, variable="int", value=10.0),
+                                Row(id=1, variable="double", value=1.0),
+                                Row(id=2, variable="int", value=20.0),
+                                Row(id=2, variable="double", value=2.0),
+                                Row(id=3, variable="int", value=30.0),
+                                Row(id=3, variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with multiple identifier columns and single given value columns"):
+            for ids in [["id", "double"], ("id", "double")]:
+                for values in ["str", ["str"], ("str",)]:
+                    with self.subTest(ids=ids, values=values):
+                        actual = df.unpivot(ids, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,double:double,var:string,val:string>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, double=1.0, variable="str", value="one"),
+                                Row(id=2, double=2.0, variable="str", value="two"),
+                                Row(id=3, double=3.0, variable="str", value="three"),
+                            ],
+                        )
+
+        with self.subTest(desc="with multiple identifier columns but no given value columns"):
+            for ids in [["id", "str"], ("id", "str")]:
+                for values in [None, [], ()]:
+                    with self.subTest(ids=ids, values=values):
+                        actual = df.unpivot(ids, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,str:string,var:string,val:double>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, str="one", variable="int", value=10.0),
+                                Row(id=1, str="one", variable="double", value=1.0),
+                                Row(id=2, str="two", variable="int", value=20.0),
+                                Row(id=2, str="two", variable="double", value=2.0),
+                                Row(id=3, str="three", variable="int", value=30.0),
+                                Row(id=3, str="three", variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val")
+
+        with self.subTest(desc="with columns"):
+            for id in [df.id, [df.id], (df.id,)]:
+                for values in [[df.int, df.double], (df.int, df.double)]:
+                    with self.subTest(ids=id, values=values):
+                        self.assertEqual(
+                            df.unpivot(id, values, "var", "val").collect(),
+                            df.unpivot("id", ["int", "double"], "var", "val").collect(),
+                        )
+
+        with self.subTest(desc="with column names and columns"):
+            for ids in [[df.id, "str"], (df.id, "str")]:
+                for values in [[df.int, "double"], (df.int, "double")]:
+                    with self.subTest(ids=ids, values=values):
+                        self.assertEqual(
+                            df.unpivot(ids, values, "var", "val").collect(),
+                            df.unpivot(["id", "str"], ["int", "double"], "var", "val").collect(),
+                        )
+
+        with self.subTest(desc="melt alias"):
+            self.assertEqual(
+                df.unpivot("id", ["int", "double"], "var", "val").collect(),
+                df.melt("id", ["int", "double"], "var", "val").collect(),
+            )
+
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation

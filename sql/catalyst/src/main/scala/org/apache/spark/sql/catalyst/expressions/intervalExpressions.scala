@@ -604,7 +604,7 @@ trait IntervalDivide {
       minValue: Any,
       num: Expression,
       numValue: Any,
-      context: Option[SQLQueryContext]): Unit = {
+      context: SQLQueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
         throw QueryExecutionErrors.overflowInIntegralDivideError(context)
@@ -615,20 +615,24 @@ trait IntervalDivide {
   def divideByZeroCheck(
       dataType: DataType,
       num: Any,
-      context: Option[SQLQueryContext]): Unit = dataType match {
+      context: SQLQueryContext): Unit = dataType match {
     case _: DecimalType =>
-      if (num.asInstanceOf[Decimal].isZero) throw QueryExecutionErrors.divideByZeroError(context)
-    case _ => if (num == 0) throw QueryExecutionErrors.divideByZeroError(context)
+      if (num.asInstanceOf[Decimal].isZero) {
+        throw QueryExecutionErrors.intervalDividedByZeroError(context)
+      }
+    case _ => if (num == 0) throw QueryExecutionErrors.intervalDividedByZeroError(context)
   }
 
   def divideByZeroCheckCodegen(
       dataType: DataType,
       value: String,
       errorContextReference: String): String = dataType match {
+    // scalastyle:off line.size.limit
     case _: DecimalType =>
-      s"if ($value.isZero()) throw QueryExecutionErrors.divideByZeroError($errorContextReference);"
+      s"if ($value.isZero()) throw QueryExecutionErrors.intervalDividedByZeroError($errorContextReference);"
     case _ =>
-      s"if ($value == 0) throw QueryExecutionErrors.divideByZeroError($errorContextReference);"
+      s"if ($value == 0) throw QueryExecutionErrors.intervalDividedByZeroError($errorContextReference);"
+    // scalastyle:on line.size.limit
   }
 }
 
@@ -661,13 +665,13 @@ case class DivideYMInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(
-      interval.asInstanceOf[Int], Int.MinValue, right, num, Some(origin.context))
-    divideByZeroCheck(right.dataType, num, Some(origin.context))
+      interval.asInstanceOf[Int], Int.MinValue, right, num, origin.context)
+    divideByZeroCheck(right.dataType, num, origin.context)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", Some(origin.context))
+    val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     right.dataType match {
       case t: IntegralType =>
         val math = t match {
@@ -739,13 +743,13 @@ case class DivideDTInterval(
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     checkDivideOverflow(
-      interval.asInstanceOf[Long], Long.MinValue, right, num, Some(origin.context))
-    divideByZeroCheck(right.dataType, num, Some(origin.context))
+      interval.asInstanceOf[Long], Long.MinValue, right, num, origin.context)
+    divideByZeroCheck(right.dataType, num, origin.context)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContext = ctx.addReferenceObj("errCtx", Some(origin.context))
+    val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     right.dataType match {
       case _: IntegralType =>
         val math = classOf[LongMath].getName

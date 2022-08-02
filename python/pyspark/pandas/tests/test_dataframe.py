@@ -48,7 +48,7 @@ from pyspark.testing.pandasutils import (
     tabulate_requirement_message,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.utils import name_like_string
+from pyspark.pandas.utils import name_like_string, is_testing
 
 
 class DataFrameTest(ComparisonTestBase, SQLTestUtils):
@@ -95,6 +95,17 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         column_mask = pdf.columns.isin(["a", "b"])
         index_cols = pdf.columns[column_mask]
         self.assert_eq(psdf[index_cols], pdf[index_cols])
+
+        if is_testing():
+            err_msg = "pandas-on-Spark doesn't allow columns to be created via a new attribute name"
+            with self.assertRaisesRegex(AssertionError, err_msg):
+                psdf.X = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+        else:
+            with self.assertWarns(UserWarning):
+                psdf.X = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+            # If a new column is created, the following test would fail.
+            # It means that the pandas have changed their behavior, so we should follow.
+            self.assert_eq(pdf, psdf)
 
     def test_creation_index(self):
         err_msg = (
@@ -378,6 +389,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             self.assert_eq(ptuple, ktuple)
         for ptuple, ktuple in zip(pdf.itertuples(name=None), psdf.itertuples(name=None)):
             self.assert_eq(ptuple, ktuple)
+        for ptuple, ktuple in zip(
+            pdf.itertuples(index=False, name=None), psdf.itertuples(index=False, name=None)
+        ):
+            self.assert_eq(ptuple, ktuple)
 
         pdf.index = pd.MultiIndex.from_arrays(
             [[1, 2], ["black", "brown"]], names=("count", "color")
@@ -416,6 +431,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(3),
         )
+        psdf = ps.from_pandas(pdf)
+
+        for (pdf_k, pdf_v), (psdf_k, psdf_v) in zip(pdf.iterrows(), psdf.iterrows()):
+            self.assert_eq(pdf_k, psdf_k)
+            self.assert_eq(pdf_v, psdf_v)
+
+        # MultiIndex
+        pmidx = pd.Index([(1, 2), (3, 4), (5, 6)])
+        pdf.index = pmidx
         psdf = ps.from_pandas(pdf)
 
         for (pdf_k, pdf_v), (psdf_k, psdf_v) in zip(pdf.iterrows(), psdf.iterrows()):
@@ -879,6 +903,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         msg = r"level should be an integer between \[0, column_labels_level\)"
         with self.assertRaisesRegex(ValueError, msg):
             psdf2.rename(columns=str_lower, level=2)
+        msg = r"level should be an integer between \[0, 2\)"
+        with self.assertRaisesRegex(ValueError, msg):
+            psdf3.rename(index=str_lower, level=2)
 
     def test_rename_axis(self):
         index = pd.Index(["A", "B", "C"], name="index")
@@ -915,6 +942,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assertRaises(ValueError, lambda: psdf.rename_axis(["index2", "index3"], axis=0))
         self.assertRaises(ValueError, lambda: psdf.rename_axis(["cols2", "cols3"], axis=1))
         self.assertRaises(TypeError, lambda: psdf.rename_axis(mapper=["index2"], index=["index3"]))
+        self.assertRaises(ValueError, lambda: psdf.rename_axis(ps))
 
         self.assert_eq(
             pdf.rename_axis(index={"index": "index2"}, columns={"cols": "cols2"}).sort_index(),
@@ -1354,7 +1382,6 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(6),
         )
-        psdf = ps.from_pandas(pdf)
 
         self._test_dropna(pdf, axis=0)
 
@@ -1362,6 +1389,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf = pd.DataFrame(index=np.random.rand(6))
         psdf = ps.from_pandas(pdf)
 
+        self.assert_eq(psdf.dropna(), pdf.dropna())
+        self.assert_eq(psdf.dropna(how="all"), pdf.dropna(how="all"))
+        self.assert_eq(psdf.dropna(thresh=0), pdf.dropna(thresh=0))
+        self.assert_eq(psdf.dropna(thresh=1), pdf.dropna(thresh=1))
+
+        # Only NA value
+        pdf["a"] = [np.nan] * 6
+        psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf.dropna(), pdf.dropna())
         self.assert_eq(psdf.dropna(how="all"), pdf.dropna(how="all"))
         self.assert_eq(psdf.dropna(thresh=0), pdf.dropna(thresh=0))
@@ -3668,6 +3703,17 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             psdf.reindex(index=kindex, fill_value=0.0).sort_index(),
         )
 
+        # Specifying the `labels` parameter
+        new_index = ["V", "W", "X", "Y", "Z"]
+        self.assert_eq(
+            pdf.reindex(labels=new_index, fill_value=0.0, axis=0).sort_index(),
+            psdf.reindex(labels=new_index, fill_value=0.0, axis=0).sort_index(),
+        )
+        self.assert_eq(
+            pdf.reindex(labels=new_index, fill_value=0.0, axis=1).sort_index(),
+            psdf.reindex(labels=new_index, fill_value=0.0, axis=1).sort_index(),
+        )
+
         self.assertRaises(TypeError, lambda: psdf.reindex(columns=["numbers", "2", "3"], axis=1))
         self.assertRaises(TypeError, lambda: psdf.reindex(columns=["numbers", "2", "3"], axis=2))
         self.assertRaises(TypeError, lambda: psdf.reindex(columns="numbers"))
@@ -4493,6 +4539,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         with self.assertRaisesRegex(AssertionError, "the first argument should be a callable"):
             psdf.transform(1)
+        with self.assertRaisesRegex(
+            NotImplementedError, 'axis should be either 0 or "index" currently.'
+        ):
+            psdf.transform(lambda x: x + 1, axis=1)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -4987,6 +5037,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         with self.assertRaisesRegex(TypeError, "type of cond must be a DataFrame or Series"):
             psdf.where(1)
+        with self.assertRaisesRegex(
+            NotImplementedError, 'axis should be either 0 or "index" currently.'
+        ):
+            psdf.where(psdf > 2, psdf.a + 10, axis=1)
 
     def test_mask(self):
         psdf = ps.from_pandas(self.pdf)
@@ -5578,11 +5632,17 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(np.abs(psdf), np.abs(pdf))
 
     def test_corrwith(self):
-        df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
+        df1 = ps.DataFrame(
+            {"A": [1, np.nan, 7, 8], "B": [False, True, True, False], "C": [10, 4, 9, 3]}
+        )
         df2 = df1[["A", "C"]]
+        df3 = df1[["B", "C"]]
         self._test_corrwith(df1, df2)
+        self._test_corrwith(df1, df3)
         self._test_corrwith((df1 + 1), df2.A)
+        self._test_corrwith((df1 + 1), df3.B)
         self._test_corrwith((df1 + 1), (df2.C + 2))
+        self._test_corrwith((df1 + 1), (df3.B + 2))
 
         with self.assertRaisesRegex(
             NotImplementedError, "corrwith currently works only for method='pearson'"
@@ -6561,6 +6621,23 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov())
+
+    def test_style(self):
+        # Currently, the `style` function returns a pandas object `Styler` as it is,
+        # processing only the number of rows declared in `compute.max_rows`.
+        # So it's a bit vague to test, but we are doing minimal tests instead of not testing at all.
+        pdf = pd.DataFrame(np.random.randn(10, 4), columns=["A", "B", "C", "D"])
+        psdf = ps.from_pandas(pdf)
+
+        def style_negative(v, props=""):
+            return props if v < 0 else None
+
+        # If the value is negative, the text color will be displayed as red.
+        pdf_style = pdf.style.applymap(style_negative, props="color:red;")
+        psdf_style = psdf.style.applymap(style_negative, props="color:red;")
+
+        # Test whether the same shape as pandas table is created including the color.
+        self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
 
 
 if __name__ == "__main__":

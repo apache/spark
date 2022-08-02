@@ -1633,8 +1633,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Config(
             None),
           Config(
-            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"),
-            insertNullsToStorage = false))),
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")))),
       TestCase(
         dataSource = "parquet",
         Seq(
@@ -1675,16 +1674,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with array defaults") {
     // Positive tests: array types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1708,16 +1698,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with struct defaults") {
     // Positive tests: struct types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1741,16 +1722,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-39557 INSERT INTO statements with tables with map defaults") {
     // Positive tests: map types are supported as default values.
-    case class TestCase(
-        dataSource: String,
-        insertNullsToStorage: Boolean = true)
-    Seq(
-      TestCase(
-        "parquet"),
-      TestCase(
-        "orc",
-        false)).foreach { testCase =>
-      val dataSource = testCase.dataSource
+    Seq("parquet", "orc").foreach { dataSource =>
       withTable("t") {
         sql(s"create table t(i boolean) using $dataSource")
         sql("insert into t select false")
@@ -1765,8 +1737,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               s struct<
                 x array<
                   struct<a int, b int>>,
-              y array<
-                map<boolean, string>>>
+                y array<
+                  map<boolean, string>>>
               default struct(
                 array(
                   struct(1, 2)),
@@ -1799,11 +1771,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
               Seq(Map(true -> "xyz"))),
             Row(2,
-              if (testCase.insertNullsToStorage) {
-                null
-              } else {
-                Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr")))
-              },
+              null,
               Seq(Map(true -> "xyz"))),
             Row(3,
               Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
@@ -1837,6 +1805,45 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql(query)
       }.getMessage.contains(
         QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
+    }
+  }
+
+  test("SPARK-39844 Restrict adding DEFAULT columns for existing tables to certain sources") {
+    Seq("csv", "json", "orc", "parquet").foreach { provider =>
+      withTable("t1") {
+        // Set the allowlist of table providers to include the new table type for all SQL commands.
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
+          // It is OK to create a new table with a column DEFAULT value assigned if the table
+          // provider is in the allowlist.
+          sql(s"create table t1(a int default 42) using $provider")
+          // It is OK to add a new column to the table with a DEFAULT value to the existing table
+          // since this table provider is not yet present in the
+          // 'ADD_DEFAULT_COLUMN_EXISTING_TABLE_BANNED_PROVIDERS' denylist.
+          sql(s"alter table t1 add column (b string default 'abc')")
+          // Insert a row into the table and check that the assigned DEFAULT value is correct.
+          sql(s"insert into t1 values (42, default)")
+          checkAnswer(spark.table("t1"), Row(42, "abc"))
+        }
+        // Now update the allowlist of table providers to prohibit ALTER TABLE ADD COLUMN commands
+        // from assigning DEFAULT values.
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*") {
+          assert(intercept[AnalysisException] {
+            // Try to add another column to the existing table again. This fails because the table
+            // provider is now in the denylist.
+            sql(s"alter table t1 add column (b string default 'abc')")
+          }.getMessage.contains(
+            QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
+              "ALTER TABLE ADD COLUMNS", provider).getMessage))
+          withTable("t2") {
+            // It is still OK to create a new table with a column DEFAULT value assigned, even if
+            // the table provider is in the above denylist.
+            sql(s"create table t2(a int default 42) using $provider")
+            // Insert a row into the table and check that the assigned DEFAULT value is correct.
+            sql(s"insert into t2 values (default)")
+            checkAnswer(spark.table("t2"), Row(42))
+          }
+        }
+      }
     }
   }
 
