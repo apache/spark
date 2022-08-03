@@ -207,7 +207,7 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
-      file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
     val db = DBProvider.initDB(file)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
