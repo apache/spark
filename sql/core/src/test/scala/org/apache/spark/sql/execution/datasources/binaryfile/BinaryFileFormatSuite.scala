@@ -183,8 +183,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   def testCreateFilterFunction(
       filters: Seq[Filter],
       testCases: Seq[(FileStatus, Boolean)]): Unit = {
-    val funcs = filters.map(BinaryFileFormat.createFilterFunction)
-      .filter(_.isDefined).map(_.get)
+    val funcs = filters.flatMap(BinaryFileFormat.createFilterFunction)
     testCases.foreach { case (status, expected) =>
       assert(funcs.forall(f => f(status)) === expected,
         s"$filters applied to $status should be $expected.")
