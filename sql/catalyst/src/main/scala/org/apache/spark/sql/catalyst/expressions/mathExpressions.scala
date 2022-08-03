@@ -1520,7 +1520,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (_scale >= 0) {
           s"""
             ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, scala.None$$.MODULE$$);
+            Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
        } else {
           s"""
