@@ -2336,7 +2336,11 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
-
-    // TODO: test error when feature is disabled
+    // Make sure that the parser returns an exception when the feature is disabled.
+    withSQLConf(SQLConf.ENABLE_GENERATED_COLUMNS.key -> "false") {
+      intercept(
+        "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet",
+        "Support for GENERATED ALWAYS AS column is not allowed")
+    }
   }
 }

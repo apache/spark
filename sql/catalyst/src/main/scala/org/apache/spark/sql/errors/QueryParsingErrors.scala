@@ -540,4 +540,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       "References to DEFAULT column values are not allowed within the PARTITION clause", ctx)
   }
+
+  def generatedColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("Support for GENERATED ALWAYS AS column is not allowed", ctx)
+  }
 }

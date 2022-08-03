@@ -2922,6 +2922,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ENABLE_GENERATED_COLUMNS =
+    buildConf("spark.sql.generatedColumn.enabled")
+      .internal()
+      .doc("When true, allow CREATE TABLE statements to specify a generation expression for" +
+        "specific columns.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
       "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
