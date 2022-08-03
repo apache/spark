@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -36,6 +37,8 @@ import org.apache.spark.util.SizeEstimator
 object FileStatusCache {
   private var sharedCache: SharedInMemoryCache = _
 
+  private[spark] val sessionToCache = new mutable.HashMap[String, FileStatusCache]
+
   /**
    * @return a new FileStatusCache based on session configuration. Cache memory quota is
    *         shared across all clients.
@@ -49,7 +52,9 @@ object FileStatusCache {
           session.sqlContext.conf.metadataCacheTTL
         )
       }
-      sharedCache.createForNewClient()
+      val fileStatusCache = sharedCache.createForNewClient()
+      sessionToCache.put(session.sessionUUID, fileStatusCache)
+      fileStatusCache
     } else {
       NoopCache
     }

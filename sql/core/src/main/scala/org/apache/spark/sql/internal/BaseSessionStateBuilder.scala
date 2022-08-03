@@ -370,7 +370,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      adaptiveRulesHolder)
+      adaptiveRulesHolder,
+      Some(this))
   }
 }
 
