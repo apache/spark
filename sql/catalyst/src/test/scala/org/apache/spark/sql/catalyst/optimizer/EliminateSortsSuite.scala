@@ -115,7 +115,8 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val unnecessaryReordered = LocalLimit(2, orderedPlan).select('a).sortBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = LocalLimit(2, orderedPlan).select('a)
+      .sortBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
     val correctAnswer = LocalLimit(2, orderedPlan).select('a).analyze
     comparePlans(optimized, correctAnswer)
