@@ -38,7 +38,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Deprecated logical plan for writing data into data source v2. This is being replaced by more
@@ -365,7 +365,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       PhysicalWriteInfoImpl(rdd.getNumPartitions))
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
-    val totalNumRowsAccumulator = Some(new LongAccumulator())
+    val totalNumRowsAccumulator = Some(sparkContext.longAccumulator)
 
     logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")

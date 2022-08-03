@@ -3080,8 +3080,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
 
+    val acc = Some(sc.longAccumulator)
+    acc.get.add(1)
+    assert(acc.get.value == 1)
+
     // Allow the result stage of finalRDD to retry
     finalRdd.setResultStageAllowToRetry(true)
+    finalRdd.totalNumRowsAccumulator = acc
 
     // Create a temporary directory as the temporary output of the job
     val localFs = FileSystem.getLocal(sc.hadoopConfiguration)
@@ -3150,6 +3155,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
 
     assert(localFs.exists(attemptOutputPath) && localFs.listStatus(attemptOutputPath).length == 0)
+    assert(acc.get == finalRdd.totalNumRowsAccumulator.get && acc.get.value == 0)
     localFs.delete(rootOutputPath.getParent, true)
   }
 
