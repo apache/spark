@@ -56,6 +56,9 @@ RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
 RUN Rscript -e "install.packages(c('knitr', 'markdown', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
+RUN apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
 RUN Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
 RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
