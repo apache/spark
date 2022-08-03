@@ -109,12 +109,13 @@ case class AggregateInPandasExec(
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
       val prunedProj = UnsafeProjection.create(allInputs.toSeq, child.output)
 
-      val grouped = if (groupingExpressions.isEmpty) {
+      val groupedItr = if (groupingExpressions.isEmpty) {
         // Use an empty unsafe row as a place holder for the grouping key
         Iterator((new UnsafeRow(), iter))
       } else {
         GroupedIterator(iter, groupingExpressions, child.output)
-      }.map { case (key, rows) =>
+      }
+      val grouped = groupedItr.map { case (key, rows) =>
         (key, rows.map(prunedProj))
       }
 
