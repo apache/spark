@@ -42,9 +42,8 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it sh
 Spark runs on Java 8/11/17, Scala 2.12/2.13, Python 3.7+ and R 3.5+.
 Python 3.7 support is deprecated as of Spark 3.4.0.
 Java 8 prior to version 8u201 support is deprecated as of Spark 3.2.0.
-For the Scala API, Spark {{site.SPARK_VERSION}}
-uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
-({{site.SCALA_BINARY_VERSION}}.x).
+When using the Scala API, it is necessary for applications to use the same version of Scala that Spark was compiled for.
+For example, when using Scala 2.13, use Spark compiled for 2.13, and compile code/applications for Scala 2.13 as well.
 
 For Python 3.9, Arrow optimization and pandas UDFs might not work due to the supported Python versions in Apache Arrow. Please refer to the latest [Python Compatibility](https://arrow.apache.org/docs/python/install.html#python-compatibility) page.
 For Java 11, `-Dio.netty.tryReflectionSetAccessible=true` is required additionally for Apache Arrow library. This prevents `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` when Apache Arrow uses Netty internally.
