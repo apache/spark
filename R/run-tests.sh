@@ -65,7 +65,6 @@ else
       cat $CRAN_CHECK_LOG_FILE
       echo -en "\033[31m"  # Red
       echo "Had CRAN check errors; see logs."
-      cat /__w/spark/spark/R/SparkR.Rcheck/00check.log
       echo -en "\033[0m"  # No color
       exit -1
     else
