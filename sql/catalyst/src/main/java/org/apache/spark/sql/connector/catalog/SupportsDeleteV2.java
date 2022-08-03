@@ -17,25 +17,18 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.filter.AlwaysTrue;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.internal.connector.PredicateUtils;
-import org.apache.spark.sql.sources.AlwaysTrue;
-import org.apache.spark.sql.sources.Filter;
-
-import scala.Option;
 
 /**
  * A mix-in interface for {@link Table} delete support. Data sources can implement this
  * interface to provide the ability to delete data from tables that matches filter expressions.
  *
- * @since 3.0.0
+ * @since 3.4.0
  */
 @Evolving
-public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
+public interface SupportsDeleteV2 extends TruncatableTable {
 
   /**
    * Checks whether it is possible to delete data from a data source table that matches filter
@@ -44,24 +37,25 @@ public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
    * Rows should be deleted from the data source iff all of the filter expressions match.
    * That is, the expressions must be interpreted as a set of filters that are ANDed together.
    * <p>
-   * Spark will call this method at planning time to check whether {@link #deleteWhere(Filter[])}
+   * Spark will call this method at planning time to check whether {@link #deleteWhere(Predicate[])}
    * would reject the delete operation because it requires significant effort. If this method
-   * returns false, Spark will not call {@link #deleteWhere(Filter[])} and will try to rewrite
+   * returns false, Spark will not call {@link #deleteWhere(Predicate[])} and will try to rewrite
    * the delete operation and produce row-level changes if the data source table supports deleting
    * individual records.
    *
-   * @param filters filter expressions, used to select rows to delete when all expressions match
+   * @param predicates V2 filter expressions, used to select rows to delete when all expressions
+   *                  match
    * @return true if the delete operation can be performed
    *
-   * @since 3.1.0
+   * @since 3.4.0
    */
-  default boolean canDeleteWhere(Filter[] filters) {
+  default boolean canDeleteWhere(Predicate[] predicates) {
     return true;
   }
 
   /**
    * Delete data from a data source table that matches filter expressions. Note that this method
-   * will be invoked only if {@link #canDeleteWhere(Filter[])} returns true.
+   * will be invoked only if {@link #canDeleteWhere(Predicate[])} returns true.
    * <p>
    * Rows are deleted from the data source iff all of the filter expressions match. That is, the
    * expressions must be interpreted as a set of filters that are ANDed together.
@@ -72,42 +66,15 @@ public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
    * To reject a delete implementations should throw {@link IllegalArgumentException} with a clear
    * error message that identifies which expression was rejected.
    *
-   * @param filters filter expressions, used to select rows to delete when all expressions match
+   * @param predicates predicate expressions, used to select rows to delete when all expressions
+   *                  match
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    */
-  void deleteWhere(Filter[] filters);
-
-  default boolean canDeleteWhere(Predicate[] predicates) {
-    List<Filter> filterList = new ArrayList();
-    for (int i = 0; i < predicates.length; i++) {
-      Option filter = PredicateUtils.toV1(predicates[i]);
-      if (filter.nonEmpty()) {
-        filterList.add((Filter)filter.get());
-      }
-    }
-
-    Filter[] filters = new Filter[filterList.size()];
-    filterList.toArray(filters);
-    return this.canDeleteWhere(filters);
-  }
-
-  default void deleteWhere(Predicate[] predicates) {
-    List<Filter> filterList = new ArrayList();
-    for (int i = 0; i < predicates.length; i++) {
-      Option filter = PredicateUtils.toV1(predicates[i]);
-      if (filter.nonEmpty()) {
-        filterList.add((Filter)filter.get());
-      }
-    }
-
-    Filter[] filters = new Filter[filterList.size()];
-    filterList.toArray(filters);
-    this.deleteWhere(filters);
-  }
+  void deleteWhere(Predicate[] predicates);
 
   @Override
   default boolean truncateTable() {
-    Filter[] filters = new Filter[] { new AlwaysTrue() };
+    Predicate[] filters = new Predicate[] { new AlwaysTrue() };
     boolean canDelete = canDeleteWhere(filters);
     if (canDelete) {
       deleteWhere(filters);
