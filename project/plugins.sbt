@@ -31,15 +31,15 @@ addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.4")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.9.2")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.0")
 
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.1"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.3"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.1"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.3"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 

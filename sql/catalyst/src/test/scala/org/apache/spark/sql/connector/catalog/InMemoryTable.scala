@@ -268,12 +268,11 @@ class InMemoryTable(
 
   case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
 
-  case class InMemoryBatchScan(
+  abstract class BatchScanBaseClass(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
-        with SupportsReportPartitioning {
+    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -308,6 +307,13 @@ class InMemoryTable(
       val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
       new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
     }
+  }
+
+  case class InMemoryBatchScan(
+      var _data: Seq[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType)
+    extends BatchScanBaseClass (_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet

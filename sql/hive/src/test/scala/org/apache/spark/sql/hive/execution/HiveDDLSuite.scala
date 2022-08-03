@@ -147,14 +147,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testUnsetProperties(isDatasourceTable = false)
   }
 
-  test("alter table: set serde") {
-    testSetSerde(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde partition") {
-    testSetSerdePartition(isDatasourceTable = false)
-  }
-
   test("alter table: change column") {
     testChangeColumn(isDatasourceTable = false)
   }

@@ -117,20 +117,26 @@ object V1WritesUtils {
       outputColumns: Seq[Attribute],
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
-      options: Map[String, String]): Seq[SortOrder] = {
+      options: Map[String, String],
+      numStaticPartitionCols: Int = 0): Seq[SortOrder] = {
+    require(partitionColumns.size >= numStaticPartitionCols)
+
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputColumns.filterNot(partitionSet.contains)
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
+    // Static partition must to be ahead of dynamic partition
+    val dynamicPartitionColumns = partitionColumns.drop(numStaticPartitionCols)
 
     if (SQLConf.get.maxConcurrentOutputFileWriters > 0 && sortColumns.isEmpty) {
       // Do not insert logical sort when concurrent output writers are enabled.
       Seq.empty
     } else {
-      // We should first sort by partition columns, then bucket id, and finally sorting columns.
+      // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+      // columns.
       // Note we do not need to convert empty string partition columns to null when sorting the
       // columns since null and empty string values will be next to each other.
-      (partitionColumns ++writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
+      (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
         .map(SortOrder(_, Ascending))
     }
   }

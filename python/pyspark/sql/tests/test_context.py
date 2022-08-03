@@ -160,7 +160,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                 ).columns[0]
             )
 
-        for new_maxsize in [2 ** 31 - 1, 2 ** 63 - 1, 2 ** 127 - 1]:
+        for new_maxsize in [2**31 - 1, 2**63 - 1, 2**127 - 1]:
             old_maxsize = sys.maxsize
             sys.maxsize = new_maxsize
             try:

@@ -163,12 +163,12 @@ class NumOpsTest(OpsTestBase):
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col in ["float", "float_w_nan"]:
-                self.assert_eq(pser ** pser, psser ** psser)
+                self.assert_eq(pser**pser, psser**psser)
                 self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
-                self.assert_eq(pser ** True, psser ** True)
-                self.assert_eq(pser ** False, psser ** False)
-                self.assert_eq(pser ** 1, psser ** 1)
-                self.assert_eq(pser ** 0, psser ** 0)
+                self.assert_eq(pser**True, psser**True)
+                self.assert_eq(pser**False, psser**False)
+                self.assert_eq(pser**1, psser**1)
+                self.assert_eq(pser**0, psser**0)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
@@ -243,8 +243,8 @@ class NumOpsTest(OpsTestBase):
             # self.assert_eq(1 ** pser, 1 ** psser)
             # self.assert_eq(0.1 ** pser, 0.1 ** psser)
             self.assertRaises(TypeError, lambda: "x" ** psser)
-            self.assert_eq((True ** pser).astype(float), True ** psser)
-            self.assert_eq((False ** pser).astype(float), False ** psser)
+            self.assert_eq((True**pser).astype(float), True**psser)
+            self.assert_eq((False**pser).astype(float), False**psser)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** psser)
 

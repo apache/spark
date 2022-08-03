@@ -109,9 +109,9 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
-    <td><code>inferDate</code></td> 
+    <td><code>prefersDate</code></td>
     <td>false</td>
-    <td>Whether or not to infer columns that satisfy the <code>dateFormat</code> option as <code>Date</code>. Requires <code>inferSchema</code> to be <code>true</code>. When <code>false</code>, columns with dates will be inferred as <code>String</code> (or as <code>Timestamp</code> if it fits the <code>timestampFormat</code>).</td>
+    <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates or timestamps as <code>Date</code> if the values satisfy the <code>dateFormat</code> option and failed to be parsed by the respective formatter. With a user-provided schema, attempts to parse timestamp columns as dates using <code>dateFormat</code> if they fail to conform to <code>timestampFormat</code>, in this case the parsed values will be cast to timestamp type afterwards.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -173,6 +173,12 @@ Data source options of CSV can be set via:
     <td>yyyy-MM-dd'T'HH:mm:ss[.SSS]</td>
     <td>Sets the string that indicates a timestamp without timezone format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to timestamp without timezone type, note that zone-offset and time-zone components are not supported when writing or reading this data type.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>enableDateTimeParsingFallback</code></td>
+    <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
+    <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>maxColumns</code></td>
