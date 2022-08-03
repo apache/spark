@@ -913,26 +913,27 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(entry.getKey());
         AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
         logger.debug("Reloading Application paths info for application {}", appAttemptId);
-        appsShuffleInfo.compute(appAttemptId.appId, (appId, existingAppShuffleInfo) -> {
-          if (existingAppShuffleInfo == null ||
-            existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
-            if (existingAppShuffleInfo != null) {
-              AppAttemptId existingAppAttemptId = new AppAttemptId(
-                existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
-              try {
-                // Add the former outdated DB key to deletion list
-                dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
-              } catch (IOException e) {
-                logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
-              }
-            }
-            return new AppShuffleInfo(
-              appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
-          } else {
-            // Add the current DB key to deletion list as it is outdated
-            dbKeysToBeRemoved.add(entry.getKey().getBytes(StandardCharsets.UTF_8));
-            return existingAppShuffleInfo;
-          }
+        appsShuffleInfo.compute(appAttemptId.appId,
+            (appId, existingAppShuffleInfo) -> {
+               if (existingAppShuffleInfo == null ||
+                  existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
+                 if (existingAppShuffleInfo != null) {
+                   AppAttemptId existingAppAttemptId = new AppAttemptId(
+                           existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
+                   try {
+                     // Add the former outdated DB key to deletion list
+                     dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
+                   } catch (IOException e) {
+                     logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
+                   }
+                 }
+                 return new AppShuffleInfo(
+                     appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
+               } else {
+                 // Add the current DB key to deletion list as it is outdated
+                 dbKeysToBeRemoved.add(entry.getKey().getBytes(StandardCharsets.UTF_8));
+                 return existingAppShuffleInfo;
+               }
         });
       }
     }

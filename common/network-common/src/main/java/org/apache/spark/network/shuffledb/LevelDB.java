@@ -25,7 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class LevelDB implements DB {
-    private org.iq80.leveldb.DB db;
+    private final org.iq80.leveldb.DB db;
 
     public LevelDB(org.iq80.leveldb.DB db) {
         this.db = db;

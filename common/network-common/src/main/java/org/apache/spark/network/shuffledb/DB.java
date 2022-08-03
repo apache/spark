@@ -17,13 +17,33 @@
 
 package org.apache.spark.network.shuffledb;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Map;
 
-public interface DB {
+/**
+ * The local KV storage used to persist the shuffle state,
+ * the implementations may include leveldb, rocksdb, etc.
+ */
+public interface DB extends Closeable {
+    /**
+     * Set the DB entry for "key" to "value".
+     */
     void put(byte[] key, byte[] value) throws RuntimeException;
+
+    /**
+     * Get which returns a new byte array storing the value associated
+     * with the specified input key if any.
+     */
     byte[] get(byte[] key) throws RuntimeException;
+
+    /**
+     * Delete the DB entry (if any) for "key".
+     */
     void delete(byte[] key) throws RuntimeException;
-    void close() throws IOException;
+
+    /**
+     * Read KV prefixed with `prefix` into a Map from DB.
+     */
     Map<String, byte[]> readKVToMap(String prefix) throws IOException;
 }
