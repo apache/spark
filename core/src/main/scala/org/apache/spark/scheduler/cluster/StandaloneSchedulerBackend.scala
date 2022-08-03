@@ -26,6 +26,7 @@ import scala.concurrent.Future
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -175,6 +176,11 @@ private[spark] class StandaloneSchedulerBackend(
       exitStatus: Option[Int],
       workerHost: Option[String]): Unit = {
     val reason: ExecutorLossReason = exitStatus match {
+      case Some(ExecutorExitCode.HEARTBEAT_FAILURE) =>
+        ExecutorExited(ExecutorExitCode.HEARTBEAT_FAILURE, exitCausedByApp = false, message)
+      case Some(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR) =>
+        ExecutorExited(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR,
+          exitCausedByApp = false, message)
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
       case None => ExecutorProcessLost(message, workerHost)
     }
