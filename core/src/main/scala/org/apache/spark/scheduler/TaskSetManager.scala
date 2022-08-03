@@ -90,7 +90,6 @@ private[spark] class TaskSetManager(
   private val killedByOtherAttempt = new HashSet[Long]
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
-  private[scheduler] var tasksSuccessful = 0
 
   val weight = 1
   val minShare = 0
@@ -530,7 +529,7 @@ private[spark] class TaskSetManager(
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
-      if (tasksSuccessful == numTasks) {
+      if (successful.count(x => x) == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,
           taskSet.stageAttemptId,
@@ -770,7 +769,7 @@ private[spark] class TaskSetManager(
         reason = "another attempt succeeded")
     }
     if (!successful(index)) {
-      tasksSuccessful += 1
+      val tasksSuccessful = successful.count(x => x)
       logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
         s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
         s" ($tasksSuccessful/$numTasks)")
@@ -802,9 +801,8 @@ private[spark] class TaskSetManager(
         if (speculationEnabled && !isZombie) {
           successfulTaskDurations.insert(taskInfo.duration)
         }
-        tasksSuccessful += 1
         successful(index) = true
-        if (tasksSuccessful == numTasks) {
+        if (successful.count(x => x) == numTasks) {
           isZombie = true
         }
         maybeFinishTaskSet()
@@ -833,7 +831,6 @@ private[spark] class TaskSetManager(
         logWarning(failureReason)
         if (!successful(index)) {
           successful(index) = true
-          tasksSuccessful += 1
         }
         isZombie = true
 
@@ -984,7 +981,6 @@ private[spark] class TaskSetManager(
         if (successful(index) && !info.running && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
-          tasksSuccessful -= 1
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
@@ -1020,7 +1016,7 @@ private[spark] class TaskSetManager(
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-
+    val tasksSuccessful = successful.count(x => x)
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
