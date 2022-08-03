@@ -919,7 +919,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
                 if (existingAppShuffleInfo != null) {
                   AppAttemptId existingAppAttemptId = new AppAttemptId(
-                           existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
+                      existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
                   try {
                     // Add the former outdated DB key to deletion list
                     dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
@@ -927,13 +927,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                     logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
                   }
                 }
-                return new AppShuffleInfo(appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
+                return new AppShuffleInfo(
+                    appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
               } else {
                 // Add the current DB key to deletion list as it is outdated
                 dbKeysToBeRemoved.add(entry.getKey().getBytes(StandardCharsets.UTF_8));
                 return existingAppShuffleInfo;
               }
-        });
+            });
       }
     }
     return dbKeysToBeRemoved;
