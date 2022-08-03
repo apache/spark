@@ -392,11 +392,9 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e1.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      errorSubClass = None,
       parameters = Map("functionName" -> "QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+",
         "signature" -> "string, int",
         "result" -> "string"),
-      sqlState = None,
       matchPVals = true)
   }
 
@@ -469,11 +467,9 @@ class QueryExecutionErrorsSuite
           checkError(
             exception = e.getCause.asInstanceOf[SparkSecurityException],
             errorClass = "RESET_PERMISSION_TO_ORIGINAL",
-            errorSubClass = None,
             parameters = Map("permission" -> ".+",
               "path" -> ".+",
               "message" -> ".+"),
-            sqlState = None,
             matchPVals = true)
       }
     }
@@ -605,9 +601,7 @@ class QueryExecutionErrorsSuite
           aggregated.count()
         },
         errorClass = "INVALID_BUCKET_FILE",
-        errorSubClass = None,
         parameters = Map("path" -> ".+"),
-        sqlState = None,
         matchPVals = true)
     }
   }
@@ -619,7 +613,6 @@ class QueryExecutionErrorsSuite
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      errorSubClass = None,
       parameters = Map("plan" ->
           """Subquery subquery#\w+, \[id=#\w+\]
             |\+\- AdaptiveSparkPlan isFinalPlan=true
@@ -636,7 +629,6 @@ class QueryExecutionErrorsSuite
             |      \+\- Project \[\w+ AS a#\w+\]
             |         \+\- Scan OneRowRelation\[\]
             |""".stripMargin),
-      sqlState = None,
       matchPVals = true)
   }
 
@@ -646,7 +638,7 @@ class QueryExecutionErrorsSuite
         sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
       ),
       errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      Map.empty
+      parameters = Map.empty
     )
   }
 

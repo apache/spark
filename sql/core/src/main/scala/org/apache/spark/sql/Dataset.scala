@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -476,14 +475,14 @@ class Dataset[T] private[sql](
    *   int.</li>
    *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
    *   still keep their own metadata if not overwritten by the specified schema.</li>
-   *   <li>Fail if the nullability are not compatible. For example, the column and/or inner field is
+   *   <li>Fail if the nullability is not compatible. For example, the column and/or inner field is
    *   nullable but the specified schema requires them to be not nullable.</li>
    * </ul>
    *
    * @group basic
    * @since 3.4.0
    */
-  def as(schema: StructType): DataFrame = withPlan {
+  def to(schema: StructType): DataFrame = withPlan {
     Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
   }
 
@@ -710,29 +709,10 @@ class Dataset[T] private[sql](
         internalRdd.doCheckpoint()
       }
 
-      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-      // joins.
-      @scala.annotation.tailrec
-      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-        partitioning match {
-          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-          case p => p
-        }
-      }
-
-      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
       Dataset.ofRows(
         sparkSession,
-        LogicalRDD(
-          logicalPlan.output,
-          internalRdd,
-          Some(queryExecution.analyzed),
-          outputPartitioning,
-          physicalPlan.outputOrdering,
-          isStreaming
-        )(sparkSession)).as[T]
+        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+      ).as[T]
     }
   }
 
@@ -2126,6 +2106,17 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame =
     unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      values: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.

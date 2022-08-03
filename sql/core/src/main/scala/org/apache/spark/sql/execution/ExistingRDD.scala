@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -86,19 +86,24 @@ case class ExternalRDDScanExec[T](
 /**
  * Logical plan node for scanning data from an RDD of InternalRow.
  *
- * It is advised to set the field `originLogicalPlan` if the RDD is directly built from DataFrame,
- * as the stat can be inherited from `originLogicalPlan`.
+ * It is advised to set the field `originStats` and `originConstraints` if the RDD is directly
+ * built from DataFrame, so that Spark can make better optimizations.
  */
 case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    originLogicalPlan: Option[LogicalPlan] = None,
     outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val outputOrdering: Seq[SortOrder] = Nil,
-    override val isStreaming: Boolean = false)(session: SparkSession)
+    override val isStreaming: Boolean = false)(
+    session: SparkSession,
+    // originStats and originConstraints are intentionally placed to "second" parameter list,
+    // to prevent catalyst rules to mistakenly transform and rewrite them. Do not change this.
+    originStats: Option[Statistics] = None,
+    originConstraints: Option[ExpressionSet] = None)
   extends LeafNode with MultiInstanceRelation {
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
+  override protected final def otherCopyArgs: Seq[AnyRef] =
+    session :: originStats :: originConstraints :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
     val rewrite = output.zip(output.map(_.newInstance())).toMap
@@ -116,36 +121,77 @@ case class LogicalRDD(
       case e: Attribute => rewrite.getOrElse(e, e)
     }.asInstanceOf[SortOrder])
 
-    val rewrittenOriginLogicalPlan = originLogicalPlan.map { plan =>
-      assert(output == plan.output, "The output columns are expected to the same for output " +
-        s"and originLogicalPlan. output: $output / output in originLogicalPlan: ${plan.output}")
+    val rewrittenStatistics = originStats.map { s =>
+      Statistics(
+        s.sizeInBytes,
+        s.rowCount,
+        AttributeMap[ColumnStat](s.attributeStats.map {
+          case (attr, v) => (rewrite.getOrElse(attr, attr), v)
+        }),
+        s.isRuntime
+      )
+    }
 
-      val projectList = output.map { attr =>
-        Alias(attr, attr.name)(exprId = rewrite(attr).exprId)
-      }
-      Project(projectList, plan)
+    val rewrittenConstraints = originConstraints.map { c =>
+      c.map(_.transform {
+        case e: Attribute => rewrite.getOrElse(e, e)
+      })
     }
 
     LogicalRDD(
       output.map(rewrite),
       rdd,
-      rewrittenOriginLogicalPlan,
       rewrittenPartitioning,
       rewrittenOrdering,
       isStreaming
-    )(session).asInstanceOf[this.type]
+    )(session, rewrittenStatistics, rewrittenConstraints).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(output, isStreaming)
 
   override def computeStats(): Statistics = {
-    originLogicalPlan.map(_.stats).getOrElse {
+    originStats.getOrElse {
       Statistics(
         // TODO: Instead of returning a default value here, find a way to return a meaningful size
         // estimate for RDDs. See PR 1238 for more discussions.
         sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
       )
     }
+  }
+
+  override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
+}
+
+object LogicalRDD {
+  /**
+   * Create a new LogicalRDD based on existing Dataset. Stats and constraints are inherited from
+   * origin Dataset.
+   */
+  private[sql] def fromDataset(
+      rdd: RDD[InternalRow],
+      originDataset: Dataset[_],
+      isStreaming: Boolean): LogicalRDD = {
+    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+    // joins.
+    @scala.annotation.tailrec
+    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+      partitioning match {
+        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+        case p => p
+      }
+    }
+
+    val optimizedPlan = originDataset.queryExecution.optimizedPlan
+    val executedPlan = originDataset.queryExecution.executedPlan
+
+    LogicalRDD(
+      originDataset.logicalPlan.output,
+      rdd,
+      firstLeafPartitioning(executedPlan.outputPartitioning),
+      executedPlan.outputOrdering,
+      isStreaming
+    )(originDataset.sparkSession, Some(optimizedPlan.stats), Some(optimizedPlan.constraints))
   }
 }
 
