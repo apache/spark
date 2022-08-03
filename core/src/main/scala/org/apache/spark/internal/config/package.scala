@@ -2398,4 +2398,13 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark] val EXECUTOR_REMOVE_DELAY =
+    ConfigBuilder("spark.executor.removeDelayOnDisconnection")
+      .internal()
+      .doc("The timeout duration for a disconnected executor to wait for the specific disconnect" +
+        "reason before it gets removed. This is only used for Standalone yet.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
 }

@@ -97,7 +97,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private[scheduler] val executorsPendingToRemove = new HashMap[String, Boolean]
 
   // Executors that have been lost, but for which we don't yet know the real exit reason.
-  private val executorsPendingLossReason = new HashSet[String]
+  protected val executorsPendingLossReason = new HashSet[String]
 
   // Executors which are being decommissioned. Maps from executorId to workerHost.
   protected val executorsPendingDecommission = new HashMap[String, Option[String]]
