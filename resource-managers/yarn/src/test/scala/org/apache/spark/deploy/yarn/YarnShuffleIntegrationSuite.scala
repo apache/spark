@@ -138,7 +138,9 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     logInfo("shuffle service executor file = " + registeredExecFile)
     var result = "failure"
     val execStateCopy = Option(registeredExecFile).map { file =>
-      new File(file.getAbsolutePath + "_dup")
+      val path = file.getAbsolutePath
+      val idx = path.lastIndexOf(".")
+      new File(s"${path.slice(0, idx)}_dup${path.slice(idx, path.length)}")
     }.orNull
     try {
       val data = sc.parallelize(0 until 100, 10).map { x => (x % 10) -> x }.reduceByKey{ _ + _ }.
@@ -149,7 +151,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       // only one process can open a leveldb file at a time, so we copy the files
       if (registeredExecFile != null && execStateCopy != null) {
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
-        assert(!ShuffleTestAccessor.reloadRegisteredExecutors("ldb", execStateCopy).isEmpty)
+        assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
       }
     } finally {
       sc.stop()

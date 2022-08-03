@@ -41,8 +41,8 @@ public class DBProvider {
     }
 
     @VisibleForTesting
-    public static DB initDB(String dbKind, File file) throws IOException {
-        if(dbKind.equals("ldb")) {
+    public static DB initDB(File file) throws IOException {
+        if (file.getName().endsWith(".ldb")) {
             return new LevelDB(LevelDBProvider.initLevelDB(file));
         } else {
             return null;
