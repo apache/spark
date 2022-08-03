@@ -2207,9 +2207,10 @@ class TaskSetManagerSuite
 
     val (taskId0, index0, exec0) = (task0.taskId, task0.index, task0.executorId)
     val (taskId1, index1, exec1) = (task1.taskId, task1.index, task1.executorId)
+
     // set up two running tasks
-    assert(manager.taskInfos(taskId0).running && manager.taskInfos(taskId0).launching)
-    assert(manager.taskInfos(taskId1).running && manager.taskInfos(taskId1).launching)
+    assert(manager.taskInfos(taskId0).running)
+    assert(manager.taskInfos(taskId1).running)
 
     val numFailures = PrivateMethod[Array[Int]](Symbol("numFailures"))
     // no task failures yet
@@ -2219,7 +2220,7 @@ class TaskSetManagerSuite
     sched.asInstanceOf[TaskSchedulerImpl]
       .statusUpdate(taskId1, TaskState.RUNNING, ByteBuffer.allocate(0))
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
-      assert(manager.taskInfos(taskId0).running && manager.taskInfos(taskId0).launching)
+      assert(manager.taskInfos(taskId0).running)
       assert(manager.taskInfos(taskId1).running && !manager.taskInfos(taskId1).launching)
     }
     // let exec1 count task failures but exec0 doesn't
