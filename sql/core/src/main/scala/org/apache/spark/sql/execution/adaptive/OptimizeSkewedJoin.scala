@@ -248,7 +248,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
     logDebug(s"number of skewed partitions: stream $numSkewedChild")
     if (numSkewedChild > 0) {
-      Some(SkewJoinChildWrapper(AQEShuffleReadExec(child, childSidePartitions)))
+      Some(SkewJoinChildWrapper(AQEShuffleReadExec(child, childSidePartitions.toSeq)))
     } else {
       None
     }
