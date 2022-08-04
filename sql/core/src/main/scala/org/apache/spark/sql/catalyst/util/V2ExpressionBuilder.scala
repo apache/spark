@@ -93,7 +93,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       }
     case Cast(child, dataType, _, true) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
-    case AggregateExpression(aggregateFunction, _, isDistinct, None, _) =>
+    case AggregateExpression(aggregateFunction, Complete, isDistinct, None, _) =>
       generateAggregateFunc(aggregateFunction, isDistinct)
     case Abs(child, true) => generateExpressionWithName("ABS", Seq(child))
     case Coalesce(children) => generateExpressionWithName("COALESCE", children)
