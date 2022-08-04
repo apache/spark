@@ -68,9 +68,50 @@ object TakeOrderedAndProjectBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
+  private def pushLocalTopKThroughOuterJoin(): Unit = {
+    val row = 10 * 1000
+
+    val df1 = spark.range(0, row, 1, 2).selectExpr("id % 3 as c1", "id % 7 as cx")
+    val df2 = spark.range(0, row, 1, 2).selectExpr("id % 3 as c2")
+
+    val benchmark = new Benchmark("Push local topK through outer join", row, output = output)
+
+    Seq(-1, 100).foreach { limits =>
+      val enable = if (limits < 0) "off" else "on"
+        benchmark.addCase(s"Push local topK through outer join for bhj - $enable", 3) { _ =>
+          withSQLConf(SQLConf.PUSH_DOWN_LOCAL_TOPK_LIMIT_THRESHOLD.key -> limits.toString) {
+            df1.join(df2.hint("broadcast"), col("c1") === col("c2"), "left_outer")
+              .orderBy(col("cx"))
+              .limit(100)
+              .noop()
+          }
+        }
+
+        benchmark.addCase(s"Push local topK through outer join for shj - $enable", 3) { _ =>
+          withSQLConf(SQLConf.PUSH_DOWN_LOCAL_TOPK_LIMIT_THRESHOLD.key -> limits.toString) {
+            df1.join(df2.hint("shuffle_hash"), col("c1") === col("c2"), "left_outer")
+              .orderBy(col("cx"))
+              .limit(100)
+              .noop()
+          }
+        }
+
+        benchmark.addCase(s"Push local topK through outer join for smj - $enable", 3) { _ =>
+          withSQLConf(SQLConf.PUSH_DOWN_LOCAL_TOPK_LIMIT_THRESHOLD.key -> limits.toString) {
+            df1.join(df2.hint("shuffle_merge"), col("c1") === col("c2"), "left_outer")
+              .orderBy(col("cx"))
+              .limit(100)
+              .noop()
+          }
+        }
+    }
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("TakeOrderedAndProject") {
       takeOrderedAndProjectWithSMJ()
+      pushLocalTopKThroughOuterJoin()
     }
   }
 }

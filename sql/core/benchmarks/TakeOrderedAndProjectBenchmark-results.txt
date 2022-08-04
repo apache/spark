@@ -9,4 +9,15 @@ TakeOrderedAndProject with SMJ:                    Best Time(ms)   Avg Time(ms) 
 TakeOrderedAndProject with SMJ for doExecute                 287            337          43          0.0       28734.9       1.0X
 TakeOrderedAndProject with SMJ for executeCollect            150            170          30          0.1       15037.8       1.9X
 
+OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Linux 5.13.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+Push local topK through outer join:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Push local topK through outer join for bhj - off           3694           3717          22          0.0      369361.5       1.0X
+Push local topK through outer join for shj - off           3761           3767          11          0.0      376057.4       1.0X
+Push local topK through outer join for smj - off           3469           3478          10          0.0      346945.6       1.1X
+Push local topK through outer join for bhj - on              97            109          10          0.1        9745.2      37.9X
+Push local topK through outer join for shj - on             162            176          17          0.1       16153.5      22.9X
+Push local topK through outer join for smj - on             160            163           3          0.1       15974.6      23.1X
+
 

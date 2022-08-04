@@ -229,6 +229,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
+    // We should only push down local topK to the bottom outer join, so here make FixedPoint(1)
+    // instead of Once to skip idempotence enforcement.
+    Batch("Push Local TopK Through Outer Join", FixedPoint(1), PushLocalTopKThroughOuterJoin) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+

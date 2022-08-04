@@ -420,6 +420,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_LOCAL_TOPK_LIMIT_THRESHOLD =
+    buildConf("spark.sql.optimizer.pushDownLocalTopKLimitThreshold")
+      .doc("If the limit number is not larger than this threshold, Spark will try to push " +
+        "down local topK through outer join. Negative number means do not push down.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(10000)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")

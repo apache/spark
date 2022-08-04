@@ -103,33 +103,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
-      // We should match the combination of limit and offset first, to get the optimal physical
-      // plan, instead of planning limit and offset separately.
-      case LimitAndOffset(limit, offset, Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          limit, order, child.output, planLater(child), offset))
-      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          limit, order, projectList, planLater(child), offset))
-      // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-      case OffsetAndLimit(offset, limit, Sort(order, true, child))
-          if offset + limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          offset + limit, order, child.output, planLater(child), offset))
-      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child)))
-          if offset + limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          offset + limit, order, projectList, planLater(child), offset))
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          limit, order, child.output, planLater(child)))
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
-        Some(TakeOrderedAndProjectExec(
-          limit, order, projectList, planLater(child)))
+      case ExtractTopK(limit, order, projectList, child, offset) =>
+        Some(TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), offset))
       case _ => None
     }
   }

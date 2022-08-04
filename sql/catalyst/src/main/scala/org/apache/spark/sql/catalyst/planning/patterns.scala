@@ -242,6 +242,46 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 }
 
 /**
+ * A pattern that matches the topK-like tree nodes:
+ *   - offset + limit + order
+ *   - offset + limit + project + order
+ *   - limit + offset + order
+ *   - limit + offset + project + order
+ *   - limit + order
+ *   - limit + project + order
+ */
+object ExtractTopK extends PredicateHelper {
+  // limit, sortOrder, projectList, child, offset
+  type ReturnType =
+    (Int, Seq[SortOrder], Seq[NamedExpression], LogicalPlan, Int)
+
+  def unapply(plan: Any): Option[ReturnType] = plan match {
+    // We should match the combination of limit and offset first, to get the optimal physical
+    // plan, instead of planning limit and offset separately.
+    case LimitAndOffset(limit, offset, Sort(order, true, child))
+        if limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(limit, order, child.output, child, offset)
+    case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child)))
+        if limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(limit, order, projectList, child, offset)
+    // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+    case OffsetAndLimit(offset, limit, Sort(order, true, child))
+        if offset + limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(offset + limit, order, child.output, child, offset)
+    case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child)))
+        if offset + limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(offset + limit, order, projectList, child, offset)
+    case Limit(IntegerLiteral(limit), Sort(order, true, child))
+        if limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(limit, order, child.output, child, 0)
+    case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+        if limit < SQLConf.get.topKSortFallbackThreshold =>
+      Some(limit, order, projectList, child, 0)
+    case _ => None
+  }
+}
+
+/**
  * An extractor used when planning the physical execution of an aggregation. Compared with a logical
  * aggregation, the following transformations are performed:
  *  - Unnamed grouping expressions are named so that they can be referred to across phases of
