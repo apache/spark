@@ -131,4 +131,10 @@ case class BatchScanExec(
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
     redact(result)
   }
+
+  /**
+   * Returns the name of this type of TreeNode.  Defaults to the class name.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  override def nodeName: String = s"BatchScan ${scan.name()}"
 }

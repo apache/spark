@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
@@ -97,7 +98,11 @@ private[sql] trait QueryErrorsBase {
     quoteByDefault(toPrettySQL(e))
   }
 
-  def getSummary(context: Option[SQLQueryContext]): String = {
-    context.map(_.summary).getOrElse("")
+  def getSummary(sqlContext: SQLQueryContext): String = {
+    if (sqlContext == null) "" else sqlContext.summary
+  }
+
+  def getQueryContext(sqlContext: SQLQueryContext): Array[QueryContext] = {
+    if (sqlContext == null) Array.empty else Array(sqlContext.asInstanceOf[QueryContext])
   }
 }
