@@ -45,6 +45,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
+  private final String DEFAULT_THROTTLLING_DELAY_KEY;
 
   private final ConfigProvider conf;
 
@@ -69,6 +70,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
+    DEFAULT_THROTTLLING_DELAY_KEY = getConfKey("throttledLogger.delay");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -385,5 +387,15 @@ public class TransportConf {
    */
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
+  }
+
+  /**
+   * The RateLimiter in ThrottledLogger will create a permit per second. The logger needs to acquire
+   * ${throttledLogger.delay} permits to print a log message. In other words, if the value of the
+   * ${throttledLogger.delay} is 2, the maximum throughput of the logger is printing 1 message  per
+   * 2 seconds.
+   */
+  public int throttlingDelaySeconds() {
+    return conf.getInt(DEFAULT_THROTTLLING_DELAY_KEY, 2);
   }
 }
