@@ -89,7 +89,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
         None
       }
     case Cast(child, dataType, _, ansiEnabled)
-      if Cast.canUpCast(child.dataType, dataType) || ansiEnabled =>
+        if ansiEnabled || Cast.canUpCast(child.dataType, dataType) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
     case Abs(child, true) => generateExpressionWithName("ABS", Seq(child))
     case Coalesce(children) => generateExpressionWithName("COALESCE", children)
