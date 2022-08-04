@@ -83,6 +83,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       case u: UnresolvedInlineTable
         if u.rows.nonEmpty && u.rows.forall(_.size == u.rows(0).size) =>
         true
+      case r: LocalRelation
+        if r.data.nonEmpty && r.data.forall(_.numFields == r.data(0).numFields) =>
+        true
       case _ =>
         false
     }
@@ -99,14 +102,13 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       children.append(node)
       node = node.children(0)
     }
-    val table = node.asInstanceOf[UnresolvedInlineTable]
     val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
     insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
       val regenerated: InsertIntoStatement =
         regenerateUserSpecifiedCols(i, schema)
-      val expanded: UnresolvedInlineTable =
-        addMissingDefaultValuesForInsertFromInlineTable(table, schema)
+      val expanded: LogicalPlan =
+        addMissingDefaultValuesForInsertFromInlineTable(node, schema)
       val replaced: Option[LogicalPlan] =
         replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
       replaced.map { r: LogicalPlan =>
@@ -262,16 +264,35 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Updates an inline table to generate missing default column values.
    */
   private def addMissingDefaultValuesForInsertFromInlineTable(
-      table: UnresolvedInlineTable,
-      insertTableSchemaWithoutPartitionColumns: StructType): UnresolvedInlineTable = {
-    val numQueryOutputs: Int = table.rows(0).size
+      node: LogicalPlan,
+      insertTableSchemaWithoutPartitionColumns: StructType): LogicalPlan = {
+    val numQueryOutputs: Int = node match {
+      case table: UnresolvedInlineTable => table.rows(0).size
+      case local: LocalRelation => local.data(0).numFields
+    }
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
       getDefaultExpressionsForInsert(numQueryOutputs, schema)
     val newNames: Seq[String] = schema.fields.drop(numQueryOutputs).map { _.name }
-    table.copy(
-      names = table.names ++ newNames,
-      rows = table.rows.map { row => row ++ newDefaultExpressions })
+    node match {
+      case table: UnresolvedInlineTable =>
+        table.copy(
+          names = table.names ++ newNames,
+          rows = table.rows.map { row => row ++ newDefaultExpressions })
+      case local: LocalRelation if newDefaultExpressions.isEmpty =>
+        local
+      case local: LocalRelation =>
+        val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
+        val newRows: Seq[Seq[Expression]] = local.data.map { row =>
+          row.toSeq(colTypes)
+            .map { v =>
+              Literal(v)
+            } ++ newDefaultExpressions
+        }
+        UnresolvedInlineTable(
+          local.output.map(_.name) ++ newNames,
+          newRows)
+    }
   }
 
   /**
@@ -338,6 +359,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         replaceExplicitDefaultValuesForInlineTable(defaultExpressions, table)
       case project: Project =>
         replaceExplicitDefaultValuesForProject(defaultExpressions, project)
+      case local: LocalRelation =>
+        Some(local)
     }
   }
 
