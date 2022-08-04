@@ -371,7 +371,7 @@ abstract class BaseSessionStateBuilder(
       createClone,
       columnarRules,
       adaptiveRulesHolder,
-      Some(this))
+      session.sessionUUID)
   }
 }
 

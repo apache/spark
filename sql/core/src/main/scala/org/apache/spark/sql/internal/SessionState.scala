@@ -81,7 +81,7 @@ private[sql] class SessionState(
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
-    sessionStateBuilder: Option[BaseSessionStateBuilder] = None) {
+    val sessionUUID: String) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -126,12 +126,9 @@ private[sql] class SessionState(
       mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
     createQueryExecution(plan, mode)
 
-  def closeSession(): Unit = {
-    if (sessionStateBuilder.isDefined) {
-      val session = sessionStateBuilder.get.session
-      val cache = FileStatusCache.sessionToCache.get(session.sessionUUID)
-      cache.foreach(_.invalidateAll())
-    }
+  def closeState(): Unit = {
+    val cache = FileStatusCache.sessionToCache.get(sessionUUID)
+    cache.foreach(_.invalidateAll())
   }
 }
 
@@ -178,7 +175,6 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * Add a jar path to [[SparkContext]] and the classloader.
    *
    * Note: this method seems not access any session state, but a Hive based `SessionState` needs
-   * to add the jar to its hive client for the current session. Hence, it still needs to be in
    * to add the jar to its hive client for the current session. Hence, it still needs to be in
    * [[SessionState]].
    */
