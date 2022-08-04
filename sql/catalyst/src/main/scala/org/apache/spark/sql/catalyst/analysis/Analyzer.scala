@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
