@@ -670,27 +670,6 @@ class DatasetUnpivotSuite extends QueryTest
         )),
       matchPVals = true)
   }
-
-  test("unpivot via sql") {
-    wideDataDs.createOrReplaceTempView("wideData")
-    Seq(
-      "SELECT id, variable, value FROM wideData UNPIVOT (value for variable in (str1, str2))",
-      "SELECT * FROM wideData UNPIVOT (values for variable in (str1, str2))",
-      "SELECT * FROM wideData UNPIVOT (values for variable in (int1, long1))",
-      "SELECT * FROM wideData UNPIVOT " +
-        "(values for variable in (str1, str2, CAST(int1 AS STRING), CAST(long1 AS STRING)))",
-      "SELECT * FROM wideData UNPIVOT " +
-        "((i, l) for variable in ((int1, long1) as `li`, (long1, int1), (long1, long1)))",
-      "SELECT * FROM wideData UNPIVOT ((i, l) for variable in (" +
-        "(int1, long1) as `li`, " +
-        "(long1, int1) as `il`, " +
-        "(long1, long1) as `ll`))"
-    ).foreach { sql =>
-      println(sql)
-      spark.sql(sql).show(false)
-      println()
-    }
-  }
 }
 
 case class WideData(id: Int, str1: String, str2: String, int1: Option[Int], long1: Option[Long])
