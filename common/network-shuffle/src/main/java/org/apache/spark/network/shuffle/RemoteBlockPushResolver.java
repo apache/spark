@@ -908,9 +908,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   List<byte[]> reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
-      for (Map.Entry<String, byte[]> entry : db.readKVToMap(APP_ATTEMPT_PATH_KEY_PREFIX).entrySet()) {
-        AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(entry.getKey());
-        AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
+      for (Map.Entry<String, byte[]> e : db.readKVToMap(APP_ATTEMPT_PATH_KEY_PREFIX).entrySet()) {
+        AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(e.getKey());
+        AppPathsInfo appPathsInfo = mapper.readValue(e.getValue(), AppPathsInfo.class);
         logger.debug("Reloading Application paths info for application {}", appAttemptId);
         appsShuffleInfo.compute(appAttemptId.appId,
             (appId, existingAppShuffleInfo) -> {
@@ -930,7 +930,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                     appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
               } else {
                 // Add the current DB key to deletion list as it is outdated
-                dbKeysToBeRemoved.add(entry.getKey().getBytes(StandardCharsets.UTF_8));
+                dbKeysToBeRemoved.add(e.getKey().getBytes(StandardCharsets.UTF_8));
                 return existingAppShuffleInfo;
               }
             });
