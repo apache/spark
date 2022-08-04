@@ -922,8 +922,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   try {
                     // Add the former outdated DB key to deletion list
                     dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
-                  } catch (IOException e) {
-                    logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
+                  } catch (IOException ioe) {
+                    logger.error("Failed to get the DB key for {}", existingAppAttemptId, ioe);
                   }
                 }
                 return new AppShuffleInfo(
