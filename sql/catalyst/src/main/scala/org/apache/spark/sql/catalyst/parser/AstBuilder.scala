@@ -1117,12 +1117,20 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   private def withUnpivot(
       ctx: UnpivotClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    // TODO: instead of UnresolvedStar, take all child output attributes
-    //  that are not given as unpivotColumns
-    if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
+    // this is needed to create unpivot and to filter unpivot for nulls further down
+    val valueColumnNames =
+      Option(ctx.unpivotOperator().unpivotSingleValueColumnClause())
+        .map(_.unpivotValueColumn().identifier().getText)
+        .map(Seq(_))
+      .getOrElse(
+        Option(ctx.unpivotOperator().unpivotMultiValueColumnClause())
+          .map(_.unpivotValueColumns.asScala.map(_.identifier().getText))
+          .get
+      )
+
+    val unpivot = if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
       val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
-      val valueColumnName = unpivotClause.unpivotValueColumn().identifier().getText
       val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn)
 
       Unpivot(
@@ -1130,13 +1138,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         Some(unpivotColumns.map(Seq(_)).toSeq),
         None,
         variableColumnName,
-        Seq(valueColumnName),
+        valueColumnNames,
         query
       )
     } else {
       val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
-      val valueColumnNames = unpivotClause.unpivotValueColumns.asScala.map(_.identifier().getText)
       val (unpivotColumns, unpivotAliases) =
         unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).unzip
 
@@ -1148,6 +1155,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         valueColumnNames,
         query
       )
+    }
+
+    // exclude null values
+    if (ctx.nullOperator != null && ctx.nullOperator.EXCLUDE() != null) {
+      Filter(IsNotNull(Coalesce(valueColumnNames.map(UnresolvedAttribute(_)))), unpivot)
+    } else {
+      unpivot
     }
   }
 
