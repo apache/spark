@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
-import org.apache.spark.sql.connector.expressions.aggregate.{Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableExpression
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
@@ -94,51 +94,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     case Cast(child, dataType, _, true) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
     case AggregateExpression(aggregateFunction, _, isDistinct, None, _) =>
-      aggregateFunction match {
-        case aggregate.Min(PushableExpression(expr)) => Some(new Min(expr))
-        case aggregate.Max(PushableExpression(expr)) => Some(new Max(expr))
-        case count: aggregate.Count if count.children.length == 1 =>
-          count.children.head match {
-            // COUNT(any literal) is the same as COUNT(*)
-            case Literal(_, _) => Some(new CountStar())
-            case PushableExpression(expr) => Some(new Count(expr, isDistinct))
-            case _ => None
-          }
-        case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, isDistinct))
-        case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, isDistinct))
-        case aggregate.VariancePop(PushableExpression(expr), _) =>
-          Some(new GeneralAggregateFunc("VAR_POP", isDistinct, Array(expr)))
-        case aggregate.VarianceSamp(PushableExpression(expr), _) =>
-          Some(new GeneralAggregateFunc("VAR_SAMP", isDistinct, Array(expr)))
-        case aggregate.StddevPop(PushableExpression(expr), _) =>
-          Some(new GeneralAggregateFunc("STDDEV_POP", isDistinct, Array(expr)))
-        case aggregate.StddevSamp(PushableExpression(expr), _) =>
-          Some(new GeneralAggregateFunc("STDDEV_SAMP", isDistinct, Array(expr)))
-        case aggregate.CovPopulation(PushableExpression(left), PushableExpression(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_POP", isDistinct, Array(left, right)))
-        case aggregate.CovSample(PushableExpression(left), PushableExpression(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_SAMP", isDistinct, Array(left, right)))
-        case aggregate.Corr(PushableExpression(left), PushableExpression(right), _) =>
-          Some(new GeneralAggregateFunc("CORR", isDistinct, Array(left, right)))
-        case aggregate.RegrIntercept(PushableExpression(left), PushableExpression(right)) =>
-          Some(new GeneralAggregateFunc("REGR_INTERCEPT", isDistinct, Array(left, right)))
-        case aggregate.RegrR2(PushableExpression(left), PushableExpression(right)) =>
-          Some(new GeneralAggregateFunc("REGR_R2", isDistinct, Array(left, right)))
-        case aggregate.RegrSlope(PushableExpression(left), PushableExpression(right)) =>
-          Some(new GeneralAggregateFunc("REGR_SLOPE", isDistinct, Array(left, right)))
-        case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
-          Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
-        // TODO supports other aggregate functions
-        case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
-          val translatedExprs = children.flatMap(PushableExpression.unapply(_))
-          if (translatedExprs.length == children.length) {
-            Some(new UserDefinedAggregateFunc(aggrFunc.name(),
-              aggrFunc.canonicalName(), isDistinct, translatedExprs.toArray[V2Expression]))
-          } else {
-            None
-          }
-        case _ => None
-      }
+      generateAggregateFunc(aggregateFunction, isDistinct)
     case Abs(child, true) => generateExpressionWithName("ABS", Seq(child))
     case Coalesce(children) => generateExpressionWithName("COALESCE", children)
     case Greatest(children) => generateExpressionWithName("GREATEST", children)
@@ -312,6 +268,54 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       if (childrenExpressions.length == children.length) {
         Some(new UserDefinedScalarFunc(
           function.name(), function.canonicalName(), childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case _ => None
+  }
+
+  private def generateAggregateFunc(
+      aggregateFunction: AggregateFunction,
+      isDistinct: Boolean): Option[AggregateFunc] = aggregateFunction match {
+    case aggregate.Min(PushableExpression(expr)) => Some(new Min(expr))
+    case aggregate.Max(PushableExpression(expr)) => Some(new Max(expr))
+    case count: aggregate.Count if count.children.length == 1 =>
+      count.children.head match {
+        // COUNT(any literal) is the same as COUNT(*)
+        case Literal(_, _) => Some(new CountStar())
+        case PushableExpression(expr) => Some(new Count(expr, isDistinct))
+        case _ => None
+      }
+    case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, isDistinct))
+    case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, isDistinct))
+    case aggregate.VariancePop(PushableExpression(expr), _) =>
+      Some(new GeneralAggregateFunc("VAR_POP", isDistinct, Array(expr)))
+    case aggregate.VarianceSamp(PushableExpression(expr), _) =>
+      Some(new GeneralAggregateFunc("VAR_SAMP", isDistinct, Array(expr)))
+    case aggregate.StddevPop(PushableExpression(expr), _) =>
+      Some(new GeneralAggregateFunc("STDDEV_POP", isDistinct, Array(expr)))
+    case aggregate.StddevSamp(PushableExpression(expr), _) =>
+      Some(new GeneralAggregateFunc("STDDEV_SAMP", isDistinct, Array(expr)))
+    case aggregate.CovPopulation(PushableExpression(left), PushableExpression(right), _) =>
+      Some(new GeneralAggregateFunc("COVAR_POP", isDistinct, Array(left, right)))
+    case aggregate.CovSample(PushableExpression(left), PushableExpression(right), _) =>
+      Some(new GeneralAggregateFunc("COVAR_SAMP", isDistinct, Array(left, right)))
+    case aggregate.Corr(PushableExpression(left), PushableExpression(right), _) =>
+      Some(new GeneralAggregateFunc("CORR", isDistinct, Array(left, right)))
+    case aggregate.RegrIntercept(PushableExpression(left), PushableExpression(right)) =>
+      Some(new GeneralAggregateFunc("REGR_INTERCEPT", isDistinct, Array(left, right)))
+    case aggregate.RegrR2(PushableExpression(left), PushableExpression(right)) =>
+      Some(new GeneralAggregateFunc("REGR_R2", isDistinct, Array(left, right)))
+    case aggregate.RegrSlope(PushableExpression(left), PushableExpression(right)) =>
+      Some(new GeneralAggregateFunc("REGR_SLOPE", isDistinct, Array(left, right)))
+    case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
+      Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
+    // TODO supports other aggregate functions
+    case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
+      val translatedExprs = children.flatMap(PushableExpression.unapply(_))
+      if (translatedExprs.length == children.length) {
+        Some(new UserDefinedAggregateFunc(aggrFunc.name(),
+          aggrFunc.canonicalName(), isDistinct, translatedExprs.toArray[V2Expression]))
       } else {
         None
       }
