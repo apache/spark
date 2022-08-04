@@ -815,6 +815,55 @@ class StructType(DataType):
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructType":
+        """
+        Constructs StructType from a scheme defined in json format
+
+        Parameters
+        ----------
+        json : Dict of str/any or a dict like object e.g. json object
+
+        Returns
+        -------
+        :class:`StructType`
+
+        Examples
+        --------
+        >>> json_str = """
+        >>>  {
+        >>>      "fields": [
+        >>>          {
+        >>>              "metadata": {},
+        >>>              "name": "Person",
+        >>>              "nullable": true,
+        >>>              "type": {
+        >>>                  "fields": [
+        >>>                      {
+        >>>                          "metadata": {},
+        >>>                          "name": "name",
+        >>>                          "nullable": false,
+        >>>                          "type": "string"
+        >>>                      },
+        >>>                      {
+        >>>                          "metadata": {},
+        >>>                          "name": "surname",
+        >>>                          "nullable": false,
+        >>>                          "type": "string"
+        >>>                      }
+        >>>                  ],
+        >>>                  "type": "struct"
+        >>>              }
+        >>>          }
+        >>>      ],
+        >>>      "type": "struct"
+        >>>  }
+        >>>  """
+
+        >>> import json
+        >>> scheme = StructType.fromJson(json.loads(json_str))
+        >>> print(scheme.simpleString())
+        struct<Person:struct<name:string,surname:string>>
+
+        """
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
     def fieldNames(self) -> List[str]:
