@@ -1124,18 +1124,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         .map(Seq(_))
       .getOrElse(
         Option(ctx.unpivotOperator().unpivotMultiValueColumnClause())
-          .map(_.unpivotValueColumns.asScala.map(_.identifier().getText))
+          .map(_.unpivotValueColumns.asScala.map(_.identifier().getText).toSeq)
           .get
       )
 
     val unpivot = if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
       val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
-      val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn)
+      val unpivotColumns = unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
 
       Unpivot(
         None,
-        Some(unpivotColumns.map(Seq(_)).toSeq),
+        Some(unpivotColumns.map(Seq(_))),
         None,
         variableColumnName,
         valueColumnNames,
@@ -1145,7 +1145,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
       val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
       val (unpivotColumns, unpivotAliases) =
-        unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).unzip
+        unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).toSeq.unzip
 
       Unpivot(
         None,
@@ -1184,7 +1184,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitUnpivotColumnSet(ctx: UnpivotColumnSetContext):
       (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
-      val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn)
+      val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
       val alias = Option(ctx.identifier).map(_.getText)
       (exprs, alias)
     }
