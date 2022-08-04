@@ -162,8 +162,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("SPARK-22431: illegal nested type") {
     val queries = Seq(
       "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
-      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
 
     queries.foreach(query => {
       val err = intercept[SparkException] {

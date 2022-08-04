@@ -37,12 +37,13 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
@@ -72,6 +73,8 @@ case class ParquetPartitionReaderFactory(
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
   private val enableVectorizedReader: Boolean =
     ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
+  private val supportsColumnar = enableVectorizedReader && sqlConf.wholeStageEnabled &&
+    !WholeStageCodegenExec.isTooManyFields(sqlConf, resultSchema)
   private val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
   private val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
   private val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -104,9 +107,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
-    sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
-      resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+    supportsColumnar
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {

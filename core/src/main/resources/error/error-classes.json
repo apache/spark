@@ -7,7 +7,7 @@
   },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative> If necessary set <config> to \"false\" (except for ANSI interval type) to bypass this error."
+      "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22003"
   },
@@ -209,6 +209,12 @@
     "message" : [
       "<message>"
     ]
+  },
+  "INTERVAL_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<message>.<alternative>"
+    ],
+    "sqlState" : "22003"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
     "message" : [

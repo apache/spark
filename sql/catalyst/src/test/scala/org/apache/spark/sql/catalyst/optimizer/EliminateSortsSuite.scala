@@ -116,10 +116,10 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.limit(2).select($"a")
+    val unnecessaryReordered = LocalLimit(2, orderedPlan).select($"a")
       .sortBy($"a".asc, $"b".desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
-    val correctAnswer = orderedPlan.limit(2).select($"a").analyze
+    val correctAnswer = LocalLimit(2, orderedPlan).select($"a").analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -163,11 +163,11 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33183: limits should not affect order for local sort") {
+  test("SPARK-33183: local limits should not affect order for local sort") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc)
-    val filteredAndReordered = orderedPlan.limit(Literal(10)).sortBy($"a".asc, $"b".desc)
+    val filteredAndReordered = LocalLimit(10, orderedPlan).sortBy($"a".asc, $"b".desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    val correctAnswer = LocalLimit(10, orderedPlan).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -443,5 +443,10 @@ class EliminateSortsSuite extends AnalysisTest {
     val expected3 = RepartitionByExpression($"b".asc :: Nil, testRelation, None)
       .sortBy($"c".asc).analyze
     comparePlans(Optimize.execute(plan3), expected3)
+  }
+
+  test("SPARK-39867: Global limit should not inherit OrderPreservingUnaryNode") {
+    val plan = testRelation.sortBy($"a".asc).limit(2).sortBy($"a".asc).analyze
+    comparePlans(Optimize.execute(plan), plan)
   }
 }
