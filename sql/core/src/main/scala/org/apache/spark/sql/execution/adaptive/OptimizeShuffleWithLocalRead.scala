@@ -122,7 +122,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.left) =>
+      case join: BroadcastHashJoinExec if !join.isSkewJoin && canUseLocalShuffleRead(join.left) =>
         Some((join.left, join.buildSide))
       case _ => None
     }
@@ -130,7 +130,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   object BroadcastJoinWithShuffleRight {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.right) =>
+      case join: BroadcastHashJoinExec if !join.isSkewJoin && canUseLocalShuffleRead(join.right) =>
         Some((join.right, join.buildSide))
       case _ => None
     }

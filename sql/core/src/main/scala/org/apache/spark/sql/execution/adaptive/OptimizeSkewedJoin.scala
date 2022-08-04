@@ -24,12 +24,13 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -198,6 +199,61 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
+  private def tryOptimizeBroadcastHashJoinChild(
+      child: ShuffleQueryStageExec,
+      buildSide: BuildSide,
+      joinType: JoinType): Option[SparkPlan] = {
+    val childCanSplit = if (buildSide == BuildRight) {
+      canSplitLeftSide(joinType)
+    } else {
+      canSplitRightSide(joinType)
+    }
+
+    val childSizes = child.mapStats.get.bytesByPartitionId
+    val numPartitions = childSizes.length
+    // We use the median size of the original shuffle partitions to detect skewed partitions.
+    val childMedSize = Utils.median(childSizes, false)
+    logDebug(
+      s"""
+         |Optimizing skewed broadcast join.
+         |Stream side partitions size info:
+         |${getSizeInfo(childMedSize, childSizes)}
+      """.stripMargin)
+
+    val childSkewThreshold = getSkewThreshold(childMedSize)
+    val leftTargetSize = targetSize(childSizes, childSkewThreshold)
+
+    val childSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
+    var numSkewedChild = 0
+    for (partitionIndex <- 0 until numPartitions) {
+      val childSize = childSizes(partitionIndex)
+      val isLeftSkew = childCanSplit && childSize > childSkewThreshold
+      val childNoSkewPartitionSpec =
+        Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1, childSize))
+
+      val childParts = if (isLeftSkew) {
+        val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
+          child.mapStats.get.shuffleId, partitionIndex, leftTargetSize)
+        if (skewSpecs.isDefined) {
+          logDebug(s"Left side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(childSize)}) is skewed, " +
+              s"split it into ${skewSpecs.get.length} parts.")
+          numSkewedChild += 1
+        }
+        skewSpecs.getOrElse(childNoSkewPartitionSpec)
+      } else {
+        childNoSkewPartitionSpec
+      }
+      childParts.foreach(childSidePartitions += _)
+    }
+    logDebug(s"number of skewed partitions: stream $numSkewedChild")
+    if (numSkewedChild > 0) {
+      Some(SkewJoinChildWrapper(AQEShuffleReadExec(child, childSidePartitions)))
+    } else {
+      None
+    }
+  }
+
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
@@ -215,6 +271,18 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
         case (newLeft, newRight) =>
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
       }.getOrElse(shj)
+
+    case bhj @ BroadcastHashJoinExec(_, _, joinType, buildSide, _,
+    ShuffleStage(left: ShuffleQueryStageExec),
+    BroadcastQueryStageExec(_, _, _), _, false) =>
+      tryOptimizeBroadcastHashJoinChild(left, buildSide, joinType).map(newLeft =>
+        bhj.copy(left = newLeft, isSkewJoin = true)).getOrElse(bhj)
+
+    case bhj @ BroadcastHashJoinExec(_, _, joinType, buildSide, _,
+    BroadcastQueryStageExec(_, _, _),
+    ShuffleStage(right: ShuffleQueryStageExec), _, false) =>
+      tryOptimizeBroadcastHashJoinChild(right, buildSide, joinType).map(newRight =>
+        bhj.copy(right = newRight, isSkewJoin = true)).getOrElse(bhj)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {

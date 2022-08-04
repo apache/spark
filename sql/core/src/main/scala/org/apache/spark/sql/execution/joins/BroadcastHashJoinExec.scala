@@ -45,7 +45,8 @@ case class BroadcastHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isNullAwareAntiJoin: Boolean = false)
+    isNullAwareAntiJoin: Boolean = false,
+    isSkewJoin: Boolean = false)
   extends HashJoin {
 
   if (isNullAwareAntiJoin) {
@@ -55,6 +56,13 @@ case class BroadcastHashJoinExec(
     require(buildSide == BuildRight, "buildSide must be BuildRight.")
     require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
   }
+
+  /**
+   * Returns the name of this type of TreeNode.  Defaults to the class name.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  override def nodeName: String =
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
