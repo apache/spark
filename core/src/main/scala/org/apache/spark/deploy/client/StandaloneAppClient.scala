@@ -21,6 +21,7 @@ import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
@@ -220,6 +221,21 @@ private[spark] class StandaloneAppClient(
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
         }
+
+      case w: WorkerLastHeartbeat =>
+        master match {
+          case Some(masterRef) =>
+            // Ask a message and create a thread to reply with the result.  Allow thread to be
+            // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
+            masterRef.ask[ArrayBuffer[Long]](w).andThen {
+              case Success(lastHeartbeats) => context.reply(Some(lastHeartbeats))
+              case Failure(ie: InterruptedException) => // Cancelled
+              case Failure(NonFatal(t)) => context.sendFailure(t)
+            }(ThreadUtils.sameThread)
+          case None =>
+            logWarning("Attempted to request WorkerLastHeartbeat before registering with Master.")
+            context.reply(None)
+        }
     }
 
     private def askAndReplyAsync[T](
@@ -333,4 +349,8 @@ private[spark] class StandaloneAppClient(
     }
   }
 
+  def workerLastHeartbeat(appId: String,
+    executorIds: ArrayBuffer[String]): Option[ArrayBuffer[Long]] = {
+    endpoint.get.askSync[Option[ArrayBuffer[Long]]](WorkerLastHeartbeat(appId, executorIds))
+  }
 }

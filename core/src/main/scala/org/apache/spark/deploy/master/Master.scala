@@ -544,6 +544,20 @@ private[deploy] class Master(
           logWarning(s"Got status update for unknown executor $appId/$execId")
       }
       context.reply(true)
+
+    case WorkerLastHeartbeat(appId, executorIds) =>
+      idToApp.get(appId) match {
+        case Some(appInfo) =>
+          val lastHeartbeats = new ArrayBuffer[Long]()
+          for (executorId <- executorIds) {
+            appInfo.executors.get(executorId.toInt) match {
+              case Some(executor) => lastHeartbeats += executor.worker.lastHeartbeat
+              case None => lastHeartbeats += 0
+            }
+          }
+          context.reply(lastHeartbeats)
+        case None => context.reply(ArrayBuffer.fill(executorIds.size)(0))
+      }
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {

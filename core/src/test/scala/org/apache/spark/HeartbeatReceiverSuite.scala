@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.{ExecutorService, TimeUnit}
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
@@ -28,13 +29,15 @@ import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{ManualClock, ThreadUtils}
 
@@ -61,6 +64,7 @@ class HeartbeatReceiverSuite
     PrivateMethod[collection.Map[String, Long]](Symbol("executorLastSeen"))
   private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
   private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
+  private val _waitingList = PrivateMethod[mutable.HashMap[String, Long]](Symbol("waitingList"))
   var conf: SparkConf = _
 
   /**
@@ -159,6 +163,239 @@ class HeartbeatReceiverSuite
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
     assert(!trackedExecutors.contains(executorId2))
+  }
+
+  test("Check workerLastHeartbeat before expiring the executor") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
+    when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
+
+    // executorTimeout = 120000
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+
+    // Setup FakeAppClient
+    val rpcEnv = sc.env.rpcEnv
+    val fakeAppClient = new FakeAppClient(rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      conf,
+      executorTimeout)
+    val schedulerBackend = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+    schedulerBackend.client = fakeAppClient
+
+    // executorLastSeen = Map(1 -> 0); now = 0
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+
+    // now = 120001
+    heartbeatReceiverClock.advance(executorTimeout + 1)
+    // Executor1 will not be killed because workerLastHeartbeat is 120000. Executor1 will be removed
+    // from executorLastSeen (trackedExecutors.size === 0) and moved to waitingList
+    // (waitingList.size === 1). In other words, waitingList is equal to Map(1 -> 120000).
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+
+    var trackedExecutors = getTrackedExecutors
+    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 0)
+    assert(waitingList.size === 1)
+    assert(waitingList.contains(executorId1))
+
+    // now = 240001
+    // The executor will be removed from waitingList because (now - waitingList(1)) is larger than
+    // (executorTimeoutMs / 2).
+    heartbeatReceiverClock.advance(executorTimeout)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+    trackedExecutors = getTrackedExecutors
+    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 0)
+    assert(waitingList.size === 0)
+  }
+
+  test("Remove executor from waitingList when receiving a heartbeat") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
+    when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
+
+    // executorTimeout = 120000
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+
+    val rpcEnv = sc.env.rpcEnv
+    val fakeAppClient = new FakeAppClient(rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      conf,
+      executorTimeout)
+    val schedulerBackend = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+    schedulerBackend.client = fakeAppClient
+
+    // executorLastSeen = Map(1 -> 0); now = 0
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+
+    // now = 120001
+    heartbeatReceiverClock.advance(executorTimeout + 1)
+    // Executor1 will not be killed because workerLastHeartbeat is 120000. Executor1 will be removed
+    // from executorLastSeen (trackedExecutors.size === 0) and moved to waitingList
+    // (waitingList.size === 1). In other words, waitingList is equal to Map(1 -> 120000).
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+
+    var trackedExecutors = getTrackedExecutors
+    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 0)
+    assert(waitingList.size === 1)
+    assert(waitingList.contains(executorId1))
+
+    // now = 120001
+    // When heartbeatReceiver receives a heartbeat from executor1, executor1 will be removed from
+    // waitingList and moved to executorLastSeen.
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    trackedExecutors = getTrackedExecutors
+    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 1)
+    assert(waitingList.size === 0)
+  }
+
+  test("Remove executor from both waitingList and executorLastSeen when receiving an " +
+    "ExecutorRemoved msg") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
+    when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
+
+    // executorTimeout = 120000
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
+
+    val rpcEnv = sc.env.rpcEnv
+    val fakeAppClient = new FakeAppClient(rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      conf,
+      executorTimeout)
+    val schedulerBackend = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+    schedulerBackend.client = fakeAppClient
+
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    triggerHeartbeat(executorId2, executorShouldReregister = false)
+    var trackedExecutors = getTrackedExecutors
+    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 2)
+    assert(waitingList.size === 0)
+
+    // Advance the clock and only trigger a heartbeat for the first executor
+    heartbeatReceiverClock.advance(executorTimeout / 2)
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    heartbeatReceiverClock.advance(executorTimeout)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+
+    // Only the second executor will be put into waitingList
+    trackedExecutors = getTrackedExecutors
+    assert(trackedExecutors.size === 1)
+    assert(trackedExecutors.contains(executorId1))
+    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(waitingList.size === 1)
+    assert(waitingList.contains(executorId2))
+
+    // When heartbeatReceiver receives ExecutorRemoved, it will remove the executor from both
+    // executorLastSeen and waitingList.
+    heartbeatReceiverRef.askSync[Boolean](ExecutorRemoved(executorId1))
+    heartbeatReceiverRef.askSync[Boolean](ExecutorRemoved(executorId2))
+    trackedExecutors = getTrackedExecutors
+    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 0)
+    assert(waitingList.size === 0)
+  }
+
+  test("Remove all executors if HeartbeatReceiver cannot connect to master") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
+    when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
+
+    // executorTimeout = 120000
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
+
+    val rpcEnv = sc.env.rpcEnv
+    // Set the value of lastHeartbeat to -1 to simulate master disconnection.
+    val fakeAppClient = new FakeAppClient(rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      conf,
+      -1)
+    val schedulerBackend = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+    schedulerBackend.client = fakeAppClient
+
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+    triggerHeartbeat(executorId2, executorShouldReregister = false)
+    var trackedExecutors = getTrackedExecutors
+    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 2)
+    assert(waitingList.size === 0)
+
+    // When (now - executorLastSeen(execID)) is larger than executorTimeout, heartbeatReceiver will
+    // ask master node for workerLastHeartbeat. However, in this test, heartbeatReceiver cannot
+    // reach master node, and thus we will remove the executor.
+    heartbeatReceiverClock.advance(executorTimeout + 1)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+
+    // Both executors will be removed from executorLastSeen and waitingList.
+    trackedExecutors = getTrackedExecutors
+    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    assert(trackedExecutors.size === 0)
+    assert(waitingList.size === 0)
   }
 
   test("expire dead hosts should kill executors with replacement (SPARK-8119)") {
@@ -316,6 +553,24 @@ private class FakeSchedulerBackend(
 
   protected override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](KillExecutors(executorIds))
+  }
+}
+
+private class FakeAppClient(rpcEnv: RpcEnv,
+  masterUrls: Array[String],
+  appDescription: ApplicationDescription,
+  listener: StandaloneAppClientListener,
+  conf: SparkConf,
+  lastHeartbeat: Long = 0)
+  extends StandaloneAppClient(rpcEnv, masterUrls, appDescription, listener, conf) {
+
+  private val workerLastHeartbeat: Long = lastHeartbeat
+  override def workerLastHeartbeat(appId: String,
+    executorFullIds: ArrayBuffer[String]): Option[ArrayBuffer[Long]] = {
+    lastHeartbeat match {
+      case -1 => None
+      case _ => Some(ArrayBuffer.fill[Long](executorFullIds.size)(workerLastHeartbeat))
+    }
   }
 }
 

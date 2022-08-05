@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import scala.collection.immutable.List
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
@@ -137,6 +138,7 @@ private[deploy] object DeployMessages {
    */
   case class DecommissionWorkersOnHosts(hostnames: Seq[String])
 
+  case class WorkerLastHeartbeat(appId: String, executorFullIds: ArrayBuffer[String])
   // Master to Worker
 
   sealed trait RegisterWorkerResponse

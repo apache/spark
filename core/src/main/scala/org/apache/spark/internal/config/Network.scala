@@ -49,7 +49,13 @@ private[spark] object Network {
     ConfigBuilder("spark.network.timeoutInterval")
       .version("1.3.2")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString(STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL.defaultValueString)
+      .createWithDefaultString("15s")
+
+  private[spark] val NETWORK_EXECUTOR_TIMEOUT =
+    ConfigBuilder("spark.network.executorTimeout")
+      .version("1.3.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60s")
 
   private[spark] val RPC_ASK_TIMEOUT =
     ConfigBuilder("spark.rpc.askTimeout")

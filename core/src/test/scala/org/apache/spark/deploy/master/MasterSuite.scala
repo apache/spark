@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.reflect.ClassTag
@@ -41,6 +41,7 @@ import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
@@ -942,6 +943,220 @@ class MasterSuite extends SparkFunSuite
         master.rpcEnv.shutdown()
       }
     }
+  }
+
+  private val _idToApp =
+    PrivateMethod[mutable.HashMap[String, ApplicationInfo]](Symbol("idToApp"))
+  test("Test WorkerLastHeartbeat message") {
+    val master = makeAliveMaster()
+    val idToApp = master.invokePrivate(_idToApp())
+    val appId = "app1"
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val worker1 = new WorkerInfo(
+      id = "worker1",
+      host = "127.0.0.1",
+      port = 10000,
+      cores = 0,
+      memory = 0,
+      endpoint = null,
+      webUiAddress = "http://localhost:80",
+      Map.empty
+    )
+    val worker2 = new WorkerInfo(
+      id = "worker2",
+      host = "127.0.0.1",
+      port = 10000,
+      cores = 0,
+      memory = 0,
+      endpoint = null,
+      webUiAddress = "http://localhost:80",
+      Map.empty
+    )
+
+    // Schedule executor1, executor2, and executor3 on worker1
+    idToApp(appId) = makeAppInfo(1024)
+    val executorIds = ArrayBuffer[String]("1", "2", "3")
+    for (executorId <- executorIds) {
+      idToApp(appId).executors(executorId.toInt) =
+        new ExecutorDesc(executorId.toInt,
+          idToApp(appId), worker1, 2, 1024, Map.empty, rpId)
+      idToApp(appId).executors(executorId.toInt).worker.lastHeartbeat = 1000
+    }
+    var workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](1000, 1000, 1000))
+
+    // executor4 is not on any worker, and thus its lastHeartbeat should be 0.
+    executorIds += "4"
+    workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](1000, 1000, 1000, 0))
+
+    // Move executor4 to worker2, but worker2 has not registered in master.
+    val newExecutorId = 4
+    idToApp(appId).executors(newExecutorId) =
+      new ExecutorDesc(newExecutorId,
+        idToApp(appId), worker2, 2, 1024, Map.empty, rpId)
+    idToApp(appId).executors(4).worker.lastHeartbeat = 2000
+    workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](1000, 1000, 1000, 2000))
+
+    // Unregistered app
+    val unregisteredAppId = "app2"
+    workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(unregisteredAppId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](0, 0, 0, 0))
+  }
+
+  private val _timeOutDeadWorkers = PrivateMethod[Unit](Symbol("timeOutDeadWorkers"))
+  private val _workers = PrivateMethod[HashSet[WorkerInfo]](Symbol("workers"))
+  private val _addressToWorker =
+    PrivateMethod[HashMap[RpcAddress, WorkerInfo]](Symbol("addressToWorker"))
+  test("Test CheckForWorkerTimeOut message") {
+    val master = makeAliveMaster()
+    val idToApp = master.invokePrivate(_idToApp())
+    val appId = "app1"
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val addressToWorker = master.invokePrivate(_addressToWorker())
+    val worker1 = new WorkerInfo(
+      id = "worker1",
+      host = "127.0.0.1",
+      port = 10000,
+      cores = 0,
+      memory = 0,
+      endpoint = mock(classOf[RpcEndpointRef]),
+      webUiAddress = "http://localhost:80",
+      Map.empty
+    )
+    worker1.lastHeartbeat = 1000
+    worker1.state = WorkerState.ALIVE
+
+    idToApp(appId) = makeAppInfo(1024)
+    val executorIds = ArrayBuffer[String]("1", "2", "3")
+    for (executorId <- executorIds) {
+      val execDesc = new ExecutorDesc(executorId.toInt,
+        idToApp(appId), worker1, 2, 1024, Map.empty, rpId)
+      idToApp(appId).executors(executorId.toInt) = execDesc
+      idToApp(appId).executors(executorId.toInt).worker.lastHeartbeat = 1000
+      idToApp(appId).getOrUpdateExecutorsForRPId(rpId).add(executorId.toInt)
+      worker1.executors(executorId) = execDesc
+    }
+
+    val workers = master.invokePrivate(_workers())
+    workers += worker1
+    assert(workers.size == 1)
+    assert(idToApp(appId).executors.size == 3)
+
+    var workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](1000, 1000, 1000))
+
+    // Labeled worker1 as WorkerState.DEAD
+    master.invokePrivate(_timeOutDeadWorkers())
+    workerLastHeartbeat =
+      master.self.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds))
+    assert(workerLastHeartbeat === ArrayBuffer[Long](0, 0, 0))
+    assert(idToApp(appId).executors.size == 0)
+
+    // Removed worker1
+    master.invokePrivate(_timeOutDeadWorkers())
+    assert(workers.size == 0)
+  }
+
+  private class FakeAppClient(rpcEnv: RpcEnv,
+    masterUrls: Array[String],
+    appDescription: ApplicationDescription,
+    listener: StandaloneAppClientListener,
+    conf: SparkConf,
+    master: Option[RpcEndpointRef])
+    extends StandaloneAppClient(rpcEnv, masterUrls, appDescription, listener, conf) {
+
+    override def workerLastHeartbeat(appId: String,
+      executorIds: ArrayBuffer[String]): Option[ArrayBuffer[Long]] = {
+      master match {
+        case Some(masterRef) =>
+          Some(masterRef.askSync[ArrayBuffer[Long]](WorkerLastHeartbeat(appId, executorIds)))
+        case None =>
+          logWarning("Attempted to request WorkerLastHeartbeat before registering with Master.")
+          None
+      }
+    }
+  }
+
+  test("Test behavior of the message WorkerLastHeartbeat when master is connected") {
+    val master = makeAliveMaster()
+    val idToApp = master.invokePrivate(_idToApp())
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val worker1 = new WorkerInfo(
+      id = "worker1",
+      host = "127.0.0.1",
+      port = 10000,
+      cores = 0,
+      memory = 0,
+      endpoint = null,
+      webUiAddress = "http://localhost:80",
+      Map.empty
+    )
+    worker1.lastHeartbeat = 1000
+
+    val appId = "app1"
+    idToApp(appId) = makeAppInfo(1024)
+    val executorIds = ArrayBuffer[String]("1", "2", "3")
+    for (executorId <- executorIds) {
+      idToApp(appId).executors(executorId.toInt) =
+        new ExecutorDesc(executorId.toInt,
+          idToApp(appId), worker1, 2, 1024, Map.empty, rpId)
+      idToApp(appId).executors(executorId.toInt).worker.lastHeartbeat = 1000
+    }
+
+    val appClient = new FakeAppClient(master.rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      master.conf,
+      Some(master.self))
+    val workerLastHeartbeat =
+      appClient.workerLastHeartbeat(appId, executorIds)
+    assert(workerLastHeartbeat === Some(ArrayBuffer[Long](1000, 1000, 1000)))
+  }
+
+  test("Test behavior of the message WorkerLastHeartbeat when master is disconnected") {
+    val master = makeAliveMaster()
+    val idToApp = master.invokePrivate(_idToApp())
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val worker1 = new WorkerInfo(
+      id = "worker1",
+      host = "127.0.0.1",
+      port = 10000,
+      cores = 0,
+      memory = 0,
+      endpoint = null,
+      webUiAddress = "http://localhost:80",
+      Map.empty
+    )
+    worker1.lastHeartbeat = 1000
+
+    val appId = "app1"
+    idToApp(appId) = makeAppInfo(1024)
+    val executorIds = ArrayBuffer[String]("1", "2", "3")
+    for (executorId <- executorIds) {
+      idToApp(appId).executors(executorId.toInt) =
+        new ExecutorDesc(executorId.toInt,
+          idToApp(appId), worker1, 2, 1024, Map.empty, rpId)
+      idToApp(appId).executors(executorId.toInt).worker.lastHeartbeat = 1000
+    }
+
+    // "None" indicates that master is disconnected.
+    val appClient = new FakeAppClient(master.rpcEnv,
+      Array[String](),
+      mock(classOf[ApplicationDescription]),
+      mock(classOf[StandaloneAppClientListener]),
+      master.conf,
+      None)
+    val workerLastHeartbeat =
+      appClient.workerLastHeartbeat(appId, executorIds)
+    assert(workerLastHeartbeat === None)
   }
 
   def testWorkerDecommissioning(

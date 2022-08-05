@@ -2422,4 +2422,11 @@ package object config {
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5s")
+
+  private[spark] val HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT =
+    ConfigBuilder("spark.driver.heartbeat.checkWorkerLastHeartbeat")
+      .internal()
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 }
