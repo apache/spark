@@ -18,27 +18,15 @@
 package org.apache.spark.network.shuffledb;
 
 import java.io.Closeable;
+import java.util.Iterator;
+import java.util.Map;
 
-/**
- * The local KV storage used to persist the shuffle state,
- * the implementations may include leveldb, rocksdb, etc.
- */
-public interface DB extends Closeable {
-    /**
-     * Set the DB entry for "key" to "value".
-     */
-    void put(byte[] key, byte[] value) throws RuntimeException;
+public interface DBIterator extends Iterator<Map.Entry<byte[], byte[]>>, Closeable {
 
-    /**
-     * Get which returns a new byte array storing the value associated
-     * with the specified input key if any.
-     */
-    byte[] get(byte[] key) throws RuntimeException;
+    void seek(byte[] key);
 
-    /**
-     * Delete the DB entry (if any) for "key".
-     */
-    void delete(byte[] key) throws RuntimeException;
+    default void remove() {
+        throw new UnsupportedOperationException();
+    }
 
-    DBIterator iterator();
 }

@@ -17,11 +17,10 @@
 
 package org.apache.spark.network.shuffledb;
 
-import org.iq80.leveldb.DBIterator;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 public class LevelDB implements DB {
@@ -52,18 +51,7 @@ public class LevelDB implements DB {
     }
 
     @Override
-    public Map<String, byte[]> readKVToMap(String prefix) {
-        Map<String, byte[]> map = new HashMap<>();
-        DBIterator itr = db.iterator();
-        itr.seek(prefix.getBytes(StandardCharsets.UTF_8));
-        while (itr.hasNext()) {
-            Map.Entry<byte[], byte[]> e = itr.next();
-            String key = new String(e.getKey(), StandardCharsets.UTF_8);
-            if (!key.startsWith(prefix)) {
-                break;
-            }
-            map.put(key, e.getValue());
-        }
-        return map;
+    public DBIterator iterator() {
+        return new LevelDBIterator(db.iterator());
     }
 }
