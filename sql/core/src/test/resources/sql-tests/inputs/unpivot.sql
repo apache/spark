@@ -36,6 +36,11 @@ UNPIVOT (
 
 SELECT * FROM courseEarningsAndSales
 UNPIVOT (
+  values FOR year IN ()
+);
+
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012) as `2012`, (earnings2013, sales2013) as `2013`, (earnings2014, sales2014) as `2014`)
 );
 
@@ -47,4 +52,24 @@ UNPIVOT EXCLUDE NULLS (
 SELECT * FROM courseEarningsAndSales
 UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+);
+
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  () FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+);
+
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ()
+);
+
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales, extra) FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+);
+
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ((earnings2012), (earnings2013, sales2013), (earnings2014, sales2014, sales2014))
 );

@@ -99,6 +99,26 @@ dotNET	2014	{"earnings":22500,"sales":1}
 -- !query
 SELECT * FROM courseEarningsAndSales
 UNPIVOT (
+  values FOR year IN ()
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 3, pos 22)
+
+== SQL ==
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  values FOR year IN ()
+----------------------^^^
+)
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
   (earnings, sales) FOR year IN ((earnings2012, sales2012) as `2012`, (earnings2013, sales2013) as `2013`, (earnings2014, sales2014) as `2014`)
 )
 -- !query schema
@@ -141,3 +161,67 @@ Java	(`earnings2014`,`sales2014`)	NULL	NULL
 dotNET	(`earnings2012`,`sales2012`)	15000	2
 dotNET	(`earnings2013`,`sales2013`)	48000	1
 dotNET	(`earnings2014`,`sales2014`)	22500	1
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  () FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+[PARSE_SYNTAX_ERROR] Syntax error at or near ')': extra input ')'(line 3, pos 3)
+
+== SQL ==
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  () FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+---^^^
+)
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ()
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+
+[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 3, pos 33)
+
+== SQL ==
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ()
+---------------------------------^^^
+)
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales, extra) FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+[UNPIVOT_VALUE_SIZE_MISMATCH] All unpivot value columns must have the same size as there are value column names (3): [2, 2, 2]
+
+
+-- !query
+SELECT * FROM courseEarningsAndSales
+UNPIVOT (
+  (earnings, sales) FOR year IN ((earnings2012), (earnings2013, sales2013), (earnings2014, sales2014, sales2014))
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+[UNPIVOT_VALUE_SIZE_MISMATCH] All unpivot value columns must have the same size as there are value column names (2): [1, 2, 3]

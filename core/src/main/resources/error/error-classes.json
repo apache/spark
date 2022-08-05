@@ -566,7 +566,7 @@
   },
   "UNPIVOT_VALUE_SIZE_MISMATCH" : {
     "message" : [
-      "Unpivot value columns must have the same size: [<sizes>]"
+      "All unpivot value columns must have the same size as there are value column names (<names>): [<sizes>]"
     ],
     "sqlState" : "42000"
   },

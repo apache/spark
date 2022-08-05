@@ -107,10 +107,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def unpivotValueSizeMismatchError(valueSizes: Seq[Int]): Throwable = {
+  def unpivotValueSizeMismatchError(names: Int, valueSizes: Seq[Int]): Throwable = {
     new AnalysisException(
       errorClass = "UNPIVOT_VALUE_SIZE_MISMATCH",
-      messageParameters = Array(valueSizes.mkString(", ")))
+      messageParameters = Array(names.toString, valueSizes.mkString(", ")))
   }
 
   def unpivotValueDataTypeMismatchError(values: Seq[Seq[NamedExpression]]): Throwable = {

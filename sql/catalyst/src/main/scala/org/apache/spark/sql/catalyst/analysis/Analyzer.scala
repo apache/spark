@@ -880,6 +880,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case up: Unpivot if !up.childrenResolved || !up.ids.exists(_.forall(_.resolved)) ||
         !up.values.exists(_.nonEmpty) || !up.values.exists(_.forall(_.forall(_.resolved))) ||
+        !up.values.get.forall(_.length == up.valueColumnNames.length) ||
         !up.valuesTypeCoercioned => up
 
       // TypeCoercionBase.UnpivotCoercion determines valueType
@@ -894,7 +895,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           values.zip(aliases.getOrElse(values.map(_ => None))).map {
             case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
             case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
-            // there are more than on value in vals
+            // there are more than one value in vals
             case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
           }
 
