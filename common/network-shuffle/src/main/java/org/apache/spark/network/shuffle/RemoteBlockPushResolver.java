@@ -909,40 +909,39 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   List<byte[]> reloadActiveAppAttemptsPathInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
-      try (DBIterator itr = db.iterator()) {
-        itr.seek(APP_ATTEMPT_PATH_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-        while (itr.hasNext()) {
-          Map.Entry<byte[], byte[]> entry = itr.next();
-          String key = new String(entry.getKey(), StandardCharsets.UTF_8);
-          if (!key.startsWith(APP_ATTEMPT_PATH_KEY_PREFIX)) {
-            break;
-          }
-          AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(key);
-          AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
-          logger.debug("Reloading Application paths info for application {}", appAttemptId);
-          appsShuffleInfo.compute(appAttemptId.appId,
-                  (appId, existingAppShuffleInfo) -> {
-                    if (existingAppShuffleInfo == null ||
-                            existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
-                      if (existingAppShuffleInfo != null) {
-                        AppAttemptId existingAppAttemptId = new AppAttemptId(
-                                existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
-                        try {
-                          // Add the former outdated DB key to deletion list
-                          dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
-                        } catch (IOException e) {
-                          logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
-                        }
-                      }
-                      return new AppShuffleInfo(
-                              appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
-                    } else {
-                      // Add the current DB key to deletion list as it is outdated
-                      dbKeysToBeRemoved.add(entry.getKey());
-                      return existingAppShuffleInfo;
-                    }
-                  });
+      DBIterator itr = db.iterator();
+      itr.seek(APP_ATTEMPT_PATH_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> entry = itr.next();
+        String key = new String(entry.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_ATTEMPT_PATH_KEY_PREFIX)) {
+          break;
         }
+        AppAttemptId appAttemptId = parseDbAppAttemptPathsKey(key);
+        AppPathsInfo appPathsInfo = mapper.readValue(entry.getValue(), AppPathsInfo.class);
+        logger.debug("Reloading Application paths info for application {}", appAttemptId);
+        appsShuffleInfo.compute(appAttemptId.appId,
+                (appId, existingAppShuffleInfo) -> {
+                  if (existingAppShuffleInfo == null ||
+                          existingAppShuffleInfo.attemptId < appAttemptId.attemptId) {
+                    if (existingAppShuffleInfo != null) {
+                      AppAttemptId existingAppAttemptId = new AppAttemptId(
+                              existingAppShuffleInfo.appId, existingAppShuffleInfo.attemptId);
+                      try {
+                        // Add the former outdated DB key to deletion list
+                        dbKeysToBeRemoved.add(getDbAppAttemptPathsKey(existingAppAttemptId));
+                      } catch (IOException e) {
+                        logger.error("Failed to get the DB key for {}", existingAppAttemptId, e);
+                      }
+                    }
+                    return new AppShuffleInfo(
+                            appAttemptId.appId, appAttemptId.attemptId, appPathsInfo);
+                  } else {
+                    // Add the current DB key to deletion list as it is outdated
+                    dbKeysToBeRemoved.add(entry.getKey());
+                    return existingAppShuffleInfo;
+                  }
+                });
       }
     }
     return dbKeysToBeRemoved;
@@ -955,42 +954,41 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   List<byte[]> reloadFinalizedAppAttemptsShuffleMergeInfo(DB db) throws IOException {
     List<byte[]> dbKeysToBeRemoved = new ArrayList<>();
     if (db != null) {
-      try (DBIterator itr = db.iterator()) {
-        itr.seek(APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-        while (itr.hasNext()) {
-          Map.Entry<byte[], byte[]> entry = itr.next();
-          String key = new String(entry.getKey(), StandardCharsets.UTF_8);
-          if (!key.startsWith(APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX)) {
-            break;
-          }
-          AppAttemptShuffleMergeId partitionId = parseDbAppAttemptShufflePartitionKey(key);
-          logger.debug("Reloading finalized shuffle info for partitionId {}", partitionId);
-          AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(partitionId.appId);
-          if (appShuffleInfo != null && appShuffleInfo.attemptId == partitionId.attemptId) {
-            appShuffleInfo.shuffles.compute(partitionId.shuffleId,
-                    (shuffleId, existingMergePartitionInfo) -> {
-                      if (existingMergePartitionInfo == null ||
-                              existingMergePartitionInfo.shuffleMergeId < partitionId.shuffleMergeId) {
-                        if (existingMergePartitionInfo != null) {
-                          AppAttemptShuffleMergeId appAttemptShuffleMergeId =
-                                  new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
-                                          shuffleId, existingMergePartitionInfo.shuffleMergeId);
-                          try{
-                            dbKeysToBeRemoved.add(
-                                    getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId));
-                          } catch (Exception e) {
-                            logger.error("Error getting the DB key for {}", appAttemptShuffleMergeId, e);
-                          }
+      DBIterator itr = db.iterator();
+      itr.seek(APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> entry = itr.next();
+        String key = new String(entry.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX)) {
+          break;
+        }
+        AppAttemptShuffleMergeId partitionId = parseDbAppAttemptShufflePartitionKey(key);
+        logger.debug("Reloading finalized shuffle info for partitionId {}", partitionId);
+        AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(partitionId.appId);
+        if (appShuffleInfo != null && appShuffleInfo.attemptId == partitionId.attemptId) {
+          appShuffleInfo.shuffles.compute(partitionId.shuffleId,
+                  (shuffleId, existingMergePartitionInfo) -> {
+                    if (existingMergePartitionInfo == null ||
+                            existingMergePartitionInfo.shuffleMergeId < partitionId.shuffleMergeId) {
+                      if (existingMergePartitionInfo != null) {
+                        AppAttemptShuffleMergeId appAttemptShuffleMergeId =
+                                new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
+                                        shuffleId, existingMergePartitionInfo.shuffleMergeId);
+                        try{
+                          dbKeysToBeRemoved.add(
+                                  getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId));
+                        } catch (Exception e) {
+                          logger.error("Error getting the DB key for {}", appAttemptShuffleMergeId, e);
                         }
-                        return new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true);
-                      } else {
-                        dbKeysToBeRemoved.add(entry.getKey());
-                        return existingMergePartitionInfo;
                       }
-                    });
-          } else {
-            dbKeysToBeRemoved.add(entry.getKey());
-          }
+                      return new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true);
+                    } else {
+                      dbKeysToBeRemoved.add(entry.getKey());
+                      return existingMergePartitionInfo;
+                    }
+                  });
+        } else {
+          dbKeysToBeRemoved.add(entry.getKey());
         }
       }
     }
