@@ -467,7 +467,8 @@ public class ExternalShuffleBlockResolver {
           }
           AppExecId id = parseDbAppExecKey(key);
           logger.info("Reloading registered executors: " +  id.toString());
-          ExecutorShuffleInfo shuffleInfo = mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
+          ExecutorShuffleInfo shuffleInfo =
+            mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
           registeredExecutors.put(id, shuffleInfo);
         }
       }

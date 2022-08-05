@@ -973,13 +973,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                       existingMergePartitionInfo.shuffleMergeId < partitionId.shuffleMergeId) {
                     if (existingMergePartitionInfo != null) {
                       AppAttemptShuffleMergeId appAttemptShuffleMergeId =
-                          new AppAttemptShuffleMergeId(appShuffleInfo.appId, appShuffleInfo.attemptId,
+                          new AppAttemptShuffleMergeId(
+                              appShuffleInfo.appId, appShuffleInfo.attemptId,
                               shuffleId, existingMergePartitionInfo.shuffleMergeId);
                       try{
                         dbKeysToBeRemoved.add(
                             getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId));
                       } catch (Exception e) {
-                        logger.error("Error getting the DB key for {}", appAttemptShuffleMergeId, e);
+                        logger.error("Error getting the DB key for {}",
+                            appAttemptShuffleMergeId, e);
                       }
                     }
                     return new AppShuffleMergePartitionsInfo(partitionId.shuffleMergeId, true);
