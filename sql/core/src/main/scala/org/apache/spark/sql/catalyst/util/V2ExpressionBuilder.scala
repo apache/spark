@@ -258,6 +258,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       generateExpression(child).map(v => new V2Extract("WEEK", v))
     case YearOfWeek(child) =>
       generateExpression(child).map(v => new V2Extract("YEAR_OF_WEEK", v))
+    case encrypt: AesEncrypt => generateExpressionWithName("AES_ENCRYPT", encrypt.children)
+    case decrypt: AesDecrypt => generateExpressionWithName("AES_DECRYPT", decrypt.children)
+    case Crc32(child) => generateExpressionWithName("CRC32", Seq(child))
+    case Md5(child) => generateExpressionWithName("MD5", Seq(child))
+    case Sha1(child) => generateExpressionWithName("SHA1", Seq(child))
+    case sha2: Sha2 => generateExpressionWithName("SHA2", sha2.children)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))

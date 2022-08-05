@@ -364,6 +364,42 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>AES_ENCRYPT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>AES_ENCRYPT(expr, key[, mode[, padding]])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>AES_DECRYPT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>AES_DECRYPT(expr, key[, mode[, padding]])</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SHA1</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SHA1(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SHA2</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SHA2(expr, bitLength)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>MD5</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>MD5(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CRC32</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CRC32(expr)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
