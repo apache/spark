@@ -95,6 +95,10 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
       input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select($"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select($"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
 
     comparePlans(
       Optimize.execute(
