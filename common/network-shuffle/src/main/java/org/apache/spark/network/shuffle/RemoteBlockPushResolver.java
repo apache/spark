@@ -944,7 +944,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           });
         }
       }
-
     }
     return dbKeysToBeRemoved;
   }
