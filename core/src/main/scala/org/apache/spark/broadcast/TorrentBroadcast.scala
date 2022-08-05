@@ -143,7 +143,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       // regressions if an internal broadcast is accessed on the driver, we store a soft
       // reference to the broadcasted value:
       _value = new SoftReference[T](value)
-    } else { // Store a copy of the broadcast variable in the driver so that tasks run on the driver
+    } else {
+      // Store a copy of the broadcast variable in the driver so that tasks run on the driver
       // do not create a duplicate copy of the broadcast variable's value.
       if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
         throw new SparkException(s"Failed to store $broadcastId in BlockManager")
