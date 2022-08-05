@@ -1844,18 +1844,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER TABLE SerDe properties") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
-    }
-  }
-
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {

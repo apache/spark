@@ -67,10 +67,9 @@ abstract class XPathExtract
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
+case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract with Predicate {
 
   override def prettyName: String = "xpath_boolean"
-  override def dataType: DataType = BooleanType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     xpathUtil.evalBoolean(xml.asInstanceOf[UTF8String].toString, pathString)

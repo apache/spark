@@ -629,7 +629,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     def pow(self, other: Any) -> "Series":
-        return self ** other
+        return self**other
 
     pow.__doc__ = _flex_doc_SERIES.format(
         desc="Exponential power of series",
@@ -640,7 +640,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     def rpow(self, other: Any) -> "Series":
-        return other ** self
+        return other**self
 
     rpow.__doc__ = _flex_doc_SERIES.format(
         desc="Reverse Exponential power",
@@ -6266,11 +6266,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        axis : {{None}}
+        axis : None
             Dummy argument for consistency with Series.
         skipna : bool, default True
-            Exclude NA/null values. If the entire Series is NA, the result
-            will be NA.
+            Exclude NA/null values.
 
         Returns
         -------
@@ -6322,12 +6321,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # If the maximum is achieved in multiple locations, the first row position is returned.
             return -1 if max_value[0] is None else max_value[1]
 
-    def argmin(self) -> int:
+    def argmin(self, axis: Axis = None, skipna: bool = True) -> int:
         """
         Return int position of the smallest value in the Series.
 
         If the minimum is achieved in multiple locations,
         the first row position is returned.
+
+        Parameters
+        ----------
+        axis : None
+            Dummy argument for consistency with Series.
+        skipna : bool, default True
+            Exclude NA/null values.
 
         Returns
         -------
@@ -6350,24 +6356,30 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.argmin()  # doctest: +SKIP
         0
         """
+        axis = validate_axis(axis, none_axis=0)
+        if axis == 1:
+            raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
-        min_value = sdf.select(
-            F.min(scol_for(sdf, self._internal.data_spark_column_names[0])),
-            F.first(NATURAL_ORDER_COLUMN_NAME),
-        ).head()
-        if min_value[1] is None:
-            raise ValueError("attempt to get argmin of an empty sequence")
-        elif min_value[0] is None:
-            return -1
-        # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(
-            sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
+            sdf,
+            seq_col_name,
         )
-        # If the minimum is achieved in multiple locations, the first row position is returned.
-        return sdf.filter(
-            scol_for(sdf, self._internal.data_spark_column_names[0]) == min_value[0]
-        ).head()[0]
+        scol = scol_for(sdf, self._internal.data_spark_column_names[0])
+
+        if skipna:
+            sdf = sdf.orderBy(scol.asc_nulls_last(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+        else:
+            sdf = sdf.orderBy(scol.asc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+
+        results = sdf.select(scol, seq_col_name).take(1)
+
+        if len(results) == 0:
+            raise ValueError("attempt to get argmin of an empty sequence")
+        else:
+            min_value = results[0]
+            # If the maximum is achieved in multiple locations, the first row position is returned.
+            return -1 if min_value[0] is None else min_value[1]
 
     def compare(
         self, other: "Series", keep_shape: bool = False, keep_equal: bool = False

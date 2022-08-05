@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -650,25 +650,6 @@ object DataSourceStrategy
         translatedFilterToExpr.getOrElse(other,
           throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
-  }
-
-  /**
-   * Translates a runtime filter into a data source filter.
-   *
-   * Runtime filters usually contain a subquery that must be evaluated before the translation.
-   * If the underlying subquery hasn't completed yet, this method will throw an exception.
-   */
-  protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
-    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
-      val values = in.values().getOrElse {
-        throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
-      }
-      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      Some(sources.In(name, values.map(toScala)))
-
-    case other =>
-      logWarning(s"Can't translate $other to source filter, unsupported expression")
-      None
   }
 
   /**

@@ -46,8 +46,15 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row("b"))
   }
 
-  test("negative: column not found") {
-    val schema = new StructType().add("non_exist", StringType)
+  test("nullable column with default null value") {
+    val schema = new StructType().add("non_exist", StringType).add("j", StringType)
+    val df = Seq("a" -> "b").toDF("i", "j").to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Row(null, "b"))
+  }
+
+  test("negative: non-nullable column not found") {
+    val schema = new StructType().add("non_exist", StringType, nullable = false)
     val e = intercept[SparkThrowable](Seq("a" -> "b").toDF("i", "j").to(schema))
     checkError(
       exception = e,
@@ -137,8 +144,16 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(Row("b", "a")))
   }
 
-  test("negative: field not found") {
-    val innerFields = new StructType().add("non_exist", StringType)
+  test("nullable field with default null value") {
+    val innerFields = new StructType().add("J", StringType).add("non_exist", StringType)
+    val schema = new StructType().add("struct", innerFields, nullable = false)
+    val df = Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Row(Row("b", null)))
+  }
+
+  test("negative: non-nullable field not found") {
+    val innerFields = new StructType().add("non_exist", StringType, nullable = false)
     val schema = new StructType().add("struct", innerFields, nullable = false)
     val e = intercept[SparkThrowable] {
       Seq("a" -> "b").toDF("i", "j").select(struct($"i", $"j").as("struct")).to(schema)

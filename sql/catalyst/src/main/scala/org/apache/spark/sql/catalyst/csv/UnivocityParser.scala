@@ -235,7 +235,7 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // There may be date type entries in timestamp column due to schema inference
-            if (options.inferDate) {
+            if (options.prefersDate) {
               daysToMicros(dateFormatter.parse(datum), options.zoneId)
             } else {
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
@@ -254,7 +254,7 @@ class UnivocityParser(
         try {
           timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         } catch {
-          case NonFatal(e) if (options.inferDate) =>
+          case NonFatal(e) if options.prefersDate =>
             daysToMicros(dateFormatter.parse(datum), TimeZoneUTC.toZoneId)
         }
       }

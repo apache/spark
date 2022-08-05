@@ -1786,7 +1786,7 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow.
 
 
 -- !query
@@ -1795,7 +1795,7 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead.
 
 
 -- !query
@@ -1804,7 +1804,7 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
 
 
 -- !query
@@ -2033,7 +2033,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2045,7 +2045,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2091,7 +2091,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2103,7 +2103,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] Overflow in integral divide. Use 'try_divide' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
 == SQL(line 1, position 8) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

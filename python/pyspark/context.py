@@ -309,10 +309,7 @@ class SparkContext:
         if sys.version_info[:2] < (3, 8):
             with warnings.catch_warnings():
                 warnings.simplefilter("once")
-                warnings.warn(
-                    "Python 3.7 support is deprecated in Spark 3.4.",
-                    FutureWarning
-                )
+                warnings.warn("Python 3.7 support is deprecated in Spark 3.4.", FutureWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have

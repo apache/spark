@@ -27,21 +27,21 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object UTF8StringUtils {
 
-  def toLongExact(s: UTF8String, context: Option[SQLQueryContext]): Long =
+  def toLongExact(s: UTF8String, context: SQLQueryContext): Long =
     withException(s.toLongExact, context, LongType, s)
 
-  def toIntExact(s: UTF8String, context: Option[SQLQueryContext]): Int =
+  def toIntExact(s: UTF8String, context: SQLQueryContext): Int =
     withException(s.toIntExact, context, IntegerType, s)
 
-  def toShortExact(s: UTF8String, context: Option[SQLQueryContext]): Short =
+  def toShortExact(s: UTF8String, context: SQLQueryContext): Short =
     withException(s.toShortExact, context, ShortType, s)
 
-  def toByteExact(s: UTF8String, context: Option[SQLQueryContext]): Byte =
+  def toByteExact(s: UTF8String, context: SQLQueryContext): Byte =
     withException(s.toByteExact, context, ByteType, s)
 
   private def withException[A](
       f: => A,
-      context: Option[SQLQueryContext],
+      context: SQLQueryContext,
       to: DataType,
       s: UTF8String): A = {
     try {

@@ -182,14 +182,14 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // Respect SparkConf and replace file:/
       assert(isIncluded(df.queryExecution, replacement))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
+      assert(isIncluded(df.queryExecution, "BatchScan orc"))
       assert(!isIncluded(df.queryExecution, "file:/"))
 
-      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)BatchScan") {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)BatchScan orc") {
         // Respect SQLConf and replace FileScan
         assert(isIncluded(df.queryExecution, replacement))
 
-        assert(!isIncluded(df.queryExecution, "BatchScan"))
+        assert(!isIncluded(df.queryExecution, "BatchScan orc"))
         assert(isIncluded(df.queryExecution, "file:/"))
       }
     }
@@ -204,7 +204,7 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
         withClue(s"Source '$format':") {
           assert(isIncluded(df.queryExecution, "ReadSchema"))
-          assert(isIncluded(df.queryExecution, "BatchScan"))
+          assert(isIncluded(df.queryExecution, s"BatchScan $format"))
           if (Seq("orc", "parquet").contains(format)) {
             assert(isIncluded(df.queryExecution, "PushedFilters"))
           }
