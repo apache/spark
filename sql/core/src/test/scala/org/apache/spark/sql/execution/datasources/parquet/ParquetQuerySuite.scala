@@ -1107,6 +1107,17 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       checkAnswer(sql("select * from tbl"), expected)
     }
   }
+
+  test("SPARK-39833: count() with pushed filters from Parquet files") {
+    withTempPath { path =>
+      val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
+      Seq(0).toDF("COL").coalesce(1).write.save(p)
+      val df = spark.read.parquet(path.getCanonicalPath)
+      checkAnswer(df.filter("col = 0"), Seq(Row(0)))
+      assert(df.filter("col = 0").count() == 1, "col")
+      assert(df.filter("COL = 0").count() == 1, "COL")
+    }
+  }
 }
 
 class ParquetV1QuerySuite extends ParquetQuerySuite {
