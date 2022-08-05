@@ -16,7 +16,8 @@
 #
 
 # Image for building and testing Spark branches. Based on Ubuntu 20.04.
-FROM ubuntu:20.04
+# See also in https://hub.docker.com/_/ubuntu
+FROM ubuntu:focal-20220801
 
 ENV FULL_REFRESH_DATE 20220706
 
