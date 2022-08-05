@@ -18,10 +18,6 @@
 package org.apache.spark.network.shuffledb;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 public class LevelDB implements DB {
     private final org.iq80.leveldb.DB db;
