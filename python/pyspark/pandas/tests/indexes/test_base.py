@@ -449,6 +449,20 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             pmidx1.symmetric_difference(pmidx2).sort_values(),
         )
 
+        # Pandas has a bug that raise TypeError when setting `result_name` for MultiIndex.
+        pandas_result = pmidx1.symmetric_difference(pmidx2)
+        pandas_result.names = ["a", "b"]
+        self.assert_eq(
+            psmidx1.symmetric_difference(psmidx2, result_name=["a", "b"]).sort_values(),
+            pandas_result,
+        )
+
+        # Pandas sort the result by default, so doesn't provide the `True` for sort.
+        self.assert_eq(
+            psmidx1.symmetric_difference(psmidx2, sort=True),
+            pmidx1.symmetric_difference(pmidx2),
+        )
+
         idx = ps.Index(["a", "b", "c"])
         midx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
 
@@ -1965,6 +1979,13 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         other = {("c", "z"): None, ("d", "w"): None}
         self.assert_eq(pmidx.intersection(other), psmidx.intersection(other).sort_values())
 
+        # MultiIndex with different names.
+        pmidx1 = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")], names=["X", "Y"])
+        pmidx2 = pd.MultiIndex.from_tuples([("c", "z"), ("d", "w")], names=["A", "B"])
+        psmidx1 = ps.from_pandas(pmidx1)
+        psmidx2 = ps.from_pandas(pmidx2)
+        self.assert_eq(pmidx1.intersection(pmidx2), psmidx1.intersection(psmidx2).sort_values())
+
         with self.assertRaisesRegex(TypeError, "Input must be Index or array-like"):
             psidx.intersection(4)
         with self.assertRaisesRegex(TypeError, "other must be a MultiIndex or a list of tuples"):
@@ -2521,6 +2542,14 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             IndexError, "Too many levels: Index has only 2 levels, -3 is not a valid level number"
         ):
             psmidx.droplevel(-3)
+
+    def test_multi_index_nunique(self):
+        tuples = [(1, "red"), (1, "blue"), (2, "red"), (2, "green")]
+        pmidx = pd.MultiIndex.from_tuples(tuples)
+        psmidx = ps.from_pandas(pmidx)
+
+        with self.assertRaisesRegex(NotImplementedError, "nunique is not defined for MultiIndex"):
+            psmidx.nunique()
 
 
 if __name__ == "__main__":
