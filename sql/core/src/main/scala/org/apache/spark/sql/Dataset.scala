@@ -2133,20 +2133,6 @@ class Dataset[T] private[sql](
     )
   }
 
-  def unpivotValues(
-      values: Array[Column],
-      variableColumnName: String,
-      valueColumnName: String): DataFrame = withPlan {
-    Unpivot(
-      None,
-      Some(values.map(v => Seq(v.named))),
-      None,
-      variableColumnName,
-      Seq(valueColumnName),
-      logicalPlan
-    )
-  }
-
   /**
    * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
    * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.

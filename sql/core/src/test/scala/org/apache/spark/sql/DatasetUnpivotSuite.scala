@@ -128,22 +128,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkAnswer(unpivoted, longDataWithoutIdRows)
   }
 
-  test("unpivot with all non-value ids") {
-    checkAnswer(
-      wideDataDs
-        .unpivotValues(
-          Array($"str1", $"str2"),
-          variableColumnName = "var",
-          valueColumnName = "val"),
-      wideDataDs
-        .unpivot(
-          Array($"id", $"int1", $"long1"),
-          Array($"str1", $"str2"),
-          variableColumnName = "var",
-          valueColumnName = "val")
-    )
-  }
-
   test("unpivot without values") {
     val unpivoted = wideDataDs.select($"id", $"str1", $"str2")
       .unpivot(
@@ -567,26 +551,6 @@ class DatasetUnpivotSuite extends QueryTest
     checkAnswer(
       wideDataDs.unpivot(
         Array($"id"),
-        Array(
-          struct($"str1".as("str"), $"int1".cast(LongType).as("long")).as("str-int"),
-          struct($"str2".as("str"), $"long1".as("long")).as("str-long")
-        ),
-        "var",
-        "val"),
-      Seq(
-        Row(1, "str-int", Row("one", 1L)),
-        Row(1, "str-long", Row("One", 1L)),
-        Row(2, "str-int", Row("two", null)),
-        Row(2, "str-long", Row(null, 2L)),
-        Row(3, "str-int", Row(null, 3L)),
-        Row(3, "str-long", Row("three", null)),
-        Row(4, "str-int", Row(null, null)),
-        Row(4, "str-long", Row(null, null))
-      )
-    )
-
-    checkAnswer(
-      wideDataDs.unpivotValues(
         Array(
           struct($"str1".as("str"), $"int1".cast(LongType).as("long")).as("str-int"),
           struct($"str2".as("str"), $"long1".as("long")).as("str-long")
