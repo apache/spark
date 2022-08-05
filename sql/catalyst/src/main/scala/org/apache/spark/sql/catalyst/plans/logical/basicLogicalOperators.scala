@@ -1390,34 +1390,57 @@ case class Pivot(
  *
  * @see `org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveUnpivot`
  *
- * Multiple columns can be unpivoted into one row by providing multiple value column names
- * and the same number of value expressions per unpivot value:
+ * Multiple columns can be unpivoted in one row by providing multiple value column names
+ * and the same number of unpivot value expressions:
  * {{{
- *   // single value column
+ *   // one-dimensional value columns
  *   Unpivot(
  *     Some(Seq("id")),
  *     Some(Seq(
- *       Seq("val1"), Seq("val2")
+ *       Seq("val1"),
+ *       Seq("val2")
  *     )),
+ *     None,
  *     "var",
  *     Seq("val")
  *   )
  *
- *   // two value columns
+ *   // two-dimensional value columns
  *   Unpivot(
  *     Some(Seq("id")),
  *     Some(Seq(
  *       Seq("val1.1", "val1.2"),
  *       Seq("val2.1", "val2.2"))
  *     ),
+ *     None,
  *     "var",
  *     Seq("val1", "val2")
  *   )
  * }}}
  *
- * The type of the value column is derived from all value columns during analysis once all values
- * are resolved. All values' types have to be compatible, otherwise the result value column cannot
- * be assigned the individual values and an AnalysisException is thrown.
+ * The variable column will contain the name of the unpivot value while the value columns contain
+ * the unpivot values. Multi-dimensional unpivot values can be given `aliases`:
+ * }}}
+ *   // two-dimensional value columns with aliases
+ *   Unpivot(
+ *     Some(Seq("id")),
+ *     Some(Seq(
+ *       Seq("val1.1", "val1.2"),
+ *       Seq("val2.1", "val2.2"))
+ *     ),
+ *     Some(Seq(
+ *       Some("val1"),
+ *       Some("val2")
+ *     )),
+ *     "var",
+ *     Seq("val1", "val2")
+ *   )
+ * }}}
+ *
+ * All "value" columns must share a least common data type. Unless they are the same data type,
+ * all "value" columns are cast to the nearest common data type. For instance,
+ * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+ * do not have a common data type and `unpivot` fails with an `AnalysisException`.
  *
  * @see `org.apache.spark.sql.catalyst.analysis.TypeCoercionBase.UnpivotCoercion`
  *

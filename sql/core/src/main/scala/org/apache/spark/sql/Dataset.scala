@@ -2060,7 +2060,7 @@ class Dataset[T] private[sql](
    * All "value" columns must share a least common data type. Unless they are the same data type,
    * all "value" columns are cast to the nearest common data type. For instance,
    * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
-   * do not have a common data type and `unpivot` fails.
+   * do not have a common data type and `unpivot` fails with an `AnalysisException`.
    *
    * @param ids Id columns
    * @param values Value columns to unpivot

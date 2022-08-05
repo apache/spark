@@ -1422,7 +1422,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         up.copy(
           ids = up.ids.map(buildExpandedProjectList(_, up.child)),
           // The inner Seq in Option[Seq[Seq[NamedExpression]]] is one-dimensional, e.g.
-          // Optional[[["*"]]]. The inner NamedExpression turns into Seq[NamedExpression], e.g.
+          // Optional[[["*"]]]. The single NamedExpression turns into multiple, e.g.
           // Optional[[["col1", "col2"]]], which we here turn into Optional[[["col1"], ["col2"]]]
           values = up.values.map(_.flatMap(buildExpandedProjectList(_, up.child)).map(Seq(_)))
         )
