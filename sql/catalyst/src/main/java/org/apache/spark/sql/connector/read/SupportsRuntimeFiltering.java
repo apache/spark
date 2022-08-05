@@ -61,7 +61,6 @@ public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filteri
   void filter(Filter[] filters);
 
   default void filter(Predicate[] predicates) {
-    Filter[] filters = PredicateUtils.toV1(predicates);
-    this.filter(filters);
+    this.filter(PredicateUtils.toV1(predicates));
   }
 }

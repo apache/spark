@@ -73,13 +73,11 @@ public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
   void deleteWhere(Filter[] filters);
 
   default boolean canDeleteWhere(Predicate[] predicates) {
-    Filter[] filters = PredicateUtils.toV1(predicates);
-    return this.canDeleteWhere(filters);
+    return this.canDeleteWhere(PredicateUtils.toV1(predicates));
   }
 
   default void deleteWhere(Predicate[] predicates) {
-    Filter[] filters = PredicateUtils.toV1(predicates);
-    this.deleteWhere(filters);
+    this.deleteWhere(PredicateUtils.toV1(predicates));
   }
 
   @Override
