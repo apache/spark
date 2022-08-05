@@ -22,7 +22,7 @@ import java.util.{Locale, Properties}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -636,18 +636,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
     val catalog = df.sparkSession.sessionState.catalog
-    val tableExists = catalog.tableExists(tableIdent)
-    val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-    val tableIdentWithDB = CatalystIdentifier.attachSessionCatalog(
-      tableIdent.copy(database = Some(db)))
-    val tableName = tableIdentWithDB.unquotedString
+    val qualifiedIdent = catalog.qualifyIdentifier(tableIdent)
+    val tableExists = catalog.tableExists(qualifiedIdent)
+    val tableName = qualifiedIdent.unquotedString
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
         // Do nothing
 
       case (true, SaveMode.ErrorIfExists) =>
-        throw QueryCompilationErrors.tableAlreadyExistsError(tableIdent)
+        throw QueryCompilationErrors.tableAlreadyExistsError(qualifiedIdent)
 
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
@@ -656,7 +654,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           case relation: HiveTableRelation => relation.tableMeta.identifier
         }
 
-        val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
+        val tableRelation = df.sparkSession.table(qualifiedIdent).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
@@ -669,12 +667,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
 
         // Drop the existing table
-        catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
-        createTable(tableIdentWithDB)
+        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
+        createTable(qualifiedIdent)
         // Refresh the cache of the table in the catalog.
-        catalog.refreshTable(tableIdentWithDB)
+        catalog.refreshTable(qualifiedIdent)
 
-      case _ => createTable(tableIdentWithDB)
+      case _ => createTable(qualifiedIdent)
     }
   }
 
