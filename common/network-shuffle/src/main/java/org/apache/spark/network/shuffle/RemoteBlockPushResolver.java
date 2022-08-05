@@ -941,7 +941,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 dbKeysToBeRemoved.add(entry.getKey());
                 return existingAppShuffleInfo;
               }
-        });
+            });
       }
     }
     return dbKeysToBeRemoved;
@@ -986,7 +986,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                   dbKeysToBeRemoved.add(entry.getKey());
                   return existingMergePartitionInfo;
                 }
-          });
+              });
         } else {
           dbKeysToBeRemoved.add(entry.getKey());
         }
