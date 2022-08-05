@@ -257,7 +257,7 @@ class InMemoryBaseTable(
     private var schema: StructType = tableSchema
 
     override def build: Scan =
-      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
@@ -372,7 +372,7 @@ class InMemoryBaseTable(
       override def build(): Write = new Write with RequiresDistributionAndOrdering {
         override def requiredDistribution: Distribution = distribution
 
-        override def distributionStrictlyRequired = isDistributionStrictlyRequired
+        override def distributionStrictlyRequired: Boolean = isDistributionStrictlyRequired
 
         override def requiredOrdering: Array[SortOrder] = ordering
 

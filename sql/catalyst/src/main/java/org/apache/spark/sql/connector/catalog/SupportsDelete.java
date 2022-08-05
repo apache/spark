@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.internal.connector.PredicateUtils;
 import org.apache.spark.sql.sources.AlwaysTrue;
 import org.apache.spark.sql.sources.Filter;
-
-import scala.Option;
 
 /**
  * A mix-in interface for {@link Table} delete support. Data sources can implement this
@@ -78,30 +73,12 @@ public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
   void deleteWhere(Filter[] filters);
 
   default boolean canDeleteWhere(Predicate[] predicates) {
-    List<Filter> filterList = new ArrayList();
-    for (int i = 0; i < predicates.length; i++) {
-      Option filter = PredicateUtils.toV1(predicates[i]);
-      if (filter.nonEmpty()) {
-        filterList.add((Filter)filter.get());
-      }
-    }
-
-    Filter[] filters = new Filter[filterList.size()];
-    filterList.toArray(filters);
+    Filter[] filters = PredicateUtils.toV1(predicates);
     return this.canDeleteWhere(filters);
   }
 
   default void deleteWhere(Predicate[] predicates) {
-    List<Filter> filterList = new ArrayList();
-    for (int i = 0; i < predicates.length; i++) {
-      Option filter = PredicateUtils.toV1(predicates[i]);
-      if (filter.nonEmpty()) {
-        filterList.add((Filter)filter.get());
-      }
-    }
-
-    Filter[] filters = new Filter[filterList.size()];
-    filterList.toArray(filters);
+    Filter[] filters = PredicateUtils.toV1(predicates);
     this.deleteWhere(filters);
   }
 

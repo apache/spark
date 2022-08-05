@@ -132,4 +132,8 @@ private[sql] object PredicateUtils {
       case _ => None
     }
   }
+
+  def toV1(predicate: Array[Predicate]): Array[Filter] = {
+    predicate.flatMap(toV1(_))
+  }
 }
