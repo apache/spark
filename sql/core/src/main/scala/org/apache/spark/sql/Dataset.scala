@@ -2096,7 +2096,8 @@ class Dataset[T] private[sql](
    * where `values` is set to all non-id columns that exist in the DataFrame.
    *
    * Note: A column that is referenced by an id column expression is considered an id column itself.
-   * For instance `$"id" * 2` references column `id`, so `id` is not considered a value column:
+   * For instance `$"id" * 2` references column `id`, so `id` is considered an id column and not a
+   * value column:
    * {{{
    *   val df = Seq((1, 11, 12L), (2, 21, 22L)).toDF("id", "int", "long")
    *   df.unpivot(Array($"id" * 2), "var", "val").show()
@@ -2156,6 +2157,16 @@ class Dataset[T] private[sql](
       variableColumnName: String,
       valueColumnName: String): DataFrame =
     unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, variableColumnName, valueColumnName)
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
