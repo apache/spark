@@ -829,7 +829,7 @@ class StructType(DataType):
         Examples
         --------
         >>> json_str = '''
-        >>>  {
+        ...  {
         ...      "fields": [
         ...          {
         ...              "metadata": {},
@@ -857,11 +857,10 @@ class StructType(DataType):
         ...      "type": "struct"
         ...  }
         ...  '''
-
         >>> import json
         >>> scheme = StructType.fromJson(json.loads(json_str))
-        >>> print(scheme.simpleString())
-        struct<Person:struct<name:string,surname:string>>
+        >>> scheme.simpleString()
+        'struct<Person:struct<name:string,surname:string>>'
 
         """
         return StructType([StructField.fromJson(f) for f in json["fields"]])
