@@ -828,35 +828,35 @@ class StructType(DataType):
 
         Examples
         --------
-        >>> json_str = """
+        >>> json_str = '''
         >>>  {
-        >>>      "fields": [
-        >>>          {
-        >>>              "metadata": {},
-        >>>              "name": "Person",
-        >>>              "nullable": true,
-        >>>              "type": {
-        >>>                  "fields": [
-        >>>                      {
-        >>>                          "metadata": {},
-        >>>                          "name": "name",
-        >>>                          "nullable": false,
-        >>>                          "type": "string"
-        >>>                      },
-        >>>                      {
-        >>>                          "metadata": {},
-        >>>                          "name": "surname",
-        >>>                          "nullable": false,
-        >>>                          "type": "string"
-        >>>                      }
-        >>>                  ],
-        >>>                  "type": "struct"
-        >>>              }
-        >>>          }
-        >>>      ],
-        >>>      "type": "struct"
-        >>>  }
-        >>>  """
+        ...      "fields": [
+        ...          {
+        ...              "metadata": {},
+        ...              "name": "Person",
+        ...              "nullable": true,
+        ...              "type": {
+        ...                  "fields": [
+        ...                      {
+        ...                          "metadata": {},
+        ...                          "name": "name",
+        ...                          "nullable": false,
+        ...                          "type": "string"
+        ...                      },
+        ...                      {
+        ...                          "metadata": {},
+        ...                          "name": "surname",
+        ...                          "nullable": false,
+        ...                          "type": "string"
+        ...                      }
+        ...                  ],
+        ...                  "type": "struct"
+        ...              }
+        ...          }
+        ...      ],
+        ...      "type": "struct"
+        ...  }
+        ...  '''
 
         >>> import json
         >>> scheme = StructType.fromJson(json.loads(json_str))
