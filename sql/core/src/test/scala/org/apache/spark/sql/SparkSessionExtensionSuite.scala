@@ -220,10 +220,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
           case a: AdaptiveSparkPlanExec =>
             findColumnStats(a.executedPlan, columnStats)
           case qs: ShuffleQueryStageExec =>
+            columnStats += qs.computeStats().get.attributeStats
             findColumnStats(qs.plan, columnStats)
-          case e: MyShuffleExchangeExec =>
-            columnStats += e.runtimeStatistics.attributeStats
-            findColumnStats(e.child, columnStats)
           case _ =>
             plan.children.foreach(findColumnStats(_, columnStats))
         }
