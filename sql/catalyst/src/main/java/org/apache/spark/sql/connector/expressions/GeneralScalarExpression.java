@@ -340,6 +340,24 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>BIT_LENGTH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>BIT_LENGTH(src)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CHAR_LENGTH</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CHAR_LENGTH(src)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CONCAT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CONCAT(col1, col2, ..., colN)</code></li>
+ *    <li>Since version: 3.4.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>OVERLAY</code>
  *   <ul>
  *    <li>SQL semantic: <code>OVERLAY(string, replace, position[, length])</code></li>
