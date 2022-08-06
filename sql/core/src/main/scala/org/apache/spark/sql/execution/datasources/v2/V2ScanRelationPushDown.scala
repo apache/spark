@@ -415,9 +415,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val aliasMap = getAliasMap(project)
       val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))
       val newOrder = if (sHolder.pushedAggregate.isDefined) {
-        // Without building the Scan, Aggregate push-down give the expected output starts with
-        // `group_col_` or `agg_func_`. When Aggregate push-down working with Sort for top n
-        // push-down, we need replace these expected output with the origin expressions.
+        // `ScanBuilderHolder` has different output columns after aggregate push-down. Here we
+        // replace the attributes in ordering expressions with the original table output columns.
         aliasReplacedOrder.map {
           _.transform {
             case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
@@ -428,9 +427,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
-      // Because V2ExpressionBuilder can't translate aggregate functions, so we can't
-      // translate the sort with aggregate functions.
-      // TODO V2ExpressionBuilder could translate aggregate functions.
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
         val (isPushed, isPartiallyPushed) =
