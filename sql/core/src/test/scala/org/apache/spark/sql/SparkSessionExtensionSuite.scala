@@ -214,7 +214,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
       df.collect()
 
       // check that column stats exist
-      def findColumnStats(plan: SparkPlan, columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
+      def findColumnStats(plan: SparkPlan,
+          columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
             findColumnStats(a.executedPlan, columnStats)
