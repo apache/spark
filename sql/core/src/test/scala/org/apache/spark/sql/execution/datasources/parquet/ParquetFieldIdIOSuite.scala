@@ -136,6 +136,36 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
     }
   }
 
+  test("SPARK-39997: absence of field ids: reading nested schema struct field renamed") {
+    withTempDir { dir =>
+      // now with nested schema/complex type
+
+      val innerTypeRenamed = new StructType().add("c1", IntegerType, true, withId(6));
+      val readSchema =
+        new StructType()
+          .add("c", ArrayType(innerTypeRenamed), true, withId(3))
+          .add("e", IntegerType, true, withId(5))
+
+
+      val innerType = new StructType().add("c0", IntegerType, true, withId(6))
+      val writeSchema =
+        new StructType()
+          .add("c", ArrayType(innerType), true, withId(3))
+          .add("randomName", StringType, true)
+
+      val writeData = Seq(Row(Seq(Row(100)), "text"), Row(Seq(Row(100)), "more"))
+
+      spark.createDataFrame(writeData.asJava, writeSchema)
+        .write.mode("overwrite").parquet(dir.getCanonicalPath)
+
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
+          // a, b, c, d all couldn't be found
+          Row(Seq(Row(100)), null) :: Row(Seq(Row(100)), null) :: Nil)
+      }
+    }
+  }
+
   test("multiple id matches") {
     withTempDir { dir =>
       val readSchema =

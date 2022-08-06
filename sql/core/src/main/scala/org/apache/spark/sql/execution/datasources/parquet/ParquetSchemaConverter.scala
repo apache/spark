@@ -340,7 +340,7 @@ class ParquetToSparkSchemaConverter(
 
         if (isElementType(repeatedType, field.getName)) {
           var converted = convertField(repeated, sparkReadElementType)
-          val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
+          val convertedType = converted.sparkType
 
           // legacy format such as:
           //   optional group my_list (LIST) {
@@ -354,7 +354,7 @@ class ParquetToSparkSchemaConverter(
         } else {
           val element = repeated.asInstanceOf[GroupColumnIO].getChild(0)
           val converted = convertField(element, sparkReadElementType)
-          val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
+          val convertedType = converted.sparkType
           val optional = element.getType.isRepetition(OPTIONAL)
           ParquetColumn(ArrayType(convertedType, containsNull = optional),
             groupColumn, Seq(converted))
@@ -384,8 +384,8 @@ class ParquetToSparkSchemaConverter(
         val sparkReadValueType = sparkReadType.map(_.asInstanceOf[MapType].valueType)
         val convertedKey = convertField(key, sparkReadKeyType)
         val convertedValue = convertField(value, sparkReadValueType)
-        val convertedKeyType = sparkReadKeyType.getOrElse(convertedKey.sparkType)
-        val convertedValueType = sparkReadValueType.getOrElse(convertedValue.sparkType)
+        val convertedKeyType = convertedKey.sparkType
+        val convertedValueType = convertedValue.sparkType
         val valueOptional = value.getType.isRepetition(OPTIONAL)
         ParquetColumn(
           MapType(convertedKeyType, convertedValueType,
