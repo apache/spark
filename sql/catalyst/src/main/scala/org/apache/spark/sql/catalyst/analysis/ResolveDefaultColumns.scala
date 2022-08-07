@@ -279,19 +279,14 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         table.copy(
           names = table.names ++ newNames,
           rows = table.rows.map { row => row ++ newDefaultExpressions })
-      case local: LocalRelation if newDefaultExpressions.isEmpty =>
-        local
-      case local: LocalRelation =>
+      case local: LocalRelation if newDefaultExpressions.nonEmpty =>
         val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
-        val newRows: Seq[Seq[Expression]] = local.data.map { row =>
-          row.toSeq(colTypes)
-            .map { v =>
-              Literal(v)
-            } ++ newDefaultExpressions
-        }
         UnresolvedInlineTable(
           local.output.map(_.name) ++ newNames,
-          newRows)
+          local.data.map { row =>
+            row.toSeq(colTypes).map(Literal(_)) ++ newDefaultExpressions
+          })
+      case other => other
     }
   }
 

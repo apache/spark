@@ -1872,7 +1872,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         sql("alter table t alter column s drop default")
         if (config.useDataFrames) {
-          Seq((2)).toDF.write.insertInto("t")
+          Seq((2, null)).toDF.write.insertInto("t")
         } else {
           sql("insert into t select 2, default")
         }
