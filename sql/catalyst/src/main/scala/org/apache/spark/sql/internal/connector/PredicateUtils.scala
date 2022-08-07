@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.internal.connector
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -123,18 +121,15 @@ private[sql] object PredicateUtils {
   def toV1(
       predicates: Array[Predicate],
       throwExceptionIfNotConvertible: Boolean): Array[Filter] = {
-    val filters = mutable.ArrayBuilder.make[Filter]
-    for (predicate <- predicates) {
-      val converted = toV1(predicate)
-      if (converted.isEmpty) {
+    predicates.flatMap { predicate =>
+      val filter = toV1(predicate)
+      if (filter.isEmpty) {
         if (throwExceptionIfNotConvertible) {
           throw QueryCompilationErrors.unsupportedPredicateToFilterConversionError(predicate.name())
         }
-      } else {
-        filters += converted.get
       }
-    }
-    filters.result()
+      filter
+    }.toArray
   }
 
   def isValidPredicate(predicate: Predicate): Boolean = {
