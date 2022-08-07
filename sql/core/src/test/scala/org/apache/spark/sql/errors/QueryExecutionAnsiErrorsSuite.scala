@@ -18,7 +18,9 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark._
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, Literal}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
@@ -173,5 +175,19 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         )
       }
     }
+  }
+
+  test("SPARK-39981: interpreted CheckOverflowInTableInsert should throw an exception") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        CheckOverflowInTableInsert(
+          Cast(Literal.apply(12345678901234567890D), ByteType), "col").eval(null)
+      }.asInstanceOf[SparkThrowable],
+      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      parameters = Map(
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> ("\"TINYINT\""),
+        "columnName" -> "`col`")
+    )
   }
 }
