@@ -22,6 +22,7 @@ import java.util
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.internal.connector.PredicateUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -33,6 +34,7 @@ class InMemoryTableWithV2Filter(
   extends InMemoryBaseTable(name, schema, partitioning, properties) with SupportsDeleteV2 {
 
   override def canDeleteWhere(filters: Array[Predicate]): Boolean = {
+    if (filters.map(PredicateUtils.isValidPredicate(_)).exists(_ == false)) return false
     InMemoryTableWithV2Filter.supportsFilters(filters)
   }
 

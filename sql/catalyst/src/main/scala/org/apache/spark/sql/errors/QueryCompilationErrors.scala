@@ -2557,4 +2557,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
+
+  def unsupportedPredicateToFilterConversionError(predicateType: String): Throwable = {
+    new UnsupportedOperationException(s"conversion from data source v2 Predicate to data " +
+      s"source v1 Filter is not supported for this Predicate: ${predicateType}")
+  }
 }

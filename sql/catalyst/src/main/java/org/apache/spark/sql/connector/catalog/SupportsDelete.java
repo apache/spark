@@ -30,7 +30,7 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
+public interface SupportsDelete extends SupportsDeleteV2 {
 
   /**
    * Checks whether it is possible to delete data from a data source table that matches filter
@@ -73,11 +73,15 @@ public interface SupportsDelete extends TruncatableTable, SupportsDeleteV2 {
   void deleteWhere(Filter[] filters);
 
   default boolean canDeleteWhere(Predicate[] predicates) {
-    return this.canDeleteWhere(PredicateUtils.toV1(predicates));
+    try {
+      return this.canDeleteWhere(PredicateUtils.toV1(predicates, true));
+    } catch (UnsupportedOperationException e) {
+      return false;
+    }
   }
 
   default void deleteWhere(Predicate[] predicates) {
-    this.deleteWhere(PredicateUtils.toV1(predicates));
+    this.deleteWhere(PredicateUtils.toV1(predicates, true));
   }
 
   @Override

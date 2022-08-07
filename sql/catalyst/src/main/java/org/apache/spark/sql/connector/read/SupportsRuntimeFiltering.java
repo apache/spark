@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.connector.PredicateUtils;
  * @since 3.2.0
  */
 @Experimental
-public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filtering {
+public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    * <p>
@@ -61,6 +61,6 @@ public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filteri
   void filter(Filter[] filters);
 
   default void filter(Predicate[] predicates) {
-    this.filter(PredicateUtils.toV1(predicates));
+    this.filter(PredicateUtils.toV1(predicates, false));
   }
 }
