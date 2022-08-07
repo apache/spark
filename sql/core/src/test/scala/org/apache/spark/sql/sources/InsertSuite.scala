@@ -1230,6 +1230,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t (i, q) select true from (select 1)")
       }.getMessage.contains(addTwoColButExpectedThree))
     }
+    withSQLConf(SQLConf.ADD_DEFAULTS_FOR_INSERTS_WITHOUT_USER_SPECIFIED_FIELDS.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint default 42) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i) values (default)")
+        }.getMessage.contains("expected 2 columns but found 1 column"))
+      }
+    }
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
     // values than expected, the INSERT INTO command fails to execute.

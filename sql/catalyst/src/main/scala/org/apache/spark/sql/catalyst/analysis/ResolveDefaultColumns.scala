@@ -297,9 +297,13 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def getDefaultExpressionsForInsert(
       numQueryOutputs: Int,
       schema: StructType): Seq[Expression] = {
-    val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
-    val numDefaultExpressionsToAdd = getStructFieldsForDefaultExpressions(remainingFields).size
-    Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+    if (SQLConf.get.getConf(SQLConf.ADD_DEFAULTS_FOR_INSERTS_WITHOUT_USER_SPECIFIED_FIELDS)) {
+      val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
+      val numDefaultExpressionsToAdd = getStructFieldsForDefaultExpressions(remainingFields).size
+      Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+    } else {
+      Seq.empty[Expression]
+    }
   }
 
   /**
