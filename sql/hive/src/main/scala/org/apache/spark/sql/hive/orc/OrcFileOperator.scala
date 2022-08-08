@@ -154,7 +154,7 @@ private[hive] object OrcFileOperator extends Logging {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $file., got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+        toCatalystSchema(readerInspector)
       })
     }.flatten
   }
