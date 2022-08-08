@@ -714,7 +714,6 @@ object functions {
 
   /**
    * Aggregate function: returns the median of the values in a group.
-   * Alias for avg.
    *
    * @group agg_funcs
    * @since 3.4.0
