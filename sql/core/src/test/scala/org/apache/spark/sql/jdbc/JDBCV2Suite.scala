@@ -45,6 +45,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
+    Array.fill(15)(0.toByte)
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
@@ -178,6 +180,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
         "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+
+      conn.prepareStatement("CREATE TABLE \"test\".\"binary1\" (name TEXT(32),b BINARY(20))")
+        .executeUpdate()
+      val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary1\" VALUES (?, ?)")
+      stmt.setString(1, "jen")
+      stmt.setBytes(2, testBytes)
+      stmt.executeUpdate()
     }
     H2Dialect.registerFunction("my_avg", IntegralAverage)
     H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -860,7 +869,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df2)
     checkPushedInfo(df2,
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 1]",
-        "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1")
+      "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1")
     checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
@@ -1190,6 +1199,52 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df8, Seq(Row("alex")))
   }
 
+  test("scan with filter push-down with misc functions") {
+    val df1 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+      "md5(b) = '4371fe0aa613bcb081543a37d241adcb'")
+    checkFiltersRemoved(df1)
+    val expectedPlanFragment1 = "PushedFilters: [B IS NOT NULL, " +
+      "MD5(B) = '4371fe0aa613bcb081543a37d241adcb']"
+    checkPushedInfo(df1, expectedPlanFragment1)
+    checkAnswer(df1, Seq(Row("jen")))
+
+    val df2 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+      "sha1(b) = 'cf355e86e8666f9300ef12e996acd5c629e0b0a1'")
+    checkFiltersRemoved(df2)
+    val expectedPlanFragment2 = "PushedFilters: [B IS NOT NULL, " +
+      "SHA1(B) = 'cf355e86e8666f9300ef12e996acd5c629e0b0a1'],"
+    checkPushedInfo(df2, expectedPlanFragment2)
+    checkAnswer(df2, Seq(Row("jen")))
+
+    val df3 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+      "sha2(b, 256) = '911732d10153f859dec04627df38b19290ec707ff9f83910d061421fdc476109'")
+    checkFiltersRemoved(df3)
+    val expectedPlanFragment3 = "PushedFilters: [B IS NOT NULL, (SHA2(B, 256)) = " +
+      "'911732d10153f859dec04627df38b19290ec707ff9f83910d061421fdc476109']"
+    checkPushedInfo(df3, expectedPlanFragment3)
+    checkAnswer(df3, Seq(Row("jen")))
+
+    val df4 = sql("SELECT * FROM h2.test.employee WHERE crc32(name) = '142689369'")
+    checkFiltersRemoved(df4, false)
+    val expectedPlanFragment4 = "PushedFilters: [NAME IS NOT NULL], "
+    checkPushedInfo(df4, expectedPlanFragment4)
+    checkAnswer(df4, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    val df5 = sql("SELECT name FROM h2.test.employee WHERE " +
+      "aes_encrypt(cast(null as string), name) is null")
+    checkFiltersRemoved(df5, false)
+    val expectedPlanFragment5 = "PushedFilters: [], "
+    checkPushedInfo(df5, expectedPlanFragment5)
+    checkAnswer(df5, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
+
+    val df6 = sql("SELECT name FROM h2.test.employee WHERE " +
+      "aes_decrypt(cast(null as binary), name) is null")
+    checkFiltersRemoved(df6, false)
+    val expectedPlanFragment6 = "PushedFilters: [], "
+    checkPushedInfo(df6, expectedPlanFragment6)
+    checkAnswer(df6, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
+  }
+
   test("scan with filter push-down with UDF") {
     JdbcDialects.unregisterDialect(H2Dialect)
     try {
@@ -1267,7 +1322,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
         Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false)))
+        Row("test", "datetime", false), Row("test", "binary1", false)))
   }
 
   test("SQL API: create table as select") {
@@ -1817,12 +1872,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     checkPushedInfo(df,
-     """
-       |PushedAggregates: [VAR_POP(BONUS), VAR_POP(DISTINCT BONUS),
-       |VAR_SAMP(BONUS), VAR_SAMP(DISTINCT BONUS)],
-       |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
-       |PushedGroupByExpressions: [DEPT],
-       |""".stripMargin.replaceAll("\n", " "))
+      """
+        |PushedAggregates: [VAR_POP(BONUS), VAR_POP(DISTINCT BONUS),
+        |VAR_SAMP(BONUS), VAR_SAMP(DISTINCT BONUS)],
+        |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
+        |PushedGroupByExpressions: [DEPT],
+        |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df, Seq(Row(10000d, 10000d, 20000d, 20000d),
       Row(2500d, 2500d, 5000d, 5000d), Row(0d, 0d, null, null)))
   }
