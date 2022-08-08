@@ -319,7 +319,7 @@ def median(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        value associated with the maximum value of ord.
+        the median of the values in a group.
 
     Examples
     --------

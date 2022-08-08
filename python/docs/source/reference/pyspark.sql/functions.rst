@@ -235,6 +235,7 @@ Aggregate Functions
     max
     max_by
     mean
+    median
     min
     min_by
     percentile_approx
