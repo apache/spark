@@ -476,22 +476,22 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[SchemaAndProvider] = {
     val schemaAndProvider = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
-    val schema: StructType =
+    val newSchema: StructType =
       StructType(schemaAndProvider.schema.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
     if (userSpecifiedCols.isEmpty) {
-      return Some(schemaAndProvider)
+      return Some(SchemaAndProvider(newSchema, schemaAndProvider.provider))
     }
-    val colNamesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
+    val colNamesToFields: Map[String, StructField] = mapStructFieldNamesToFields(newSchema)
     val userSpecifiedFields: Seq[StructField] =
       userSpecifiedCols.map {
         name: String => colNamesToFields.getOrElse(normalizeFieldName(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
     val nonUserSpecifiedFields: Seq[StructField] =
-      schema.fields.filter {
+      newSchema.fields.filter {
         field => !userSpecifiedColNames.contains(field.name)
       }
     Some(SchemaAndProvider(StructType(userSpecifiedFields ++
