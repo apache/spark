@@ -89,17 +89,11 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_drop(self):
         df = self.spark.createDataFrame([("A", 50, "Y"), ("B", 60, "Y")], ["name", "age", "active"])
-
         self.assertEqual(df.drop("active").columns, ["name", "age"])
-
         self.assertEqual(df.drop("active", "nonexistent_column").columns, ["name", "age"])
-
         self.assertEqual(df.drop("name", "age", "active").columns, [])
-
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
-
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
-
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
     def test_drop_duplicates(self):
