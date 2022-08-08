@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class SimplifyCastsSuite extends PlanTest {
@@ -95,10 +96,17 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
       input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
-    comparePlans(
-      Optimize.execute(
-        input.select($"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
-      input.select($"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+
+    withClue("SPARK-39963: cast date to decimal") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+        // ANSI mode does not allow to cast a date to a decimal.
+        comparePlans(Optimize.execute(
+          input.select(
+            $"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+          input.select(
+            $"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+      }
+    }
 
     comparePlans(
       Optimize.execute(
