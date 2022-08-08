@@ -65,7 +65,7 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
       // mimic a ExternalShuffleService. Then, executors on the Worker can successfully
       // find a ExternalShuffleService to connect.
       val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 2)
-      rpcHandler = new ExternalBlockHandler(transportConf, null, null)
+      rpcHandler = new ExternalBlockHandler(transportConf, null)
       transportContext = new TransportContext(transportConf, rpcHandler)
       server = transportContext.createServer()
       conf.set(SHUFFLE_SERVICE_PORT, server.getPort)

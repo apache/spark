@@ -62,7 +62,7 @@ public class ExternalShuffleBlockResolverSuite {
 
   @Test
   public void testBadRequests() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null, null);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
     RuntimeException e = assertThrows(RuntimeException.class,
       () -> resolver.getBlockData("app0", "exec1", 1, 1, 0));
@@ -77,7 +77,7 @@ public class ExternalShuffleBlockResolverSuite {
 
   @Test
   public void testSortShuffleBlocks() throws IOException {
-    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null, null);
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
       dataContext.createExecutorInfo(SORT_MANAGER));
 

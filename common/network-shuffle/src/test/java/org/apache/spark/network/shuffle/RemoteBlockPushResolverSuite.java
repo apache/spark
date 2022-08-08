@@ -89,7 +89,7 @@ public class RemoteBlockPushResolverSuite {
     MapConfigProvider provider = new MapConfigProvider(
       ImmutableMap.of("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf, null, null);
+    pushResolver = new RemoteBlockPushResolver(conf, null);
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
   }
 
@@ -489,7 +489,7 @@ public class RemoteBlockPushResolverSuite {
   public void testCleanUpDirectory() throws IOException, InterruptedException {
     String testApp = "cleanUpDirectory";
     Semaphore deleted = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf, null, null) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void deleteExecutorDirs(AppShuffleInfo appShuffleInfo) {
         super.deleteExecutorDirs(appShuffleInfo);
@@ -887,7 +887,7 @@ public class RemoteBlockPushResolverSuite {
   public void testPushBlockFromPreviousAttemptIsRejected()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf, null, null) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
@@ -984,7 +984,7 @@ public class RemoteBlockPushResolverSuite {
   public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf, null, null) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeletePartitionsIfNeeded(
           AppShuffleInfo appShuffleInfo,
@@ -1146,7 +1146,7 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testCleanupOlderShuffleMergeId() throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf, null, null) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void closeAndDeleteOutdatedPartitions(
           AppAttemptShuffleMergeId appAttemptShuffleMergeId,
@@ -1317,7 +1317,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
-    pushResolver = new RemoteBlockPushResolver(conf, null, null) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
           AppShuffleInfo appShuffleInfo,

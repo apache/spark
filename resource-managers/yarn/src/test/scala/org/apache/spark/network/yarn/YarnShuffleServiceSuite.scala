@@ -159,15 +159,14 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   private def createYarnShuffleServiceWithCustomMergeManager(
-      createMergeManager: (TransportConf, DBBackend, File) => MergedShuffleFileManager)
-    : YarnShuffleService = {
+      createMergeManager: (TransportConf, File) => MergedShuffleFileManager): YarnShuffleService = {
     val shuffleService = createYarnShuffleService(false)
-    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     val dBBackend = shuffleDBBackend()
+    yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
+    val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
     val dbName = YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME + dBBackend.suffix()
     val testShuffleMergeManager = createMergeManager(
         transportConf,
-        dBBackend,
         shuffleService.initRecoveryDb(dbName))
     shuffleService.setShuffleMergeManager(testShuffleMergeManager)
     shuffleService.init(yarnConfig)
@@ -1063,7 +1062,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null, null)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
   }
 
@@ -1071,7 +1070,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null, null)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[RemoteBlockPushResolver])
   }
 
@@ -1079,7 +1078,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.NotExistent")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null, null)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
   }
 }

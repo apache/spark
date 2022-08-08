@@ -51,7 +51,6 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
-import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
@@ -77,20 +76,19 @@ public class ExternalBlockHandler extends RpcHandler
   private final ShuffleMetrics metrics;
   private final MergedShuffleFileManager mergeManager;
 
-  public ExternalBlockHandler(TransportConf conf, DBBackend dbBackend, File registeredExecutorFile)
+  public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, dbBackend, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager(conf, null, null));
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+      new NoOpMergedShuffleFileManager(conf, null));
   }
 
   public ExternalBlockHandler(
       TransportConf conf,
-      DBBackend dbBackend,
       File registeredExecutorFile,
       MergedShuffleFileManager mergeManager) throws IOException {
     this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, dbBackend, registeredExecutorFile), mergeManager);
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
   }
 
   @VisibleForTesting
@@ -103,8 +101,7 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
-    this(streamManager, blockManager,
-      new NoOpMergedShuffleFileManager(null, null, null));
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null, null));
   }
 
   /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */

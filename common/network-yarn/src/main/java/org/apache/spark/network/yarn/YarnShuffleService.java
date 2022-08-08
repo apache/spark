@@ -241,7 +241,7 @@ public class YarnShuffleService extends AuxiliaryService {
       String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
         DBBackend.LEVELDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
-      logger.warn("User configured {} as {} and actually used value {}",
+      logger.info("Configured {} as {} and actually used value {}",
         Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
     }
 
@@ -262,11 +262,10 @@ public class YarnShuffleService extends AuxiliaryService {
       // This is because in the unit test, a customized MergedShuffleFileManager will
       // be created through setShuffleFileManager method.
       if (shuffleMergeManager == null) {
-        shuffleMergeManager = newMergedShuffleFileManagerInstance(
-          transportConf, dbBackend, mergeManagerFile);
+        shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
       blockHandler = new ExternalBlockHandler(
-        transportConf, dbBackend, registeredExecutorFile, shuffleMergeManager);
+        transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -327,7 +326,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   @VisibleForTesting
   static MergedShuffleFileManager newMergedShuffleFileManagerInstance(
-      TransportConf conf, DBBackend dbBackend, File mergeManagerFile) {
+      TransportConf conf, File mergeManagerFile) {
     String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
     try {
       Class<?> mergeManagerImplClazz = Class.forName(
@@ -336,11 +335,11 @@ public class YarnShuffleService extends AuxiliaryService {
         mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
       // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
       // will also need the transport configuration.
-      return mergeManagerSubClazz.getConstructor(TransportConf.class, DBBackend.class, File.class)
-        .newInstance(conf, dbBackend, mergeManagerFile);
+      return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
+        .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
       defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new NoOpMergedShuffleFileManager(conf, dbBackend, mergeManagerFile);
+      return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
 

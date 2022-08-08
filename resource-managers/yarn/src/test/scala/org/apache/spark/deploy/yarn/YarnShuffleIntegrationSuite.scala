@@ -163,7 +163,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         val dbBackendName = conf.get(SHUFFLE_SERVICE_DB_BACKEND.key)
         val dbBackend = DBBackend.byName(dbBackendName)
         logWarning(s"Configured ${SHUFFLE_SERVICE_DB_BACKEND.key} as $dbBackendName " +
-          s"and actually used value ${dbBackend.name()} ")
+          s"and actually used value ${dbBackend.name()}")
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
         assert(!ShuffleTestAccessor
           .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)

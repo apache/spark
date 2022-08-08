@@ -95,11 +95,9 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
-  public ExternalShuffleBlockResolver(
-      TransportConf conf,
-      DBBackend dbBackend,
-      File registeredExecutorFile) throws IOException {
-    this(conf, dbBackend, registeredExecutorFile, Executors.newSingleThreadExecutor(
+  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
+      throws IOException {
+    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
@@ -108,7 +106,6 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   ExternalShuffleBlockResolver(
       TransportConf conf,
-      DBBackend dbBackend,
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
@@ -128,6 +125,14 @@ public class ExternalShuffleBlockResolver {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
+    DBBackend dbBackend = null;
+    if (registeredExecutorFile != null) {
+      String dbBackendName =
+        conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+      dbBackend = DBBackend.byName(dbBackendName);
+      logger.info("Configured {} as {} and actually used value {}",
+        Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
+    }
     db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);

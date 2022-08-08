@@ -78,9 +78,8 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithSynchronizedCleanup(
       transportConf: TransportConf,
-      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
+    new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()
       }
@@ -89,9 +88,8 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoOpAppShuffleDBCleanup(
       transportConf: TransportConf,
-      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
+    new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeAppShuffleInfoFromDB(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo): Unit = {
         // NoOp
@@ -104,9 +102,8 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoDBCleanup(
       transportConf: TransportConf,
-      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
+    new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeAppAttemptPathInfoFromDB(
         appId: String, attemptId: Int): Unit = {
         // NoOp
@@ -123,9 +120,8 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoCleanupAfterReload(
       transportConf: TransportConf,
-      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
+    new RemoteBlockPushResolver(transportConf, file) {
       override private[shuffle] def removeOutdatedKeyValuesInDB(
           dbKeysToBeRemoved: List[Array[Byte]]): Unit = {
         // NoOp

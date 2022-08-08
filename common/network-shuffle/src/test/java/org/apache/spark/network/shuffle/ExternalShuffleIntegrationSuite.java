@@ -111,7 +111,7 @@ public class ExternalShuffleIntegrationSuite {
     conf = new TransportConf("shuffle", new MapConfigProvider(config));
     handler = new ExternalBlockHandler(
       new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, null, null) {
+      new ExternalShuffleBlockResolver(conf, null) {
         @Override
         public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
           ManagedBuffer res;

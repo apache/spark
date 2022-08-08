@@ -135,8 +135,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final DB db;
 
   @SuppressWarnings("UnstableApiUsage")
-  public RemoteBlockPushResolver(
-      TransportConf conf, DBBackend dbBackend, File recoveryFile) throws IOException {
+  public RemoteBlockPushResolver(TransportConf conf, File recoveryFile) throws IOException {
     this.conf = conf;
     this.appsShuffleInfo = new ConcurrentHashMap<>();
     this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
@@ -157,6 +156,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
+    DBBackend dbBackend = null;
+    if (recoveryFile != null) {
+      String dbBackendName =
+        conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+      dbBackend = DBBackend.byName(dbBackendName);
+      logger.info("Configured {} as {} and actually used value {}",
+        Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
+    }
     db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
       reloadAndCleanUpAppShuffleInfo(db);
