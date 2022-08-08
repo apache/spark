@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
-import org.apache.spark.sql.catalyst.planning.ScanOperation
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -97,7 +97,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
-    case ScanOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
+    case PhysicalOperation(project, Nil, holder @ ScanBuilderHolder(_, _,
         r: SupportsPushDownAggregates)) if CollapseProject.canCollapseExpressions(
         agg.aggregateExpressions, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
@@ -342,7 +342,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
+    case PhysicalOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
@@ -382,7 +382,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
-      case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      case PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
           sample.upperBound,
@@ -401,18 +401,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
-    case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+    case operation @ PhysicalOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
       val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (isPushed) {
         sHolder.pushedLimit = Some(limit)
       }
       (operation, isPushed && !isPartiallyPushed)
-    case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
+    case s @ Sort(order, _, operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder))
         // Without building the Scan, we do not know the resulting column names after aggregate
         // push-down, and thus can't push down Top-N which needs to know the ordering column names.
         // TODO: we can support simple cases like GROUP BY columns directly and ORDER BY the same
         //       columns, which we know the resulting column names: the original table columns.
-        if sHolder.pushedAggregate.isEmpty && filter.isEmpty &&
+        if sHolder.pushedAggregate.isEmpty &&
           CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]

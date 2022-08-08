@@ -29,7 +29,14 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 
-trait OperationHelper extends PredicateHelper {
+/**
+ * A pattern that matches any number of project or filter operations even if they are
+ * non-deterministic, as long as they satisfy the requirement of CollapseProject and CombineFilters.
+ * All filter operators are collected and their conditions are broken up and returned
+ * together with the top project operator. [[Alias Aliases]] are in-lined/substituted if
+ * necessary.
+ */
+object PhysicalOperation extends AliasHelper with PredicateHelper {
   import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
 
   type ReturnType =
@@ -42,16 +49,6 @@ trait OperationHelper extends PredicateHelper {
     val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
     Some((fields.getOrElse(child.output), filters, child))
   }
-
-  /**
-   * This legacy mode is for PhysicalOperation which has been there for years and we want to be
-   * extremely safe to not change its behavior. There are two differences when legacy mode is off:
-   *   1. We postpone the deterministic check to the very end (calling `canCollapseExpressions`),
-   *      so that it's more likely to collect more projects and filters.
-   *   2. We follow CollapseProject and only collect adjacent projects if they don't produce
-   *      repeated expensive expressions.
-   */
-  protected def legacyMode: Boolean
 
   /**
    * Collects all adjacent projects and filters, in-lining/substituting aliases if necessary.
@@ -73,31 +70,27 @@ trait OperationHelper extends PredicateHelper {
     def empty: IntermediateType = (None, Nil, plan, AttributeMap.empty)
 
     plan match {
-      case Project(fields, child) if !legacyMode || fields.forall(_.deterministic) =>
+      case Project(fields, child) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
-        if (legacyMode || canCollapseExpressions(fields, aliases, alwaysInline)) {
+        if (canCollapseExpressions(fields, aliases, alwaysInline)) {
           val replaced = fields.map(replaceAliasButKeepName(_, aliases))
           (Some(replaced), filters, other, getAliasMap(replaced))
         } else {
           empty
         }
 
-      case Filter(condition, child) if !legacyMode || condition.deterministic =>
+      case Filter(condition, child) =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
-        val canIncludeThisFilter = if (legacyMode) {
-          true
-        } else {
-          // When collecting projects and filters, we effectively push down filters through
-          // projects. We need to meet the following conditions to do so:
-          //   1) no Project collected so far or the collected Projects are all deterministic
-          //   2) the collected filters and this filter are all deterministic, or this is the
-          //      first collected filter.
-          //   3) this filter does not repeat any expensive expressions from the collected
-          //      projects.
-          fields.forall(_.forall(_.deterministic)) && {
-            filters.isEmpty || (filters.forall(_.deterministic) && condition.deterministic)
-          } && canCollapseExpressions(Seq(condition), aliases, alwaysInline)
-        }
+        // When collecting projects and filters, we effectively push down filters through
+        // projects. We need to meet the following conditions to do so:
+        //   1) no Project collected so far or the collected Projects are all deterministic
+        //   2) the collected filters and this filter are all deterministic, or this is the
+        //      first collected filter.
+        //   3) this filter does not repeat any expensive expressions from the collected
+        //      projects.
+        val canIncludeThisFilter = fields.forall(_.forall(_.deterministic)) && {
+          filters.isEmpty || (filters.forall(_.deterministic) && condition.deterministic)
+        } && canCollapseExpressions(Seq(condition), aliases, alwaysInline)
         if (canIncludeThisFilter) {
           val replaced = replaceAlias(condition, aliases)
           (fields, filters ++ splitConjunctivePredicates(replaced), other, aliases)
@@ -112,24 +105,12 @@ trait OperationHelper extends PredicateHelper {
   }
 }
 
-/**
- * A pattern that matches any number of project or filter operations on top of another relational
- * operator.  All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator.
- * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
- * necessary.
- */
-object PhysicalOperation extends OperationHelper {
-  override protected def legacyMode: Boolean = true
-}
-
-/**
- * A variant of [[PhysicalOperation]]. It matches any number of project or filter
- * operations even if they are non-deterministic, as long as they satisfy the
- * requirement of CollapseProject and CombineFilters.
- */
-object ScanOperation extends OperationHelper {
-  override protected def legacyMode: Boolean = false
+object NodeWithOnlyDeterministicProjectAndFilter {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case Project(projectList, child) if projectList.forall(_.deterministic) => unapply(child)
+    case Filter(cond, child) if cond.deterministic => unapply(child)
+    case _ => Some(plan)
+  }
 }
 
 /**
