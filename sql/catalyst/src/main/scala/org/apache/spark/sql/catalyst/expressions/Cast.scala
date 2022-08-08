@@ -112,6 +112,7 @@ object Cast {
     case (StringType, _: AnsiIntervalType) => true
 
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
+    case (_: IntegralType, _: AnsiIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -786,7 +787,6 @@ case class Cast(
     case _: DayTimeIntervalType => buildCast[Long](_, s =>
       IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
           x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
@@ -804,7 +804,6 @@ case class Cast(
     case _: YearMonthIntervalType => buildCast[Int](_, s =>
       IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
           x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
