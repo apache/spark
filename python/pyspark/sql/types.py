@@ -816,11 +816,54 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructType":
         """
-        Constructs StructType from a scheme defined in json format
+        Constructs :class`StructType` from a schema defined in json format
 
         Parameters
         ----------
-        json : Dict of str/any or a dict like object e.g. json object
+        json : dict or a dict-like object e.g. json object
+             This "dict" must have "fields" key that returns an array of fields each of which must have
+             specific keys (name, type, nullable, metadata). Below is a json schema it must
+             adhere to:
+             {
+               "title":"StructType",
+               "description":"Schema of StructType in json format",
+               "type":"object",
+               "properties":{
+                  "fields":{
+                     "description":"Array of struct fields",
+                     "type":"array",
+                     "items":{
+                         "type":"object",
+                         "properties":{
+                            "name":{
+                               "description":"Name of the field",
+                               "type":"string"
+                            },
+                            "type":{
+                               "description":
+                               "Type of the field. Can be either another nested StructType or a primitive type",
+                               "type":"object/string"
+                            },
+                            "nullable":{
+                               "description":"If nulls are allowed",
+                               "type":"boolean"
+                            },
+                            "metadata":{
+                               "description":"Additional metadata to supply",
+                               "type":"object"
+                            },
+                            "required":[
+                               "name",
+                               "type",
+                               "nullable",
+                               "metadata"
+                            ]
+                         }
+                    }
+                 }
+              }
+            }
+
 
         Returns
         -------
