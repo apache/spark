@@ -254,6 +254,33 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(!funcNames2.contains("my_temp_func"))
   }
 
+  test("SPARK-39828: Catalog.listFunctions() should respect currentCatalog") {
+    assert(spark.catalog.currentCatalog() == "spark_catalog")
+    assert(Set("+", "current_database", "window").subsetOf(
+      spark.catalog.listFunctions().collect().map(_.name).toSet))
+    createFunction("my_func")
+    assert(spark.catalog.listFunctions().collect().map(_.name).contains("my_func"))
+
+    sql(s"CREATE NAMESPACE testcat.ns")
+    spark.catalog.setCurrentCatalog("testcat")
+    spark.catalog.setCurrentDatabase("ns")
+
+    val funcCatalog = spark.sessionState.catalogManager.catalog("testcat")
+      .asInstanceOf[InMemoryCatalog]
+    val function: UnboundFunction = new UnboundFunction {
+      override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "my_bound_function"
+      }
+      override def description(): String = "my_function"
+      override def name(): String = "my_function"
+    }
+    assert(!spark.catalog.listFunctions().collect().map(_.name).contains("my_func"))
+    funcCatalog.createFunction(Identifier.of(Array("ns"), "my_func"), function)
+    assert(spark.catalog.listFunctions().collect().map(_.name).contains("my_func"))
+  }
+
   test("list functions with database") {
     assert(Set("+", "current_database", "window").subsetOf(
       spark.catalog.listFunctions().collect().map(_.name).toSet))

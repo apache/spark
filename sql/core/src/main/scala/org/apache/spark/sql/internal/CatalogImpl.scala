@@ -69,7 +69,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
-    // we assume `dbName` will not include the catalog mame. e.g. if you call
+    // we assume `dbName` will not include the catalog name. e.g. if you call
     // `setCurrentDatabase("catalog.db")`, it will search for a database 'catalog.db' in the current
     // catalog.
     sparkSession.sessionState.catalogManager.setCurrentNamespace(parseIdent(dbName).toArray)
