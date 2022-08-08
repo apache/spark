@@ -2924,6 +2924,17 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
+  val DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS =
+    buildConf("spark.sql.defaultColumn.allowJsonGeneratorIgnoreNullFields")
+      .internal()
+      .doc("When true, allow DEFAULT column values with JSON tables when the " +
+        "JSON_GENERATOR_IGNORE_NULL_FIELDS conf is enabled. Otherwise, the two become mutually " +
+        "exclusive. This can be useful to enforce that inserted NULL values are present in " +
+        "storage to differentiate from missing data.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
@@ -4522,6 +4533,9 @@ class SQLConf extends Serializable with Logging {
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+
+  def defaultColumnAllowJsonGeneratorIgnoreNullFields: Boolean =
+    getConf(DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)

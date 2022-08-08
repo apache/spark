@@ -100,15 +100,16 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       node = node.children(0)
     }
     val table = node.asInstanceOf[UnresolvedInlineTable]
-    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
+    val insertTableSchemaWithoutPartitionColumns: Option[SchemaAndProvider] =
       getInsertTableSchemaWithoutPartitionColumns(i)
-    insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
+    insertTableSchemaWithoutPartitionColumns.map { schemaAndProvider =>
+      val schema: StructType = schemaAndProvider.schema
       val regenerated: InsertIntoStatement =
         regenerateUserSpecifiedCols(i, schema)
       val expanded: UnresolvedInlineTable =
         addMissingDefaultValuesForInsertFromInlineTable(table, schema)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schemaAndProvider, expanded)
       replaced.map { r: LogicalPlan =>
         node = r
         for (child <- children.reverse) {
@@ -124,15 +125,16 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * projection.
    */
   private def resolveDefaultColumnsForInsertFromProject(i: InsertIntoStatement): LogicalPlan = {
-    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
+    val insertTableSchemaWithoutPartitionColumns: Option[SchemaAndProvider] =
       getInsertTableSchemaWithoutPartitionColumns(i)
-    insertTableSchemaWithoutPartitionColumns.map { schema =>
+    insertTableSchemaWithoutPartitionColumns.map { schemaAndProvider =>
+      val schema: StructType = schemaAndProvider.schema
       val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
       val project: Project = i.query.asInstanceOf[Project]
       val expanded: Project =
         addMissingDefaultValuesForInsertFromProject(project, schema)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schemaAndProvider, expanded)
       replaced.map { r =>
         regenerated.copy(query = r)
       }.getOrElse(i)
@@ -150,8 +152,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         throw QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause()
       }
     }
-    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
-    schemaForTargetTable.map { schema =>
+    val schemaForTargetTable: Option[SchemaAndProvider] = getSchemaForTargetTable(u.table)
+    schemaForTargetTable.map { schemaAndProvider =>
+      val schema: StructType = schemaAndProvider.schema
       val defaultExpressions: Seq[Expression] = schema.fields.map {
         case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "UPDATE")
         case _ => Literal(null)
@@ -163,7 +166,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       // the right-hand side, look up the corresponding expression from the above map.
       val newAssignments: Option[Seq[Assignment]] =
       replaceExplicitDefaultValuesForUpdateAssignments(
-        u.assignments, CommandType.Update, columnNamesToExpressions)
+        u.assignments, CommandType.Update, columnNamesToExpressions, schemaAndProvider.provider)
       newAssignments.map { n =>
         u.copy(assignments = n)
       }.getOrElse(u)
@@ -174,7 +177,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Resolves DEFAULT column references for a MERGE INTO command.
    */
   private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
-    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    val schemaAndProvider = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    val schema: StructType = schemaAndProvider.schema
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
     m.mergeCondition.foreach { c: Expression =>
@@ -190,13 +194,15 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       mapStructFieldNamesToExpressions(schema, defaultExpressions)
     var replaced = false
     val newMatchedActions: Seq[MergeAction] = m.matchedActions.map { action: MergeAction =>
-      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+      replaceExplicitDefaultValuesInMergeAction(
+        action, columnNamesToExpressions, schemaAndProvider.provider).map { r =>
         replaced = true
         r
       }.getOrElse(action)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
-      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+      replaceExplicitDefaultValuesInMergeAction(
+        action, columnNamesToExpressions, schemaAndProvider.provider).map { r =>
         replaced = true
         r
       }.getOrElse(action)
@@ -215,19 +221,20 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    */
   private def replaceExplicitDefaultValuesInMergeAction(
       action: MergeAction,
-      columnNamesToExpressions: Map[String, Expression]): Option[MergeAction] = {
+      columnNamesToExpressions: Map[String, Expression],
+      provider: Option[String]): Option[MergeAction] = {
     action match {
       case u: UpdateAction =>
         val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
-            u.assignments, CommandType.Merge, columnNamesToExpressions)
+            u.assignments, CommandType.Merge, columnNamesToExpressions, provider)
         replaced.map { r =>
           Some(u.copy(assignments = r))
         }.getOrElse(None)
       case i: InsertAction =>
         val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
-            i.assignments, CommandType.Merge, columnNamesToExpressions)
+            i.assignments, CommandType.Merge, columnNamesToExpressions, provider)
         replaced.map { r =>
           Some(i.copy(assignments = r))
         }.getOrElse(None)
@@ -318,8 +325,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * command from a logical plan.
    */
   private def replaceExplicitDefaultValuesForInputOfInsertInto(
-      insertTableSchemaWithoutPartitionColumns: StructType,
+      targetSchemaAndProvider: SchemaAndProvider,
       input: LogicalPlan): Option[LogicalPlan] = {
+    val insertTableSchemaWithoutPartitionColumns: StructType = targetSchemaAndProvider.schema
     val schema = insertTableSchemaWithoutPartitionColumns
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "INSERT")
@@ -335,9 +343,11 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     // and add new NULLs if needed.
     input match {
       case table: UnresolvedInlineTable =>
-        replaceExplicitDefaultValuesForInlineTable(defaultExpressions, table)
+        replaceExplicitDefaultValuesForInlineTable(
+          defaultExpressions, table, targetSchemaAndProvider.provider)
       case project: Project =>
-        replaceExplicitDefaultValuesForProject(defaultExpressions, project)
+        replaceExplicitDefaultValuesForProject(
+          defaultExpressions, project, targetSchemaAndProvider.provider)
     }
   }
 
@@ -346,7 +356,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    */
   private def replaceExplicitDefaultValuesForInlineTable(
       defaultExpressions: Seq[Expression],
-      table: UnresolvedInlineTable): Option[LogicalPlan] = {
+      table: UnresolvedInlineTable,
+      provider: Option[String]): Option[LogicalPlan] = {
     var replaced = false
     val updated: Seq[Seq[Expression]] = {
       table.rows.map { row: Seq[Expression] =>
@@ -355,7 +366,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           expr = row(i)
           defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
         } yield replaceExplicitDefaultReferenceInExpression(
-          expr, defaultExpr, CommandType.Insert, addAlias = false).map { e =>
+          expr, defaultExpr, CommandType.Insert, addAlias = false, provider).map { e =>
           replaced = true
           e
         }.getOrElse(expr)
@@ -373,7 +384,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    */
   private def replaceExplicitDefaultValuesForProject(
       defaultExpressions: Seq[Expression],
-      project: Project): Option[LogicalPlan] = {
+      project: Project,
+      provider: Option[String]): Option[LogicalPlan] = {
     var replaced = false
     val updated: Seq[NamedExpression] = {
       for {
@@ -381,7 +393,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         projectExpr = project.projectList(i)
         defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
       } yield replaceExplicitDefaultReferenceInExpression(
-        projectExpr, defaultExpr, CommandType.Insert, addAlias = true).map { e =>
+        projectExpr, defaultExpr, CommandType.Insert, addAlias = true, provider).map { e =>
         replaced = true
         e.asInstanceOf[NamedExpression]
       }.getOrElse(projectExpr)
@@ -407,19 +419,34 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * @param defaultExpr the default to return if [[input]] is an unresolved "DEFAULT" reference.
    * @param isInsert the type of command we are currently processing.
    * @param addAlias if true, wraps the result with an alias of the original default column name.
+   * @param tableProvider provider of the current command's target table, if known.
    * @return [[defaultExpr]] if [[input]] is an unresolved "DEFAULT" attribute reference.
    */
   private def replaceExplicitDefaultReferenceInExpression(
       input: Expression,
       defaultExpr: Expression,
       command: CommandType.Value,
-      addAlias: Boolean): Option[Expression] = {
+      addAlias: Boolean,
+      tableProvider: Option[String]): Option[Expression] = {
     input match {
       case a@Alias(u: UnresolvedAttribute, _)
         if isExplicitDefaultColumn(u) =>
         Some(Alias(defaultExpr, a.name)())
       case u: UnresolvedAttribute
         if isExplicitDefaultColumn(u) =>
+        // Make sure that the target table has a provider that supports default column values.
+        tableProvider.map { provider =>
+          if (provider.equalsIgnoreCase("json") &&
+            !SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS) &&
+            SQLConf.get.getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)) {
+            throw QueryCompilationErrors.jsonDefaultColumnsNotAllowedWhenIgnoringNullFields(
+              command match {
+                case CommandType.Insert => "INSERT"
+                case CommandType.Merge => "MERGE"
+                case CommandType.Update => "UPDATE"
+              })
+          }
+        }
         if (addAlias) {
           Some(Alias(defaultExpr, u.name)())
         } else {
@@ -447,14 +474,15 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Looks up the schema for the table object of an INSERT INTO statement from the catalog.
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
-      enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
-    val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
+      enclosingInsert: InsertIntoStatement): Option[SchemaAndProvider] = {
+    val schemaAndProvider = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val schema: StructType =
+      StructType(schemaAndProvider.schema.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
     if (userSpecifiedCols.isEmpty) {
-      return Some(schema)
+      return Some(schemaAndProvider)
     }
     val colNamesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
     val userSpecifiedFields: Seq[StructField] =
@@ -466,8 +494,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       schema.fields.filter {
         field => !userSpecifiedColNames.contains(field.name)
       }
-    Some(StructType(userSpecifiedFields ++
-      getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
+    Some(SchemaAndProvider(StructType(userSpecifiedFields ++
+      getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)), schemaAndProvider.provider))
   }
 
   /**
@@ -492,9 +520,11 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   }
 
   /**
-   * Returns the schema for the target table of a DML command, looking into the catalog if needed.
+   * Returns the schema and table provider for the target table of a DML command, looking into the
+   * catalog if needed.
    */
-  private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
+  case class SchemaAndProvider(schema: StructType, provider: Option[String])
+  private def getSchemaForTargetTable(table: LogicalPlan): Option[SchemaAndProvider] = {
     // First find the source relation. Note that we use 'collectFirst' to descend past any
     // SubqueryAlias nodes that may be present.
     val source: Option[LogicalPlan] = table.collectFirst {
@@ -507,7 +537,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     // Check if the target table is already resolved. If so, return the computed schema.
     source.foreach { r =>
       if (r.schema.fields.nonEmpty) {
-        return Some(r.schema)
+        return Some(SchemaAndProvider(r.schema, None))
       }
     }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
@@ -520,7 +550,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     }
     // First try to get the table metadata directly. If that fails, check for views below.
     if (catalog.tableExists(tableName)) {
-      return Some(catalog.getTableMetadata(tableName).schema)
+      val meta = catalog.getTableMetadata(tableName)
+      return Some(SchemaAndProvider(meta.schema, meta.provider))
     }
     val lookup: LogicalPlan = try {
       catalog.lookupRelation(tableName)
@@ -529,9 +560,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     }
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        Some(r.tableMeta.schema)
+        Some(SchemaAndProvider(r.tableMeta.schema, r.tableMeta.provider))
       case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.desc.schema)
+        Some(SchemaAndProvider(r.desc.schema, r.desc.provider))
       case _ => None
     }
   }
@@ -543,7 +574,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def replaceExplicitDefaultValuesForUpdateAssignments(
       assignments: Seq[Assignment],
       command: CommandType.Value,
-      columnNamesToExpressions: Map[String, Expression]): Option[Seq[Assignment]] = {
+      columnNamesToExpressions: Map[String, Expression],
+      provider: Option[String]): Option[Seq[Assignment]] = {
     var replaced = false
     val newAssignments: Seq[Assignment] =
       for (assignment <- assignments) yield {
@@ -560,7 +592,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
               assignment.value,
               defaultExpr,
               command,
-              addAlias = false)
+              addAlias = false,
+              provider)
           updated.map { e =>
             replaced = true
             e

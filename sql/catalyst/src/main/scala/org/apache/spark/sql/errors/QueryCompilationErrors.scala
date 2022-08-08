@@ -2531,6 +2531,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "provider: \"" + dataSource + "\"")
   }
 
+  def jsonDefaultColumnsNotAllowedWhenIgnoringNullFields(statementType: String): Throwable = {
+    new AnalysisException(
+      s"Failed to execute $statementType command because DEFAULT values are not supported for " +
+        "JSON tables when the 'spark.sql.jsonGenerator.ignoreNullFields' configuration is set to " +
+        "true; please disable that configuration and retry the command again")
+  }
+
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
     new AnalysisException(
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values")
