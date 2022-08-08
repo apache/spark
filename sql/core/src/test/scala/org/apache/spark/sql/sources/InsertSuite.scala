@@ -1621,6 +1621,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
       TestCase(
         dataSource = "json",
+        // Note that no test case wth JSON_GENERATOR_IGNORE_NULL_FIELDS set to true is included here
+        // since that configuration value is mutually exclusive with DEFAULT values in JSON tables.
         Seq(
           Config(
             Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
@@ -1831,7 +1833,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     Seq("csv", "json", "orc", "parquet").foreach { provider =>
       withTable("t1") {
         // Set the allowlist of table providers to include the new table type for all SQL commands.
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
+        withSQLConf(
+          SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider,
+          SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
           // It is OK to create a new table with a column DEFAULT value assigned if the table
           // provider is in the allowlist.
           sql(s"create table t1(a int default 42) using $provider")
