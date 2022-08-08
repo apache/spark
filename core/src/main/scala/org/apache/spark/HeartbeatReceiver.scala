@@ -78,7 +78,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private[spark] var scheduler: TaskScheduler = null
 
   /**
-   * [SC-105641]
+   * [SPARK-39984]
    * Please make sure the intersection between `executorLastSeen` and `waitingList` is an empty set.
    * If the intersection is not empty, it is possible to never kill the executor until the executor
    * recovers. When an executor is in both `executorLastSeen` and `waitingList`, the value of
@@ -108,7 +108,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   private val executorHeartbeatIntervalMs = sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
 
-  private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+  private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT) &&
+    sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
 
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
@@ -258,7 +259,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   private def expireDeadHosts(): Unit = {
   /**
-   * [SC-105641]
+   * [SPARK-39984]
    * Originally, the driver’s HeartbeatReceiver will expire an executor if it does not receive any
    * heartbeat from the executor for 120 seconds. However, 120 seconds is too long, but we will face
    * other challenges when we try to lower the timeout threshold. To elaborate, when an executor is
@@ -304,6 +305,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         }
       }
     } else {
+      /**
+       * [SPARK-39984] This condition will only be reached if `HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT` is true
+       * and the scheduler backend is StandaloneSchedulerBackend.
+       */
       for ((executorId, workerLastHeartbeat) <- waitingList) {
         if (now - workerLastHeartbeat > executorTimeoutMs / 2) {
           killExecutor(executorId, now - workerLastHeartbeat)
