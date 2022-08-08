@@ -205,7 +205,9 @@ case class DataSource(
     }.orElse {
       // Remove "path" option so that it is not added to the paths returned by
       // `tempFileIndex.allFiles()`.
-      // Also remove columns that match partition column names similar to the user-provided schema.
+      //
+      // SPARK-39833: Also remove columns that match partition column names similar to the case of
+      // user-provided schema above.
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions - "path",
