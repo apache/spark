@@ -448,7 +448,7 @@ class DecommissionWorkerSuite
     // other configs used in this test.
     private val transportConf = SparkTransportConf.fromSparkConf(new SparkConf(),
       "shuffle", numUsableCores = 2)
-    private val rpcHandler = new ExternalBlockHandler(transportConf, null)
+    private val rpcHandler = new ExternalBlockHandler(transportConf, null, null)
     private val transportContext = new TransportContext(transportConf, rpcHandler)
     private val server = transportContext.createServer()
 

@@ -40,5 +40,8 @@ public interface DB extends Closeable {
      */
     void delete(byte[] key) throws RuntimeException;
 
+    /**
+     * Return an iterator over the contents of the DB.
+     */
     DBIterator iterator();
 }

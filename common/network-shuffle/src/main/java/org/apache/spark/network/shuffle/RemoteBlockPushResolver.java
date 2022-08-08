@@ -71,6 +71,7 @@ import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
@@ -134,7 +135,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final DB db;
 
   @SuppressWarnings("UnstableApiUsage")
-  public RemoteBlockPushResolver(TransportConf conf, File recoveryFile) throws IOException {
+  public RemoteBlockPushResolver(
+      TransportConf conf, DBBackend dbBackend, File recoveryFile) throws IOException {
     this.conf = conf;
     this.appsShuffleInfo = new ConcurrentHashMap<>();
     this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
@@ -155,7 +157,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
-    db = DBProvider.initDB(this.recoveryFile, CURRENT_VERSION, mapper);
+    db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
       reloadAndCleanUpAppShuffleInfo(db);
     }

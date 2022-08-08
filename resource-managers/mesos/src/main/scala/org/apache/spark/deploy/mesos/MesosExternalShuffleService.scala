@@ -40,7 +40,7 @@ import org.apache.spark.util.ThreadUtils
 private[mesos] class MesosExternalBlockHandler(
     transportConf: TransportConf,
     cleanerIntervalS: Long)
-  extends ExternalBlockHandler(transportConf, null) with Logging {
+  extends ExternalBlockHandler(transportConf, null, null) with Logging {
 
   ThreadUtils.newDaemonSingleThreadScheduledExecutor("shuffle-cleaner-watcher")
     .scheduleAtFixedRate(new CleanerThread(), 0, cleanerIntervalS, TimeUnit.SECONDS)

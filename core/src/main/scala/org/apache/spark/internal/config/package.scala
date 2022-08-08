@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
@@ -713,6 +714,16 @@ package object config {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
+    ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
+      .doc("Specifies a disk-based store used in shuffle service local db. " +
+        "Only LEVELDB is supported now.")
+      .version("3.4.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(DBBackend.values.map(_.toString).toSet)
+      .createWithDefault(DBBackend.LEVELDB.name)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)

@@ -22,30 +22,39 @@ import java.io.IOException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.LevelDB;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
 public class DBProvider {
-    public static DB initDB(File dbFile, StoreVersion version, ObjectMapper mapper)
-        throws IOException {
-        if (dbFile != null) {
-            if (dbFile.getName().endsWith(".ldb")) {
-                org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
-                return levelDB != null ? new LevelDB(levelDB) : null;
-            } else {
-                return null;
-            }
+    public static DB initDB(
+        DBBackend dbBackend,
+        File dbFile,
+        StoreVersion version,
+        ObjectMapper mapper) throws IOException {
+      if (dbFile != null) {
+        // TODO: SPARK-38888, add rocksdb implementation.
+        switch (dbBackend) {
+          case LEVELDB:
+            org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
+            return levelDB != null ? new LevelDB(levelDB) : null;
+          default:
+            return null;
         }
-        return null;
+      }
+      return null;
     }
 
     @VisibleForTesting
-    public static DB initDB(File file) throws IOException {
-        if (file.getName().endsWith(".ldb")) {
-            return new LevelDB(LevelDBProvider.initLevelDB(file));
-        } else {
-            return null;
+    public static DB initDB(DBBackend dbBackend, File file) throws IOException {
+      if (file != null) {
+        // TODO: SPARK-38888, add rocksdb implementation.
+        switch (dbBackend) {
+          case LEVELDB: return new LevelDB(LevelDBProvider.initLevelDB(file));
+        default: return null;
         }
+      }
+      return null;
     }
 }

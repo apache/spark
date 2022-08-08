@@ -17,19 +17,26 @@
 
 package org.apache.spark.network.shuffledb;
 
-import java.io.Closeable;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.Locale;
 
-public interface DBIterator extends Iterator<Map.Entry<byte[], byte[]>>, Closeable {
+/**
+ * The enum `DBBackend` use to specify a disk-based store used in shuffle service local db.
+ * Only LEVELDB is supported now.
+ */
+public enum DBBackend {
+    LEVELDB(".ldb");
 
-    /**
-     * Position at the first entry in the source whose `key` is at target.
-     */
-    void seek(byte[] key);
+    private final String fileSuffix;
 
-    default void remove() {
-        throw new UnsupportedOperationException();
+    DBBackend(String fileSuffix) {
+      this.fileSuffix = fileSuffix;
     }
 
+    public String suffix() {
+      return fileSuffix;
+    }
+
+    public static DBBackend byName(String value) {
+      return DBBackend.valueOf(value.toUpperCase(Locale.ROOT));
+    }
 }

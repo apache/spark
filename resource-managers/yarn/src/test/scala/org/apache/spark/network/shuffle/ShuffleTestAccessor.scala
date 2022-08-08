@@ -27,6 +27,7 @@ import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
 import org.apache.spark.network.shuffledb.DB
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
@@ -77,8 +78,9 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithSynchronizedCleanup(
       transportConf: TransportConf,
+      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, file) {
+    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
       override private[shuffle] def submitCleanupTask(task: Runnable): Unit = {
         task.run()
       }
@@ -87,8 +89,9 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoOpAppShuffleDBCleanup(
       transportConf: TransportConf,
+      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, file) {
+    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
       override private[shuffle] def removeAppShuffleInfoFromDB(
           appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo): Unit = {
         // NoOp
@@ -101,8 +104,9 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoDBCleanup(
       transportConf: TransportConf,
+      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, file) {
+    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
       override private[shuffle] def removeAppAttemptPathInfoFromDB(
         appId: String, attemptId: Int): Unit = {
         // NoOp
@@ -119,8 +123,9 @@ object ShuffleTestAccessor {
 
   def createMergeManagerWithNoCleanupAfterReload(
       transportConf: TransportConf,
+      dbBackend: DBBackend,
       file: File): MergedShuffleFileManager = {
-    new RemoteBlockPushResolver(transportConf, file) {
+    new RemoteBlockPushResolver(transportConf, dbBackend, file) {
       override private[shuffle] def removeOutdatedKeyValuesInDB(
           dbKeysToBeRemoved: List[Array[Byte]]): Unit = {
         // NoOp
@@ -207,8 +212,9 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
+    dbBackend: DBBackend,
     file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val db = DBProvider.initDB(file)
+    val db = DBProvider.initDB(dbBackend, file)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result

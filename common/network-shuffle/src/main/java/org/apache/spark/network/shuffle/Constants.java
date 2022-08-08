@@ -21,4 +21,11 @@ public class Constants {
 
   public static final String SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     "spark.shuffle.service.fetch.rdd.enabled";
+
+  /**
+   * The Spark config defined by the core module cannot be obtained in the current module,
+   * hard coding is performed here to define `SHUFFLE_SERVICE_DB_BACKEND`.
+   */
+  public static final String SHUFFLE_SERVICE_DB_BACKEND =
+    "spark.shuffle.service.db.backend";
 }

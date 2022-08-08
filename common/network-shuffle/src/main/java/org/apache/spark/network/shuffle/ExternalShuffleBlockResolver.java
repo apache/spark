@@ -47,6 +47,7 @@ import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
@@ -94,9 +95,11 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
-  public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
-      throws IOException {
-    this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
+  public ExternalShuffleBlockResolver(
+      TransportConf conf,
+      DBBackend dbBackend,
+      File registeredExecutorFile) throws IOException {
+    this(conf, dbBackend, registeredExecutorFile, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
@@ -105,6 +108,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   ExternalShuffleBlockResolver(
       TransportConf conf,
+      DBBackend dbBackend,
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
@@ -124,7 +128,7 @@ public class ExternalShuffleBlockResolver {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
-    db = DBProvider.initDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
+    db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);
     } else {
