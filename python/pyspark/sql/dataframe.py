@@ -2508,6 +2508,36 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.union(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   4|   5|   6|
+        +----+----+----+
+        >>> df1.union(df1).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   1|   2|   3|
+        +----+----+----+
         """
         return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
@@ -2520,6 +2550,38 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        Note: This is identical to :func:`union` function
+
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.unionAll(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   4|   5|   6|
+        +----+----+----+
+        >>> df1.unionAll(df1).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   1|   2|   3|
+        +----+----+----+
         """
         return self.union(other)
 
