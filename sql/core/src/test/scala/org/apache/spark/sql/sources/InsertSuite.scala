@@ -1849,7 +1849,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         // Now update the allowlist of table providers to prohibit ALTER TABLE ADD COLUMN commands
         // from assigning DEFAULT values.
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*") {
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*",
+          SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
           assert(intercept[AnalysisException] {
             // Try to add another column to the existing table again. This fails because the table
             // provider is now in the denylist.
