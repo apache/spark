@@ -53,7 +53,7 @@ private[spark] object Network {
 
   private[spark] val NETWORK_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.network.executorTimeout")
-      .version("1.3.0")
+      .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 

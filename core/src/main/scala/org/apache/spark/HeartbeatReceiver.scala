@@ -108,6 +108,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   private val executorHeartbeatIntervalMs = sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
 
+  private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
       s"equal to ${config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key}.")
@@ -242,7 +244,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             backend.driverEndpoint.send(RemoveExecutor(executorId,
               ExecutorProcessLost(
                 s"Executor heartbeat timed out after ${timeout} ms",
-                causedByApp = !sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT))))
+                causedByApp = !checkWorkerLastHeartbeat)))
 
           // LocalSchedulerBackend is used locally and only has one single executor
           case _: LocalSchedulerBackend =>
@@ -293,7 +295,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = clock.getTimeMillis()
-    if (!sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)) {
+    if (!checkWorkerLastHeartbeat) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
           killExecutor(executorId, now - lastSeenMs)
