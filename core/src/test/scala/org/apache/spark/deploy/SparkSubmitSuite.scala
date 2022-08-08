@@ -486,7 +486,7 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
-  test("SPARK-33782 : handles k8s  files download to current directory") {
+  test("SPARK-33782 : handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -500,6 +500,7 @@ class SparkSubmitSuite
       "--files", "src/test/resources/test_metrics_config.properties",
       "--py-files", "src/test/resources/test_metrics_system.properties",
       "--archives", "src/test/resources/log4j2.properties",
+      "--jars", "src/test/resources/TestUDTF.jar",
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -509,13 +510,15 @@ class SparkSubmitSuite
     conf.get("spark.driver.memory") should be ("4g")
     conf.get("spark.kubernetes.namespace") should be ("spark")
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
-    import java.nio.file.{Paths, Files}
+
     Files.exists(Paths.get("test_metrics_config.properties")) should be (true)
     Files.exists(Paths.get("test_metrics_system.properties")) should be (true)
     Files.exists(Paths.get("log4j2.properties")) should be (true)
+    Files.exists(Paths.get("TestUDTF.jar")) should be (true)
     Files.delete(Paths.get("test_metrics_config.properties"))
     Files.delete(Paths.get("test_metrics_system.properties"))
     Files.delete(Paths.get("log4j2.properties"))
+    Files.delete(Paths.get("TestUDTF.jar"))
   }
 
   /**

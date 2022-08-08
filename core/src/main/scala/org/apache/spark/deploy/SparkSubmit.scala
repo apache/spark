@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
 import java.net.{URI, URL}
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
@@ -387,7 +388,8 @@ private[spark] class SparkSubmit extends Logging {
         // directory too.
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
-        def downloadResourcesToCurrentDirectory(uris: String): String = {
+        def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
+        String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
           val localResources = downloadFileList(
             resolvedUris.map(
@@ -403,8 +405,7 @@ private[spark] class SparkSubmit extends Logging {
                 s"Files  $resolvedUri " +
                   s"from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
               Utils.deleteRecursively(dest)
-              Utils.unpack(source, dest)
-
+              if (isArchive) Utils.unpack(source, dest) else Files.copy(source.toPath, dest.toPath)
               // Keep the URIs of local files with the given fragments.
               UriBuilder.fromUri(
                 localResources).fragment(resolvedUri.getFragment).build().toString
@@ -412,16 +413,16 @@ private[spark] class SparkSubmit extends Logging {
         }
 
         val filesLocalFiles = Option(args.files).map {
-          downloadResourcesToCurrentDirectory
+          downloadResourcesToCurrentDirectory(_)
         }.orNull
         val jarsLocalJars = Option(args.jars).map {
-          downloadResourcesToCurrentDirectory
+          downloadResourcesToCurrentDirectory(_)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
-          downloadResourcesToCurrentDirectory
+          downloadResourcesToCurrentDirectory(_, true)
         }.orNull
         val pyLocalFiles = Option(args.pyFiles).map {
-          downloadResourcesToCurrentDirectory
+          downloadResourcesToCurrentDirectory(_)
         }.orNull
         args.files = filesLocalFiles
         args.archives = archiveLocalFiles
