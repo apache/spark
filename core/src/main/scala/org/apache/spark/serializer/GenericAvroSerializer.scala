@@ -97,7 +97,7 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
     } {
       in.close()
     }
-    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
+    new Schema.Parser().setValidateDefaults(false).parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**
@@ -137,7 +137,7 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
           schemas.get(fingerprint) match {
-            case Some(s) => new Schema.Parser().parse(s)
+            case Some(s) => new Schema.Parser().setValidateDefaults(false).parse(s)
             case None =>
               throw new SparkException(
                 "Error reading attempting to read avro data -- encountered an unknown " +

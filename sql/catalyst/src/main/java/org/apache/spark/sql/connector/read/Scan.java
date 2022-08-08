@@ -61,6 +61,18 @@ public interface Scan {
   }
 
   /**
+   * The name of the scan, which will be shown in the header of a spark plan scan node on SparkUI.
+   * E.g. "scan parquet sample_db.sample_table"
+   * <p>
+   * By default this returns the simple class name of the implementation. Please override it to
+   * provide a meaningful name.
+   * </p>
+   */
+  default String name() {
+    return this.getClass().getSimpleName();
+  }
+
+  /**
    * Returns the physical representation of this scan for batch query. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its

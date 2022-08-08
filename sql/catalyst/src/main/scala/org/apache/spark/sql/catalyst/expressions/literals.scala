@@ -500,7 +500,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       val structFields: Array[String] =
         structNames.zip(structValues).map {
-          kv => s"${kv._1}, ${kv._2}"
+          kv => s"'${kv._1}', ${kv._2}"
         }
       s"NAMED_STRUCT(${structFields.mkString(", ")})"
     case (data: ArrayBasedMapData, mapType: MapType) =>

@@ -53,7 +53,8 @@ private[avro] case class AvroDataToCatalyst(
 
   private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val actualSchema = new Schema.Parser().parse(jsonFormatSchema)
+  @transient private lazy val actualSchema =
+    new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
 
   @transient private lazy val expectedSchema = avroOptions.schema.getOrElse(actualSchema)
 

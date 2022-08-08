@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalOperation}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -117,13 +117,38 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * do not add a subquery that might have an expensive computation
    */
   private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
-    val ret = plan match {
-      case PhysicalOperation(_, filters, child) if child.isInstanceOf[LeafNode] =>
-        filters.forall(isSimpleExpression) &&
-          filters.exists(isLikelySelective)
+    def isSelective(
+        p: LogicalPlan,
+        predicateReference: AttributeSet,
+        hasHitFilter: Boolean,
+        hasHitSelectiveFilter: Boolean): Boolean = p match {
+      case Project(projectList, child) =>
+        if (hasHitFilter) {
+          // We need to make sure all expressions referenced by filter predicates are simple
+          // expressions.
+          val referencedExprs = projectList.filter(predicateReference.contains)
+          referencedExprs.forall(isSimpleExpression) &&
+            isSelective(
+              child,
+              referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
+              hasHitFilter,
+              hasHitSelectiveFilter)
+        } else {
+          assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
+          isSelective(child, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+        }
+      case Filter(condition, child) =>
+        isSimpleExpression(condition) && isSelective(
+          child,
+          predicateReference ++ condition.references,
+          hasHitFilter = true,
+          hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
+      case _: LeafNode => hasHitSelectiveFilter
       case _ => false
     }
-    !plan.isStreaming && ret
+
+    !plan.isStreaming &&
+      isSelective(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
   }
 
   private def isSimpleExpression(e: Expression): Boolean = {

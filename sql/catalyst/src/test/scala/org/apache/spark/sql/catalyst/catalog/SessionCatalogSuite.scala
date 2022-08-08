@@ -159,6 +159,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // Analyze the default column values.
       val statementType = "CREATE TABLE"
       assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns
+        .analyze(columnA, statementType, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        .sql == "41")
       assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnC, statementType)

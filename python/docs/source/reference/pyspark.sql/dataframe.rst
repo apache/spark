@@ -73,6 +73,7 @@ DataFrame
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.mapInArrow
+    DataFrame.melt
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
@@ -113,6 +114,7 @@ DataFrame
     DataFrame.unionAll
     DataFrame.unionByName
     DataFrame.unpersist
+    DataFrame.unpivot
     DataFrame.where
     DataFrame.withColumn
     DataFrame.withColumns
