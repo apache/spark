@@ -679,10 +679,9 @@ struct<CAST(1 AS INTERVAL YEAR):interval year>
 -- !query
 select cast(-122S as interval year to month)
 -- !query schema
-struct<>
+struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-122S AS INTERVAL YEAR TO MONTH)' due to data type mismatch: cannot cast smallint to interval year to month; line 1 pos 7
+-10-2
 
 
 -- !query
@@ -704,19 +703,17 @@ struct<CAST(-10 AS INTERVAL SECOND):interval second>
 -- !query
 select cast(100Y as interval hour to second)
 -- !query schema
-struct<>
+struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(100Y AS INTERVAL HOUR TO SECOND)' due to data type mismatch: cannot cast tinyint to interval hour to second; line 1 pos 7
+0 00:01:40.000000000
 
 
 -- !query
 select cast(-1000S as interval day to second)
 -- !query schema
-struct<>
+struct<CAST(-1000 AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-1000S AS INTERVAL DAY TO SECOND)' due to data type mismatch: cannot cast smallint to interval day to second; line 1 pos 7
+-0 00:16:40.000000000
 
 
 -- !query

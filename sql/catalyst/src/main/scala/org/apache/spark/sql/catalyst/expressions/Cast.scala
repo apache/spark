@@ -197,6 +197,7 @@ object Cast {
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
+    case (_: IntegralType, _: AnsiIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
