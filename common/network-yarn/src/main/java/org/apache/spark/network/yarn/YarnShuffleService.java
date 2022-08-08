@@ -341,18 +341,19 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Recovery location is: " + secretsFile.getPath());
     if (db != null) {
       logger.info("Going to reload spark shuffle data");
-      DBIterator itr = db.iterator();
-      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-      while (itr.hasNext()) {
-        Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), StandardCharsets.UTF_8);
-        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
-          break;
+      try (DBIterator itr = db.iterator()) {
+        itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+        while (itr.hasNext()) {
+          Map.Entry<byte[], byte[]> e = itr.next();
+          String key = new String(e.getKey(), StandardCharsets.UTF_8);
+          if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
+            break;
+          }
+          String id = parseDbAppKey(key);
+          ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
+          logger.info("Reloading tokens for app: " + id);
+          secretManager.registerApp(id, secret);
         }
-        String id = parseDbAppKey(key);
-        ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
-        logger.info("Reloading tokens for app: " + id);
-        secretManager.registerApp(id, secret);
       }
     }
   }
