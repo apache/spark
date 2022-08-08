@@ -4170,7 +4170,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           ""
         }
 
-        val ret = s"""
+        s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$openHashSet $hashSetResult = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
@@ -4184,8 +4184,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
-        println(ret)
-        ret
       })
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
