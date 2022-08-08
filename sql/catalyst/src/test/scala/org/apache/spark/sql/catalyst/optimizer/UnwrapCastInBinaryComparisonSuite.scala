@@ -248,18 +248,6 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     val intLit = Literal.create(null, IntegerType)
     val shortLit = Literal.create(null, ShortType)
 
-    def checkInAndInSet(in: In, expected: Expression): Unit = {
-      assertEquivalent(in, expected)
-      val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
-      val expectedInSet = expected match {
-        case expectedIn: In =>
-          toInSet(expectedIn)
-        case Or(falseIfNotNull: And, expectedIn: In) =>
-          Or(falseIfNotNull, toInSet(expectedIn))
-      }
-      assertEquivalent(toInSet(in), expectedInSet)
-    }
-
     checkInAndInSet(
       In(Cast(f, LongType), Seq(1.toLong, 2.toLong, 3.toLong)),
       f.in(1.toShort, 2.toShort, 3.toShort))
@@ -289,6 +277,14 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
       Or(falseIfNotNull(f), f.in(shortLit, 1.toShort))
     )
+  }
+
+  test("SPARK-39896: unwrap cast when the literal of In/InSet downcast failed") {
+    val decimalValue = decimal2(123456.1234)
+    val decimalValue2 = decimal2(100.20)
+    checkInAndInSet(
+      In(castDecimal2(f3), Seq(decimalValue, decimalValue2)),
+      Or(falseIfNotNull(f3), f3.in(decimal(decimalValue2))))
   }
 
   test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
@@ -374,5 +370,17 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         checkEvaluation(e1, e2.eval(row), row)
       })
     }
+  }
+
+  private def checkInAndInSet(in: In, expected: Expression): Unit = {
+    assertEquivalent(in, expected)
+    val toInSet = (in: In) => InSet(in.value, HashSet() ++ in.list.map(_.eval()))
+    val expectedInSet = expected match {
+      case expectedIn: In =>
+        toInSet(expectedIn)
+      case Or(falseIfNotNull: And, expectedIn: In) =>
+        Or(falseIfNotNull, toInSet(expectedIn))
+    }
+    assertEquivalent(toInSet(in), expectedInSet)
   }
 }
