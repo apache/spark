@@ -61,6 +61,6 @@ public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
   void filter(Filter[] filters);
 
   default void filter(Predicate[] predicates) {
-    this.filter(PredicateUtils.toV1(predicates, false));
+    this.filter(PredicateUtils.toV1(predicates, true));
   }
 }

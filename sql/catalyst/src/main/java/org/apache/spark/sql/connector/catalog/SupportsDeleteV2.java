@@ -74,10 +74,10 @@ public interface SupportsDeleteV2 extends TruncatableTable {
 
   @Override
   default boolean truncateTable() {
-    Predicate[] filters = new Predicate[] { new AlwaysTrue() };
-    boolean canDelete = canDeleteWhere(filters);
+    Predicate[] predicates = new Predicate[] { new AlwaysTrue() };
+    boolean canDelete = canDeleteWhere(predicates);
     if (canDelete) {
-      deleteWhere(filters);
+      deleteWhere(predicates);
     }
     return canDelete;
   }

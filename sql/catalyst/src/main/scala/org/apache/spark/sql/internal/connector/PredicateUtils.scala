@@ -28,12 +28,26 @@ private[sql] object PredicateUtils {
 
   def toV1(predicate: Predicate): Option[Filter] = {
 
+    def isValidBinaryPredicate(): Boolean = {
+      if (predicate.children().length == 2 &&
+        predicate.children()(0).isInstanceOf[NamedReference] &&
+        predicate.children()(1).isInstanceOf[LiteralValue[_]]) {
+        true
+      } else {
+        false
+      }
+    }
+
     predicate.name() match {
-      case "IN" if isValidPredicate(predicate) =>
+      case "IN" if predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
         val values = predicate.children().drop(1)
         if (values.length > 0) {
+          if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return None
           val dataType = values(0).asInstanceOf[LiteralValue[_]].dataType
+          if (!values.forall(_.asInstanceOf[LiteralValue[_]].dataType.sameType(dataType))) {
+            return None
+          }
           val inValues = values.map(v =>
             CatalystTypeConverters.convertToScala(v.asInstanceOf[LiteralValue[_]].value, dataType))
           Some(In(attribute, inValues))
@@ -41,7 +55,7 @@ private[sql] object PredicateUtils {
           Some(In(attribute, Array.empty[Any]))
         }
 
-      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidPredicate(predicate) =>
+      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate() =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         val v1Value = CatalystTypeConverters.convertToScala(value.value, value.dataType)
@@ -55,7 +69,8 @@ private[sql] object PredicateUtils {
         }
         Some(v1Filter)
 
-      case "IS_NULL" | "IS_NOT_NULL" if isValidPredicate(predicate) =>
+      case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
+          predicate.children()(0).isInstanceOf[NamedReference] =>
         val attribute = predicate.children()(0).toString
         val v1Filter = predicate.name() match {
           case "IS_NULL" => IsNull(attribute)
@@ -63,9 +78,10 @@ private[sql] object PredicateUtils {
         }
         Some(v1Filter)
 
-      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidPredicate(predicate) =>
+      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate() =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
+        if (!value.dataType.sameType(StringType)) return None
         val v1Value = value.value.toString
         val v1Filter = predicate.name() match {
           case "STARTS_WITH" =>
@@ -77,14 +93,14 @@ private[sql] object PredicateUtils {
         }
         Some(v1Filter)
 
-      case "ALWAYS_TRUE" | "ALWAYS_FALSE" if isValidPredicate(predicate) =>
+      case "ALWAYS_TRUE" | "ALWAYS_FALSE" if predicate.children().isEmpty =>
         val v1Filter = predicate.name() match {
           case "ALWAYS_TRUE" => AlwaysTrue()
           case "ALWAYS_FALSE" => AlwaysFalse()
         }
         Some(v1Filter)
 
-      case "AND" if isValidPredicate(predicate) =>
+      case "AND" =>
         val and = predicate.asInstanceOf[V2And]
         val left = toV1(and.left())
         val right = toV1(and.right())
@@ -94,7 +110,7 @@ private[sql] object PredicateUtils {
           None
         }
 
-      case "OR" if isValidPredicate(predicate) =>
+      case "OR" =>
         val or = predicate.asInstanceOf[V2Or]
         val left = toV1(or.left())
         val right = toV1(or.right())
@@ -120,63 +136,15 @@ private[sql] object PredicateUtils {
 
   def toV1(
       predicates: Array[Predicate],
-      throwExceptionIfNotConvertible: Boolean): Array[Filter] = {
+      skipIfNotConvertible: Boolean): Array[Filter] = {
     predicates.flatMap { predicate =>
       val filter = toV1(predicate)
       if (filter.isEmpty) {
-        if (throwExceptionIfNotConvertible) {
+        if (!skipIfNotConvertible) {
           throw QueryCompilationErrors.unsupportedPredicateToFilterConversionError(predicate.name())
         }
       }
       filter
     }.toArray
-  }
-
-  def isValidPredicate(predicate: Predicate): Boolean = {
-
-    def isValidBinaryPredicate(): Boolean = {
-      if (predicate.children().length == 2 &&
-        predicate.children()(0).isInstanceOf[NamedReference] &&
-        predicate.children()(1).isInstanceOf[LiteralValue[_]]) {
-        true
-      } else {
-        false
-      }
-    }
-
-    predicate.name() match {
-      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate => true
-
-      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate =>
-        val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
-        if (value.dataType.sameType(StringType)) true else false
-
-      case "IN" if predicate.children()(0).isInstanceOf[NamedReference] =>
-        val values = predicate.children().drop(1)
-        if (values.length > 0) {
-          if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return false
-          val dataType = values(0).asInstanceOf[LiteralValue[_]].dataType
-          if (!values.forall(_.asInstanceOf[LiteralValue[_]].dataType.sameType(dataType))) {
-            return false
-          }
-        }
-        true
-
-      case "IS_NULL" | "IS_NOT_NULL" if predicate.children().length == 1 &&
-          predicate.children()(0).isInstanceOf[NamedReference] =>
-        true
-
-      case "ALWAYS_TRUE" | "ALWAYS_FALSE" if predicate.children().isEmpty => true
-
-      case "AND" =>
-        val and = predicate.asInstanceOf[V2And]
-        isValidPredicate(and.left()) && isValidPredicate(and.right())
-
-      case "OR" =>
-        val or = predicate.asInstanceOf[V2Or]
-        isValidPredicate(or.left()) || isValidPredicate(or.right())
-
-      case _ => false
-    }
   }
 }
