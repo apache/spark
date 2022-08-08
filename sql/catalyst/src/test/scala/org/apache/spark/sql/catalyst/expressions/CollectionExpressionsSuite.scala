@@ -2415,6 +2415,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(null, Float.NaN))
   }
 
+  test("SPARK-39976: ArrayIntersect should handle null in left expression correctly") {
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(1d))
+  }
+
   test("SPARK-36741: ArrayDistinct should handle duplicated Double.NaN and Float.Nan") {
     checkEvaluation(ArrayDistinct(
       Literal.create(Seq(Double.NaN, Double.NaN, null, null, 1d, 1d), ArrayType(DoubleType))),

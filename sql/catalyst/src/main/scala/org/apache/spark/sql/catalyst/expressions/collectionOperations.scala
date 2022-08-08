@@ -4158,7 +4158,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
              |$nullElementIndex = $size;
              |$size++;
              |$builder.$$plus$$eq($nullValueHolder);
-           """.stripMargin)
+           """.stripMargin,
+          Seq(s"$hashSet.containsNull()"))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4169,7 +4170,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           ""
         }
 
-        s"""
+        val ret = s"""
            |$openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
            |$openHashSet $hashSetResult = new $openHashSet$hsPostFix($classTag);
            |$declareNullTrackVariables
@@ -4183,6 +4184,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            |}
            |${buildResultArray(builder, ev.value, size, nullElementIndex)}
          """.stripMargin
+        println(ret)
+        ret
       })
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {

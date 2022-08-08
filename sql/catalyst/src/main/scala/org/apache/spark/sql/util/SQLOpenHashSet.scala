@@ -85,12 +85,13 @@ object SQLOpenHashSet {
       index: String,
       hashSet: String,
       handleNotNull: (String, String) => String,
-      handleNull: String): String = {
+      handleNull: String,
+      nullConditions: Seq[String] = Seq.empty): String = {
     if (arrayContainsNull) {
       if (setContainsNull) {
         s"""
            |if ($array.isNullAt($index)) {
-           |  if (!$hashSet.containsNull()) {
+           |  if (!$hashSet.containsNull()${nullConditions.map(" &&" + _).mkString("")}) {
            |    $hashSet.addNull();
            |    $handleNull
            |  }
