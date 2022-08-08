@@ -321,4 +321,8 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
   }
+
+  test("SPARK-36663: Support number-only column names in ORC data sources") {
+    testHandleOnlyNumbersColumnName()
+  }
 }
