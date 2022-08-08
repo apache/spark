@@ -19,16 +19,20 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.IOException
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, MapObjectInspector, ObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 
 private[hive] object OrcFileOperator extends Logging {
@@ -98,8 +102,43 @@ private[hive] object OrcFileOperator extends Logging {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+        toCatalystSchema(readerInspector)
     }
+  }
+
+  def toCatalystSchema(readerInspector: StructObjectInspector): StructType = {
+    def toCatalystType(inspector: ObjectInspector): DataType = {
+      inspector.getCategory match {
+        case Category.STRUCT => toStructType(inspector.asInstanceOf[StructObjectInspector])
+        case Category.LIST => toArrayType(inspector.asInstanceOf[ListObjectInspector])
+        case Category.MAP => toMapType(inspector.asInstanceOf[MapObjectInspector])
+        case _ =>
+          CatalystSqlParser.parseDataType(inspector.getTypeName)
+      }
+    }
+
+    def toStructType(inspector: StructObjectInspector): StructType = {
+      val structFieldRefs = inspector.getAllStructFieldRefs
+      val fields = new ArrayBuffer[StructField]()
+      structFieldRefs.asScala.foreach { structFieldRef =>
+        val catalystType = toCatalystType(structFieldRef.getFieldObjectInspector)
+        val fieldName = structFieldRef.getFieldName
+        fields += StructField(fieldName, catalystType)
+      }
+      StructType(fields.toSeq)
+    }
+
+    def toArrayType(inspector: ListObjectInspector): ArrayType = {
+      ArrayType(toCatalystType(inspector.getListElementObjectInspector()))
+    }
+
+    def toMapType(inspector: MapObjectInspector): MapType = {
+      val catalystKeyType = toCatalystType(inspector.getMapKeyObjectInspector)
+      val catalystValueType = toCatalystType(inspector.getMapValueObjectInspector)
+      MapType(catalystKeyType, catalystValueType)
+    }
+
+    toStructType(readerInspector)
   }
 
   /**
