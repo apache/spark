@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class CoalesceShufflePartitionsSuite extends SparkFunSuite {
+class CoalesceShufflePartitionsSuite extends SparkFunSuite with AdaptiveSparkPlanHelper {
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
@@ -307,6 +307,51 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
         }
       }
       withSparkSession(test, 12000, minNumPostShufflePartitions)
+    }
+
+    test(s"determining the number of reducers: expand, $minNumPostShufflePartitions") {
+      val test: SparkSession => Unit = { spark: SparkSession =>
+        try {
+          spark.range(0, 100, 1, numInputPartitions).selectExpr("id + 1 AS a", "id AS b")
+            .createOrReplaceTempView("tbl1")
+          spark.range(0, 1000, 1, numInputPartitions).selectExpr("id + 1 AS a", "id AS b")
+            .createOrReplaceTempView("tbl2")
+
+          val agg = spark.sql(
+            """
+               |SELECT
+               |  t1.a + 1, count(distinct t1.b), count(distinct t2.b) FROM tbl1 t1
+               |INNER JOIN tbl2 t2 ON t1.a = t2.a
+               |GROUP BY 1
+             """.stripMargin)
+          agg.collect()
+
+          val finalPlan = agg.queryExecution.executedPlan
+            .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+          val expands = collect(finalPlan) {
+            case e: ExpandExec => e
+          }
+
+          assert(expands.length === 1)
+
+          val shuffleReads = expands.head.collect {
+            case r @ CoalescedShuffleRead() => r
+          }
+
+          if (minNumPostShufflePartitions.nonEmpty) {
+            assert(shuffleReads.isEmpty)
+          } else {
+            assert(shuffleReads.size === 2)
+            shuffleReads.foreach { reader =>
+              assert(reader.outputPartitioning.numPartitions === 3)
+            }
+          }
+        } finally {
+          spark.catalog.dropTempView("tbl1")
+          spark.catalog.dropTempView("tbl2")
+        }
+      }
+      withSparkSession(test, 15000, minNumPostShufflePartitions)
     }
   }
 

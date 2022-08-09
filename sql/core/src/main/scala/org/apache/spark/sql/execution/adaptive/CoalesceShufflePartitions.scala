@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.{ExpandExec, ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -64,7 +64,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         1
       }
     }
-    val advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    lazy val advisoryTargetSize = adjustAdvisoryPartitionSizeInBytes(plan, conf)
     val minPartitionSize = if (Utils.isTesting) {
       // In the tests, we usually set the target size to a very small value that is even smaller
       // than the default value of the min partition size. Here we also adjust the min partition
@@ -162,6 +162,16 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         AQEShuffleReadExec(stage, specs)
       }.getOrElse(plan)
     case other => other.mapChildren(updateShuffleReads(_, specsMap))
+  }
+
+  // Adjust advisory partition size in bytes based on following operators.
+  private def adjustAdvisoryPartitionSizeInBytes(plan: SparkPlan, conf: SQLConf): Long = {
+    val postShuffleInputSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val factor = 1.0 + plan.collect {
+      case e: ExpandExec => 0.5 * e.projections.size
+      case _ => 0
+    }.max
+    (postShuffleInputSize / factor).toLong
   }
 }
 
