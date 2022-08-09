@@ -1255,7 +1255,7 @@ class SparkContext:
         >>> with open(path2, "w") as testFile:
         ...    _ = testFile.write("100")
         >>> sc.addFile(path2)
-        >>> sc.listFiles
+        >>> sorted(sc.listFiles)
         ['file:/.../test.txt', 'file:/.../test2.txt']
         """
         self._jsc.sc().addFile(path, recursive)
@@ -1270,15 +1270,9 @@ class SparkContext:
         --------
         SparkContext.addFile
         """
-        jfiles = self._jsc.sc().listFiles()
-        if jfiles is None:
-            return []
-        else:
-            files = []
-            jiter = jfiles.iterator()
-            while jiter.hasNext():
-                files.append(jiter.next())
-            return sorted(files)
+        return list(
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(self._jsc.sc().listFiles())
+        )
 
     def addPyFile(self, path: str) -> None:
         """
@@ -1340,7 +1334,7 @@ class SparkContext:
         ...         _ = f.write("100")
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path2)
-        >>> sc.listArchives
+        >>> sorted(sc.listArchives)
         ['file:/.../test.zip', 'file:/.../test2.zip']
 
         Reads the '100' as an integer in the zipped file, and processes
@@ -1365,15 +1359,9 @@ class SparkContext:
         --------
         SparkContext.addArchive
         """
-        jarchs = self._jsc.sc().listArchives()
-        if jarchs is None:
-            return []
-        else:
-            archs = []
-            jiter = jarchs.iterator()
-            while jiter.hasNext():
-                archs.append(jiter.next())
-            return sorted(archs)
+        return list(
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(self._jsc.sc().listArchives())
+        )
 
     def setCheckpointDir(self, dirName: str) -> None:
         """
