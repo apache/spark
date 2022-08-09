@@ -56,7 +56,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                       Window [_w2,s_state]
                                                                         WholeStageCodegen (5)
                                                                           Sort [s_state,_w2]
-                                                                            HashAggregate [s_state,sum] [sum(UnscaledValue(ss_net_profit)),s_state,_w2,sum]
+                                                                            HashAggregate [sum] [sum(UnscaledValue(ss_net_profit)),s_state,_w2,sum]
                                                                               InputAdapter
                                                                                 Exchange [s_state] #7
                                                                                   WholeStageCodegen (4)

@@ -681,7 +681,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         df.createTempView("df")
 
         val sqlText = "EXPLAIN CODEGEN SELECT key, MAX(value) FROM df GROUP BY key"
-        val expectedCodegenText = "Found 1 WholeStageCodegen subtrees."
+        val expectedCodegenText = "Found 2 WholeStageCodegen subtrees."
         val expectedNoCodegenText = "Found 0 WholeStageCodegen subtrees."
         withNormalizedExplain(sqlText) { normalizedOutput =>
           assert(normalizedOutput.contains(expectedNoCodegenText))

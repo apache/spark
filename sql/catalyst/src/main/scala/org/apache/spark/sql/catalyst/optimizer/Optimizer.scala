@@ -513,43 +513,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     }
   }
 
-  private def mapAttribute[T <: Expression](expression: T, mapping: AttributeMap[Attribute]) = {
-    expression.transform {
-      case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
-    }.asInstanceOf[T]
-  }
-
-  private def mapAttributes[T <: Expression](
-      expressions: Seq[T],
-      mapping: AttributeMap[Attribute]) = {
-    expressions.map(mapAttribute(_, mapping))
-  }
-
   /**
-   * Remove the top-level alias from an expression when it is redundant, but keep aliases that avoid
-   * duplicate output attributes.
+   * Remove the top-level alias from an expression when it is redundant.
    */
-  private def removeRedundantAliases(
-      expressions: Seq[NamedExpression],
-      excludeList: AttributeSet): Seq[NamedExpression] = {
-    var passThroughAttributes = AttributeSet(expressions.filter(_.isInstanceOf[Attribute]))
-    expressions.map {
-      // Alias with metadata can not be stripped, or the metadata will be lost.
-      // If the alias name is different from attribute name, we can't strip it either, or we
-      // may accidentally change the output schema name of the root plan.
-      case a @ Alias(attr: Attribute, name)
-        if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
-          name == attr.name &&
-          !excludeList.contains(attr) &&
-          !excludeList.contains(a) =>
-        if (passThroughAttributes.contains(attr)) {
-          a
-        } else {
-          passThroughAttributes += attr
-          attr
-        }
-      case o => o
-    }
+  private def removeRedundantAlias(e: Expression, excludeList: AttributeSet): Expression = e match {
+    // Alias with metadata can not be stripped, or the metadata will be lost.
+    // If the alias name is different from attribute name, we can't strip it either, or we
+    // may accidentally change the output schema name of the root plan.
+    case a @ Alias(attr: Attribute, name)
+      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
+        name == attr.name &&
+        !excludeList.contains(attr) &&
+        !excludeList.contains(a) =>
+      attr
+    case a => a
   }
 
   /**
@@ -557,11 +534,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
    * A set of excludes is used to prevent the removal of:
    * - seemingly redundant aliases used to deduplicate the input for a (self) join,
    * - top-level subquery attributes and
-   * - attributes of `Alias`es that fix conflicting attributes in an `Union`'s first `Project` child
-   *
-   * @param plan the plan to remove redundant aliases from
-   * @param excluded the set of attributes to keep
-   * @return the plan where redundant aliases are removed from
+   * - attributes of a Union's first child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -581,27 +554,23 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val newLeft = removeRedundantAliases(left, excluded ++ right.outputSet)
         val newRight = removeRedundantAliases(right, excluded ++ newLeft.outputSet)
         val mapping = AttributeMap(
-          createAttributeMapping(left, newLeft) ++ createAttributeMapping(right, newRight))
-        val newCondition = condition.map(mapAttribute(_, mapping))
+          createAttributeMapping(left, newLeft) ++
+          createAttributeMapping(right, newRight))
+        val newCondition = condition.map(_.transform {
+          case a: Attribute => mapping.getOrElse(a, a)
+        })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
-      case p: Project =>
-        val newChild = removeRedundantAliases(p.child, excluded)
-        val mapping = AttributeMap(createAttributeMapping(p.child, newChild))
-        Project(removeRedundantAliases(mapAttributes(p.projectList, mapping), excluded), newChild)
-
-      case a: Aggregate =>
-        val newChild = removeRedundantAliases(a.child, excluded)
-        val mapping = AttributeMap(createAttributeMapping(a.child, newChild))
-        Aggregate(mapAttributes(a.groupingExpressions, mapping),
-          removeRedundantAliases(mapAttributes(a.aggregateExpressions, mapping), excluded),
-          newChild)
-
-      case w: Window =>
-        val newChild = removeRedundantAliases(w.child, excluded)
-        val mapping = AttributeMap(createAttributeMapping(w.child, newChild))
-        Window(removeRedundantAliases(mapAttributes(w.windowExpressions, mapping), excluded),
-          mapAttributes(w.partitionSpec, mapping), mapAttributes(w.orderSpec, mapping), newChild)
+      case _: Union =>
+        var first = true
+        plan.mapChildren { child =>
+          if (first) {
+            first = false
+            removeRedundantAliases(child, excluded ++ child.outputSet)
+          } else {
+            removeRedundantAliases(child, excluded)
+          }
+        }
 
       case _ =>
         // Remove redundant aliases in the subtree(s).
@@ -611,12 +580,24 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
+
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
-        assert(currentNextAttrPairs.size == mapping.size,
-          "Attribute mapping keys should be unique.")
+        // Create a an expression cleaning function for nodes that can actually produce redundant
+        // aliases, use identity otherwise.
+        val clean: Expression => Expression = plan match {
+          case _: Project => removeRedundantAlias(_, excluded)
+          case _: Aggregate => removeRedundantAlias(_, excluded)
+          case _: Window => removeRedundantAlias(_, excluded)
+          case _ => identity[Expression]
+        }
 
-        newNode.mapExpressions(mapAttribute(_, mapping))
+        // Transform the expressions.
+        newNode.mapExpressions { expr =>
+          clean(expr.transform {
+            case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
+          })
+        }
     }
   }
 
