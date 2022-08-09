@@ -1083,12 +1083,20 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    dividend : str, :class:`~pyspark.sql.Column` or float
+        the column that contains dividend, or the specified dividend value
+    divisor : str, :class:`~pyspark.sql.Column` or float
+        the column that contains divisor, or the specified divisor value
+
     Examples
     --------
+    >>> from pyspark.sql.functions import pmod
     >>> df = spark.createDataFrame([
-    ...     (1.0, float('nan')), (float('nan'), 2.0),
-    ...     (float('nan'), float('nan')), (-3.0, 4.0),
-    ...      (-5.0, -6.0), (7.0, -8.0), (1.0, 2.0)],
+    ...     (1.0, float('nan')), (float('nan'), 2.0), (10.0, 3.0),
+    ...     (float('nan'), float('nan')), (-3.0, 4.0), (-10.0, 3.0),
+    ...     (-5.0, -6.0), (7.0, -8.0), (1.0, 2.0)],
     ...     ("a", "b"))
     >>> df.select(pmod("a", "b")).show()
     +----------+
@@ -1096,8 +1104,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     +----------+
     |       NaN|
     |       NaN|
+    |       1.0|
     |       NaN|
     |       1.0|
+    |       2.0|
     |      -5.0|
     |       7.0|
     |       1.0|
@@ -2036,9 +2046,14 @@ def localtimestamp() -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql.functions import localtimestamp
     >>> df = spark.range(0, 100)
-    >>> df.select(localtimestamp()).distinct().count()
-    1
+    >>> df.select(localtimestamp()).distinct().show()
+    +--------------------+
+    |    localtimestamp()|
+    +--------------------+
+    |20...-...-... ...:...:...|
+    +--------------------+
     """
     return _invoke_function("localtimestamp")
 
@@ -4491,10 +4506,18 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
     Returns true if the map contains the key.
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    value :
+        a literal value
+
     .. versionadded:: 3.4.0
 
     Examples
     --------
+    >>> from pyspark.sql.functions import map_contains_key
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
     >>> df.select(map_contains_key("data", 1)).show()
     +---------------------------------+
@@ -5481,8 +5504,16 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    udfName : str
+        name of the user defined function (UDF)
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in the UDF
+
     Examples
     --------
+    >>> from pyspark.sql.functions import col
     >>> from pyspark.sql.types import IntegerType, StringType
     >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
     >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
@@ -5495,7 +5526,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |        6|
     +---------+
     >>> _ = spark.udf.register("strX2", lambda s: s * 2, StringType())
-    >>> df.select(call_udf("strX2", "name")).show()
+    >>> df.select(call_udf("strX2", col("name"))).show()
     +-----------+
     |strX2(name)|
     +-----------+
