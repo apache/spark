@@ -157,10 +157,10 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   private def updateUGICreds(ugi: UserGroupInformation, creds: Credentials): Unit = {
-    val tokens = creds.getAllTokens.asScala //
-      .filterNot(_.getKind == null) //
-      .filterNot(_.getService == null)
     try {
+      val tokens = creds.getAllTokens.asScala //
+        .filterNot(_.getKind == null) //
+        .filterNot(_.getService == null)
       // For potential private tokens.
       updatePrivateTokens(ugi, tokens)
     } catch {
@@ -214,10 +214,9 @@ private[spark] class SparkHadoopUtil extends Logging {
           || !otk.getKind.equals(kind) || otk.getService.equals(service)) {
           return
         }
-
-        if (otk.isPrivateCloneOf(service)) {
-          ugi.addToken(key, token.privateClone(otk.getService))
-        }
+        val tk = new Token(token)
+        tk.setService(otk.getService)
+        ugi.addToken(key, tk)
       }
     }
   }
@@ -263,7 +262,7 @@ private[spark] class SparkHadoopUtil extends Logging {
     user.getTokens
       .asScala.map(tokenToString).foreach(token => logInfo(token))
 
-    try{
+    try {
       // Potential FileSystem$CACHE non current UGIs.
       addNonCurrentCredentials(creds)
     } catch {
