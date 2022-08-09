@@ -18,7 +18,7 @@
 package org.apache.spark.broadcast
 
 import java.io._
-import java.lang.ref.SoftReference
+import java.lang.ref.{Reference, SoftReference, WeakReference}
 import java.nio.ByteBuffer
 import java.util.zip.Adler32
 
@@ -65,9 +65,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
    *
    * On the driver, if the value is required, it is read lazily from the block manager. We hold
    * a soft reference so that it can be garbage collected if required, as we can always reconstruct
-   * in the future.
+   * in the future. For internal broadcast variables where `serializedOnly = true`, we hold a
+   * WeakReference to allow the value to be reclaimed more aggressively.
    */
-  @transient private var _value: SoftReference[T] = _
+  @transient private var _value: Reference[T] = _
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
@@ -106,7 +107,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       memoized
     } else {
       val newlyRead = readBroadcastBlock()
-      _value = new SoftReference[T](newlyRead)
+      _value = if (serializedOnly) {
+        new WeakReference[T](newlyRead)
+      } else {
+        new SoftReference[T](newlyRead)
+      }
       newlyRead
     }
   }
@@ -140,9 +145,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       // skipping the store reduces driver memory pressure because we don't add a long-lived
       // reference to the broadcasted object. However, this optimization cannot be applied for
       // local mode (since tasks might run on the driver). To guard against performance
-      // regressions if an internal broadcast is accessed on the driver, we store a soft
+      // regressions if an internal broadcast is accessed on the driver, we store a weak
       // reference to the broadcasted value:
-      _value = new SoftReference[T](value)
+      _value = new WeakReference[T](value)
     } else {
       // Store a copy of the broadcast variable in the driver so that tasks run on the driver
       // do not create a duplicate copy of the broadcast variable's value.
