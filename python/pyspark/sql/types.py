@@ -448,6 +448,7 @@ class ArrayType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import ArrayType, StringType
     >>> ArrayType(StringType()) == ArrayType(StringType(), True)
     True
     >>> ArrayType(StringType(), False) == ArrayType(StringType())
@@ -511,6 +512,7 @@ class MapType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import IntegerType, FloatType, MapType, StringType
     >>> (MapType(StringType(), IntegerType())
     ...        == MapType(StringType(), IntegerType(), True))
     True
@@ -588,6 +590,7 @@ class StructField(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import StringType, StructField
     >>> (StructField("f1", StringType(), True)
     ...      == StructField("f1", StringType(), True))
     True
@@ -661,6 +664,7 @@ class StructType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import CharType, IntegerType, StringType, StructField, StructType, VarcharType
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
     StructField('f1', StringType(), True)
@@ -747,8 +751,9 @@ class StructType(DataType):
 
         Examples
         --------
+        >>> from pyspark.sql.types import IntegerType, StringType, StructField, StructType
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True), \\
+        >>> struct2 = StructType([StructField("f1", StringType(), True),
         ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
@@ -823,6 +828,7 @@ class StructType(DataType):
 
         Examples
         --------
+        >>> from pyspark.sql.types import StringType, StructField, StructType
         >>> struct = StructType([StructField("f1", StringType(), True)])
         >>> struct.fieldNames()
         ['f1']
@@ -1036,6 +1042,7 @@ def _parse_datatype_string(s: str) -> DataType:
 
     Examples
     --------
+    >>> from pyspark.sql.types import _parse_datatype_string
     >>> _parse_datatype_string("int ")
     IntegerType()
     >>> _parse_datatype_string("INT ")
@@ -1108,6 +1115,18 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
     Examples
     --------
+    >>> from pyspark.sql.types import (
+            ArrayType,
+            BinaryType,
+            BooleanType,
+            CharType,
+            DecimalType,
+            LongType,
+            MapType,
+            StringType,
+            StructType,
+            VarcharType,
+        )
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
@@ -1649,6 +1668,19 @@ def _make_type_verifier(
 
     Examples
     --------
+    >>> from pyspark.sql.types import (
+    ...     ArrayType,
+    ...     BooleanType,
+    ...     ByteType,
+    ...     DecimalType,
+    ...     IntegerType,
+    ...     LongType,
+    ...     MapType,
+    ...     ShortType,
+    ...     StringType,
+    ...     StructType,
+    ...     _make_type_verifier
+    ... )
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
@@ -1899,6 +1931,7 @@ class Row(tuple):
 
     Examples
     --------
+    >>> from pyspark.sql import Row
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(name='Alice', age=11)
@@ -1972,6 +2005,7 @@ class Row(tuple):
 
         Examples
         --------
+        >>> from pyspark.sql import Row
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
