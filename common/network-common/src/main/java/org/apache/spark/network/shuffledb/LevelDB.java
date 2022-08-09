@@ -32,11 +32,6 @@ public class LevelDB implements DB {
     }
 
     @Override
-    public byte[] get(byte[] key) throws RuntimeException {
-       return db.get(key);
-    }
-
-    @Override
     public void delete(byte[] key) throws RuntimeException {
         db.delete(key);
     }
