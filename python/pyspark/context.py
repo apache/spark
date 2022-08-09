@@ -1249,17 +1249,18 @@ class SparkContext:
         ...        return [x * fileVal for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
-        >>> sc.listFiles()
+        >>> sc.listFiles
         ['file:/.../test.txt']
         >>> path2 = os.path.join(tempdir, "test2.txt")
         >>> with open(path2, "w") as testFile:
         ...    _ = testFile.write("100")
         >>> sc.addFile(path2)
-        >>> sc.listFiles()
+        >>> sc.listFiles
         ['file:/.../test.txt', 'file:/.../test2.txt']
         """
         self._jsc.sc().addFile(path, recursive)
 
+    @property
     def listFiles(self) -> List[str]:
         """Returns a list of file paths that are added to resources.
 
@@ -1331,7 +1332,7 @@ class SparkContext:
         ...         _ = f.write("100")
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path)
-        >>> sc.listArchives()
+        >>> sc.listArchives
         ['file:/.../test.zip']
         >>> zip_path2 = os.path.join(tempdir, "test2.zip")
         >>> with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as zipped:
@@ -1339,7 +1340,7 @@ class SparkContext:
         ...         _ = f.write("100")
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path2)
-        >>> sc.listArchives()
+        >>> sc.listArchives
         ['file:/.../test.zip', 'file:/.../test2.zip']
 
         Reads the '100' as an integer in the zipped file, and processes
@@ -1354,6 +1355,7 @@ class SparkContext:
         """
         self._jsc.sc().addArchive(path)
 
+    @property
     def listArchives(self) -> List[str]:
         """Returns a list of archive paths that are added to resources.
 
