@@ -36,6 +36,8 @@ class PandasUDFType:
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
+    GROUPED_BATCH_MAP = PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF
+
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
@@ -365,6 +367,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -374,7 +377,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ]:  # None means it should infer the type from type hints.
 
         raise ValueError(
-            "Invalid function type: " "functionType must be one the values from PandasUDFType"
+            "Invalid function type: functionType must be one the values from PandasUDFType"
         )
 
     if is_decorator:
@@ -400,6 +403,7 @@ def _create_pandas_udf(f, returnType, evalType):
         )
     elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -435,9 +439,11 @@ def _create_pandas_udf(f, returnType, evalType):
             "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
         )
 
-    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (1, 2):
+    if evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                    PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF] and \
+            len(argspec.args) not in (1, 2):
         raise ValueError(
-            "Invalid function: pandas_udf with function type GROUPED_MAP or "
+            "Invalid function: pandas_udf with function type GROUPED_MAP or GROUPED_BATCH_MAP, or"
             "the function in groupby.applyInPandas "
             "must take either one argument (data) or two arguments (key, data)."
         )

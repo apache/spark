@@ -561,8 +561,13 @@ class RelationalGroupedDataset protected[sql](
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF,
                                          batchSize: Option[Int] = None): DataFrame = {
-    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-      "Must pass a grouped map udf")
+    if (batchSize.isDefined) {
+      require(expr.evalType == PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF,
+        "Must pass a grouped batch map udf")
+    } else {
+      require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        "Must pass a grouped map udf")
+    }
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
 

@@ -43,9 +43,7 @@ object GroupBatchIterator {
     // TODO: decorate GroupedIterator to batch groups
     // TODO: implementing without GroupedIterator should improve performance
     GroupedIterator(input, keyExpressions, inputSchema).map {
-      case (k, groupedRowIter) => groupedRowIter.map(row =>
-        // TODO: What is the right way to concatenate two InternalRows k and row?
-        InternalRow(k +: row.toSeq(inputSchema.map(_.dataType)): _*))
+      case (_, groupedRowIter) => groupedRowIter
     }
   }
 }

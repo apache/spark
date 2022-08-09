@@ -219,21 +219,8 @@ class PandasGroupedOpsMixin:
 
         assert isinstance(self, GroupedData)
 
-        the_func = func
-        if batchSize:
-            print(f'Calling flatMapGroupsInPandas with batchSize={batchSize}')
-
-            # TODO: allow for func that accepts DataFrameGroupBy
-            def batch_func(pdf):
-                # TODO: unwrap group dataframe
-                print(f'Retrieved pandas dataframe:\n{pdf}')
-                print(f'Grouped pandas dataframe:\n{pdf.groupby(pdf.columns[0])}')
-                print(f'Returned pandas dataframe:\n{pdf.groupby(pdf.columns[0]).apply(func)}')
-                return pdf.groupby(pdf.columns[0]).apply(func)
-
-            the_func = batch_func
-
-        udf = pandas_udf(the_func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        function_type = PandasUDFType.GROUPED_BATCH_MAP if batchSize else PandasUDFType.GROUPED_MAP
+        udf = pandas_udf(func, returnType=schema, functionType=function_type)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jbs = self._df._sc._jvm.scala.Option.apply(batchSize)

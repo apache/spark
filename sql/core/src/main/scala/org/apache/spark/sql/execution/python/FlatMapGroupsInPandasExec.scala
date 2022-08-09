@@ -89,7 +89,11 @@ case class FlatMapGroupsInPandasExec(
 
       val runner = new ArrowPythonRunner(
         chainedFunc,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        if (batchSize.isDefined) {
+          PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF
+        } else {
+          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+        },
         Array(argOffsets),
         StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,

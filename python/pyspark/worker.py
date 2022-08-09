@@ -293,6 +293,40 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
     return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
 
 
+def wrap_grouped_batch_map_pandas_udf(f, return_type, argspec):
+    def wrapped(key_series, value_series):
+        import pandas as pd
+
+        # construct grouped batch dataframe with values as columns and keys as index
+        df = pd.concat(value_series, axis=1)
+        df.index = key_series
+        print(f'group batch: {df}')
+
+        if len(argspec.args) == 1:
+            result = df.groupby(lambda k: k, axis=0).apply(lambda df: f(df.reset_index(drop=True)))
+        elif len(argspec.args) == 2:
+            result = df.groupby(lambda k: k, axis=0).apply(lambda g: f(g.index.to_numpy()[0], g.reset_index(drop=True)))
+
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "pandas.DataFrame, but is {}".format(type(result))
+            )
+        # the number of columns of result have to match the return type
+        # but it is fine for result to have no columns at all if it is empty
+        if not (
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+        ):
+            raise RuntimeError(
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+            )
+        return result
+
+    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
+
+
 def wrap_grouped_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
@@ -399,6 +433,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         return arg_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
+    elif eval_type == PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF:
+        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
+        return arg_offsets, wrap_grouped_batch_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
@@ -422,6 +459,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -575,7 +613,8 @@ def read_udfs(pickleSer, infile, eval_type):
             idx += offsets_len
         return parsed
 
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+    if eval_type in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF]:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1

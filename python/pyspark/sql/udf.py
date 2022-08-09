@@ -253,6 +253,7 @@ class UserDefinedFunction:
         elif (
             self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             or self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
+            or self.evalType == PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF
         ):
             if isinstance(self._returnType_placeholder, StructType):
                 try:

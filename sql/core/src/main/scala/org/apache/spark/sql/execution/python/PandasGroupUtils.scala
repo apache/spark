@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.BasePythonRunner
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.execution.{GroupBatchIterator, GroupedIterator, SparkPlan}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -79,12 +79,8 @@ private[python] object PandasGroupUtils {
       dedupSchema: Seq[Attribute],
       batchSize: Int): Iterator[Iterator[InternalRow]] = {
     val groupBatchIter = GroupBatchIterator(input, groupingAttributes, inputSchema, batchSize)
-    // TODO: how to prepend the key column do the dedup projection?
-    // val keyDataType = StructType.fromAttributes(groupingAttributes)
-    // val dedupSchemaWithKey = AttributeReference("_key", keyDataType)() +: dedupSchema
-    // val dedupProj = UnsafeProjection.create(dedupSchemaWithKey, inputSchema)
-    // groupBatchIter.map(_.map(dedupProj))
-    groupBatchIter
+    val dedupProj = UnsafeProjection.create(dedupSchema, inputSchema)
+    groupBatchIter.map(_.map(dedupProj))
   }
 
   /**
@@ -95,15 +91,15 @@ private[python] object PandasGroupUtils {
    * twice; once in the key and once in the value.  For any such attribute we need to
    * deduplicate.
    *
-   * The arg offsets are used to distinguish grouping grouping attributes and data attributes
+   * The arg offsets are used to distinguish grouping attributes and data attributes
    * as following:
    *
    * argOffsets[0] is the length of the argOffsets array
    *
    * argOffsets[1] is the length of grouping attribute
-   * argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping attributes
+   * argOffsets[2 .. argOffsets[1]+2] is the arg offsets for grouping attributes
    *
-   * argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data attributes
+   * argOffsets[argOffsets[1]+3 .. ] is the arg offsets for data attributes
    */
   def resolveArgOffsets(
       attributes: Seq[Attribute],
