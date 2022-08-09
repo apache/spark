@@ -25,6 +25,7 @@ on:
     - 'master'
     paths:
     - 'dev/infra/Dockerfile'
+    - 'dev/infra/lint.Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
 jobs:
   main:
@@ -52,5 +53,14 @@ jobs:
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}
           cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }},mode=max
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: ./dev/infra/
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-lint-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-lint
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-lint,mode=max
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
