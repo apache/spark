@@ -1249,8 +1249,35 @@ class SparkContext:
         ...        return [x * fileVal for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
+        >>> sc.listFiles()
+        ['file:/.../test.txt']
+        >>> path2 = os.path.join(tempdir, "test2.txt")
+        >>> with open(path2, "w") as testFile:
+        ...    _ = testFile.write("100")
+        >>> sc.addFile(path2)
+        >>> sc.listFiles()
+        ['file:/.../test.txt', 'file:/.../test2.txt']
         """
         self._jsc.sc().addFile(path, recursive)
+
+    def listFiles(self) -> List[str]:
+        """Returns a list of file paths that are added to resources.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        SparkContext.addFile
+        """
+        jfiles = self._jsc.sc().listFiles()
+        if jfiles is None:
+            return []
+        else:
+            files = []
+            jiter = jfiles.iterator()
+            while jiter.hasNext():
+                files.append(jiter.next())
+            return sorted(files)
 
     def addPyFile(self, path: str) -> None:
         """
@@ -1304,6 +1331,16 @@ class SparkContext:
         ...         _ = f.write("100")
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path)
+        >>> sc.listArchives()
+        ['file:/.../test.zip']
+        >>> zip_path2 = os.path.join(tempdir, "test2.zip")
+        >>> with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as zipped:
+        ...     with open(path, "w") as f:
+        ...         _ = f.write("100")
+        ...     zipped.write(path, os.path.basename(path))
+        >>> sc.addArchive(zip_path2)
+        >>> sc.listArchives()
+        ['file:/.../test.zip', 'file:/.../test2.zip']
 
         Reads the '100' as an integer in the zipped file, and processes
         it with the data in the RDD.
@@ -1316,6 +1353,25 @@ class SparkContext:
         [100, 200, 300, 400]
         """
         self._jsc.sc().addArchive(path)
+
+    def listArchives(self) -> List[str]:
+        """Returns a list of archive paths that are added to resources.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        SparkContext.addArchive
+        """
+        jarchs = self._jsc.sc().listArchives()
+        if jarchs is None:
+            return []
+        else:
+            archs = []
+            jiter = jarchs.iterator()
+            while jiter.hasNext():
+                archs.append(jiter.next())
+            return sorted(archs)
 
     def setCheckpointDir(self, dirName: str) -> None:
         """
