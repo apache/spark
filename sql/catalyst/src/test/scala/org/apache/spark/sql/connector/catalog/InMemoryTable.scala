@@ -28,16 +28,16 @@ import org.apache.spark.sql.types.StructType
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
  */
 class InMemoryTable(
-    val _name: String,
-    val _schema: StructType,
+    name: String,
+    schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
-    val _distribution: Distribution = Distributions.unspecified(),
-    val _ordering: Array[SortOrder] = Array.empty,
-    val _numPartitions: Option[Int] = None,
-    val _isDistributionStrictlyRequired: Boolean = true)
-  extends InMemoryBaseTable(_name, _schema, partitioning, properties, _distribution,
-    _ordering, _numPartitions, _isDistributionStrictlyRequired) with SupportsDelete {
+    distribution: Distribution = Distributions.unspecified(),
+    ordering: Array[SortOrder] = Array.empty,
+    numPartitions: Option[Int] = None,
+    isDistributionStrictlyRequired: Boolean = true)
+  extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
+    ordering, numPartitions, isDistributionStrictlyRequired) with SupportsDelete {
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryBaseTable.supportsFilters(filters)

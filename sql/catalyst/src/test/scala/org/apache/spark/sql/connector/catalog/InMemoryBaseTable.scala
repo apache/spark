@@ -312,7 +312,7 @@ class InMemoryBaseTable(
       var _data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends BatchScanBaseClass (_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
+    extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet

@@ -56,7 +56,7 @@ class InMemoryTableWithV2Filter(
       var _data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends BatchScanBaseClass (_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
+    extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeV2Filtering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
