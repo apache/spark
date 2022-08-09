@@ -128,11 +128,23 @@ class Window:
         --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> from pyspark.sql import SQLContext
-        >>> sc = SparkContext.getOrCreate()
-        >>> sqlContext = SQLContext(sc)
-        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Calculate sum of ``id`` in the range from currentRow to currentRow + 1
+        in partition ``category``
+
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
         +---+--------+---+
@@ -196,11 +208,23 @@ class Window:
         --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> from pyspark.sql import SQLContext
-        >>> sc = SparkContext.getOrCreate()
-        >>> sqlContext = SQLContext(sc)
-        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
-        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> df = spark.createDataFrame(
+        ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> df.show()
+        +---+--------+
+        | id|category|
+        +---+--------+
+        |  1|       a|
+        |  1|       a|
+        |  2|       a|
+        |  1|       b|
+        |  2|       b|
+        |  3|       b|
+        +---+--------+
+
+        Calculate sum of ``id`` in the range from ``id`` of currentRow to ``id`` of currentRow + 1
+        in partition ``category``
+
         >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
         >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
         +---+--------+---+
