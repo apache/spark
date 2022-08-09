@@ -300,7 +300,7 @@ def wrap_grouped_batch_map_pandas_udf(f, return_type, argspec):
         # construct grouped batch dataframe with values as columns and keys as index
         df = pd.concat(value_series, axis=1)
         df.index = key_series
-        print(f'group batch: {df}')
+        #print(f'group batch: {df}')
 
         if len(argspec.args) == 1:
             result = df.groupby(lambda k: k, axis=0).apply(lambda df: f(df.reset_index(drop=True)))

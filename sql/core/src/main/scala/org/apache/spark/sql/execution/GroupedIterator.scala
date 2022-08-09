@@ -34,16 +34,16 @@ object GroupedIterator {
   }
 }
 
-object GroupBatchIterator {
+object GroupedBatchIterator {
   def apply(
       input: Iterator[InternalRow],
       keyExpressions: Seq[Expression],
       inputSchema: Seq[Attribute],
       batchSize: Int): Iterator[Iterator[InternalRow]] = {
-    // TODO: decorate GroupedIterator to batch groups
-    // TODO: implementing without GroupedIterator should improve performance
-    GroupedIterator(input, keyExpressions, inputSchema).map {
-      case (_, groupedRowIter) => groupedRowIter
+    if (input.hasNext) {
+      new GroupedBatchIterator(input.buffered, keyExpressions, inputSchema, batchSize)
+    } else {
+      Iterator.empty
     }
   }
 }
@@ -175,6 +175,46 @@ class GroupedIterator private(
           // There is no more data, return false.
           false
         }
+      }
+    }
+  }
+}
+
+class GroupedBatchIterator private(
+    input: BufferedIterator[InternalRow],
+    groupingExpressions: Seq[Expression],
+    inputSchema: Seq[Attribute],
+    batchSize: Int)
+  extends Iterator[Iterator[InternalRow]] {
+  assert(batchSize > 0, "batchSize must be larger than 0")
+
+  val groups: Iterator[Iterator[InternalRow]] =
+    GroupedIterator(input, groupingExpressions, inputSchema).map(_._2)
+
+  override def hasNext: Boolean = groups.hasNext
+
+  override def next(): Iterator[InternalRow] = createBatchIterator()
+
+  private def createBatchIterator(): Iterator[InternalRow] = {
+    new Iterator[InternalRow] {
+      var rows = 0
+
+      var currentGroup: Option[Iterator[InternalRow]] = None
+
+      override def hasNext: Boolean = {
+        if (currentGroup.exists(_.hasNext)) {
+          true
+        } else if (rows < batchSize && groups.hasNext) {
+          currentGroup = Some(groups.next())
+          true
+        } else {
+          false
+        }
+      }
+
+      override def next(): InternalRow = {
+        rows += 1
+        currentGroup.get.next()
       }
     }
   }

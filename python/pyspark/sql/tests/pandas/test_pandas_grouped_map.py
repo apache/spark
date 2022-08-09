@@ -732,6 +732,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             return pdf.assign(score=0.5)
 
         df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
+
         row = (
             df.groupby("COLUMN")
             .applyInPandas(my_pandas_udf, schema="column integer, score float")
@@ -739,14 +740,21 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
-    def test_apply_in_pandas_batch(self):
-        def my_pandas_udf(pdf):
-            return pdf.assign(s=pdf.size)
+    def test_grouped_batch(self):
+        ids = self.spark.range(1, 10, 1)
+        cards = self.spark.range(10).withColumnRenamed("id", "card")
 
-        df = self.data
-        result = df.groupby("id") \
-                   .applyInPandas(my_pandas_udf, schema="id integer, v integer, s integer")
-        self.assertEqual(df.collect(), result.collect())
+        # group with id i has same number of rows, size of 2*rows
+        groups = ids.join(cards, col("card") < col("id")) \
+            .groupby("id") \
+            .applyInPandas(
+                lambda k, df: pd.DataFrame({'id': [k[0]], 'size': [df.size]}),
+                "id integer, size integer",
+                5) \
+            .collect()
+
+        expected = [Row(id=i, size=i*2) for i in range(1, 10, 1)]
+        self.assertEqual(groups, expected)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
 
 class GroupedIteratorSuite extends SparkFunSuite {
 
-  test("basic") {
+  test("group by 1 column") {
     val schema = new StructType().add("i", IntegerType).add("s", StringType)
     val encoder = RowEncoder(schema).resolveAndBind()
     val toRow = encoder.createSerializer()
@@ -83,5 +83,38 @@ class GroupedIteratorSuite extends SparkFunSuite {
       Seq($"i".int.at(0)), schema.toAttributes)
 
     assert(grouped.length == 2)
+  }
+
+  test("group batch by 1 column") {
+    val schema = new StructType().add("i", IntegerType).add("s", StringType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    // these rows will be iterated in batches of at least 3 rows, while not splitting groups
+    val input = Seq(
+      // first batch
+      Row(1, "a"),
+      Row(2, "b"),
+      Row(3, "c"),
+      // second batch
+      Row(4, "d"), Row(5, "e"), Row(5, "f"), Row(5, "g"),
+      // third batch
+      Row(6, "h"), Row(6, "i"), Row(6, "j"), Row(6, "k"),
+      // fourth batch
+      Row(7, "l"),
+      Row(8, "m")
+    )
+    val groupBatches = GroupedBatchIterator(input.iterator.map(toRow),
+      Seq($"i".int.at(0)), schema.toAttributes, 3)
+
+    val result = groupBatches.zipWithIndex.map { case (batch, idx) =>
+      idx -> batch.map(fromRow).toList
+    }.toList
+
+    assert(result ==
+      0 -> Seq(input(0), input(1), input(2)) ::
+        1 -> Seq(input(3), input(4), input(5), input(6)) ::
+        2 -> Seq(input(7), input(8), input(9), input(10)) ::
+        3 -> Seq(input(11), input(12)) :: Nil)
   }
 }

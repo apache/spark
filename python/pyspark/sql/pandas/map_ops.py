@@ -86,14 +86,6 @@ class PandasMapOpsMixin:
 
         assert isinstance(self, DataFrame)
 
-        if batchSize:
-            # decorate func to handle batches of groups
-            def batch_func(dfs: Iterable[DataFrameLike]) -> Iterable[DataFrameLike]:
-                dfs.group
-                return func(dfs)
-
-            func = batch_func
-
         # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
