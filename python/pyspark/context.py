@@ -1271,7 +1271,9 @@ class SparkContext:
         SparkContext.addFile
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(self._jsc.sc().listFiles())
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+                self._jsc.sc().listFiles()
+            )
         )
 
     def addPyFile(self, path: str) -> None:
@@ -1360,7 +1362,9 @@ class SparkContext:
         SparkContext.addArchive
         """
         return list(
-            self._jvm.scala.collection.JavaConverters.seqAsJavaList(self._jsc.sc().listArchives())
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+                self._jsc.sc().listArchives()
+            )
         )
 
     def setCheckpointDir(self, dirName: str) -> None:
