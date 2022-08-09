@@ -4372,7 +4372,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |$nullElementIndex = $size;
              |$size++;
              |$builder.$$plus$$eq($nullValueHolder);
-           """.stripMargin)
+           """.stripMargin,
+          Seq(s"!$hashSet.containsNull()"))
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
