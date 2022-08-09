@@ -91,7 +91,7 @@ object SQLOpenHashSet {
       if (setContainsNull) {
         s"""
            |if ($array.isNullAt($index)) {
-           |  if (!$hashSet.containsNull()${nullConditions.map(" &&" + _).mkString("")}) {
+           |  if (!$hashSet.containsNull()${nullConditions.map(" && " + _).mkString)}) {
            |    $hashSet.addNull();
            |    $handleNull
            |  }
