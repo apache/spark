@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
+import org.apache.spark.internal.config.{DYN_ALLOCATION_TESTING, Network}
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -396,6 +396,42 @@ class HeartbeatReceiverSuite
     waitingList = heartbeatReceiver.invokePrivate(_waitingList())
     assert(trackedExecutors.size === 0)
     assert(waitingList.size === 0)
+  }
+
+  test("executorTimeout will fallback to NETWORK_TIMEOUT if NETWORK_EXECUTOR_TIMEOUT is not set") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+      .set(Network.NETWORK_TIMEOUT.key, "100s")
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    assert(executorTimeout == 100000)
+  }
+
+  test("check executorTimeout value when NETWORK_EXECUTOR_TIMEOUT is set") {
+    sc.stop()
+    conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test")
+      .set(DYN_ALLOCATION_TESTING, true)
+      .set(Network.NETWORK_EXECUTOR_TIMEOUT.key, "50s")
+    sc = spy(new SparkContext(conf))
+    scheduler = mock(classOf[TaskSchedulerImpl])
+    when(sc.taskScheduler).thenReturn(scheduler)
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.sc).thenReturn(sc)
+    heartbeatReceiverClock = new ManualClock
+    heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    assert(executorTimeout == 50000)
   }
 
   test("expire dead hosts should kill executors with replacement (SPARK-8119)") {
