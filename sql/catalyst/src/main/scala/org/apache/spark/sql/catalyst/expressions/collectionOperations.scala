@@ -4159,7 +4159,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
              |$size++;
              |$builder.$$plus$$eq($nullValueHolder);
            """.stripMargin,
-          Seq(s"$hashSet.containsNull()"))
+          Some(s"$hashSet.containsNull()"))
 
         // Only need to track null element index when result array's element is nullable.
         val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
@@ -4373,7 +4373,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |$size++;
              |$builder.$$plus$$eq($nullValueHolder);
            """.stripMargin,
-          Seq(s"!$hashSet.containsNull()"))
+          Some(s"!$hashSet.containsNull()"))
 
         // Only need to track null element index when array1's element is nullable.
         val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {

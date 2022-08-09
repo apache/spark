@@ -79,19 +79,19 @@ object SQLOpenHashSet {
   }
 
   def withNullCheckCode(
-      arrayContainsNull: Boolean,
-      setContainsNull: Boolean,
+      array1Nullable: Boolean,
+      array2Nullable: Boolean,
       array: String,
       index: String,
       hashSet: String,
       handleNotNull: (String, String) => String,
       handleNull: String,
-      additionalNullConditions: Seq[String] = Seq.empty): String = {
-    if (arrayContainsNull) {
-      if (setContainsNull) {
+      additionalCondition: Option[String] = None): String = {
+    if (array1Nullable) {
+      if (array2Nullable) {
         s"""
            |if ($array.isNullAt($index)) {
-           |  if (!$hashSet.containsNull()${additionalNullConditions.map(" && " + _).mkString}) {
+           |  if (!$hashSet.containsNull()${additionalCondition.map("&& " + _).getOrElse("")}) {
            |    $hashSet.addNull();
            |    $handleNull
            |  }
