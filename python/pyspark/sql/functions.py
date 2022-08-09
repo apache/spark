@@ -305,6 +305,40 @@ def mean(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("mean", col)
 
 
+def median(col: "ColumnOrName") -> Column:
+    """
+    Returns the median of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the median of the values in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(median("earnings")).show()
+    +------+----------------+
+    |course|median(earnings)|
+    +------+----------------+
+    |  Java|         22000.0|
+    |dotNET|         10000.0|
+    +------+----------------+
+    """
+    return _invoke_function_over_columns("median", col)
+
+
 @since(1.3)
 def sumDistinct(col: "ColumnOrName") -> Column:
     """
