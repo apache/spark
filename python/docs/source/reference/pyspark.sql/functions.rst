@@ -238,6 +238,7 @@ Aggregate Functions
     median
     min
     min_by
+    mode
     percentile_approx
     product
     skewness

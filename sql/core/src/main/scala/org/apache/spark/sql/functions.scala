@@ -671,6 +671,14 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+
+  /**
    * Aggregate function: returns the maximum value of the expression in a group.
    *
    * @group agg_funcs
