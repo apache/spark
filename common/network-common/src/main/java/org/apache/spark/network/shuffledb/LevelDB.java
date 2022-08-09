@@ -27,17 +27,17 @@ public class LevelDB implements DB {
     }
 
     @Override
-    public void put(byte[] key, byte[] value) throws RuntimeException {
+    public void put(byte[] key, byte[] value) {
         db.put(key, value);
     }
 
     @Override
-    public byte[] get(byte[] key) throws RuntimeException {
+    public byte[] get(byte[] key) {
        return db.get(key);
     }
 
     @Override
-    public void delete(byte[] key) throws RuntimeException {
+    public void delete(byte[] key) {
         db.delete(key);
     }
 
