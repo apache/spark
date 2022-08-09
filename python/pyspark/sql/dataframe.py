@@ -363,9 +363,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
         >>> df.schema
-        StructType([StructField('age', IntegerType(), True),
-                    StructField('name', StringType(), True)])
+        StructType([StructField('age', LongType(), True), StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
@@ -571,29 +579,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df
-        DataFrame[age: int, name: string]
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
         +---+-----+
-        |  2|Alice|
-        |  5|  Bob|
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
         +---+-----+
+        >>> df.show(2)
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        +---+-----+
+        only showing top 2 rows
         >>> df.show(truncate=3)
         +---+----+
         |age|name|
         +---+----+
-        |  2| Ali|
-        |  5| Bob|
+        | 14| Tom|
+        | 23| Ali|
+        | 16| Bob|
         +---+----+
         >>> df.show(vertical=True)
         -RECORD 0-----
-         age  | 2
-         name | Alice
+        age  | 14
+        name | Tom
         -RECORD 1-----
-         age  | 5
-         name | Bob
+        age  | 23
+        name | Alice
+        -RECORD 2-----
+        age  | 16
+        name | Bob
         """
 
         if not isinstance(n, int) or isinstance(n, bool):
@@ -872,8 +892,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
         >>> df.take(2)
-        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
+        [Row(age=14, name='Tom'), Row(age=23, name='Alice')]
         """
         return self.limit(num).collect()
 
@@ -888,8 +917,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df.tail(1)
-        [Row(age=5, name='Bob')]
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+        >>> df.tail(2)
+        [Row(age=23, name='Alice'), Row(age=16, name='Bob')]
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
@@ -3438,11 +3476,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
         >>> df.drop('age').collect()
-        [Row(name='Alice'), Row(name='Bob')]
+        [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
 
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
         >>> df.drop(df.age).collect()
-        [Row(name='Alice'), Row(name='Bob')]
+        [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
         [Row(age=5, height=85, name='Bob')]
@@ -3475,12 +3531,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols : str
-            new column names
+            new column names. The length of the list needs to be the same as the number of columns in the initial DataFrame
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
         >>> df.toDF('f1', 'f2').collect()
-        [Row(f1=2, f2='Alice'), Row(f1=5, f2='Bob')]
+        [Row(f1=14, f2='Tom'), Row(f1=23, f2='Alice'), Row(f1=16, f2='Bob')]
         """
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sparkSession)
