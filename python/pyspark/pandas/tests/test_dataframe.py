@@ -1503,6 +1503,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47188
         if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
             self.assert_eq(psser, pser)
+
+        pser = pdf.z
+        psser = psdf.z
+        pdf.fillna(0, inplace=True)
+        psdf.fillna(0, inplace=True)
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psser, pser)
+
         s_nan = pd.Series([-1, -2, -5], index=["x", "y", "z"], dtype=int)
         self.assert_eq(psdf.fillna(s_nan), pdf.fillna(s_nan))
 
@@ -1544,14 +1552,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
         self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
 
-        self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
-
-        self.assert_eq(
-            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-        )
-        self.assert_eq(
-            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-        )
+        # See also: https://github.com/pandas-dev/pandas/issues/47649
+        if LooseVersion("1.4.3") != LooseVersion(pd.__version__):
+            self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
+            self.assert_eq(
+                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+            )
+            self.assert_eq(
+                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+            )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])
