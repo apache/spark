@@ -85,7 +85,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       logInfo(s"Configured ${config.SHUFFLE_SERVICE_DB_BACKEND.key} as $shuffleDBName " +
         s"and actually used value ${dBBackend.name()} ")
       new ExternalBlockHandler(conf,
-        findRegisteredExecutorsDBFile(registeredExecutorsDB + dBBackend.suffix()))
+        findRegisteredExecutorsDBFile(dBBackend.fileName(registeredExecutorsDB)))
     } else {
       new ExternalBlockHandler(conf, null)
     }

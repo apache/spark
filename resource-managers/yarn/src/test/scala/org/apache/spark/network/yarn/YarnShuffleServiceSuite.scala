@@ -164,7 +164,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val dBBackend = shuffleDBBackend()
     yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
     val transportConf = new TransportConf("shuffle", new HadoopConfigProvider(yarnConfig))
-    val dbName = YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME + dBBackend.suffix()
+    val dbName = dBBackend.fileName(YarnShuffleService.SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME)
     val testShuffleMergeManager = createMergeManager(
         transportConf,
         shuffleService.initRecoveryDb(dbName))

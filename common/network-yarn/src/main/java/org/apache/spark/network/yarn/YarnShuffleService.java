@@ -252,9 +252,8 @@ public class YarnShuffleService extends AuxiliaryService {
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
       if (_recoveryPath != null) {
-        registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME + dbBackend.suffix());
-        mergeManagerFile = initRecoveryDb(
-          SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME + dbBackend.suffix());
+        registeredExecutorFile = initRecoveryDb(dbBackend.fileName(RECOVERY_FILE_NAME));
+        mergeManagerFile = initRecoveryDb(dbBackend.fileName(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME));
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
@@ -344,7 +343,7 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   private void loadSecretsFromDb() throws IOException {
-    secretsFile = initRecoveryDb(SECRETS_RECOVERY_FILE_NAME + dbBackend.suffix());
+    secretsFile = initRecoveryDb(dbBackend.fileName(SECRETS_RECOVERY_FILE_NAME));
 
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);

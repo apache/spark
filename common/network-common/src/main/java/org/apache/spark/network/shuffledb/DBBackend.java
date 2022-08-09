@@ -32,8 +32,8 @@ public enum DBBackend {
       this.fileSuffix = fileSuffix;
     }
 
-    public String suffix() {
-      return fileSuffix;
+    public String fileName(String prefix) {
+      return prefix + fileSuffix;
     }
 
     public static DBBackend byName(String value) {
