@@ -126,10 +126,8 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> spark = SparkSession.builder.master("local[4]").appName("sql.window test").getOrCreate()
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -159,8 +157,6 @@ class Window:
         |  2|       b|  5|
         |  3|       b|  3|
         +---+--------+---+
-
-        >>> spark.stop()
 
         """
         if start <= Window._PRECEDING_THRESHOLD:
@@ -210,10 +206,8 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> spark = SparkSession.builder.master("local[4]").appName("sql.window test").getOrCreate()
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -243,8 +237,6 @@ class Window:
         |  2|       b|  5|
         |  3|       b|  3|
         +---+--------+---+
-
-        >>> spark.stop()
 
         """
         if start <= Window._PRECEDING_THRESHOLD:
@@ -361,9 +353,10 @@ class WindowSpec:
 
 def _test() -> None:
     import doctest
+    from pyspark.sql import SparkSession
     import pyspark.sql.window
 
-    SparkContext("local[4]", "PythonTest")
+    spark = SparkSession.builder.master("local[4]").appName("sql.window tests").getOrCreate()
     globs = pyspark.sql.window.__dict__.copy()
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
