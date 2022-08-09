@@ -129,7 +129,7 @@ class Window:
         >>> from pyspark.sql import SparkSession
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> spark = SparkSession.builder.getOrCreate()
+        >>> spark = SparkSession.builder.master("local[4]").appName("sql.window test").getOrCreate()
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -213,7 +213,7 @@ class Window:
         >>> from pyspark.sql import SparkSession
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
-        >>> spark = SparkSession.builder.getOrCreate()
+        >>> spark = SparkSession.builder.master("local[4]").appName("sql.window test").getOrCreate()
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
