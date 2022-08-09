@@ -53,11 +53,12 @@ object ArrayType extends AbstractDataType {
  * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
- * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
- * array elements. The field of `containsNull` is used to specify if the array has `null` values.
+ * `containsNull: Boolean`.
+ * The field of `elementType` is used to specify the type of array elements.
+ * The field of `containsNull` is used to specify if the array can have `null` values.
  *
  * @param elementType The data type of values.
- * @param containsNull Indicates if values have `null` values
+ * @param containsNull Indicates if values can have `null` values
  *
  * @since 1.3.0
  */
@@ -101,6 +102,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || elementType.existsRecursively(f)
   }
+
+  def nullable: Boolean = containsNull
 
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {

@@ -895,7 +895,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
-  def containsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
+  def canContainsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].nullable
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
@@ -931,7 +931,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
       val canPerformFastSort =
-        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
+        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !canContainsNull
       val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
@@ -1118,7 +1118,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
-      i, s"$indices[$i]", dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$indices[$i]", dataType.asInstanceOf[ArrayType].nullable)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1196,7 +1196,7 @@ case class Reverse(child: Expression)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, childName, i, j, dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, childName, i, j, dataType.asInstanceOf[ArrayType].nullable)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1258,7 +1258,7 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def nullable: Boolean = {
-    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].nullable
   }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
@@ -1347,8 +1347,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
   }
 
   override def nullable: Boolean = {
-    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
-      right.dataType.asInstanceOf[ArrayType].containsNull
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].nullable ||
+      right.dataType.asInstanceOf[ArrayType].nullable
   }
 
   override def nullSafeEval(a1: Any, a2: Any): Any = {
@@ -1632,7 +1632,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val allocation = CodeGenerator.createArrayData(
       values, elementType, resLength, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
-      i, s"$i + $startIdx", dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$i + $startIdx", dataType.asInstanceOf[ArrayType].nullable)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -2103,7 +2103,7 @@ case class ElementAt(
   @transient private lazy val mapValueContainsNull =
     left.dataType.asInstanceOf[MapType].valueContainsNull
 
-  @transient private lazy val arrayContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val arrayNullanle = left.dataType.asInstanceOf[ArrayType].nullable
 
   @transient private lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(mapKeyType)
 
@@ -2189,7 +2189,7 @@ case class ElementAt(
           } else {
             array.numElements() + index
           }
-          if (arrayContainsNull && array.isNullAt(idx)) {
+          if (arrayNullanle && array.isNullAt(idx)) {
             null
           } else {
             array.get(idx, dataType)
@@ -2205,7 +2205,7 @@ case class ElementAt(
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
-          val nullCheck = if (arrayContainsNull) {
+          val nullCheck = if (arrayNullanle) {
             s"""
                |if ($eval1.isNullAt($index)) {
                |  ${ev.isNull} = true;
@@ -3662,7 +3662,7 @@ case class ArrayDistinct(child: Expression)
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
         // Only need to track null element index when array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].nullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
@@ -3692,8 +3692,8 @@ case class ArrayDistinct(child: Expression)
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(
-          dataType.asInstanceOf[ArrayType].containsNull,
-          dataType.asInstanceOf[ArrayType].containsNull,
+          dataType.asInstanceOf[ArrayType].nullable,
+          dataType.asInstanceOf[ArrayType].nullable,
           array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -3880,8 +3880,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(
-          dataType.asInstanceOf[ArrayType].containsNull,
-          dataType.asInstanceOf[ArrayType].containsNull,
+          dataType.asInstanceOf[ArrayType].nullable,
+          dataType.asInstanceOf[ArrayType].nullable,
           array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -3890,7 +3890,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].nullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
@@ -4122,8 +4122,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
                 (valueNaN: String) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType.asInstanceOf[ArrayType].containsNull,
-          left.dataType.asInstanceOf[ArrayType].containsNull,
+          right.dataType.asInstanceOf[ArrayType].nullable,
+          left.dataType.asInstanceOf[ArrayType].nullable,
           array2, i, hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
@@ -4151,8 +4151,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
                  """.stripMargin)
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
-          left.dataType.asInstanceOf[ArrayType].containsNull,
-          right.dataType.asInstanceOf[ArrayType].containsNull,
+          left.dataType.asInstanceOf[ArrayType].nullable,
+          right.dataType.asInstanceOf[ArrayType].nullable,
           array1, i, hashSetResult, withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -4161,7 +4161,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].nullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
@@ -4338,8 +4338,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                 (valueNaN: Any) => "")
 
         val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
-          right.dataType.asInstanceOf[ArrayType].containsNull,
-          left.dataType.asInstanceOf[ArrayType].containsNull,
+          right.dataType.asInstanceOf[ArrayType].nullable,
+          left.dataType.asInstanceOf[ArrayType].nullable,
           array2, i, hashSet, withArray2NaNCheckCodeGenerator, "")
 
         val body =
@@ -4364,8 +4364,8 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
                  """.stripMargin)
 
         val processArray1 = SQLOpenHashSet.withNullCheckCode(
-          left.dataType.asInstanceOf[ArrayType].containsNull,
-          left.dataType.asInstanceOf[ArrayType].containsNull,
+          left.dataType.asInstanceOf[ArrayType].nullable,
+          left.dataType.asInstanceOf[ArrayType].nullable,
           array1, i, hashSet, withArray1NaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -4374,7 +4374,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
            """.stripMargin)
 
         // Only need to track null element index when array1's element is nullable.
-        val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].nullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
