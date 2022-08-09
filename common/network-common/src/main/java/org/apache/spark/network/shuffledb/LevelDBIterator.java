@@ -69,6 +69,7 @@ public class LevelDBIterator implements DBIterator {
       if (!closed) {
        it.close();
        closed = true;
+       next = null;
       }
     }
 
