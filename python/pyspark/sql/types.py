@@ -821,9 +821,9 @@ class StructType(DataType):
         Parameters
         ----------
         json : dict or a dict-like object e.g. json object
-             This "dict" must have "fields" key that returns an array of fields each of which must have
-             specific keys (name, type, nullable, metadata). Below is a json schema it must
-             adhere to:
+             This "dict" must have "fields" key that returns an array of fields
+             each of which must have specific keys (name, type, nullable, metadata).
+             Below is a json schema it must adhere to:
              {
                "title":"StructType",
                "description":"Schema of StructType in json format",
@@ -840,8 +840,8 @@ class StructType(DataType):
                                "type":"string"
                             },
                             "type":{
-                               "description":
-                               "Type of the field. Can be either another nested StructType or a primitive type",
+                               "description": "Type of the field. Can either be
+                                               another nested StructType or primitive type",
                                "type":"object/string"
                             },
                             "nullable":{
@@ -904,7 +904,6 @@ class StructType(DataType):
         >>> scheme = StructType.fromJson(json.loads(json_str))
         >>> scheme.simpleString()
         'struct<Person:struct<name:string,surname:string>>'
-
         """
         return StructType([StructField.fromJson(f) for f in json["fields"]])
 
