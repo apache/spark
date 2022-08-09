@@ -40,7 +40,7 @@ public class DBProvider {
             org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
             return levelDB != null ? new LevelDB(levelDB) : null;
           default:
-            return null;
+            throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
         }
       }
       return null;
@@ -52,7 +52,8 @@ public class DBProvider {
         // TODO: SPARK-38888, add rocksdb implementation.
         switch (dbBackend) {
           case LEVELDB: return new LevelDB(LevelDBProvider.initLevelDB(file));
-        default: return null;
+        default:
+          throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
         }
       }
       return null;
