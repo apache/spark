@@ -18,7 +18,6 @@
 package org.apache.spark.internal.io.cloud
 
 import java.io.{File, FileInputStream, FileOutputStream, IOException, ObjectInputStream, ObjectOutputStream}
-import java.lang.reflect.InvocationTargetException
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -29,6 +28,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.CAPABILITY_DYNAMIC_PARTITIONING
 
 class CommitterBindingSuite extends SparkFunSuite {
 
@@ -57,10 +57,12 @@ class CommitterBindingSuite extends SparkFunSuite {
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
     conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
 
-    StubPathOutputCommitterFactory.bind(conf, "http")
+    StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val parquet = new BindingParquetOutputCommitter(path, tContext)
-    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitter]
+    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
+    assert(parquet.hasCapability(CAPABILITY_DYNAMIC_PARTITIONING),
+      s"committer $parquet does not declare dynamic partition support")
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)
@@ -130,16 +132,41 @@ class CommitterBindingSuite extends SparkFunSuite {
     assert("file:///tmp" === protocol.destination)
   }
 
-  test("reject dynamic partitioning") {
-    val cause = intercept[InvocationTargetException] {
-      FileCommitProtocol.instantiate(
-        pathCommitProtocolClassname,
-        jobId, "file:///tmp", true)
-    }.getCause
-    if (cause == null || !cause.isInstanceOf[IOException]
-        || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
-      throw cause
+  test("reject dynamic partitioning if not supported") {
+    val path = new Path("http://example/data")
+    val job = newJob(path)
+    val conf = job.getConfiguration
+    conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+    conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+
+    StubPathOutputCommitterBinding.bind(conf, "http")
+    val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+    val committer = FileCommitProtocol.instantiate(
+      pathCommitProtocolClassname,
+      jobId, path.toUri.toString, true)
+
+    val ioe = intercept[IOException] {
+      committer.setupJob(tContext)
     }
+    if (!ioe.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
+      throw ioe
+    }
+  }
+
+  test("permit dynamic partitioning if the committer says it works") {
+    val path = new Path("http://example/data")
+    val job = newJob(path)
+    val conf = job.getConfiguration
+    conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+    conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+
+    StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
+    val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+    val committer = FileCommitProtocol.instantiate(
+      pathCommitProtocolClassname,
+      jobId, path.toUri.toString, true)
+    committer.setupJob(tContext)
+
   }
 
 }
