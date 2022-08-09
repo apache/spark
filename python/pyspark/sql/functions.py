@@ -5513,7 +5513,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import col
+    >>> from pyspark.sql.functions import call_udf, col
     >>> from pyspark.sql.types import IntegerType, StringType
     >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
     >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
