@@ -5,7 +5,7 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: concat_ws requires at least one argument.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -14,7 +14,7 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -167,7 +167,7 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
+{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -648,7 +648,7 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -657,7 +657,7 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1122,7 +1122,7 @@ select to_binary(null, cast(null as int))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1131,7 +1131,7 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1140,7 +1140,7 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

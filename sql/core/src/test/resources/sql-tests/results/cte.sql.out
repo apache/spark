@@ -21,7 +21,7 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s; line 1 pos 25
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -31,7 +31,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: r; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -50,7 +50,7 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s2; line 1 pos 26
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -129,13 +129,7 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 1, pos 7)
-
-== SQL ==
-WITH t() AS (SELECT 1)
--------^^^
-SELECT * FROM t
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["')'",""],"queryContext":[]}
 
 
 -- !query
@@ -147,15 +141,7 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-CTE definition can't have duplicate names: 't'.(line 1, pos 0)
-
-== SQL ==
-WITH
-^^^
-  t(x) AS (SELECT 1),
-  t(x) AS (SELECT 2)
-SELECT * FROM t
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

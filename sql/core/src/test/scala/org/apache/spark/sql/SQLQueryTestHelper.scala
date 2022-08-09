@@ -19,7 +19,12 @@ package org.apache.spark.sql
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.json4s.{JInt, JString}
+import org.json4s.JsonAST.{JArray, JObject}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -71,6 +76,23 @@ trait SQLQueryTestHelper {
     if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
+  private def toJson(e: SparkThrowable): String = {
+    val jValue = ("errorClass" -> e.getErrorClass) ~
+      ("errorSubClass" -> Option(e.getErrorSubClass)) ~
+      ("sqlState" -> Option(e.getSqlState)) ~
+      ("messageParameters" ->
+        JArray(e.getMessageParameters.map(JString(_)).toList)) ~
+      ("queryContext" -> JArray(
+        e.getQueryContext.map(c => JObject(
+          "objectType" -> JString(c.objectType()),
+          "objectName" -> JString(c.objectName()),
+          "startIndex" -> JInt(c.startIndex()),
+          "stopIndex" -> JInt(c.stopIndex()),
+          "fragment" -> JString(c.fragment()))).toList)
+      )
+    compact(render(jValue))
+  }
+
   /**
    * This method handles exceptions occurred during query execution as they may need special care
    * to become comparable to the expected output.
@@ -81,18 +103,11 @@ trait SQLQueryTestHelper {
     try {
       result
     } catch {
-      case a: AnalysisException =>
+      case e: SparkThrowable =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
-      case s: SparkException if s.getCause != null =>
-        // For a runtime exception, it is hard to match because its message contains
-        // information of stage, task ID, etc.
-        // To make result matching simpler, here we match the cause of the exception if it exists.
-        val cause = s.getCause
-        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
+        (emptySchema, Seq(e.getClass.getName, toJson(e).replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (emptySchema, Seq(e.getClass.getName, e.getMessage))

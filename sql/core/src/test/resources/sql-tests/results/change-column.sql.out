@@ -23,12 +23,7 @@ ALTER TABLE test_change CHANGE a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Operation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)
-
-== SQL ==
-ALTER TABLE test_change CHANGE a
-^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -47,7 +42,7 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-RENAME COLUMN is only supported with v2 tables.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -66,7 +61,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType'
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -85,7 +80,7 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -94,7 +89,7 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -173,12 +168,7 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Missing field invalid_col in table spark_catalog.default.test_change with schema:
-root
- |-- a: integer (nullable = true)
- |-- b: string (nullable = true)
- |-- c: integer (nullable = true)
-; line 1 pos 0
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -223,7 +213,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -240,7 +230,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-global_temp.global_temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

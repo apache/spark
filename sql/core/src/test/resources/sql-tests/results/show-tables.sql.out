@@ -166,12 +166,7 @@ SHOW TABLE EXTENDED
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near end of input(line 1, pos 19)
-
-== SQL ==
-SHOW TABLE EXTENDED
--------------------^^^
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["end of input",""],"queryContext":[]}
 
 
 -- !query
@@ -191,12 +186,7 @@ SHOW TABLE EXTENDED PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'PARTITION'(line 1, pos 20)
-
-== SQL ==
-SHOW TABLE EXTENDED PARTITION(c='Us', d=1)
---------------------^^^
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'PARTITION'",""],"queryContext":[]}
 
 
 -- !query
@@ -205,7 +195,7 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'show_t*' not found in database 'showdb'
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -214,7 +204,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`showdb`.`show_t1`'
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -223,7 +213,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-a is not a valid partition column in table `spark_catalog`.`showdb`.`show_t1`.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -232,9 +222,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Ch', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-Partition not found in table 'show_t1' database 'showdb':
-c -> Ch
-d -> 1
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

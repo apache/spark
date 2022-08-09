@@ -5,7 +5,7 @@ select * from dummy(3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-could not resolve `dummy` to a table-valued function; line 1 pos 14
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -67,12 +67,7 @@ select * from range(1, 1, 1, 1, 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5; line 1 pos 14
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -81,12 +76,7 @@ select * from range(1, null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, void): Incompatible input data type. Expected: long; Found: void; line 1 pos 14
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -95,12 +85,7 @@ select * from range(array(1, 2, 3))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (array): Incompatible input data type. Expected: long; Found: array; line 1 pos 14
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -109,12 +94,7 @@ select * from range(0, 5, 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (integer, integer, integer): requirement failed: step (0) cannot be 0; line 1 pos 14
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

@@ -198,12 +198,7 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -212,12 +207,7 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -242,12 +232,7 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -256,12 +241,7 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -278,12 +258,7 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -292,12 +267,7 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -322,12 +292,7 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -336,12 +301,7 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -366,12 +326,7 @@ SELECT date '1999 Jan 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 Jan 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 Jan 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -380,12 +335,7 @@ SELECT date '1999 08 Jan'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 Jan(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 Jan'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -410,12 +360,7 @@ SELECT date '1999 01 08'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 01 08(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 01 08'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -424,12 +369,7 @@ SELECT date '1999 08 01'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 1999 08 01(line 1, pos 7)
-
-== SQL ==
-SELECT date '1999 08 01'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

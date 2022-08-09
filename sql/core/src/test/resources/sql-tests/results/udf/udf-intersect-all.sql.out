@@ -95,7 +95,7 @@ SELECT array(1), udf(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -106,7 +106,7 @@ SELECT udf(k), udf(v) FROM tab2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

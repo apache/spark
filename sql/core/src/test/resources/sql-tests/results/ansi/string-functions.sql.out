@@ -5,7 +5,7 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: concat_ws requires at least one argument.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -14,7 +14,7 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -79,10 +79,7 @@ select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 43) ==
-...t("abcd", -2), left("abcd", 0), left("abcd", 'a')
-                                   ^^^^^^^^^^^^^^^^^
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'a'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":42,"stopIndex":58,"fragment":"left(\"abcd\", 'a'"}]}
 
 
 -- !query
@@ -107,10 +104,7 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 45) ==
-...("abcd", -2), right("abcd", 0), right("abcd", 'a')
-                                   ^^^^^^^^^^^^^^^^^^
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'a'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":44,"stopIndex":61,"fragment":"right(\"abcd\", 'a'"}]}
 
 
 -- !query
@@ -175,7 +169,7 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
+{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -416,10 +410,7 @@ SELECT lpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT lpad('hi', 'invalid_length')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'invalid_length'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"lpad('hi', 'invalid_length'"}]}
 
 
 -- !query
@@ -428,10 +419,7 @@ SELECT rpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT rpad('hi', 'invalid_length')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'invalid_length'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"rpad('hi', 'invalid_length'"}]}
 
 
 -- !query
@@ -664,7 +652,7 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -673,7 +661,7 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1138,7 +1126,7 @@ select to_binary(null, cast(null as int))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1147,7 +1135,7 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1156,7 +1144,7 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

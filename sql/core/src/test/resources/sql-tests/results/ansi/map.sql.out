@@ -5,10 +5,7 @@ select element_at(map(1, 'a', 2, 'b'), 5)
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":["5","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":40,"fragment":"element_at(map(1, 'a', 2, 'b'), 5"}]}
 
 
 -- !query
@@ -17,10 +14,7 @@ select map(1, 'a', 2, 'b')[5]
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select map(1, 'a', 2, 'b')[5]
-       ^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":["5","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":28,"fragment":"map(1, 'a', 2, 'b')[5"}]}
 
 
 -- !query
@@ -77,7 +71,7 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -86,7 +80,7 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -111,10 +105,7 @@ select element_at(map(1, 'a', 2, 'b'), 5)
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":["5","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":40,"fragment":"element_at(map(1, 'a', 2, 'b'), 5"}]}
 
 
 -- !query
@@ -123,7 +114,4 @@ select element_at(map('a', 1, 'b', 2), 'c')
 struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 'c' does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map('a', 1, 'b', 2), 'c')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":["'c'","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":42,"fragment":"element_at(map('a', 1, 'b', 2), 'c'"}]}

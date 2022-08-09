@@ -362,9 +362,7 @@ DESC t PARTITION (c='Us', d=2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-Partition not found in table 't' database 'default':
-c -> Us
-d -> 2
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -373,7 +371,7 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -382,12 +380,7 @@ DESC t PARTITION (c='Us', d)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: PARTITION specification is incomplete: `d`(line 1, pos 0)
-
-== SQL ==
-DESC t PARTITION (c='Us', d)
-^^^
+{"errorClass":"INVALID_SQL_SYNTAX","sqlState":"42000","messageParameters":["PARTITION specification is incomplete: `d`"],"queryContext":[]}
 
 
 -- !query
@@ -463,7 +456,7 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the TEMPORARY VIEW: `temp_v`
+{"errorClass":"FORBIDDEN_OPERATION","messageParameters":["DESC PARTITION","TEMPORARY VIEW","`temp_v`"],"queryContext":[]}
 
 
 -- !query
@@ -542,7 +535,7 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[FORBIDDEN_OPERATION] The operation DESC PARTITION is not allowed on the VIEW: `v`
+{"errorClass":"FORBIDDEN_OPERATION","messageParameters":["DESC PARTITION","VIEW","`v`"],"queryContext":[]}
 
 
 -- !query

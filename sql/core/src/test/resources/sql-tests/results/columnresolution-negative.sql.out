@@ -69,7 +69,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -78,7 +78,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -87,7 +87,7 @@ SELECT mydb1.t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'mydb1.t1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -96,7 +96,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -105,7 +105,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb1.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -122,7 +122,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -131,7 +131,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb1.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -140,7 +140,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -149,7 +149,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: spark_catalog.mydb2.t1.i1, spark_catalog.mydb2.t1.i1.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -158,7 +158,7 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `db1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`db1`.`t1`.`i1`","`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`"],"queryContext":[]}
 
 
 -- !query
@@ -183,7 +183,7 @@ SELECT mydb1.t1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`mydb1`.`t1`","`spark_catalog`.`mydb1`.`t1`.`i1`"],"queryContext":[]}
 
 
 -- !query
@@ -192,7 +192,7 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' given input columns 'i1'; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -201,7 +201,7 @@ SELECT t1 FROM mydb1.t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]; line 1 pos 7
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t1`","`spark_catalog`.`mydb1`.`t1`.`i1`"],"queryContext":[]}
 
 
 -- !query
@@ -218,7 +218,7 @@ SELECT mydb1.t1.i1 FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `mydb1`.`t1`.`i1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`]; line 1 pos 7
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`mydb1`.`t1`.`i1`","`spark_catalog`.`mydb2`.`t1`.`i1`"],"queryContext":[]}
 
 
 -- !query

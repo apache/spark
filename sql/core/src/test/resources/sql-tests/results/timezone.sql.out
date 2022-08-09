@@ -45,12 +45,7 @@ SET TIME ZONE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Invalid time zone displacement value(line 1, pos 0)
-
-== SQL ==
-SET TIME ZONE
-^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -68,12 +63,7 @@ SET TIME ZONE INTERVAL 3 DAYS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
-
-== SQL ==
-SET TIME ZONE INTERVAL 3 DAYS
---------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -82,12 +72,7 @@ SET TIME ZONE INTERVAL 24 HOURS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
-
-== SQL ==
-SET TIME ZONE INTERVAL 24 HOURS
---------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -96,12 +81,7 @@ SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
-
-== SQL ==
-SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
---------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -110,12 +90,7 @@ SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Invalid time zone displacement value(line 1, pos 0)
-
-== SQL ==
-SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
-^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -124,9 +99,4 @@ SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
-
-== SQL ==
-SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
---------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}

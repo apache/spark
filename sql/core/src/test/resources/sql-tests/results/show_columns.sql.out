@@ -91,7 +91,7 @@ SHOW COLUMNS IN badtable FROM showdb
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.badtable; line 1 pos 16
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -109,7 +109,7 @@ SHOW COLUMNS IN showdb.showcolumn1 FROM baddb
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-SHOW COLUMNS with conflicting databases: 'baddb' != 'showdb'
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -127,7 +127,7 @@ SHOW COLUMNS IN showdb.showcolumn3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.showcolumn3; line 1 pos 16
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -136,7 +136,7 @@ SHOW COLUMNS IN showcolumn3 FROM showdb
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: showdb.showcolumn3; line 1 pos 16
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -145,7 +145,7 @@ SHOW COLUMNS IN showcolumn4
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: showcolumn4; line 1 pos 16
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

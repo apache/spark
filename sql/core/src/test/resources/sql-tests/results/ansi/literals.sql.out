@@ -37,12 +37,7 @@ select 128Y
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 128 does not fit in range [-128, 127] for type tinyint(line 1, pos 7)
-
-== SQL ==
-select 128Y
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -67,12 +62,7 @@ select 32768S
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 32768 does not fit in range [-32768, 32767] for type smallint(line 1, pos 7)
-
-== SQL ==
-select 32768S
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -97,12 +87,7 @@ select 9223372036854775808L
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 9223372036854775808 does not fit in range [-9223372036854775808, 9223372036854775807] for type bigint(line 1, pos 7)
-
-== SQL ==
-select 9223372036854775808L
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -143,10 +128,7 @@ select 1234567890123456789012345678901234567890
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -155,10 +137,7 @@ select 1234567890123456789012345678901234567890.0
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890.0
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -183,12 +162,7 @@ select -3.4028235E39f
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal -3.4028235E39 does not fit in range [-3.4028234663852886E+38, 3.4028234663852886E+38] for type float(line 1, pos 7)
-
-== SQL ==
-select -3.4028235E39f
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -213,12 +187,7 @@ select .e3
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near '.'(line 1, pos 7)
-
-== SQL ==
-select .e3
--------^^^
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'.'",""],"queryContext":[]}
 
 
 -- !query
@@ -227,12 +196,7 @@ select 1E309, -1E309
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Numeric literal 1E309 does not fit in range [-1.7976931348623157E+308, 1.7976931348623157E+308] for type double(line 1, pos 7)
-
-== SQL ==
-select 1E309, -1E309
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -331,12 +295,7 @@ select date 'mar 11 2016'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: mar 11 2016(line 1, pos 7)
-
-== SQL ==
-select date 'mar 11 2016'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -353,12 +312,7 @@ select timestamp '2016-33-11 20:54:00.000'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2016-33-11 20:54:00.000(line 1, pos 7)
-
-== SQL ==
-select timestamp '2016-33-11 20:54:00.000'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -367,12 +321,7 @@ select GEO '(10,-6)'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Literals of type 'GEO' are currently not supported.(line 1, pos 7)
-
-== SQL ==
-select GEO '(10,-6)'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -389,12 +338,7 @@ select 1.20E-38BD
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-decimal can only support precision up to 38(line 1, pos 7)
-
-== SQL ==
-select 1.20E-38BD
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -411,12 +355,7 @@ select X'XuZ'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-contains illegal character for hexBinary: 0XuZ(line 1, pos 7)
-
-== SQL ==
-select X'XuZ'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -433,7 +372,7 @@ select +date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -442,7 +381,7 @@ select +timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -459,7 +398,7 @@ select +map(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -468,7 +407,7 @@ select +array(1,2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -477,7 +416,7 @@ select +named_struct('a', 1, 'b', 'spark')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -486,7 +425,7 @@ select +X'1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'01'' is of binary type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -495,7 +434,7 @@ select -date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -504,7 +443,7 @@ select -timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -513,4 +452,4 @@ select -x'2379ACFe'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}

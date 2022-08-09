@@ -13,12 +13,7 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)
-
-== SQL ==
-select timestamp '2019-01-01中文'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -27,12 +22,7 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)
-
-== SQL ==
-select timestamp'4294967297'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -41,12 +31,7 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)
-
-== SQL ==
-select timestamp'2021-01-01T12:30:4294967297.123456'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -95,7 +80,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_FRACTION_OF_SECOND] The fraction of sec must be zero. Valid range is [0, 60]. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"INVALID_FRACTION_OF_SECOND","sqlState":"22023","messageParameters":["\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -329,7 +314,7 @@ select to_timestamp(1)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP_NTZ" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'1'","\"STRING\"","\"TIMESTAMP_NTZ\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
 
 
 -- !query
@@ -338,7 +323,7 @@ select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.' could not be parsed at index 20. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Text '2019-10-06 10:11:12.' could not be parsed at index 20","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -403,7 +388,7 @@ select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSS
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -420,7 +405,7 @@ select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -485,7 +470,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 7. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Text '12.1232019-10-06S10:11' could not be parsed at index 7","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -494,7 +479,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 9. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Text '12.1232019-10-06S10:11' could not be parsed at index 9","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -567,7 +552,7 @@ select to_timestamp("02-29", "MM-dd")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Invalid date 'February 29' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{"errorClass":"CANNOT_PARSE_TIMESTAMP","sqlState":"42000","messageParameters":["Invalid date 'February 29' as '1970' is not a leap year","\"spark.sql.ansi.enabled\""],"queryContext":[]}
 
 
 -- !query
@@ -672,7 +657,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' due to data type mismatch: '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -681,7 +666,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -690,7 +675,7 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)' (timestamp_ntz and void).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -699,7 +684,7 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')' (void and timestamp_ntz).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -758,8 +743,7 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'dd MM yyyy EEEEE'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
 
 
 -- !query

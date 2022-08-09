@@ -61,7 +61,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -76,7 +76,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -89,15 +89,7 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 1.
-#columns in right hand side: 2.
-Left side columns:
-[t1.t1a].
-Right side columns:
-[t2.t2a, t2.t2b].; line 3 pos 4
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -110,15 +102,7 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 2.
-#columns in right hand side: 1.
-Left side columns:
-[t1.t1a, t1.t1b].
-Right side columns:
-[t2.t2a].; line 3 pos 11
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -132,12 +116,4 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]
-Left side:
-[double, string, string].
-Right side:
-[timestamp, string, bigint].; line 3 pos 16
+{"errorClass":null,"messageParameters":[],"queryContext":[]}

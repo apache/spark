@@ -13,12 +13,7 @@ select interval 4 month 2 weeks 3 microseconds * 1.5
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval 4 month 2 weeks 3 microseconds(line 1, pos 7)
-
-== SQL ==
-select interval 4 month 2 weeks 3 microseconds * 1.5
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -183,7 +178,7 @@ select '2' / interval 2 second
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2' AS DOUBLE) / INTERVAL '02' SECOND)' due to data type mismatch: differing types in '(CAST('2' AS DOUBLE) / INTERVAL '02' SECOND)' (double and interval second).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -192,7 +187,7 @@ select '2' / interval 2 year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2' AS DOUBLE) / INTERVAL '2' YEAR)' due to data type mismatch: differing types in '(CAST('2' AS DOUBLE) / INTERVAL '2' YEAR)' (double and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -201,10 +196,7 @@ select interval '2 seconds' / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2 seconds' / 0
-       ^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_DIVIDED_BY_ZERO","sqlState":"22012","messageParameters":[],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":30,"fragment":"interval '2 seconds' / "}]}
 
 
 -- !query
@@ -237,10 +229,7 @@ select interval '2' year / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2' year / 0
-       ^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_DIVIDED_BY_ZERO","sqlState":"22012","messageParameters":[],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":27,"fragment":"interval '2' year / "}]}
 
 
 -- !query
@@ -273,7 +262,7 @@ select 2 / interval '2' year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(2 / INTERVAL '2' YEAR)' due to data type mismatch: differing types in '(2 / INTERVAL '2' YEAR)' (int and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -282,7 +271,7 @@ select 2 / interval '2' hour
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(2 / INTERVAL '02' HOUR)' due to data type mismatch: differing types in '(2 / INTERVAL '02' HOUR)' (int and interval hour).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -291,7 +280,7 @@ select null / interval '2' year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL / INTERVAL '2' YEAR)' due to data type mismatch: differing types in '(NULL / INTERVAL '2' YEAR)' (void and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -300,7 +289,7 @@ select null / interval '2' hour
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL / INTERVAL '02' HOUR)' due to data type mismatch: differing types in '(NULL / INTERVAL '02' HOUR)' (void and interval hour).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -309,12 +298,7 @@ select -interval '-1 month 1 day -1 second'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval '-1 month 1 day -1 second'(line 1, pos 8)
-
-== SQL ==
-select -interval '-1 month 1 day -1 second'
---------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -339,12 +323,7 @@ select -interval -1 month 1 day -1 second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval -1 month 1 day -1 second(line 1, pos 8)
-
-== SQL ==
-select -interval -1 month 1 day -1 second
---------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -369,12 +348,7 @@ select +interval '-1 month 1 day -1 second'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval '-1 month 1 day -1 second'(line 1, pos 8)
-
-== SQL ==
-select +interval '-1 month 1 day -1 second'
---------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -399,12 +373,7 @@ select +interval -1 month 1 day -1 second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval -1 month 1 day -1 second(line 1, pos 8)
-
-== SQL ==
-select +interval -1 month 1 day -1 second
---------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -816,12 +785,7 @@ select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisec
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond(line 1, pos 7)
-
-== SQL ==
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -854,12 +818,7 @@ select interval '30' year '25' month '-100' day '40' hour '80' minute '299.88998
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot mix year-month and day-time fields: interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second(line 1, pos 7)
-
-== SQL ==
-select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -988,12 +947,7 @@ select interval '20 15:40:32.99899999' day to hour
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval day to hour: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '20 15:40:32.99899999' day to hour
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1002,12 +956,7 @@ select interval '20 15:40:32.99899999' day to minute
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE` when cast to interval day to minute: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '20 15:40:32.99899999' day to minute
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1016,12 +965,7 @@ select interval '15:40:32.99899999' hour to minute
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE` when cast to interval hour to minute: 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '15:40:32.99899999' hour to minute
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1030,12 +974,7 @@ select interval '15:40.99899999' hour to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '15:40.99899999' hour to second
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1044,12 +983,7 @@ select interval '15:40' hour to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '15:40' hour to second
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1058,12 +992,7 @@ select interval '20 40:32.99899999' minute to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND` when cast to interval minute to second: 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '20 40:32.99899999' minute to second
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1072,12 +1001,7 @@ select interval 10 nanoseconds
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Error parsing ' 10 nanoseconds' to interval, invalid unit 'nanoseconds'(line 1, pos 16)
-
-== SQL ==
-select interval 10 nanoseconds
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1166,12 +1090,7 @@ select interval
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-at least one time unit should be given for interval literal(line 1, pos 7)
-
-== SQL ==
-select interval
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1180,12 +1099,7 @@ select interval 1 fake_unit
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Error parsing ' 1 fake_unit' to interval, invalid unit 'fake_unit'(line 1, pos 16)
-
-== SQL ==
-select interval 1 fake_unit
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1194,12 +1108,7 @@ select interval 1 year to month
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-The value of from-to unit must be a string(line 1, pos 16)
-
-== SQL ==
-select interval 1 year to month
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1208,12 +1117,7 @@ select interval '1' year to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Intervals FROM year TO second are not supported.(line 1, pos 16)
-
-== SQL ==
-select interval '1' year to second
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1222,12 +1126,7 @@ select interval '10-9' year to month '2-1' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 37)
-
-== SQL ==
-select interval '10-9' year to month '2-1' year to month
--------------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1236,12 +1135,7 @@ select interval '10-9' year to month '12:11:10' hour to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 37)
-
-== SQL ==
-select interval '10-9' year to month '12:11:10' hour to second
--------------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1250,12 +1144,7 @@ select interval '1 15:11' day to minute '12:11:10' hour to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 40)
-
-== SQL ==
-select interval '1 15:11' day to minute '12:11:10' hour to second
-----------------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1264,12 +1153,7 @@ select interval 1 year '2-1' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 23)
-
-== SQL ==
-select interval 1 year '2-1' year to month
------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1278,12 +1162,7 @@ select interval 1 year '12:11:10' hour to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 23)
-
-== SQL ==
-select interval 1 year '12:11:10' hour to second
------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1292,12 +1171,7 @@ select interval '10-9' year to month '1' year
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 37)
-
-== SQL ==
-select interval '10-9' year to month '1' year
--------------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1306,12 +1180,7 @@ select interval '12:11:10' hour to second '1' year
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only have a single from-to unit in the interval literal syntax(line 1, pos 42)
-
-== SQL ==
-select interval '12:11:10' hour to second '1' year
-------------------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1320,7 +1189,7 @@ select interval (-30) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1329,7 +1198,7 @@ select interval (a + 1) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1338,12 +1207,7 @@ select interval 30 day day day
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
-
-== SQL ==
-select interval 30 day day day
----------------------------^^^
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'day'",": extra input 'day'"],"queryContext":[]}
 
 
 -- !query
@@ -1352,7 +1216,7 @@ select interval (-30) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1361,7 +1225,7 @@ select interval (a + 1) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1370,12 +1234,7 @@ select interval 30 days days days
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
-
-== SQL ==
-select interval 30 days days days
------------------------------^^^
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'days'",": extra input 'days'"],"queryContext":[]}
 
 
 -- !query
@@ -1392,12 +1251,7 @@ SELECT INTERVAL '178956970-8' YEAR TO MONTH
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Error parsing interval year-month string: integer overflow(line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '178956970-8' YEAR TO MONTH
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1442,7 +1296,7 @@ select
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + CAST('3-3 year to month' AS DOUBLE))' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + CAST('3-3 year to month' AS DOUBLE))' (interval year and double).; line 2 pos 2
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1467,7 +1321,7 @@ select interval '2' year + '3-3'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + CAST('3-3' AS DOUBLE))' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + CAST('3-3' AS DOUBLE))' (interval year and double).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1476,7 +1330,7 @@ select interval '2' year - '4'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR - CAST('4' AS DOUBLE))' due to data type mismatch: differing types in '(INTERVAL '2' YEAR - CAST('4' AS DOUBLE))' (interval year and double).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1509,7 +1363,7 @@ select interval '2' year + str from interval_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + CAST(interval_view.str AS DOUBLE))' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + CAST(interval_view.str AS DOUBLE))' (interval year and double).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1518,7 +1372,7 @@ select interval '2' year - str from interval_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR - CAST(interval_view.str AS DOUBLE))' due to data type mismatch: differing types in '(INTERVAL '2' YEAR - CAST(interval_view.str AS DOUBLE))' (interval year and double).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1543,7 +1397,7 @@ select interval '2-2' year to month + interval '3' day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1552,7 +1406,7 @@ select interval '3' day + interval '2-2' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1561,7 +1415,7 @@ select interval '2-2' year to month - interval '3' day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'INTERVAL '2-2' YEAR TO MONTH' is of interval year to month type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1570,7 +1424,7 @@ select interval '3' day - interval '2-2' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '3' DAY - INTERVAL '2-2' YEAR TO MONTH)' due to data type mismatch: differing types in '(INTERVAL '3' DAY - INTERVAL '2-2' YEAR TO MONTH)' (interval day and interval year to month).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1579,7 +1433,7 @@ select 1 - interval '2' second
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 + (- INTERVAL '02' SECOND)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1588,7 +1442,7 @@ select 1 + interval '2' month
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(1 + INTERVAL '2' MONTH)' due to data type mismatch: differing types in '(1 + INTERVAL '2' MONTH)' (int and interval month).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1597,7 +1451,7 @@ select interval '2' second + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 + INTERVAL '02' SECOND' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1606,7 +1460,7 @@ select interval '2' month - 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' MONTH - 1)' due to data type mismatch: differing types in '(INTERVAL '2' MONTH - 1)' (interval month and int).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1663,12 +1517,7 @@ select interval '-\t2-2\t' year to month
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match year-month format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval year to month: -	2-2	(line 1, pos 16)
-
-== SQL ==
-select interval '-\t2-2\t' year to month
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1685,13 +1534,7 @@ select interval '\n-\t10\t 12:34:46.789\t' day to second
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match day-time format of `[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND` when cast to interval day to second: 
--	10	 12:34:46.789	, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0.(line 1, pos 16)
-
-== SQL ==
-select interval '\n-\t10\t 12:34:46.789\t' day to second
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1700,12 +1543,7 @@ select interval '中文 interval 1 day'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 中文 interval 1 day(line 1, pos 7)
-
-== SQL ==
-select interval '中文 interval 1 day'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1714,12 +1552,7 @@ select interval 'interval中文 1 day'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: interval中文 1 day(line 1, pos 7)
-
-== SQL ==
-select interval 'interval中文 1 day'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1728,12 +1561,7 @@ select interval 'interval 1中文day'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: interval 1中文day(line 1, pos 7)
-
-== SQL ==
-select interval 'interval 1中文day'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1741,8 +1569,8 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow.
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1750,8 +1578,8 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead.
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1759,8 +1587,8 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1768,8 +1596,8 @@ select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1777,8 +1605,8 @@ select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1839,12 +1667,7 @@ select interval '+'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: +(line 1, pos 7)
-
-== SQL ==
-select interval '+'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1853,12 +1676,7 @@ select interval '+.'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: +.(line 1, pos 7)
-
-== SQL ==
-select interval '+.'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1867,12 +1685,7 @@ select interval '1'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1(line 1, pos 7)
-
-== SQL ==
-select interval '1'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1881,12 +1694,7 @@ select interval '1.2'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1.2(line 1, pos 7)
-
-== SQL ==
-select interval '1.2'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1895,12 +1703,7 @@ select interval '- 2'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: - 2(line 1, pos 7)
-
-== SQL ==
-select interval '- 2'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1909,12 +1712,7 @@ select interval '1 day -'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1 day -(line 1, pos 7)
-
-== SQL ==
-select interval '1 day -'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1923,12 +1721,7 @@ select interval '1 day 1'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1 day 1(line 1, pos 7)
-
-== SQL ==
-select interval '1 day 1'
--------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1937,12 +1730,7 @@ select interval '1 day 2' day
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: 1 day 2(line 1, pos 16)
-
-== SQL ==
-select interval '1 day 2' day
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1951,12 +1739,7 @@ select interval 'interval 1' day
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: interval 1(line 1, pos 16)
-
-== SQL ==
-select interval 'interval 1' day
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1989,10 +1772,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["Interval value overflows after being divided by -1"," Use 'try_divide' to tolerate overflow and return NULL instead."],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":50,"fragment":"(INTERVAL '-178956970-8' YEAR TO MONTH) / -"}]}
 
 
 -- !query
@@ -2001,10 +1781,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["Interval value overflows after being divided by -1"," Use 'try_divide' to tolerate overflow and return NULL instead."],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":51,"fragment":"(INTERVAL '-178956970-8' YEAR TO MONTH) / -1"}]}
 
 
 -- !query
@@ -2047,10 +1824,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["Interval value overflows after being divided by -1"," Use 'try_divide' to tolerate overflow and return NULL instead."],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":64,"fragment":"(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -"}]}
 
 
 -- !query
@@ -2059,10 +1833,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{"errorClass":"INTERVAL_ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["Interval value overflows after being divided by -1"," Use 'try_divide' to tolerate overflow and return NULL instead."],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":65,"fragment":"(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1"}]}
 
 
 -- !query
@@ -2185,12 +1956,7 @@ SELECT INTERVAL '106751992 04' DAY TO HOUR
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: day 106751992 outside range [0, 106751991](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '106751992 04' DAY TO HOUR
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2199,12 +1965,7 @@ SELECT INTERVAL '-106751992 04' DAY TO HOUR
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: day 106751992 outside range [0, 106751991](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '-106751992 04' DAY TO HOUR
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2213,12 +1974,7 @@ SELECT INTERVAL '2562047789:00' HOUR TO MINUTE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: hour 2562047789 outside range [0, 2562047788](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '2562047789:00' HOUR TO MINUTE
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2227,12 +1983,7 @@ SELECT INTERVAL '-2562047789:00' HOUR TO MINUTE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: hour 2562047789 outside range [0, 2562047788](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '-2562047789:00' HOUR TO MINUTE
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2241,12 +1992,7 @@ SELECT INTERVAL '153722867281:54.775808' MINUTE TO SECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: minute 153722867281 outside range [0, 153722867280](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '153722867281:54.775808' MINUTE TO SECOND
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2255,12 +2001,7 @@ SELECT INTERVAL '-153722867281:54.775808' MINUTE TO SECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-requirement failed: minute 153722867281 outside range [0, 153722867280](line 1, pos 16)
-
-== SQL ==
-SELECT INTERVAL '-153722867281:54.775808' MINUTE TO SECOND
-----------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2397,7 +2138,7 @@ SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' MONTH > INTERVAL '20' DAY)' due to data type mismatch: differing types in '(INTERVAL '1' MONTH > INTERVAL '20' DAY)' (interval month and interval day).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2406,7 +2147,7 @@ SELECT INTERVAL '1' DAY < '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY < '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY < '1')' (interval day and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2415,7 +2156,7 @@ SELECT INTERVAL '1' DAY = '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY = '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY = '1')' (interval day and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2424,7 +2165,7 @@ SELECT INTERVAL '1' DAY > '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY > '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY > '1')' (interval day and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2433,7 +2174,7 @@ SELECT '1' < INTERVAL '1' DAY
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' < INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' < INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2442,7 +2183,7 @@ SELECT '1' = INTERVAL '1' DAY
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' = INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' = INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2451,7 +2192,7 @@ SELECT '1' > INTERVAL '1' DAY
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' > INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' > INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2460,7 +2201,7 @@ SELECT INTERVAL '1' YEAR < '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR < '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR < '1')' (interval year and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2469,7 +2210,7 @@ SELECT INTERVAL '1' YEAR = '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR = '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR = '1')' (interval year and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2478,7 +2219,7 @@ SELECT INTERVAL '1' YEAR > '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR > '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR > '1')' (interval year and string).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2487,7 +2228,7 @@ SELECT '1' < INTERVAL '1' YEAR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' < INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' < INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2496,7 +2237,7 @@ SELECT '1' = INTERVAL '1' YEAR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' = INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' = INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2505,7 +2246,7 @@ SELECT '1' > INTERVAL '1' YEAR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' > INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' > INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2530,7 +2271,7 @@ SELECT array(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array(INTERVAL '1' MONTH, INTERVAL '20' DAY)' due to data type mismatch: input to function array should all be the same type, but it's [interval month, interval day]; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2555,7 +2296,7 @@ SELECT coalesce(INTERVAL 1 MONTH, INTERVAL 20 DAYS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'coalesce(INTERVAL '1' MONTH, INTERVAL '20' DAY)' due to data type mismatch: input to function coalesce should all be the same type, but it's [interval month, interval day]; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -2612,7 +2353,7 @@ SELECT div(INTERVAL '1' MONTH, INTERVAL '-1' DAY)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' MONTH div INTERVAL '-1' DAY)' due to data type mismatch: differing types in '(INTERVAL '1' MONTH div INTERVAL '-1' DAY)' (interval month and interval day).; line 1 pos 7
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

@@ -102,7 +102,7 @@ ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data type mismatch: The data type of the upper bound 'bigint' does not match the expected data type 'int'.; line 1 pos 41
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -324,7 +324,7 @@ ORDER BY cate, val_date
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.cate ORDER BY testdata.val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)' due to data type mismatch: The data type 'date' used in the order specification does not match the data type 'interval day to second' which is used in the range frame.; line 1 pos 46
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -351,7 +351,7 @@ ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, v
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING' due to data type mismatch: Window frame upper bound '1' does not follow the lower bound 'unboundedfollowing$()'.; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -361,7 +361,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.cate RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -371,7 +371,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.cate ORDER BY testdata.val ASC NULLS FIRST, testdata.cate ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: val#x ASC NULLS FIRST,cate#x ASC NULLS FIRST; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -381,7 +381,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.cate ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -391,7 +391,7 @@ RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING' due to data type mismatch: The lower bound of a window frame must be less than or equal to the upper bound; line 1 pos 33
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -401,13 +401,7 @@ RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cat
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Frame bound value must be a literal.(line 2, pos 30)
-
-== SQL ==
-SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val
-RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val
-------------------------------^^^
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -484,7 +478,7 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -556,7 +550,7 @@ FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-window aggregate function with filter predicate is not supported yet.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -910,23 +904,7 @@ ORDER BY salary DESC
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: The definition of window `w` is repetitive.(line 9, pos 0)
-
-== SQL ==
-SELECT
-    employee_name,
-    salary,
-    first_value(employee_name) OVER w highest_salary,
-    any_value(employee_name) OVER w highest_salary,
-    nth_value(employee_name, 2) OVER w second_highest_salary
-FROM
-    basic_pays
-WINDOW
-^^^
-    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
-    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)
-ORDER BY salary DESC
+{"errorClass":"INVALID_SQL_SYNTAX","sqlState":"42000","messageParameters":["The definition of window `w` is repetitive."],"queryContext":[]}
 
 
 -- !query
@@ -1207,7 +1185,7 @@ FROM
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window specification w is not defined in the WINDOW clause.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -1219,4 +1197,4 @@ FROM
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window specification w is not defined in the WINDOW clause.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}

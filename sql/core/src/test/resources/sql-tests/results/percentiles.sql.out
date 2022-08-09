@@ -178,7 +178,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -194,7 +194,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -209,7 +209,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -225,7 +225,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -241,7 +241,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -256,7 +256,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -336,7 +336,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -353,7 +353,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -369,7 +369,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -386,7 +386,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -403,7 +403,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -419,7 +419,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

@@ -72,7 +72,7 @@ select * from data order by 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ORDER BY position 0 is not in select list (valid range is [1, 2]); line 1 pos 28
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -81,7 +81,7 @@ select * from data order by -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ORDER BY position -1 is not in select list (valid range is [1, 2]); line 1 pos 28
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -90,7 +90,7 @@ select * from data order by 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ORDER BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 28
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query

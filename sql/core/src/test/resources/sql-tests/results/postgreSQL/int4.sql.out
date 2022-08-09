@@ -196,11 +196,8 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -219,11 +216,8 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -242,11 +236,8 @@ SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -266,11 +257,8 @@ SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -290,11 +278,8 @@ SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
@@ -314,11 +299,8 @@ SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
-                         ^^^^^^^^^^^^^^^
+org.apache.spark.SparkException
+{"errorClass":null,"messageParameters":[],"queryContext":[]}
 
 
 -- !query
