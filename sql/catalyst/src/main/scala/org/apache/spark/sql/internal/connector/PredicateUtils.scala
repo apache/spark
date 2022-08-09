@@ -139,12 +139,10 @@ private[sql] object PredicateUtils {
       skipIfNotConvertible: Boolean): Array[Filter] = {
     predicates.flatMap { predicate =>
       val filter = toV1(predicate)
-      if (filter.isEmpty) {
-        if (!skipIfNotConvertible) {
-          throw QueryCompilationErrors.unsupportedPredicateToFilterConversionError(predicate.name())
-        }
+      if (filter.isEmpty && !skipIfNotConvertible) {
+        throw QueryCompilationErrors.unsupportedPredicateToFilterConversionError(predicate.name())
       }
       filter
-    }.toArray
+    }
   }
 }
