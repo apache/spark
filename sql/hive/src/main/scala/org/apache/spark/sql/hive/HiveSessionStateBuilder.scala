@@ -112,6 +112,11 @@ class HiveSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
+
+    override val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = new Rule[LogicalPlan]{
+        override def apply(p: LogicalPlan): LogicalPlan = p
+      } +:
+      customSubstitutionRules
   }
 
   override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =

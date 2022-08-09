@@ -183,6 +183,23 @@ class SparkSessionExtensions {
     resolutionRuleBuilders += builder
   }
 
+
+  private[this] val substitutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  /**
+   * Build the analyzer substitution `Rule`s using the given [[SparkSession]].
+   */
+  private[sql] def buildSubstitutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    substitutionRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an analyzer substitution `Rule` builder into the [[SparkSession]]. These analyzer
+   * rules will be executed as part of the resolution phase of analysis.
+   */
+  def injectSubstitutionRule(builder: RuleBuilder): Unit = {
+    substitutionRuleBuilders += builder
+  }
   private[this] val postHocResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
   /**

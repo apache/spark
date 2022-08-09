@@ -209,6 +209,20 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <distributionManagement>
+    <repository>
+        <id>incortax-central</id>
+        <name>incortax-central-releases</name>
+        <url>${env.ARTIFACTORY_REPO_URL}</url>
+    </repository>
+    <snapshotRepository>
+        <id>incortax-snapshots</id>
+        <name>incortax-central-snapshots</name>
+        <url>${env.ARTIFACTORY_REPO_URL}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>

@@ -207,6 +207,11 @@ abstract class BaseSessionStateBuilder(
         TableCapabilityCheck +:
         CommandCheck +:
         customCheckRules
+
+    override val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = new Rule[LogicalPlan] {
+      override def apply(p: LogicalPlan): LogicalPlan = p
+    } +:
+              customSubstitutionRules
   }
 
   /**
@@ -219,6 +224,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildResolutionRules(session)
   }
 
+
+  protected def customSubstitutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildSubstitutionRules(session)
+  }
   /**
    * Custom post resolution rules to add to the Analyzer. Prefer overriding this instead of
    * creating your own Analyzer.

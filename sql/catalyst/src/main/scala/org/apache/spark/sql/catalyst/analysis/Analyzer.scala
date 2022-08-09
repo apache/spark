@@ -245,6 +245,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  val extendedPreResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  val extendedSubstitutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+
   /**
    * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
    * in an individual batch. This batch is to run right after the normal resolution batch and
@@ -264,11 +269,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
       // at the beginning of analysis.
-      OptimizeUpdateFields,
+      Seq(OptimizeUpdateFields,
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteUnresolvedOrdinals),
+      SubstituteUnresolvedOrdinals) ++ extendedSubstitutionRules : _*),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
