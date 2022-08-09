@@ -16,7 +16,8 @@
 #
 
 # Image for building and testing Spark branches. Based on Ubuntu 20.04.
-FROM ubuntu:20.04
+# See also in https://hub.docker.com/_/ubuntu
+FROM ubuntu:focal-20220801
 
 ENV FULL_REFRESH_DATE 20220706
 
@@ -54,6 +55,13 @@ RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-c
 RUN apt update
 RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
 RUN Rscript -e "install.packages(c('knitr', 'markdown', 'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
+
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+          libtiff5-dev libjpeg-dev
+RUN Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"

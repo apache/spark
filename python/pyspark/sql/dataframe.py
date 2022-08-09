@@ -1422,6 +1422,56 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
+    def to(self, schema: StructType) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
+        schema.
+
+        Notes
+        -----
+        1, Reorder columns and/or inner fields by name to match the specified schema.
+
+        2, Project away columns and/or inner fields that are not needed by the specified schema.
+        Missing columns and/or inner fields (present in the specified schema but not input
+        DataFrame) lead to failures.
+
+        3, Cast the columns and/or inner fields to match the data types in the specified schema,
+        if the types are compatible, e.g., numeric to numeric (error if overflows), but not string
+        to int.
+
+        4, Carry over the metadata from the specified schema, while the columns and/or inner fields
+        still keep their own metadata if not overwritten by the specified schema.
+
+        5, Fail if the nullability is not compatible. For example, the column and/or inner field
+        is nullable but the specified schema requires them to be not nullable.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            Specified schema.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([("a", 1)], ["i", "j"])
+        >>> df.schema
+        StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
+        >>> schema = StructType([StructField("j", StringType()), StructField("i", StringType())])
+        >>> df2 = df.to(schema)
+        >>> df2.schema
+        StructType([StructField('j', StringType(), True), StructField('i', StringType(), True)])
+        >>> df2.show()
+        +---+---+
+        |  j|  i|
+        +---+---+
+        |  1|  a|
+        +---+---+
+        """
+        assert schema is not None
+        jschema = self._jdf.sparkSession().parseDataType(schema.json())
+        return DataFrame(self._jdf.to(jschema), self.sparkSession)
+
     def alias(self, alias: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` with an alias set.
 
@@ -2187,6 +2237,142 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         from pyspark.sql.group import GroupedData
 
         return GroupedData(jgd, self)
+
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        This function is useful to massage a DataFrame into a format where some
+        columns are identifier columns ("ids"), while all other columns ("values")
+        are "unpivoted" to the rows, leaving just two non-id columns, named as given
+        by `variableColumnName` and `valueColumnName`.
+
+        When no "id" columns are given, the unpivoted DataFrame consists of only the
+        "variable" and "value" columns.
+
+        All "value" columns must share a least common data type. Unless they are the same data type,
+        all "value" columns are cast to the nearest common data type. For instance, types
+        `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+        do not have a common data type and `unpivot` fails.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list or tuple for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        DataFrame
+            Unpivoted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(1, 11, 1.1), (2, 12, 1.2)],
+        ...     ["id", "int", "double"],
+        ... )
+        >>> df.show()
+        +---+---+------+
+        | id|int|double|
+        +---+---+------+
+        |  1| 11|   1.1|
+        |  2| 12|   1.2|
+        +---+---+------+
+
+        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        +---+------+----+
+        | id|   var| val|
+        +---+------+----+
+        |  1|   int|11.0|
+        |  1|double| 1.1|
+        |  2|   int|12.0|
+        |  2|double| 1.2|
+        +---+------+----+
+
+        See Also
+        --------
+        DataFrame.melt
+        """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> JavaObject:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return self._jcols(*lst)
+
+        return DataFrame(
+            self._jdf.unpivotWithSeq(
+                to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
+            self.sparkSession,
+        )
+
+    def melt(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        :func:`melt` is an alias for :func:`unpivot`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list or tuple for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        DataFrame
+            Unpivoted DataFrame.
+
+        See Also
+        --------
+        DataFrame.unpivot
+        """
+        return self.unpivot(ids, values, variableColumnName, valueColumnName)
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Aggregate on the entire :class:`DataFrame` without groups

@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -148,14 +148,15 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  protected def getEvaluateExpression(queryContext: String): Expression = resultType match {
-    case d: DecimalType =>
-      val checkOverflowInSum =
-        CheckOverflowInSum(sum, d, !useAnsiAdd, queryContext)
-      If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
-    case _ if shouldTrackIsEmpty =>
-      If(isEmpty, Literal.create(null, resultType), sum)
-    case _ => sum
+  protected def getEvaluateExpression(context: SQLQueryContext = null): Expression = {
+    resultType match {
+      case d: DecimalType =>
+        val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
+        If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
+      case _ if shouldTrackIsEmpty =>
+        If(isEmpty, Literal.create(null, resultType), sum)
+      case _ => sum
+    }
   }
 
   // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
@@ -192,12 +193,12 @@ case class Sum(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(getContextOrNull())
 
-  override def initQueryContext(): String = if (useAnsiAdd) {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
+    Some(origin.context)
   } else {
-    ""
+    None
   }
 }
 
@@ -255,9 +256,9 @@ case class TrySum(child: Expression) extends SumBase(child) {
 
   override lazy val evaluateExpression: Expression =
     if (useAnsiAdd) {
-      TryEval(getEvaluateExpression(""))
+      TryEval(getEvaluateExpression())
     } else {
-      getEvaluateExpression("")
+      getEvaluateExpression()
     }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

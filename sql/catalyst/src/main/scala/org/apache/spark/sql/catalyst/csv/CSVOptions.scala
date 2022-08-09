@@ -148,7 +148,34 @@ class CSVOptions(
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  /**
+   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type)
+   * if schema inference is enabled. When being used with user-provided schema, tries to parse
+   * timestamp values as dates if the values do not conform to the timestamp formatter before
+   * falling back to the backward compatible parsing - the parsed values will be cast to timestamp
+   * afterwards.
+   *
+   * Disabled by default for backwards compatibility and performance.
+   *
+   * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
+   * extra trailing characters.
+   */
+  val prefersDate = {
+    val inferDateFlag = getBool("prefersDate")
+    if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
+    }
+    inferDateFlag
+  }
+
+  // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
+  // Iso8601DateFormatter (with strict date parsing) is used for date inference
+  val dateFormatInRead: Option[String] =
+    if (prefersDate) {
+      Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
+    } else {
+      parameters.get("dateFormat")
+    }
   val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
   val timestampFormatInRead: Option[String] =
@@ -168,6 +195,17 @@ class CSVOptions(
   val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
   val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
+  // SPARK-39731: Enables the backward compatible parsing behavior.
+  // Generally, this config should be set to false to avoid producing potentially incorrect results
+  // which is the current default (see UnivocityParser).
+  //
+  // If enabled and the date cannot be parsed, we will fall back to `DateTimeUtils.stringToDate`.
+  // If enabled and the timestamp cannot be parsed, `DateTimeUtils.stringToTimestamp` will be used.
+  // Otherwise, depending on the parser policy and a custom pattern, an exception may be thrown and
+  // the value will be parsed as null.
+  val enableDateTimeParsingFallback: Option[Boolean] =
+    parameters.get("enableDateTimeParsingFallback").map(_.toBoolean)
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -194,7 +232,6 @@ class CSVOptions(
    * If the option is enabled, headers of CSV files will be ignored.
    */
   val enforceSchema = getBool("enforceSchema", default = true)
-
 
   /**
    * String representation of an empty value in read and in write.

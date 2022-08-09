@@ -144,7 +144,12 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |CREATE TABLE t(i INT, k STRING) USING PARQUET
             |PARTITIONED BY (j INT)
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+        // When planned write is disabled, even though the write plan is already sorted,
+        // the AQE node inserted on top of the write query will remove the original
+        // sort orders. So the ordering will not match. This issue does not exist when
+        // planned write is enabled, because AQE will be applied on top of the write
+        // command instead of on top of the child query plan.
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
           sql("INSERT INTO t SELECT i, k, j FROM t0 ORDER BY j")
         }
       }
@@ -159,7 +164,7 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |CREATE TABLE t(i INT, j INT) USING PARQUET
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = true) {
+        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
           sql("INSERT INTO t SELECT * FROM t0 ORDER BY k")
         }
       }
@@ -210,6 +215,45 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
                 |WHERE value = '1'
                 |""".stripMargin)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37194: Avoid unnecessary sort in v1 write if it's not dynamic partition") {
+    withPlannedWrite { enabled =>
+      withTable("t") {
+        sql(
+          """
+            |CREATE TABLE t(key INT, value STRING) USING PARQUET
+            |PARTITIONED BY (p1 INT, p2 STRING)
+            |""".stripMargin)
+
+        // partition columns are static
+        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1=1, p2='a')
+              |SELECT key, value FROM testData
+              |""".stripMargin)
+        }
+
+        // one static partition column and one dynamic partition column
+        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1=1, p2)
+              |SELECT key, value, value FROM testData
+              |""".stripMargin)
+        }
+
+        // partition columns are dynamic
+        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+          sql(
+            """
+              |INSERT INTO t PARTITION(p1, p2)
+              |SELECT key, value, key, value FROM testData
+              |""".stripMargin)
         }
       }
     }

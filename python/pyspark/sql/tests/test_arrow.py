@@ -348,7 +348,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_pandas_self_destruct(self):
         import pyarrow as pa
 
-        rows = 2 ** 10
+        rows = 2**10
         cols = 4
         expected_bytes = rows * cols * 8
         df = self.spark.range(0, rows).select(*[rand() for _ in range(cols)])

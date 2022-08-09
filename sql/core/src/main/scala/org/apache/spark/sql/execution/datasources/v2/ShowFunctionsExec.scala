@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.execution.LeafExecNode
 
@@ -37,28 +38,27 @@ case class ShowFunctionsExec(
     systemScope: Boolean,
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
+  private def applyPattern(names: Seq[String]): Seq[String] = {
+    StringUtils.filterPattern(names.toSeq, pattern.getOrElse("*"))
+  }
+
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val systemFunctions = if (systemScope) {
-      // All built-in functions
-      (FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet).map(_.unquotedString) ++
-      // Hard code "<>", "!=", "between", "case", and "||"
-      // for now as there is no corresponding functions.
-      // "<>", "!=", "between", "case", and "||" is system functions,
-      // only show when systemScope=true
-      FunctionRegistry.builtinOperators.keys.toSeq
+      // All built-in functions, and operators such as "<>", "||"
+      val builtinFunctions = FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
+      applyPattern(builtinFunctions.map(_.unquotedString).toSeq ++
+        FunctionRegistry.builtinOperators.keys.toSeq)
     } else Seq.empty
     val userFunctions = if (userScope) {
       // List all temporary functions in the session catalog
-      session.sessionState.catalog.listTemporaryFunctions().map(_.unquotedString) ++
-      // List all functions registered in the given name space of the catalog
-      catalog.listFunctions(namespace.toArray).map(_.name()).toSeq
+      applyPattern(session.sessionState.catalog.listTemporaryFunctions().map(_.unquotedString)) ++
+        // List all functions registered in the given namespace of the catalog
+        applyPattern(catalog.listFunctions(namespace.toArray).map(_.name())).map { funcName =>
+          (catalog.name() +: namespace :+ funcName).quoted
+        }
     } else Seq.empty
-    val allFunctions = StringUtils.filterPattern(
-      userFunctions ++ systemFunctions,
-      pattern.getOrElse("*")).distinct.sorted
-
-    allFunctions.foreach { fn =>
+    (userFunctions ++ systemFunctions).distinct.sorted.foreach { fn =>
       rows += toCatalystRow(fn)
     }
 

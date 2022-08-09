@@ -646,7 +646,7 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
@@ -931,8 +931,12 @@ package object config {
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
     ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
       .internal()
+      .doc("The number of listeners that have timers to track the elapsed time of" +
+        "processing events. If 0 is set, disables this feature. If -1 is set," +
+        "it sets no limit to the number.")
       .version("2.3.0")
       .intConf
+      .checkValue(_ >= -1, "The number of listeners should be larger than -1.")
       .createWithDefault(128)
 
   private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =

@@ -235,8 +235,10 @@ Aggregate Functions
     max
     max_by
     mean
+    median
     min
     min_by
+    mode
     percentile_approx
     product
     skewness

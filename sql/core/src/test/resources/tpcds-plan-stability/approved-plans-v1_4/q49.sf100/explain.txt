@@ -112,6 +112,7 @@ Output [1]: [d_date_sk#8]
 (6) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ws_sold_date_sk#6]
 Right keys [1]: [d_date_sk#8]
+Join type: Inner
 Join condition: None
 
 (7) Project [codegen id : 2]
@@ -155,6 +156,7 @@ Arguments: [wr_order_number#10 ASC NULLS FIRST, wr_item_sk#9 ASC NULLS FIRST], f
 (16) SortMergeJoin [codegen id : 6]
 Left keys [2]: [ws_order_number#2, ws_item_sk#1]
 Right keys [2]: [wr_order_number#10, wr_item_sk#9]
+Join type: Inner
 Join condition: None
 
 (17) Project [codegen id : 6]
@@ -232,6 +234,7 @@ Output [1]: [d_date_sk#42]
 (33) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [cs_sold_date_sk#41]
 Right keys [1]: [d_date_sk#42]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 12]
@@ -275,6 +278,7 @@ Arguments: [cr_order_number#44 ASC NULLS FIRST, cr_item_sk#43 ASC NULLS FIRST], 
 (43) SortMergeJoin [codegen id : 16]
 Left keys [2]: [cs_order_number#37, cs_item_sk#36]
 Right keys [2]: [cr_order_number#44, cr_item_sk#43]
+Join type: Inner
 Join condition: None
 
 (44) Project [codegen id : 16]
@@ -352,6 +356,7 @@ Output [1]: [d_date_sk#76]
 (60) BroadcastHashJoin [codegen id : 22]
 Left keys [1]: [ss_sold_date_sk#75]
 Right keys [1]: [d_date_sk#76]
+Join type: Inner
 Join condition: None
 
 (61) Project [codegen id : 22]
@@ -395,6 +400,7 @@ Arguments: [sr_ticket_number#78 ASC NULLS FIRST, sr_item_sk#77 ASC NULLS FIRST],
 (70) SortMergeJoin [codegen id : 26]
 Left keys [2]: [ss_ticket_number#71, ss_item_sk#70]
 Right keys [2]: [sr_ticket_number#78, sr_item_sk#77]
+Join type: Inner
 Join condition: None
 
 (71) Project [codegen id : 26]
