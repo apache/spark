@@ -110,7 +110,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   /**
    * Currently, [SPARK-39984] is only for StandaloneSchedulerBackend.
-   * */
+   */
   private val checkWorkerLastHeartbeat =
     sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT) &&
       sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
@@ -142,11 +142,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     // Messages sent and received locally
     case ExecutorRegistered(executorId) =>
       executorLastSeen(executorId) = clock.getTimeMillis()
-      waitingList.remove(executorId)
+      removeExecutorFromWaitingList(executorId)
       context.reply(true)
     case ExecutorRemoved(executorId) =>
       executorLastSeen.remove(executorId)
-      waitingList.remove(executorId)
+      removeExecutorFromWaitingList(executorId)
       context.reply(true)
     case TaskSchedulerIsSet =>
       scheduler = sc.taskScheduler
@@ -159,9 +159,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       var reregisterBlockManager = !sc.isStopped
       if (scheduler != null) {
-        if (executorLastSeen.contains(executorId) || waitingList.contains(executorId)) {
+        if (executorLastSeen.contains(executorId) ||
+          (checkWorkerLastHeartbeat && waitingList.contains(executorId))) {
           executorLastSeen(executorId) = clock.getTimeMillis()
-          waitingList.remove(executorId)
+          removeExecutorFromWaitingList(executorId)
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
@@ -261,6 +262,12 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     })
   }
 
+  private def removeExecutorFromWaitingList(executorId: String): Unit = {
+    if (checkWorkerLastHeartbeat) {
+      waitingList.remove(executorId)
+    }
+  }
+
   private def expireDeadHosts(): Unit = {
   /**
    * [SPARK-39984]
@@ -304,7 +311,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
           killExecutor(executorId, now - lastSeenMs)
-          waitingList.remove(executorId)
           executorLastSeen.remove(executorId)
         }
       }
