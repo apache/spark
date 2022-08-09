@@ -798,8 +798,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+
         >>> df.count()
-        2
+        3
         """
         return int(self._jdf.count())
 
@@ -1179,6 +1189,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (23, "Alice")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 23|Alice|
+        +---+-----+
+
         >>> df.distinct().count()
         2
         """
@@ -1375,8 +1395,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice")], ["age", "name"])
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        +---+-----+
+
         >>> df.dtypes
-        [('age', 'int'), ('name', 'string')]
+        [('age', 'bigint'), ('name', 'string')]
         """
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
@@ -2743,7 +2772,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df4.na.fill(50).show()
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df.show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
+        >>> df.na.fill(50).show()
         +---+------+-----+
         |age|height| name|
         +---+------+-----+
@@ -2753,7 +2792,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|    50| null|
         +---+------+-----+
 
-        >>> df5.na.fill(False).show()
+        >>> df = spark.createDataFrame([(10, "Alice", None), (5, "Bob", None), (None, "Mallory", True)], ["age", "name", "spy"])
+        >>> df.show()
+        +----+-------+----+
+        | age|   name| spy|
+        +----+-------+----+
+        |  10|  Alice|null|
+        |   5|    Bob|null|
+        |null|Mallory|true|
+        +----+-------+----+
+        >>> df.na.fill(False).show()
         +----+-------+-----+
         | age|   name|  spy|
         +----+-------+-----+
@@ -2762,7 +2810,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |null|Mallory| true|
         +----+-------+-----+
 
-        >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df.show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
+        >>> df.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
         |age|height|   name|
         +---+------+-------+
@@ -2869,7 +2927,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df4.na.replace(10, 20).show()
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df.show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
+        >>> df.na.replace(10, 20).show()
         +----+------+-----+
         | age|height| name|
         +----+------+-----+
@@ -2879,7 +2947,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |null|  null| null|
         +----+------+-----+
 
-        >>> df4.na.replace('Alice', None).show()
+        Replace all instances of Alice to null
+
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df.show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
+        >>> df.na.replace('Alice', None).show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
@@ -2889,17 +2969,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |null|  null|null|
         +----+------+----+
 
-        >>> df4.na.replace({'Alice': None}).show()
-        +----+------+----+
-        | age|height|name|
-        +----+------+----+
-        |  10|    80|null|
-        |   5|  null| Bob|
-        |null|  null| Tom|
-        |null|  null|null|
-        +----+------+----+
-
-        >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
+        Replace all instances of Alice to 'A' and Bob to 'B' under the name column
+        
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df.show()
+        +----+------+-----+
+        | age|height| name|
+        +----+------+-----+
+        |  10|    80|Alice|
+        |   5|  null|  Bob|
+        |null|  null|  Tom|
+        |null|  null| null|
+        +----+------+-----+
+        >>> df.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
