@@ -30,6 +30,12 @@ public interface DB extends Closeable {
     void put(byte[] key, byte[] value) throws RuntimeException;
 
     /**
+     * Get which returns a new byte array storing the value associated
+     * with the specified input key if any.
+     */
+    byte[] get(byte[] key) throws RuntimeException;
+
+    /**
      * Delete the DB entry (if any) for "key".
      */
     void delete(byte[] key) throws RuntimeException;
