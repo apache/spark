@@ -895,7 +895,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
-  def canContainsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].nullable
+  def arrayNullable: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].nullable
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
@@ -931,7 +931,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
       val canPerformFastSort =
-        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !canContainsNull
+        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !arrayNullable
       val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
