@@ -1626,6 +1626,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [NAME IS NOT NULL]"
     checkPushedInfo(df5, expectedPlanFragment5)
     checkAnswer(df5, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    val df6 = sql("SELECT * FROM h2.test.employee WHERE bit_length(name) = 40")
+    checkFiltersRemoved(df6)
+    checkPushedInfo(df6, "[NAME IS NOT NULL, BIT_LENGTH(NAME) = 40]")
+    checkAnswer(df6, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+
+    val df7 = sql("SELECT * FROM h2.test.employee WHERE char_length(name) = 5")
+    checkFiltersRemoved(df7)
+    checkPushedInfo(df7, "[NAME IS NOT NULL, CHAR_LENGTH(NAME) = 5]")
+    checkAnswer(df6, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+
+    val df8 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "concat(name, ',' , cast(salary as string)) = 'cathy,9000.00'")
+    checkFiltersRemoved(df8)
+    checkPushedInfo(df8, "[(CONCAT(NAME, ',', CAST(SALARY AS string))) = 'cathy,9000.00']")
+    checkAnswer(df8, Seq(Row(1, "cathy", 9000, 1200, false)))
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {

@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression =>
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableExpression
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -217,6 +217,11 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       generateExpressionWithName("SUBSTRING", children)
     case Upper(child) => generateExpressionWithName("UPPER", Seq(child))
     case Lower(child) => generateExpressionWithName("LOWER", Seq(child))
+    case BitLength(child) if child.dataType.isInstanceOf[StringType] =>
+      generateExpressionWithName("BIT_LENGTH", Seq(child))
+    case Length(child) if child.dataType.isInstanceOf[StringType] =>
+      generateExpressionWithName("CHAR_LENGTH", Seq(child))
+    case concat: Concat => generateExpressionWithName("CONCAT", concat.children)
     case translate: StringTranslate => generateExpressionWithName("TRANSLATE", translate.children)
     case trim: StringTrim => generateExpressionWithName("TRIM", trim.children)
     case trim: StringTrimLeft => generateExpressionWithName("LTRIM", trim.children)
