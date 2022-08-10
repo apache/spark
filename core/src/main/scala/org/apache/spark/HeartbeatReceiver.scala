@@ -79,17 +79,17 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   /**
    * [SPARK-39984]
-   * Please make sure the intersection between `executorLastSeen` and `waitingList` is an empty set.
-   * If the intersection is not empty, it is possible to never kill the executor until the executor
-   * recovers. When an executor is in both `executorLastSeen` and `waitingList`, the value of
-   * `workerLastHeartbeat` in waitingList may update if the worker sends heartbeats to master
-   * normally.
+   * Please make sure the intersection between `executorLastSeen` and `executorExpiryCandidates` is
+   * an empty set. If the intersection is not empty, it is possible to never kill the executor until
+   * the executor recovers. When an executor is in both `executorLastSeen` and
+   * `executorExpiryCandidates`, the value of `workerLastHeartbeat` in `executorExpiryCandidates`
+   * may update if the worker sends heartbeats to master normally.
    *
    * `executorLastSeen`:
    *  - key: executor ID
    *  - value: timestamp of when the last heartbeat from this executor was received
    *
-   *  `waitingList`: executor ID -> WorkerLastHeartbeat
+   * `executorExpiryCandidates`: executor ID -> WorkerLastHeartbeat
    *  - key: executor ID
    *  - value: timestamp of when the last heartbeat from the worker was received
    *
@@ -98,7 +98,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * on.
    */
   private val executorLastSeen = new HashMap[String, Long]
-  private val waitingList = new HashMap[String, Long]
+  private val executorExpiryCandidates = new HashMap[String, Long]
 
   private val executorTimeoutMs = sc.conf.get(
     config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT
@@ -117,12 +117,13 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * Currently, [SPARK-39984] is only for StandaloneSchedulerBackend.
    *
    * `checkWorkerLastHeartbeat`: A flag to enable two-phase executor timeout.
-   * `waitingListTimeout`: The timeout used for waitingList.
+   * `expiryCandidatesTimeout`: The timeout used for executorExpiryCandidates.
    */
   private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
-  private val waitingListTimeout = checkWorkerLastHeartbeat match {
+  private val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
     case true =>
-      sc.conf.get(Network.HEARTBEAT_WAITINGLIST_TIMEOUT).getOrElse(Utils.timeStringAsMs("30s"))
+      sc.conf.get(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
+        .getOrElse(Utils.timeStringAsMs("30s"))
     case false => Utils.timeStringAsMs("0s")
   }
 
@@ -153,11 +154,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     // Messages sent and received locally
     case ExecutorRegistered(executorId) =>
       executorLastSeen(executorId) = clock.getTimeMillis()
-      removeExecutorFromWaitingList(executorId)
+      removeExecutorFromExpiryCandidates(executorId)
       context.reply(true)
     case ExecutorRemoved(executorId) =>
       executorLastSeen.remove(executorId)
-      removeExecutorFromWaitingList(executorId)
+      removeExecutorFromExpiryCandidates(executorId)
       context.reply(true)
     case TaskSchedulerIsSet =>
       scheduler = sc.taskScheduler
@@ -172,9 +173,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       if (scheduler != null) {
         val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
         if (executorLastSeen.contains(executorId) ||
-          (checkWorkerLastHeartbeat && isStandalone && waitingList.contains(executorId))) {
+          (checkWorkerLastHeartbeat && isStandalone &&
+            executorExpiryCandidates.contains(executorId))) {
           executorLastSeen(executorId) = clock.getTimeMillis()
-          removeExecutorFromWaitingList(executorId)
+          removeExecutorFromExpiryCandidates(executorId)
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
@@ -275,10 +277,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     })
   }
 
-  private def removeExecutorFromWaitingList(executorId: String): Unit = {
+  private def removeExecutorFromExpiryCandidates(executorId: String): Unit = {
     val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
     if (checkWorkerLastHeartbeat && isStandalone) {
-      waitingList.remove(executorId)
+      executorExpiryCandidates.remove(executorId)
     }
   }
 
@@ -301,7 +303,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * ask for the latest heartbeat from the worker which the executor runs on `workerLastHeartbeat`.
    * HeartbeatReceiver can determine whether the heartbeat loss is caused by network issues or other
    * issues (e.g. GC). If the heartbeat loss is not caused by network issues, the HeartbeatReceiver
-   * will put the executor into a waitingList rather than expiring it immediately.
+   * will put the executor into a executorExpiryCandidates rather than expiring it immediately.
    *
    * [Note]: Definition of `network issues`
    * Here, the definition `network issues` is the issues that related to network directly. If the
@@ -314,7 +316,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * [Warning 1]
    * Worker will send heartbeats to Master every (conf.get(WORKER_TIMEOUT) * 1000 / 4) milliseconds.
    * Check deploy/worker/Worker.scala for more details. This new mechanism design is based on the
-   * assumption: `waitingListTimeout` > (conf.get(WORKER_TIMEOUT) * 1000 / 4).
+   * assumption: `expiryCandidatesTimeout` > (conf.get(WORKER_TIMEOUT) * 1000 / 4).
    *
    * [Warning 2]
    * Not every deployment method schedules driver on master.
@@ -335,10 +337,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         }
       }
     } else {
-      for ((executorId, workerLastHeartbeat) <- waitingList) {
-        if (now - workerLastHeartbeat > waitingListTimeout) {
+      for ((executorId, workerLastHeartbeat) <- executorExpiryCandidates) {
+        if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
           killExecutor(executorId, now - workerLastHeartbeat)
-          waitingList.remove(executorId)
+          executorExpiryCandidates.remove(executorId)
           executorLastSeen.remove(executorId)
         }
       }
@@ -355,12 +357,12 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           backend.client.workerLastHeartbeat(sc.applicationId, buf) match {
             case Some(workerLastHeartbeats) =>
               for ((executorId, workerLastHeartbeat) <- buf zip workerLastHeartbeats) {
-                if (now - workerLastHeartbeat > waitingListTimeout) {
+                if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
                   val lastSeenMs = executorLastSeen.get(executorId).get
                   killExecutor(executorId, now - lastSeenMs)
-                  waitingList.remove(executorId)
+                  executorExpiryCandidates.remove(executorId)
                 } else {
-                  waitingList(executorId) = workerLastHeartbeat
+                  executorExpiryCandidates(executorId) = workerLastHeartbeat
                 }
                 executorLastSeen.remove(executorId)
               }
@@ -369,7 +371,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
                 val lastSeenMs = executorLastSeen.get(executorId).get
                 killExecutor(executorId, now - lastSeenMs)
                 executorLastSeen.remove(executorId)
-                waitingList.remove(executorId)
+                executorExpiryCandidates.remove(executorId)
               }
           }
         case _ =>

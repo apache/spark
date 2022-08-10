@@ -57,11 +57,11 @@ private[spark] object Network {
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
-  private[spark] val HEARTBEAT_WAITINGLIST_TIMEOUT =
-    ConfigBuilder("spark.network.waitingListTimeout")
-      .doc("This config is a timeout used for heartbeat receiver waitingList. Be effective" +
-        "only when HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled. See [SPARK-39984]" +
-        "for more details")
+  private[spark] val HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT =
+    ConfigBuilder("spark.network.expiryCandidatesTimeout")
+      .doc("This config is a timeout used for heartbeat receiver `executorExpiryCandidates`. Be" +
+        "effective only when HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled. See" +
+        "[SPARK-39984] for more details")
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional

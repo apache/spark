@@ -64,8 +64,9 @@ class HeartbeatReceiverSuite
     PrivateMethod[collection.Map[String, Long]](Symbol("executorLastSeen"))
   private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
   private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
-  private val _waitingList = PrivateMethod[mutable.HashMap[String, Long]](Symbol("waitingList"))
-  private val _waitingListTimeout = PrivateMethod[Long](Symbol("waitingListTimeout"))
+  private val _executorExpiryCandidates =
+    PrivateMethod[mutable.HashMap[String, Long]](Symbol("executorExpiryCandidates"))
+  private val _expiryCandidatesTimeout = PrivateMethod[Long](Symbol("expiryCandidatesTimeout"))
 
   var conf: SparkConf = _
 
@@ -206,28 +207,29 @@ class HeartbeatReceiverSuite
     // now = 120001
     heartbeatReceiverClock.advance(executorTimeout + 1)
     // Executor1 will not be killed because workerLastHeartbeat is 120000. Executor1 will be removed
-    // from executorLastSeen (trackedExecutors.size === 0) and moved to waitingList
-    // (waitingList.size === 1). In other words, waitingList is equal to Map(1 -> 120000).
+    // from executorLastSeen (trackedExecutors.size === 0) and moved to executorExpiryCandidates
+    // (executorExpiryCandidates.size === 1). In other words, executorExpiryCandidates is equal to
+    // Map(1 -> 120000).
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
     var trackedExecutors = getTrackedExecutors
-    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    var executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 0)
-    assert(waitingList.size === 1)
-    assert(waitingList.contains(executorId1))
+    assert(executorExpiryCandidates.size === 1)
+    assert(executorExpiryCandidates.contains(executorId1))
 
     // now = 240001
-    // The executor will be removed from waitingList because (now - waitingList(1)) is larger than
-    // (executorTimeoutMs / 2).
+    // The executor will be removed from executorExpiryCandidates because
+    // (now - executorExpiryCandidates(1)) is larger than (executorTimeoutMs / 2).
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
     trackedExecutors = getTrackedExecutors
-    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 0)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
   }
 
-  test("Remove executor from waitingList when receiving a heartbeat") {
+  test("Remove executor from executorExpiryCandidates when receiving a heartbeat") {
     sc.stop()
     conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
@@ -265,28 +267,29 @@ class HeartbeatReceiverSuite
     // now = 120001
     heartbeatReceiverClock.advance(executorTimeout + 1)
     // Executor1 will not be killed because workerLastHeartbeat is 120000. Executor1 will be removed
-    // from executorLastSeen (trackedExecutors.size === 0) and moved to waitingList
-    // (waitingList.size === 1). In other words, waitingList is equal to Map(1 -> 120000).
+    // from executorLastSeen (trackedExecutors.size === 0) and moved to executorExpiryCandidates
+    // (executorExpiryCandidates.size === 1). In other words, executorExpiryCandidates is equal to
+    // Map(1 -> 120000).
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
     var trackedExecutors = getTrackedExecutors
-    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    var executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 0)
-    assert(waitingList.size === 1)
-    assert(waitingList.contains(executorId1))
+    assert(executorExpiryCandidates.size === 1)
+    assert(executorExpiryCandidates.contains(executorId1))
 
     // now = 120001
     // When heartbeatReceiver receives a heartbeat from executor1, executor1 will be removed from
-    // waitingList and moved to executorLastSeen.
+    // executorExpiryCandidates and moved to executorLastSeen.
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     trackedExecutors = getTrackedExecutors
-    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 1)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
   }
 
-  test("Remove executor from both waitingList and executorLastSeen when receiving an " +
-    "ExecutorRemoved msg") {
+  test("Remove executor from both executorExpiryCandidates and executorLastSeen when receiving" +
+    "an ExecutorRemoved msg") {
     sc.stop()
     conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
@@ -322,38 +325,38 @@ class HeartbeatReceiverSuite
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
     var trackedExecutors = getTrackedExecutors
-    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    var executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 2)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
 
     // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled, but we did not set the
-    // value of HEARTBEAT_WAITINGLIST_TIMEOUT. Hence, waitingListTimeout is same as
+    // value of HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT. Hence, expiryCandidatesTimeout is same as
     // default value (30s = 30000ms).
-    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
-    assert(waitingListTimeout == 30000)
+    val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
+    assert(expiryCandidatesTimeout == 30000)
 
     // Advance the clock and only trigger a heartbeat for the first executor
-    heartbeatReceiverClock.advance(waitingListTimeout)
+    heartbeatReceiverClock.advance(expiryCandidatesTimeout)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
-    // Only the second executor will be put into waitingList
+    // Only the second executor will be put into executorExpiryCandidates
     trackedExecutors = getTrackedExecutors
     assert(trackedExecutors.size === 1)
     assert(trackedExecutors.contains(executorId1))
-    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
-    assert(waitingList.size === 1)
-    assert(waitingList.contains(executorId2))
+    executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
+    assert(executorExpiryCandidates.size === 1)
+    assert(executorExpiryCandidates.contains(executorId2))
 
     // When heartbeatReceiver receives ExecutorRemoved, it will remove the executor from both
-    // executorLastSeen and waitingList.
+    // executorLastSeen and executorExpiryCandidates.
     heartbeatReceiverRef.askSync[Boolean](ExecutorRemoved(executorId1))
     heartbeatReceiverRef.askSync[Boolean](ExecutorRemoved(executorId2))
     trackedExecutors = getTrackedExecutors
-    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 0)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
   }
 
   test("Remove all executors if HeartbeatReceiver cannot connect to master") {
@@ -393,9 +396,9 @@ class HeartbeatReceiverSuite
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     triggerHeartbeat(executorId2, executorShouldReregister = false)
     var trackedExecutors = getTrackedExecutors
-    var waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    var executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 2)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
 
     // When (now - executorLastSeen(execID)) is larger than executorTimeout, heartbeatReceiver will
     // ask master node for workerLastHeartbeat. However, in this test, heartbeatReceiver cannot
@@ -403,11 +406,11 @@ class HeartbeatReceiverSuite
     heartbeatReceiverClock.advance(executorTimeout + 1)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
-    // Both executors will be removed from executorLastSeen and waitingList.
+    // Both executors will be removed from executorLastSeen and executorExpiryCandidates.
     trackedExecutors = getTrackedExecutors
-    waitingList = heartbeatReceiver.invokePrivate(_waitingList())
+    executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
     assert(trackedExecutors.size === 0)
-    assert(waitingList.size === 0)
+    assert(executorExpiryCandidates.size === 0)
   }
 
   test("executorTimeout will fallback to NETWORK_TIMEOUT if NETWORK_EXECUTOR_TIMEOUT is not set") {
@@ -417,7 +420,7 @@ class HeartbeatReceiverSuite
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
       .set(Network.NETWORK_TIMEOUT.key, "100s")
-      .set(Network.HEARTBEAT_WAITINGLIST_TIMEOUT.key, "50s")
+      .set(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT.key, "50s")
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -429,9 +432,9 @@ class HeartbeatReceiverSuite
     assert(executorTimeout == 100000)
 
     // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is not enabled, so the value
-    // of waitingListTimeout is 0.
-    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
-    assert(waitingListTimeout == 0)
+    // of expiryCandidatesTimeout is 0.
+    val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
+    assert(expiryCandidatesTimeout == 0)
   }
 
   test("check executorTimeout value when NETWORK_EXECUTOR_TIMEOUT is set") {
@@ -442,7 +445,7 @@ class HeartbeatReceiverSuite
       .set(DYN_ALLOCATION_TESTING, true)
       .set(Network.NETWORK_EXECUTOR_TIMEOUT.key, "50s")
       .set(Network.NETWORK_TIMEOUT_INTERVAL.key, "15s")
-      .set(Network.HEARTBEAT_WAITINGLIST_TIMEOUT.key, "20s")
+      .set(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT.key, "20s")
       .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
@@ -455,8 +458,8 @@ class HeartbeatReceiverSuite
     assert(executorTimeout == 50000)
 
     // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled.
-    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
-    assert(waitingListTimeout == 20000)
+    val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
+    assert(expiryCandidatesTimeout == 20000)
   }
 
   test("expire dead hosts should kill executors with replacement (SPARK-8119)") {
