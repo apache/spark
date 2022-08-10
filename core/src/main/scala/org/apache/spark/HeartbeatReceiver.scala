@@ -161,8 +161,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     // Messages received from executors
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       var reregisterBlockManager = !sc.isStopped
-      val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
       if (scheduler != null) {
+        val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
         if (executorLastSeen.contains(executorId) ||
           (checkWorkerLastHeartbeat && isStandalone && waitingList.contains(executorId))) {
           executorLastSeen(executorId) = clock.getTimeMillis()
@@ -313,7 +313,12 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = clock.getTimeMillis()
-    val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
+    var isStandalone = sc.schedulerBackend match {
+      case backend: CoarseGrainedSchedulerBackend =>
+        backend.isInstanceOf[StandaloneSchedulerBackend]
+      case _ => false
+    }
+
     if (!checkWorkerLastHeartbeat || !isStandalone) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
@@ -333,14 +338,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       val buf = new ArrayBuffer[String]()
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
-          sc.schedulerBackend match {
-            case _: StandaloneSchedulerBackend =>
-              buf += executorId
-            case _ =>
-              killExecutor(executorId, now - lastSeenMs)
-              waitingList.remove(executorId)
-              executorLastSeen.remove(executorId)
-          }
+            buf += executorId
         }
       }
 
