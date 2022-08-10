@@ -128,7 +128,7 @@ select sort_array(array('b', 'd'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -137,7 +137,7 @@ select sort_array(array('b', 'd'), cast(NULL as boolean))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -191,8 +191,8 @@ select elt(4, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["4","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":26,"fragment":"elt(4, '123', '456'"}]}
 
 
 -- !query
@@ -200,8 +200,8 @@ select elt(0, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["0","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":26,"fragment":"elt(0, '123', '456'"}]}
 
 
 -- !query
@@ -209,8 +209,8 @@ select elt(-1, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["-1","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":27,"fragment":"elt(-1, '123', '456'"}]}
 
 
 -- !query
@@ -301,7 +301,7 @@ select array_size(map('a', 1, 'b', 2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -360,8 +360,8 @@ select elt(4, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["4","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":26,"fragment":"elt(4, '123', '456'"}]}
 
 
 -- !query
@@ -369,8 +369,8 @@ select elt(0, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["0","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":26,"fragment":"elt(0, '123', '456'"}]}
 
 
 -- !query
@@ -378,5 +378,5 @@ select elt(-1, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{"errorClass":"INVALID_ARRAY_INDEX","messageParameters":["-1","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":27,"fragment":"elt(-1, '123', '456'"}]}

@@ -29,7 +29,7 @@ SELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nSampling fraction (-0.01) must be on interval [0, 1](line 1, pos 24)\n\n== SQL ==\nSELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT)\n------------------------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -38,7 +38,7 @@ SELECT mydb1.t1 FROM t1 TABLESAMPLE (101 PERCENT)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nSampling fraction (1.01) must be on interval [0, 1](line 1, pos 24)\n\n== SQL ==\nSELECT mydb1.t1 FROM t1 TABLESAMPLE (101 PERCENT)\n------------------------^^^\n"],"queryContext":[]}
 
 
 -- !query

@@ -68,8 +68,8 @@ SELECT assert_true(false)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["'false' is not true!"],"queryContext":[]}
 
 
 -- !query
@@ -77,8 +77,8 @@ SELECT assert_true(boolean(0))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["'cast(0 as boolean)' is not true!"],"queryContext":[]}
 
 
 -- !query
@@ -86,8 +86,8 @@ SELECT assert_true(null)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["'null' is not true!"],"queryContext":[]}
 
 
 -- !query
@@ -95,8 +95,8 @@ SELECT assert_true(boolean(null))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["'cast(null as boolean)' is not true!"],"queryContext":[]}
 
 
 -- !query
@@ -104,8 +104,8 @@ SELECT assert_true(false, 'custom error message')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["custom error message"],"queryContext":[]}
 
 
 -- !query
@@ -121,8 +121,8 @@ SELECT raise_error('error message')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["error message"],"queryContext":[]}
 
 
 -- !query
@@ -130,5 +130,5 @@ SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+java.lang.RuntimeException
+{"errorClass":"legacy","messageParameters":["too big: 8"],"queryContext":[]}

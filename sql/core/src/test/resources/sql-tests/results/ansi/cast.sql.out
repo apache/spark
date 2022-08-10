@@ -259,7 +259,7 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(CAST(123 AS TINYINT) AS BINARY)' due to data type mismatch: \n cannot cast tinyint to binary with ANSI mode on.\n If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -268,7 +268,7 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(CAST(-123 AS TINYINT) AS BINARY)' due to data type mismatch: \n cannot cast tinyint to binary with ANSI mode on.\n If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -277,7 +277,7 @@ SELECT HEX(CAST(123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(123S AS BINARY)' due to data type mismatch: \n cannot cast smallint to binary with ANSI mode on.\n If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -286,7 +286,7 @@ SELECT HEX(CAST(-123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(-123S AS BINARY)' due to data type mismatch: \n cannot cast smallint to binary with ANSI mode on.\n If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -295,7 +295,7 @@ SELECT HEX(CAST(123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(123 AS BINARY)' due to data type mismatch: \n cannot cast int to binary with ANSI mode on.\n If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -304,7 +304,7 @@ SELECT HEX(CAST(-123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(-123 AS BINARY)' due to data type mismatch: \n cannot cast int to binary with ANSI mode on.\n If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -313,7 +313,7 @@ SELECT HEX(CAST(123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(123L AS BINARY)' due to data type mismatch: \n cannot cast bigint to binary with ANSI mode on.\n If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -322,7 +322,7 @@ SELECT HEX(CAST(-123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'CAST(-123L AS BINARY)' due to data type mismatch: \n cannot cast bigint to binary with ANSI mode on.\n If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.\n; line 1 pos 11"],"queryContext":[]}
 
 
 -- !query
@@ -380,7 +380,7 @@ SELECT CAST(interval 3 month 1 hour AS string)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nCannot mix year-month and day-time fields: interval 3 month 1 hour(line 1, pos 12)\n\n== SQL ==\nSELECT CAST(interval 3 month 1 hour AS string)\n------------^^^\n"],"queryContext":[]}
 
 
 -- !query

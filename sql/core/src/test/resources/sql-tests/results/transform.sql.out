@@ -400,7 +400,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nLINES TERMINATED BY only supports newline '\\n' right now: @(line 3, pos 4)\n\n== SQL ==\nSELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (\n  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)\n    ROW FORMAT DELIMITED\n----^^^\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n    USING 'cat' AS (\n      a string,\n      b string,\n      c string,\n      d string,\n      e string,\n      f string,\n      g string,\n      h string,\n      i string,\n      j string,\n      k string,\n      l string)\n    ROW FORMAT DELIMITED\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n  FROM t\n) tmp\n"],"queryContext":[]}
 
 
 -- !query

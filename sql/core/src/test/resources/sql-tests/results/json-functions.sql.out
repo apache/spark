@@ -69,7 +69,7 @@ select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Must use a map() function for options; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -78,7 +78,7 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -87,7 +87,7 @@ select to_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function to_json. Expected: one of 1 and 2; Found: 0; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -112,7 +112,7 @@ select from_json('{"a":1}', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["The expression '1' is not a valid schema string.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -121,7 +121,7 @@ select from_json('{"a":1}', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Cannot parse the data type: \n[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)\n\n== SQL ==\na InvalidType\n--^^^\n\nFailed fallback parsing: \nDataType invalidtype is not supported.(line 1, pos 2)\n\n== SQL ==\na InvalidType\n--^^^\n; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -130,7 +130,7 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Must use a map() function for options; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -139,7 +139,7 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -148,7 +148,7 @@ select from_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -376,7 +376,7 @@ select schema_of_json(null)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'schema_of_json(NULL)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got NULL.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -393,7 +393,7 @@ SELECT schema_of_json(jsonField) FROM jsonTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'schema_of_json(jsontable.jsonField)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got jsontable.jsonField.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -410,7 +410,7 @@ select json_array_length(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'json_array_length(2)' due to data type mismatch: argument 1 requires string type, however, '2' is of int type.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -419,7 +419,7 @@ select json_array_length()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function json_array_length. Expected: 1; Found: 0; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -492,7 +492,7 @@ select json_object_keys()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function json_object_keys. Expected: 1; Found: 0; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -509,7 +509,7 @@ select json_object_keys(200)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 'json_object_keys(200)' due to data type mismatch: argument 1 requires string type, however, '200' is of int type.; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query

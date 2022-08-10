@@ -216,7 +216,7 @@ select format_string('Hello %s %s', 'World')
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-Format specifier '%s'
+{"errorClass":"legacy","messageParameters":["Format specifier '%s'"],"queryContext":[]}
 
 
 -- !query
@@ -225,7 +225,7 @@ select format_string('Hello %s')
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-Format specifier '%s'
+{"errorClass":"legacy","messageParameters":["Format specifier '%s'"],"queryContext":[]}
 
 
 -- !query
@@ -258,7 +258,7 @@ select format_string('%1$s %4$s', 1, 2, 3)
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-Format specifier '%4$s'
+{"errorClass":"legacy","messageParameters":["Format specifier '%4$s'"],"queryContext":[]}
 
 
 -- !query
@@ -267,7 +267,7 @@ select format_string('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-Format specifier '%13$s'
+{"errorClass":"legacy","messageParameters":["Format specifier '%13$s'"],"queryContext":[]}
 
 
 -- !query

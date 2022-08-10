@@ -546,7 +546,7 @@ SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 29"],"queryContext":[]}
 
 
 -- !query
@@ -3263,7 +3263,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 72"],"queryContext":[]}
 
 
 -- !query

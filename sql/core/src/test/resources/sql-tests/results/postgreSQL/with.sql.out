@@ -216,7 +216,7 @@ SELECT * FROM outermost ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Table or view not found: outermost; line 4 pos 23"],"queryContext":[]}
 
 
 -- !query
@@ -346,7 +346,7 @@ create table foo (with baz)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nDataType baz is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with baz)\n-----------------------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -355,7 +355,7 @@ create table foo (with ordinality)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nDataType ordinality is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with ordinality)\n-----------------------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -372,7 +372,7 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Table not found: test; line 1 pos 37"],"queryContext":[]}
 
 
 -- !query

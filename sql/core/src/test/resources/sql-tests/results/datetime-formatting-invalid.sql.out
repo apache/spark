@@ -23,7 +23,7 @@ select date_format('2018-11-17 13:33:33.333', 'qqqqq')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Too many pattern letters: q
+{"errorClass":"legacy","messageParameters":["Too many pattern letters: q"],"queryContext":[]}
 
 
 -- !query
@@ -32,7 +32,7 @@ select date_format('2018-11-17 13:33:33.333', 'QQQQQ')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Too many pattern letters: Q
+{"errorClass":"legacy","messageParameters":["Too many pattern letters: Q"],"queryContext":[]}
 
 
 -- !query
@@ -167,7 +167,7 @@ select date_format('2018-11-17 13:33:33.333', 'V')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Pattern letter count must be 2: V
+{"errorClass":"legacy","messageParameters":["Pattern letter count must be 2: V"],"queryContext":[]}
 
 
 -- !query
@@ -185,7 +185,7 @@ select date_format('2018-11-17 13:33:33.333', 'XXXXXX')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Too many pattern letters: X
+{"errorClass":"legacy","messageParameters":["Too many pattern letters: X"],"queryContext":[]}
 
 
 -- !query
@@ -203,7 +203,7 @@ select date_format('2018-11-17 13:33:33.333', 'OO')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Pattern letter count must be 1 or 4: O
+{"errorClass":"legacy","messageParameters":["Pattern letter count must be 1 or 4: O"],"queryContext":[]}
 
 
 -- !query
@@ -212,7 +212,7 @@ select date_format('2018-11-17 13:33:33.333', 'xxxxxx')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Too many pattern letters: x
+{"errorClass":"legacy","messageParameters":["Too many pattern letters: x"],"queryContext":[]}
 
 
 -- !query
@@ -221,7 +221,7 @@ select date_format('2018-11-17 13:33:33.333', 'A')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: A
+{"errorClass":"legacy","messageParameters":["Illegal pattern character: A"],"queryContext":[]}
 
 
 -- !query
@@ -230,7 +230,7 @@ select date_format('2018-11-17 13:33:33.333', 'n')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: n
+{"errorClass":"legacy","messageParameters":["Illegal pattern character: n"],"queryContext":[]}
 
 
 -- !query
@@ -239,7 +239,7 @@ select date_format('2018-11-17 13:33:33.333', 'N')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: N
+{"errorClass":"legacy","messageParameters":["Illegal pattern character: N"],"queryContext":[]}
 
 
 -- !query
@@ -248,7 +248,7 @@ select date_format('2018-11-17 13:33:33.333', 'p')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: p
+{"errorClass":"legacy","messageParameters":["Illegal pattern character: p"],"queryContext":[]}
 
 
 -- !query
@@ -293,7 +293,7 @@ select date_format('2018-11-17 13:33:33.333', 'e')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead
+{"errorClass":"legacy","messageParameters":["All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead"],"queryContext":[]}
 
 
 -- !query
@@ -302,7 +302,7 @@ select date_format('2018-11-17 13:33:33.333', 'c')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead
+{"errorClass":"legacy","messageParameters":["All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead"],"queryContext":[]}
 
 
 -- !query
@@ -311,7 +311,7 @@ select date_format('2018-11-17 13:33:33.333', 'B')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: B
+{"errorClass":"legacy","messageParameters":["Illegal pattern character: B"],"queryContext":[]}
 
 
 -- !query
@@ -320,7 +320,7 @@ select date_format('2018-11-17 13:33:33.333', 'C')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Unknown pattern letter: C
+{"errorClass":"legacy","messageParameters":["Unknown pattern letter: C"],"queryContext":[]}
 
 
 -- !query
@@ -329,4 +329,4 @@ select date_format('2018-11-17 13:33:33.333', 'I')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Unknown pattern letter: I
+{"errorClass":"legacy","messageParameters":["Unknown pattern letter: I"],"queryContext":[]}

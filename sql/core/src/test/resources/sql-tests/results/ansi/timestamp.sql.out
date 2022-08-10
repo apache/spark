@@ -13,7 +13,7 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nCannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)\n\n== SQL ==\nselect timestamp '2019-01-01中文'\n-------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -22,7 +22,7 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nCannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)\n\n== SQL ==\nselect timestamp'4294967297'\n-------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -31,7 +31,7 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nCannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)\n\n== SQL ==\nselect timestamp'2021-01-01T12:30:4294967297.123456'\n-------^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -105,7 +105,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+{"errorClass":"legacy","messageParameters":["Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error."],"queryContext":[]}
 
 
 -- !query
@@ -130,7 +130,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+{"errorClass":"legacy","messageParameters":["Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error."],"queryContext":[]}
 
 
 -- !query
@@ -139,7 +139,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+{"errorClass":"legacy","messageParameters":["Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error."],"queryContext":[]}
 
 
 -- !query
@@ -180,7 +180,7 @@ select TIMESTAMP_SECONDS(1230219000123123)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow
+{"errorClass":"legacy","messageParameters":["long overflow"],"queryContext":[]}
 
 
 -- !query
@@ -189,7 +189,7 @@ select TIMESTAMP_SECONDS(-1230219000123123)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow
+{"errorClass":"legacy","messageParameters":["long overflow"],"queryContext":[]}
 
 
 -- !query
@@ -198,7 +198,7 @@ select TIMESTAMP_MILLIS(92233720368547758)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow
+{"errorClass":"legacy","messageParameters":["long overflow"],"queryContext":[]}
 
 
 -- !query
@@ -207,7 +207,7 @@ select TIMESTAMP_MILLIS(-92233720368547758)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow
+{"errorClass":"legacy","messageParameters":["long overflow"],"queryContext":[]}
 
 
 -- !query
@@ -216,7 +216,7 @@ select TIMESTAMP_SECONDS(0.1234567)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Rounding necessary
+{"errorClass":"legacy","messageParameters":["Rounding necessary"],"queryContext":[]}
 
 
 -- !query
@@ -656,7 +656,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP))' due to data type mismatch: '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP))' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -665,7 +665,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve '(CAST('1' AS TIMESTAMP) + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP) + TIMESTAMP '2011-11-11 11:11:11')' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -674,7 +674,7 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' (timestamp and void).; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -683,7 +683,7 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve '(NULL + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP '2011-11-11 11:11:11')' (void and timestamp).; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query

@@ -101,7 +101,7 @@ select cast(a as array<string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -110,7 +110,7 @@ select cast(a as struct<s:string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query
@@ -119,7 +119,7 @@ select cast(a as map<string, string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7"],"queryContext":[]}
 
 
 -- !query

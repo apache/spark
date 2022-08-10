@@ -48,7 +48,7 @@ select col, date_format(col, 'q qq') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'q'
+{"errorClass":"legacy","messageParameters":["Illegal pattern character 'q'"],"queryContext":[]}
 
 
 -- !query
@@ -57,7 +57,7 @@ select col, date_format(col, 'Q QQ QQQ QQQQ') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'Q'
+{"errorClass":"legacy","messageParameters":["Illegal pattern character 'Q'"],"queryContext":[]}
 
 
 -- !query
@@ -270,7 +270,7 @@ select col, date_format(col, 'VV') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'V'
+{"errorClass":"legacy","messageParameters":["Illegal pattern character 'V'"],"queryContext":[]}
 
 
 -- !query
@@ -307,7 +307,7 @@ select col, date_format(col, 'XXXX XXXXX') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-invalid ISO 8601 format: length=4
+{"errorClass":"legacy","messageParameters":["invalid ISO 8601 format: length=4"],"queryContext":[]}
 
 
 -- !query
@@ -330,7 +330,7 @@ select col, date_format(col, 'O OOOO') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'O'
+{"errorClass":"legacy","messageParameters":["Illegal pattern character 'O'"],"queryContext":[]}
 
 
 -- !query
@@ -339,7 +339,7 @@ select col, date_format(col, 'x xx xxx xxxx xxxx xxxxx') from v
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'x'
+{"errorClass":"legacy","messageParameters":["Illegal pattern character 'x'"],"queryContext":[]}
 
 
 -- !query

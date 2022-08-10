@@ -21,7 +21,7 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Table or view not found: s; line 1 pos 25"],"queryContext":[]}
 
 
 -- !query
@@ -31,7 +31,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Table or view not found: r; line 1 pos 33"],"queryContext":[]}
 
 
 -- !query
@@ -50,7 +50,7 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Table or view not found: s2; line 1 pos 26"],"queryContext":[]}
 
 
 -- !query
@@ -141,7 +141,7 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nCTE definition can't have duplicate names: 't'.(line 1, pos 0)\n\n== SQL ==\nWITH\n^^^\n  t(x) AS (SELECT 1),\n  t(x) AS (SELECT 2)\nSELECT * FROM t\n"],"queryContext":[]}
 
 
 -- !query

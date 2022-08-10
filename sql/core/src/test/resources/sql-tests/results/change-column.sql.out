@@ -23,7 +23,7 @@ ALTER TABLE test_change CHANGE a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["\nOperation not allowed: ALTER TABLE table CHANGE COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER(line 1, pos 0)\n\n== SQL ==\nALTER TABLE test_change CHANGE a\n^^^\n"],"queryContext":[]}
 
 
 -- !query
@@ -42,7 +42,7 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["RENAME COLUMN is only supported with v2 tables."],"queryContext":[]}
 
 
 -- !query
@@ -61,7 +61,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType'"],"queryContext":[]}
 
 
 -- !query
@@ -80,7 +80,7 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables."],"queryContext":[]}
 
 
 -- !query
@@ -89,7 +89,7 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables."],"queryContext":[]}
 
 
 -- !query
@@ -168,7 +168,7 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Missing field invalid_col in table spark_catalog.default.test_change with schema:\nroot\n |-- a: integer (nullable = true)\n |-- b: string (nullable = true)\n |-- c: integer (nullable = true)\n; line 1 pos 0"],"queryContext":[]}
 
 
 -- !query
@@ -213,7 +213,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12"],"queryContext":[]}
 
 
 -- !query
@@ -230,7 +230,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["global_temp.global_temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12"],"queryContext":[]}
 
 
 -- !query

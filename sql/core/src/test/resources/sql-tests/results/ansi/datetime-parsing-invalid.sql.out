@@ -5,7 +5,7 @@ select to_timestamp('294248', 'y')
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow
+{"errorClass":"legacy","messageParameters":["long overflow"],"queryContext":[]}
 
 
 -- !query

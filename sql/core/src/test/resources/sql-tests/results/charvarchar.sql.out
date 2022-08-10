@@ -259,7 +259,7 @@ alter table char_tbl1 change column c type char(6)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["ALTER TABLE CHANGE COLUMN is not supported for changing column 'c' with type 'CharType(5)' to 'c' with type 'CharType(6)'"],"queryContext":[]}
 
 
 -- !query
@@ -575,7 +575,7 @@ alter table char_part partition (v2='ke') rename to partition (v2='nt')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Partition spec is invalid. The spec (v2) must match the partition spec (v2, c2) defined in table '`spark_catalog`.`default`.`char_part`'"],"queryContext":[]}
 
 
 -- !query

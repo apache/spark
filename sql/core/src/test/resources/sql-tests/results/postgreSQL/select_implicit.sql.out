@@ -200,7 +200,7 @@ SELECT c, count(*) FROM test_missing_target GROUP BY 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["GROUP BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 53"],"queryContext":[]}
 
 
 -- !query
@@ -211,7 +211,7 @@ SELECT count(*) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 10"],"queryContext":[]}
 
 
 -- !query
@@ -387,7 +387,7 @@ SELECT count(x.a) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Reference 'b' is ambiguous, could be: x.b, y.b.; line 3 pos 10"],"queryContext":[]}
 
 
 -- !query
@@ -411,7 +411,7 @@ SELECT count(b) FROM test_missing_target x, test_missing_target y
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Reference 'b' is ambiguous, could be: x.b, y.b.; line 1 pos 13"],"queryContext":[]}
 
 
 -- !query

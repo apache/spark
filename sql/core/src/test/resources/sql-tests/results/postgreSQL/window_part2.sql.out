@@ -221,8 +221,8 @@ from range(9223372036854775804, 9223372036854775807) x
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
 
 
 -- !query
@@ -231,8 +231,8 @@ from range(-9223372036854775806, -9223372036854775805) x
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
 
 
 -- !query

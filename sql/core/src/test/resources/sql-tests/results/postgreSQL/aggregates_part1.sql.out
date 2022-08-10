@@ -484,7 +484,7 @@ having exists (select 1 from onek b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: sum(DISTINCT (outer(a.four) + b.four))"],"queryContext":[]}
 
 
 -- !query

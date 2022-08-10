@@ -196,8 +196,8 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":44,"fragment":"i.f1 * smallint('2'"}]}
 
 
 -- !query
@@ -216,8 +216,8 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":39,"fragment":"i.f1 * int('2'"}]}
 
 
 -- !query
@@ -236,8 +236,8 @@ SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":44,"fragment":"i.f1 + smallint('2'"}]}
 
 
 -- !query
@@ -257,8 +257,8 @@ SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":39,"fragment":"i.f1 + int('2'"}]}
 
 
 -- !query
@@ -278,8 +278,8 @@ SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_subtract' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":44,"fragment":"i.f1 - smallint('2'"}]}
 
 
 -- !query
@@ -299,8 +299,8 @@ SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+org.apache.spark.SparkArithmeticException
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["integer overflow"," Use 'try_subtract' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":25,"stopIndex":39,"fragment":"i.f1 - int('2'"}]}
 
 
 -- !query

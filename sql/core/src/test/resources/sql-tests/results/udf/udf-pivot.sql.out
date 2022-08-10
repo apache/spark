@@ -199,7 +199,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function."],"queryContext":[]}
 
 
 -- !query
@@ -214,7 +214,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function."],"queryContext":[]}
 
 
 -- !query
@@ -259,7 +259,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":null,"messageParameters":[],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":["It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."],"queryContext":[]}
 
 
 -- !query
