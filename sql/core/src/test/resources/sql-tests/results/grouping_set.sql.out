@@ -134,7 +134,7 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH ROLLUP
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'ROLLUP'",": extra input 'ROLLUP'"],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'ROLLUP'","hint":": extra input 'ROLLUP'"},"queryContext":[]}
 
 
 -- !query
@@ -143,7 +143,7 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'CUBE'",": extra input 'CUBE'"],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'CUBE'","hint":": extra input 'CUBE'"},"queryContext":[]}
 
 
 -- !query
@@ -152,7 +152,7 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["expression 't.c1' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get."],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"expression 't.c1' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get."},"queryContext":[]}
 
 
 -- !query

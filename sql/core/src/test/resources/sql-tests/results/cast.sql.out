@@ -350,7 +350,7 @@ SELECT CAST(interval 3 month 1 hour AS string)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":["\nCannot mix year-month and day-time fields: interval 3 month 1 hour(line 1, pos 12)\n\n== SQL ==\nSELECT CAST(interval 3 month 1 hour AS string)\n------------^^^\n"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"\nCannot mix year-month and day-time fields: interval 3 month 1 hour(line 1, pos 12)\n\n== SQL ==\nSELECT CAST(interval 3 month 1 hour AS string)\n------------^^^\n"},"queryContext":[]}
 
 
 -- !query
@@ -626,7 +626,7 @@ select cast(interval '23:59:59' hour to second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["INTERVAL '23:59:59' HOUR TO SECOND","\"INTERVAL HOUR TO SECOND\"","\"SMALLINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"INTERVAL '23:59:59' HOUR TO SECOND","sourceType":"\"INTERVAL HOUR TO SECOND\"","targetType":"\"SMALLINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -651,7 +651,7 @@ select cast(interval '-1000' month as tinyint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["INTERVAL '-1000' MONTH","\"INTERVAL MONTH\"","\"TINYINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"INTERVAL '-1000' MONTH","sourceType":"\"INTERVAL MONTH\"","targetType":"\"TINYINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -660,7 +660,7 @@ select cast(interval '1000000' second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["INTERVAL '1000000' SECOND","\"INTERVAL SECOND\"","\"SMALLINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"INTERVAL '1000000' SECOND","sourceType":"\"INTERVAL SECOND\"","targetType":"\"SMALLINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -725,7 +725,7 @@ select cast(2147483647 as interval year)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["2147483647","\"INT\"","\"INTERVAL YEAR\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"2147483647","sourceType":"\"INT\"","targetType":"\"INTERVAL YEAR\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -734,7 +734,7 @@ select cast(-9223372036854775808L as interval day)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["-9223372036854775808L","\"BIGINT\"","\"INTERVAL DAY\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"-9223372036854775808L","sourceType":"\"BIGINT\"","targetType":"\"INTERVAL DAY\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -799,4 +799,4 @@ select cast(interval '10.123' second as decimal(1, 0))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(compact, 10, 18, 6)","1","0","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(compact, 10, 18, 6)","precision":"1","scale":"0","config":"\"spark.sql.ansi.enabled\""},"queryContext":[]}

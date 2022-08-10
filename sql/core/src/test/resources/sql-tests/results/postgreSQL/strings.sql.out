@@ -443,7 +443,7 @@ SELECT 'maca' LIKE 'm%aca' ESCAPE '%' AS `true`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'm%aca' is invalid, the escape character is not allowed to precede 'a'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'm%aca' is invalid, the escape character is not allowed to precede 'a'"},"queryContext":[]}
 
 
 -- !query
@@ -452,7 +452,7 @@ SELECT 'maca' NOT LIKE 'm%aca' ESCAPE '%' AS `false`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'm%aca' is invalid, the escape character is not allowed to precede 'a'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'm%aca' is invalid, the escape character is not allowed to precede 'a'"},"queryContext":[]}
 
 
 -- !query
@@ -461,7 +461,7 @@ SELECT 'ma%a' LIKE 'm%a%%a' ESCAPE '%' AS `true`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'm%a%%a' is invalid, the escape character is not allowed to precede 'a'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'm%a%%a' is invalid, the escape character is not allowed to precede 'a'"},"queryContext":[]}
 
 
 -- !query
@@ -470,7 +470,7 @@ SELECT 'ma%a' NOT LIKE 'm%a%%a' ESCAPE '%' AS `false`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'm%a%%a' is invalid, the escape character is not allowed to precede 'a'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'm%a%%a' is invalid, the escape character is not allowed to precede 'a'"},"queryContext":[]}
 
 
 -- !query
@@ -479,7 +479,7 @@ SELECT 'bear' LIKE 'b_ear' ESCAPE '_' AS `true`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'b_ear' is invalid, the escape character is not allowed to precede 'e'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'b_ear' is invalid, the escape character is not allowed to precede 'e'"},"queryContext":[]}
 
 
 -- !query
@@ -488,7 +488,7 @@ SELECT 'bear' NOT LIKE 'b_ear' ESCAPE '_' AS `false`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'b_ear' is invalid, the escape character is not allowed to precede 'e'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'b_ear' is invalid, the escape character is not allowed to precede 'e'"},"queryContext":[]}
 
 
 -- !query
@@ -497,7 +497,7 @@ SELECT 'be_r' LIKE 'b_e__r' ESCAPE '_' AS `true`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'b_e__r' is invalid, the escape character is not allowed to precede 'e'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'b_e__r' is invalid, the escape character is not allowed to precede 'e'"},"queryContext":[]}
 
 
 -- !query
@@ -506,7 +506,7 @@ SELECT 'be_r' NOT LIKE 'b_e__r' ESCAPE '_' AS `false`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["the pattern 'b_e__r' is invalid, the escape character is not allowed to precede 'e'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"the pattern 'b_e__r' is invalid, the escape character is not allowed to precede 'e'"},"queryContext":[]}
 
 
 -- !query

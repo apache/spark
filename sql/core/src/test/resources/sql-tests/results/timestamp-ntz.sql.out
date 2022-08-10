@@ -45,7 +45,7 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function make_timestamp_ntz. Expected: 6; Found: 7; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid number of arguments for function make_timestamp_ntz. Expected: 6; Found: 7; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query

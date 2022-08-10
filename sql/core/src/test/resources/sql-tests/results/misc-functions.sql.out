@@ -69,7 +69,7 @@ SELECT assert_true(false)
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["'false' is not true!"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"'false' is not true!"},"queryContext":[]}
 
 
 -- !query
@@ -78,7 +78,7 @@ SELECT assert_true(boolean(0))
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["'cast(0 as boolean)' is not true!"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"'cast(0 as boolean)' is not true!"},"queryContext":[]}
 
 
 -- !query
@@ -87,7 +87,7 @@ SELECT assert_true(null)
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["'null' is not true!"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"'null' is not true!"},"queryContext":[]}
 
 
 -- !query
@@ -96,7 +96,7 @@ SELECT assert_true(boolean(null))
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["'cast(null as boolean)' is not true!"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"'cast(null as boolean)' is not true!"},"queryContext":[]}
 
 
 -- !query
@@ -105,7 +105,7 @@ SELECT assert_true(false, 'custom error message')
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["custom error message"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"custom error message"},"queryContext":[]}
 
 
 -- !query
@@ -122,7 +122,7 @@ SELECT raise_error('error message')
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["error message"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"error message"},"queryContext":[]}
 
 
 -- !query
@@ -131,4 +131,4 @@ SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc
 struct<>
 -- !query output
 java.lang.RuntimeException
-{"errorClass":"legacy","messageParameters":["too big: 8"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"too big: 8"},"queryContext":[]}

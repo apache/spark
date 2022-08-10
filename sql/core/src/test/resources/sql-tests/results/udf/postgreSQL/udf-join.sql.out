@@ -546,7 +546,7 @@ SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 29"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 29"},"queryContext":[]}
 
 
 -- !query
@@ -3263,7 +3263,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 72"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 72"},"queryContext":[]}
 
 
 -- !query
@@ -3273,7 +3273,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`y`.`f1`","`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`y`.`f1`","objectList":"`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"},"queryContext":[]}
 
 
 -- !query
@@ -3292,7 +3292,7 @@ select udf(t1.uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t1`.`uunique1`","`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`stringu1`, `t1`.`even`, `t1`.`four`, `t1`.`string4`, `t2`.`stringu1`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`even`, `t2`.`four`, `t1`.`odd`, `t2`.`string4`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`odd`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t1`.`uunique1`","objectList":"`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`stringu1`, `t1`.`even`, `t1`.`four`, `t1`.`string4`, `t2`.`stringu1`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`even`, `t2`.`four`, `t1`.`odd`, `t2`.`string4`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`odd`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"},"queryContext":[]}
 
 
 -- !query
@@ -3302,7 +3302,7 @@ select udf(udf(t2.uunique1)) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t2`.`uunique1`","`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`, `t1`.`hundred`, `t2`.`stringu1`, `t2`.`even`, `t2`.`four`, `t2`.`string4`, `t1`.`stringu1`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`even`, `t1`.`four`, `t2`.`odd`, `t1`.`string4`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`odd`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`twothousand`, `t1`.`twothousand`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t2`.`uunique1`","objectList":"`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`, `t1`.`hundred`, `t2`.`stringu1`, `t2`.`even`, `t2`.`four`, `t2`.`string4`, `t1`.`stringu1`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`even`, `t1`.`four`, `t2`.`odd`, `t1`.`string4`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`odd`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`twothousand`, `t1`.`twothousand`"},"queryContext":[]}
 
 
 -- !query
@@ -3312,7 +3312,7 @@ select udf(uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`uunique1`","`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`, `t2`.`even`, `t1`.`four`, `t2`.`four`, `t1`.`ten`, `t2`.`ten`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`odd`, `t2`.`odd`, `t1`.`two`, `t2`.`two`, `t1`.`stringu1`, `t2`.`stringu1`, `t1`.`twenty`, `t2`.`twenty`, `t1`.`string4`, `t2`.`string4`, `t1`.`stringu2`, `t2`.`stringu2`, `t1`.`tenthous`, `t2`.`tenthous`, `t1`.`thousand`, `t2`.`thousand`, `t1`.`fivethous`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`uunique1`","objectList":"`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`, `t2`.`even`, `t1`.`four`, `t2`.`four`, `t1`.`ten`, `t2`.`ten`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`odd`, `t2`.`odd`, `t1`.`two`, `t2`.`two`, `t1`.`stringu1`, `t2`.`stringu1`, `t1`.`twenty`, `t2`.`twenty`, `t1`.`string4`, `t2`.`string4`, `t1`.`stringu2`, `t2`.`stringu2`, `t1`.`tenthous`, `t2`.`tenthous`, `t1`.`thousand`, `t2`.`thousand`, `t1`.`fivethous`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"},"queryContext":[]}
 
 
 -- !query
@@ -3512,7 +3512,7 @@ select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`f1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`f1`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -3521,7 +3521,7 @@ select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`a`.`f1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`a`.`f1`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -3530,7 +3530,7 @@ select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`f1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`f1`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -3539,7 +3539,7 @@ select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`a`.`f1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`a`.`f1`","objectList":""},"queryContext":[]}
 
 
 -- !query

@@ -128,7 +128,7 @@ select sort_array(array('b', 'd'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -137,7 +137,7 @@ select sort_array(array('b', 'd'), cast(NULL as boolean))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -181,7 +181,7 @@ select element_at(array(1, 2, 3), 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":[],"queryContext":[]}
+{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":{},"queryContext":[]}
 
 
 -- !query
@@ -294,4 +294,4 @@ select array_size(map('a', 1, 'b', 2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7"},"queryContext":[]}

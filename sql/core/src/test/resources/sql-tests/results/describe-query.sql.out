@@ -108,7 +108,7 @@ DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'desc_temp1'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'desc_temp1'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -117,7 +117,7 @@ DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'desc_temp1'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'desc_temp1'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -129,7 +129,7 @@ DESCRIBE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'insert'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'insert'","hint":""},"queryContext":[]}
 
 
 -- !query

@@ -62,7 +62,7 @@ select string('four: ') || 2+2
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'four: 2'","\"STRING\"","\"BIGINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":29,"fragment":"string('four: ') || 2+"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'four: 2'","sourceType":"\"STRING\"","targetType":"\"BIGINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":29,"fragment":"string('four: ') || 2+"}]}
 
 
 -- !query
@@ -71,7 +71,7 @@ select 'four: ' || 2+2
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'four: 2'","\"STRING\"","\"BIGINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"'four: ' || 2+"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'four: 2'","sourceType":"\"STRING\"","targetType":"\"BIGINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"'four: ' || 2+"}]}
 
 
 -- !query
@@ -216,7 +216,7 @@ select format_string('Hello %s %s', 'World')
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-{"errorClass":"legacy","messageParameters":["Format specifier '%s'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Format specifier '%s'"},"queryContext":[]}
 
 
 -- !query
@@ -225,7 +225,7 @@ select format_string('Hello %s')
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-{"errorClass":"legacy","messageParameters":["Format specifier '%s'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Format specifier '%s'"},"queryContext":[]}
 
 
 -- !query
@@ -258,7 +258,7 @@ select format_string('%1$s %4$s', 1, 2, 3)
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-{"errorClass":"legacy","messageParameters":["Format specifier '%4$s'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Format specifier '%4$s'"},"queryContext":[]}
 
 
 -- !query
@@ -267,7 +267,7 @@ select format_string('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 struct<>
 -- !query output
 java.util.MissingFormatArgumentException
-{"errorClass":"legacy","messageParameters":["Format specifier '%13$s'"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Format specifier '%13$s'"},"queryContext":[]}
 
 
 -- !query
@@ -276,7 +276,7 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"INVALID_PARAMETER_VALUE","sqlState":"22023","messageParameters":["strfmt","`format_string`","expects %1$, %2$ and so on, but got %0$."],"queryContext":[]}
+{"errorClass":"INVALID_PARAMETER_VALUE","sqlState":"22023","messageParameters":{"parameter":"strfmt","functionName":"`format_string`","expected":"expects %1$, %2$ and so on, but got %0$."},"queryContext":[]}
 
 
 -- !query

@@ -129,4 +129,4 @@ SELECT company FROM like_all_table WHERE company LIKE ALL ()
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":["\nExpected something between '(' and ')'.(line 1, pos 49)\n\n== SQL ==\nSELECT company FROM like_all_table WHERE company LIKE ALL ()\n-------------------------------------------------^^^\n"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"\nExpected something between '(' and ')'.(line 1, pos 49)\n\n== SQL ==\nSELECT company FROM like_all_table WHERE company LIKE ALL ()\n-------------------------------------------------^^^\n"},"queryContext":[]}

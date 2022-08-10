@@ -222,7 +222,7 @@ from range(9223372036854775804, 9223372036854775807) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_add' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
 
 
 -- !query
@@ -232,7 +232,7 @@ from range(-9223372036854775806, -9223372036854775805) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_add' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_add' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":-1,"stopIndex":-1,"fragment":""}]}
 
 
 -- !query
@@ -459,7 +459,7 @@ window w as (order by f_numeric range between
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'NaN'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":82,"stopIndex":162,"fragment":"(order by f_numeric range between\n             1.1 preceding and 'NaN' following"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'NaN'","sourceType":"\"STRING\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":82,"stopIndex":162,"fragment":"(order by f_numeric range between\n             1.1 preceding and 'NaN' following"}]}
 
 
 -- !query

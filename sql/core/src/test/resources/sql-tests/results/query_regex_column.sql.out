@@ -33,7 +33,7 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a)?+.+`","`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a)?+.+`","objectList":"`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -42,7 +42,7 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t`.`(a)?+.+`","`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t`.`(a)?+.+`","objectList":"`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -51,7 +51,7 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a|b)`","`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a|b)`","objectList":"`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -60,7 +60,7 @@ SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a|b)?+.+`","`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a|b)?+.+`","objectList":"`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -69,7 +69,7 @@ SELECT SUM(`(a|b)?+.+`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a|b)?+.+`","`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a|b)?+.+`","objectList":"`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -78,7 +78,7 @@ SELECT SUM(`(a)`) FROM testData2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a)`","`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a)`","objectList":"`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"},"queryContext":[]}
 
 
 -- !query
@@ -298,7 +298,7 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a)`","`testdata3`.`a`, `testdata3`.`b`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a)`","objectList":"`testdata3`.`a`, `testdata3`.`b`"},"queryContext":[]}
 
 
 -- !query
@@ -307,4 +307,4 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`(a)?+.+`","`testdata3`.`a`, `testdata3`.`b`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`(a)?+.+`","objectList":"`testdata3`.`a`, `testdata3`.`b`"},"queryContext":[]}

@@ -140,7 +140,7 @@ SELECT a FROM test_having HAVING min(a) < max(a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get."],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get."},"queryContext":[]}
 
 
 -- !query
@@ -149,7 +149,7 @@ SELECT 1 AS one FROM test_having HAVING a > 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`a`","`one`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`a`","objectList":"`one`"},"queryContext":[]}
 
 
 -- !query
@@ -174,7 +174,7 @@ SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":["\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":39,"stopIndex":41,"fragment":"1/"}]}
+{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":39,"stopIndex":41,"fragment":"1/"}]}
 
 
 -- !query

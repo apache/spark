@@ -69,7 +69,7 @@ insert into datetimes values
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): [CAST_INVALID_INPUT] The value '11:00 BST' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 24) ==\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n; line 1 pos 22"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): [CAST_INVALID_INPUT] The value '11:00 BST' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 24) ==\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n; line 1 pos 22"},"queryContext":[]}
 
 
 -- !query
@@ -242,7 +242,7 @@ from t1 where f1 = f2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24"},"queryContext":[]}
 
 
 -- !query
@@ -292,7 +292,7 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["It is not allowed to use window functions inside WHERE clause"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"It is not allowed to use window functions inside WHERE clause"},"queryContext":[]}
 
 
 -- !query
@@ -301,7 +301,7 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["\nThe query operator `Join` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"\nThe query operator `Join` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]"},"queryContext":[]}
 
 
 -- !query
@@ -310,7 +310,7 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["\nThe query operator `Aggregate` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"\nThe query operator `Aggregate` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]"},"queryContext":[]}
 
 
 -- !query
@@ -319,7 +319,7 @@ SELECT * FROM rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'BY'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'BY'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -328,7 +328,7 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["It is not allowed to use window functions inside WHERE clause"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"It is not allowed to use window functions inside WHERE clause"},"queryContext":[]}
 
 
 -- !query
@@ -337,7 +337,7 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["It is not allowed to use window functions inside WHERE clause"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"It is not allowed to use window functions inside WHERE clause"},"queryContext":[]}
 
 
 -- !query
@@ -346,7 +346,7 @@ select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'BY'",": extra input 'BY'"],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'BY'","hint":": extra input 'BY'"},"queryContext":[]}
 
 
 -- !query
@@ -355,7 +355,7 @@ SELECT range(1, 100) OVER () FROM empsalary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -364,7 +364,7 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -373,7 +373,7 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'nth_value(spark_catalog.default.tenk1.four, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'nth_value(spark_catalog.default.tenk1.four, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query

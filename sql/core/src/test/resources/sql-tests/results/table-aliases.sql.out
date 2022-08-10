@@ -39,7 +39,7 @@ SELECT * FROM testData AS t(col1, col2, col3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14"},"queryContext":[]}
 
 
 -- !query
@@ -48,7 +48,7 @@ SELECT * FROM testData AS t(col1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14"},"queryContext":[]}
 
 
 -- !query
@@ -57,7 +57,7 @@ SELECT a AS col1, b AS col2 FROM testData AS t(c, d)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`a`","`t`.`c`, `t`.`d`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`a`","objectList":"`t`.`c`, `t`.`d`"},"queryContext":[]}
 
 
 -- !query

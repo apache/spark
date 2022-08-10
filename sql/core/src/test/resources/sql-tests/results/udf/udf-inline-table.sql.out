@@ -94,7 +94,7 @@ select udf(a), b from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot evaluate expression rand(5) in inline table definition; line 1 pos 37"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot evaluate expression rand(5) in inline table definition; line 1 pos 37"},"queryContext":[]}
 
 
 -- !query
@@ -103,7 +103,7 @@ select udf(a), udf(b) from values ("one", 2.0), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["expected 2 columns but found 1 columns in row 1; line 1 pos 27"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"expected 2 columns but found 1 columns in row 1; line 1 pos 27"},"queryContext":[]}
 
 
 -- !query
@@ -112,7 +112,7 @@ select udf(a), udf(b) from values ("one", array(0, 1)), ("two", struct(1, 2)) as
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["incompatible types found in column b for inline table; line 1 pos 27"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"incompatible types found in column b for inline table; line 1 pos 27"},"queryContext":[]}
 
 
 -- !query
@@ -121,7 +121,7 @@ select udf(a), udf(b) from values ("one"), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["expected 2 columns but found 1 columns in row 0; line 1 pos 27"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"expected 2 columns but found 1 columns in row 0; line 1 pos 27"},"queryContext":[]}
 
 
 -- !query
@@ -130,7 +130,7 @@ select udf(a), udf(b) from values ("one", random_not_exist_func(1)), ("two", 2) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 42"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 42"},"queryContext":[]}
 
 
 -- !query
@@ -139,7 +139,7 @@ select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot evaluate expression count(1) in inline table definition; line 1 pos 42"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot evaluate expression count(1) in inline table definition; line 1 pos 42"},"queryContext":[]}
 
 
 -- !query

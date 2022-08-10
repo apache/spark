@@ -76,7 +76,7 @@ SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -85,7 +85,7 @@ SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -157,7 +157,7 @@ SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -166,7 +166,7 @@ SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -357,7 +357,7 @@ struct<q1:bigint>
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -366,7 +366,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -375,7 +375,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -384,7 +384,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query
@@ -525,7 +525,7 @@ SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`q2`","`int8_tbl`.`q1`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`q2`","objectList":"`int8_tbl`.`q1`"},"queryContext":[]}
 
 
 -- !query
@@ -684,7 +684,7 @@ SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":["'SELECT'",""],"queryContext":[]}
+{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'SELECT'","hint":""},"queryContext":[]}
 
 
 -- !query

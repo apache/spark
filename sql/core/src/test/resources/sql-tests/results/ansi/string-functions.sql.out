@@ -5,7 +5,7 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["requirement failed: concat_ws requires at least one argument.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"requirement failed: concat_ws requires at least one argument.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -14,7 +14,7 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["requirement failed: format_string() should take at least 1 argument; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"requirement failed: format_string() should take at least 1 argument; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -79,7 +79,7 @@ select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'a'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":42,"stopIndex":58,"fragment":"left(\"abcd\", 'a'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'a'","sourceType":"\"STRING\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":42,"stopIndex":58,"fragment":"left(\"abcd\", 'a'"}]}
 
 
 -- !query
@@ -104,7 +104,7 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'a'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":44,"stopIndex":61,"fragment":"right(\"abcd\", 'a'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'a'","sourceType":"\"STRING\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":44,"stopIndex":61,"fragment":"right(\"abcd\", 'a'"}]}
 
 
 -- !query
@@ -169,7 +169,7 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":[],"queryContext":[]}
+{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":{},"queryContext":[]}
 
 
 -- !query
@@ -410,7 +410,7 @@ SELECT lpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'invalid_length'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"lpad('hi', 'invalid_length'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'invalid_length'","sourceType":"\"STRING\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"lpad('hi', 'invalid_length'"}]}
 
 
 -- !query
@@ -419,7 +419,7 @@ SELECT rpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'invalid_length'","\"STRING\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"rpad('hi', 'invalid_length'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'invalid_length'","sourceType":"\"STRING\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":34,"fragment":"rpad('hi', 'invalid_length'"}]}
 
 
 -- !query
@@ -652,7 +652,7 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -661,7 +661,7 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -1126,7 +1126,7 @@ select to_binary(null, cast(null as int))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -1135,7 +1135,7 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -1144,7 +1144,7 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'."],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'."},"queryContext":[]}
 
 
 -- !query
@@ -1153,4 +1153,4 @@ select to_binary('a!', 'base64')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Last unit does not have enough valid bits"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Last unit does not have enough valid bits"},"queryContext":[]}

@@ -61,7 +61,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Scalar subquery must return only one column, but got 2"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Scalar subquery must return only one column, but got 2"},"queryContext":[]}
 
 
 -- !query
@@ -76,7 +76,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Scalar subquery must return only one column, but got 2"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Scalar subquery must return only one column, but got 2"},"queryContext":[]}
 
 
 -- !query
@@ -89,7 +89,7 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 1.\n#columns in right hand side: 2.\nLeft side columns:\n[t1.t1a].\nRight side columns:\n[t2.t2a, t2.t2b].; line 3 pos 4"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 1.\n#columns in right hand side: 2.\nLeft side columns:\n[t1.t1a].\nRight side columns:\n[t2.t2a, t2.t2b].; line 3 pos 4"},"queryContext":[]}
 
 
 -- !query
@@ -102,7 +102,7 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[t1.t1a, t1.t1b].\nRight side columns:\n[t2.t2a].; line 3 pos 11"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[t1.t1a, t1.t1b].\nRight side columns:\n[t2.t2a].; line 3 pos 11"},"queryContext":[]}
 
 
 -- !query
@@ -116,4 +116,4 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: \nThe data type of one or more elements in the left hand side of an IN subquery\nis not compatible with the data type of the output of the subquery\nMismatched columns:\n[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]\nLeft side:\n[double, string, string].\nRight side:\n[timestamp, string, bigint].; line 3 pos 16"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: \nThe data type of one or more elements in the left hand side of an IN subquery\nis not compatible with the data type of the output of the subquery\nMismatched columns:\n[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]\nLeft side:\n[double, string, string].\nRight side:\n[timestamp, string, bigint].; line 3 pos 16"},"queryContext":[]}

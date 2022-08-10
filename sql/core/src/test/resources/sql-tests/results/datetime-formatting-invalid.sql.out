@@ -5,7 +5,7 @@ select date_format('2018-11-17 13:33:33.333', 'GGGGG')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'GGGGG'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'GGGGG'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -14,7 +14,7 @@ select date_format('2018-11-17 13:33:33.333', 'yyyyyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'yyyyyyy'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'yyyyyyy'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -23,7 +23,7 @@ select date_format('2018-11-17 13:33:33.333', 'qqqqq')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Too many pattern letters: q"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Too many pattern letters: q"},"queryContext":[]}
 
 
 -- !query
@@ -32,7 +32,7 @@ select date_format('2018-11-17 13:33:33.333', 'QQQQQ')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Too many pattern letters: Q"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Too many pattern letters: Q"},"queryContext":[]}
 
 
 -- !query
@@ -41,7 +41,7 @@ select date_format('2018-11-17 13:33:33.333', 'MMMMM')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'MMMMM'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'MMMMM'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -50,7 +50,7 @@ select date_format('2018-11-17 13:33:33.333', 'LLLLL')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'LLLLL'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'LLLLL'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -59,7 +59,7 @@ select date_format('2018-11-17 13:33:33.333', 'EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'EEEEE'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'EEEEE'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -68,7 +68,7 @@ select date_format('2018-11-17 13:33:33.333', 'FF')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'FF'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'FF'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -77,7 +77,7 @@ select date_format('2018-11-17 13:33:33.333', 'ddd')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'ddd'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'ddd'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -86,7 +86,7 @@ select date_format('2018-11-17 13:33:33.333', 'DDDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'DDDD'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'DDDD'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -95,7 +95,7 @@ select date_format('2018-11-17 13:33:33.333', 'HHH')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'HHH'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'HHH'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -104,7 +104,7 @@ select date_format('2018-11-17 13:33:33.333', 'hhh')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'hhh'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'hhh'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -113,7 +113,7 @@ select date_format('2018-11-17 13:33:33.333', 'kkk')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'kkk'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'kkk'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -122,7 +122,7 @@ select date_format('2018-11-17 13:33:33.333', 'KKK')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'KKK'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'KKK'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -131,7 +131,7 @@ select date_format('2018-11-17 13:33:33.333', 'mmm')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'mmm'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'mmm'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -140,7 +140,7 @@ select date_format('2018-11-17 13:33:33.333', 'sss')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'sss'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'sss'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -149,7 +149,7 @@ select date_format('2018-11-17 13:33:33.333', 'SSSSSSSSSS')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'SSSSSSSSSS'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'SSSSSSSSSS'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -158,7 +158,7 @@ select date_format('2018-11-17 13:33:33.333', 'aa')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'aa'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'aa'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -167,7 +167,7 @@ select date_format('2018-11-17 13:33:33.333', 'V')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Pattern letter count must be 2: V"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Pattern letter count must be 2: V"},"queryContext":[]}
 
 
 -- !query
@@ -176,7 +176,7 @@ select date_format('2018-11-17 13:33:33.333', 'zzzzz')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'zzzzz'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'zzzzz'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -185,7 +185,7 @@ select date_format('2018-11-17 13:33:33.333', 'XXXXXX')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Too many pattern letters: X"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Too many pattern letters: X"},"queryContext":[]}
 
 
 -- !query
@@ -194,7 +194,7 @@ select date_format('2018-11-17 13:33:33.333', 'ZZZZZZ')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'ZZZZZZ'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'ZZZZZZ'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -203,7 +203,7 @@ select date_format('2018-11-17 13:33:33.333', 'OO')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Pattern letter count must be 1 or 4: O"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Pattern letter count must be 1 or 4: O"},"queryContext":[]}
 
 
 -- !query
@@ -212,7 +212,7 @@ select date_format('2018-11-17 13:33:33.333', 'xxxxxx')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Too many pattern letters: x"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Too many pattern letters: x"},"queryContext":[]}
 
 
 -- !query
@@ -221,7 +221,7 @@ select date_format('2018-11-17 13:33:33.333', 'A')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Illegal pattern character: A"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Illegal pattern character: A"},"queryContext":[]}
 
 
 -- !query
@@ -230,7 +230,7 @@ select date_format('2018-11-17 13:33:33.333', 'n')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Illegal pattern character: n"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Illegal pattern character: n"},"queryContext":[]}
 
 
 -- !query
@@ -239,7 +239,7 @@ select date_format('2018-11-17 13:33:33.333', 'N')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Illegal pattern character: N"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Illegal pattern character: N"},"queryContext":[]}
 
 
 -- !query
@@ -248,7 +248,7 @@ select date_format('2018-11-17 13:33:33.333', 'p')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Illegal pattern character: p"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Illegal pattern character: p"},"queryContext":[]}
 
 
 -- !query
@@ -257,7 +257,7 @@ select date_format('2018-11-17 13:33:33.333', 'Y')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'Y'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'Y'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -266,7 +266,7 @@ select date_format('2018-11-17 13:33:33.333', 'w')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'w'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'w'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -275,7 +275,7 @@ select date_format('2018-11-17 13:33:33.333', 'W')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'W'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'W'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -284,7 +284,7 @@ select date_format('2018-11-17 13:33:33.333', 'u')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'u'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'u'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
 
 
 -- !query
@@ -293,7 +293,7 @@ select date_format('2018-11-17 13:33:33.333', 'e')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead"},"queryContext":[]}
 
 
 -- !query
@@ -302,7 +302,7 @@ select date_format('2018-11-17 13:33:33.333', 'c')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead"},"queryContext":[]}
 
 
 -- !query
@@ -311,7 +311,7 @@ select date_format('2018-11-17 13:33:33.333', 'B')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Illegal pattern character: B"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Illegal pattern character: B"},"queryContext":[]}
 
 
 -- !query
@@ -320,7 +320,7 @@ select date_format('2018-11-17 13:33:33.333', 'C')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Unknown pattern letter: C"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Unknown pattern letter: C"},"queryContext":[]}
 
 
 -- !query
@@ -329,4 +329,4 @@ select date_format('2018-11-17 13:33:33.333', 'I')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Unknown pattern letter: I"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Unknown pattern letter: I"},"queryContext":[]}

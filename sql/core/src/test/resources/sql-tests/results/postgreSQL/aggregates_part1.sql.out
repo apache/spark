@@ -484,7 +484,7 @@ having exists (select 1 from onek b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: sum(DISTINCT (outer(a.four) + b.four))"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: sum(DISTINCT (outer(a.four) + b.four))"},"queryContext":[]}
 
 
 -- !query
@@ -495,4 +495,4 @@ from tenk1 o
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`o`.`unique1`","`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`, `i`.`stringu1`, `i`.`ten`, `i`.`odd`, `i`.`string4`, `i`.`stringu2`, `i`.`tenthous`, `i`.`twenty`, `i`.`two`, `i`.`thousand`, `i`.`fivethous`, `i`.`twothousand`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`o`.`unique1`","objectList":"`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`, `i`.`stringu1`, `i`.`ten`, `i`.`odd`, `i`.`string4`, `i`.`stringu2`, `i`.`tenthous`, `i`.`twenty`, `i`.`two`, `i`.`thousand`, `i`.`fivethous`, `i`.`twothousand`"},"queryContext":[]}

@@ -389,7 +389,7 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":28,"stopIndex":34,"fragment":"q1 * q"}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_multiply' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":28,"stopIndex":34,"fragment":"q1 * q"}]}
 
 
 -- !query
@@ -644,7 +644,7 @@ select bigint('9223372036854775800') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":["\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":49,"fragment":"bigint('9223372036854775800') / bigint('0'"}]}
+{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":49,"fragment":"bigint('9223372036854775800') / bigint('0'"}]}
 
 
 -- !query
@@ -653,7 +653,7 @@ select bigint('-9223372036854775808') / smallint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":["\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":52,"fragment":"bigint('-9223372036854775808') / smallint('0'"}]}
+{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":52,"fragment":"bigint('-9223372036854775808') / smallint('0'"}]}
 
 
 -- !query
@@ -662,7 +662,7 @@ select smallint('100') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":["\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":35,"fragment":"smallint('100') / bigint('0'"}]}
+{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":35,"fragment":"smallint('100') / bigint('0'"}]}
 
 
 -- !query
@@ -679,7 +679,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["4567890123456789L","\"BIGINT\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"4567890123456789L","sourceType":"\"BIGINT\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -696,7 +696,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["4567890123456789L","\"BIGINT\"","\"SMALLINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"4567890123456789L","sourceType":"\"BIGINT\"","targetType":"\"SMALLINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -733,7 +733,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["9.223372036854776E20D","\"DOUBLE\"","\"BIGINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"9.223372036854776E20D","sourceType":"\"DOUBLE\"","targetType":"\"BIGINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -771,7 +771,7 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14"},"queryContext":[]}
 
 
 -- !query
@@ -800,7 +800,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["-9223372036854775808L","\"BIGINT\"","\"INT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"-9223372036854775808L","sourceType":"\"BIGINT\"","targetType":"\"INT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query
@@ -809,7 +809,7 @@ SELECT bigint((-9223372036854775808)) * bigint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":51,"fragment":"bigint((-9223372036854775808)) * bigint((-1)"}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_multiply' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":51,"fragment":"bigint((-9223372036854775808)) * bigint((-1)"}]}
 
 
 -- !query
@@ -834,7 +834,7 @@ SELECT bigint((-9223372036854775808)) * int((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":48,"fragment":"bigint((-9223372036854775808)) * int((-1)"}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_multiply' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":48,"fragment":"bigint((-9223372036854775808)) * int((-1)"}]}
 
 
 -- !query
@@ -859,7 +859,7 @@ SELECT bigint((-9223372036854775808)) * smallint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":["long overflow"," Use 'try_multiply' to tolerate overflow and return NULL instead.","spark.sql.ansi.enabled"],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":53,"fragment":"bigint((-9223372036854775808)) * smallint((-1)"}]}
+{"errorClass":"ARITHMETIC_OVERFLOW","sqlState":"22003","messageParameters":{"message":"long overflow","alternative":" Use 'try_multiply' to tolerate overflow and return NULL instead.","config":"spark.sql.ansi.enabled"},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":53,"fragment":"bigint((-9223372036854775808)) * smallint((-1)"}]}
 
 
 -- !query

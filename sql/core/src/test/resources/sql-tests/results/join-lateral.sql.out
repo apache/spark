@@ -114,7 +114,7 @@ SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 't1.*' given input columns 'c1, c2'; line 1 pos 70"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 't1.*' given input columns 'c1, c2'; line 1 pos 70"},"queryContext":[]}
 
 
 -- !query
@@ -149,7 +149,7 @@ SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"LATERAL_NATURAL_JOIN","sqlState":"0A000","messageParameters":[],"queryContext":[]}
+{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"LATERAL_NATURAL_JOIN","sqlState":"0A000","messageParameters":{},"queryContext":[]}
 
 
 -- !query
@@ -158,7 +158,7 @@ SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"LATERAL_JOIN_USING","sqlState":"0A000","messageParameters":[],"queryContext":[]}
+{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"LATERAL_JOIN_USING","sqlState":"0A000","messageParameters":{},"queryContext":[]}
 
 
 -- !query
@@ -256,7 +256,7 @@ SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b =
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t2`.`c1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t2`.`c1`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -281,7 +281,7 @@ SELECT * FROM t1, LATERAL (SELECT c1 + c2 + rand(0) AS c3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row\nSubqueryAlias __auto_generated_subquery_name\n+- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n   +- OneRowRelation\n; line 1 pos 9"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row\nSubqueryAlias __auto_generated_subquery_name\n+- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n   +- OneRowRelation\n; line 1 pos 9"},"queryContext":[]}
 
 
 -- !query
@@ -290,7 +290,7 @@ SELECT * FROM t1, LATERAL (SELECT rand(0) FROM t2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row\nSubqueryAlias __auto_generated_subquery_name\n+- Project [rand(0) AS rand(0)#x]\n   +- SubqueryAlias spark_catalog.default.t2\n      +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n            +- LocalRelation [col1#x, col2#x]\n; line 1 pos 9"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row\nSubqueryAlias __auto_generated_subquery_name\n+- Project [rand(0) AS rand(0)#x]\n   +- SubqueryAlias spark_catalog.default.t2\n      +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n            +- LocalRelation [col1#x, col2#x]\n; line 1 pos 9"},"queryContext":[]}
 
 
 -- !query
@@ -299,7 +299,7 @@ SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2) s ON t1.c1 + rand(0) = s.c1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["Lateral join condition cannot be non-deterministic: ((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE)); line 1 pos 17"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Lateral join condition cannot be non-deterministic: ((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE)); line 1 pos 17"},"queryContext":[]}
 
 
 -- !query
@@ -363,7 +363,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t1`.`c1`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t1`.`c1`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -372,7 +372,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`c2`",""],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`c2`","objectList":""},"queryContext":[]}
 
 
 -- !query
@@ -399,7 +399,7 @@ SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":["`t1`.`c1`","`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"],"queryContext":[]}
+{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`t1`.`c1`","objectList":"`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"},"queryContext":[]}
 
 
 -- !query

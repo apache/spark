@@ -77,11 +77,13 @@ trait SQLQueryTestHelper {
   }
 
   private def toJson(e: SparkThrowable): String = {
+    assert(e.getParameterNames.size == e.getMessageParameters.size,
+      "Number of message parameter names and values must be the same")
     val jValue = ("errorClass" -> e.getErrorClass) ~
       ("errorSubClass" -> Option(e.getErrorSubClass)) ~
       ("sqlState" -> Option(e.getSqlState)) ~
       ("messageParameters" ->
-        JArray(e.getMessageParameters.map(JString(_)).toList)) ~
+        JObject((e.getParameterNames zip e.getMessageParameters.map(JString)).toList)) ~
       ("queryContext" -> JArray(
         e.getQueryContext.map(c => JObject(
           "objectType" -> JString(c.objectType()),
@@ -95,7 +97,7 @@ trait SQLQueryTestHelper {
 
   private def toLegacyJson(msg: String): String = {
     val jValue = ("errorClass" -> "legacy") ~
-      ("messageParameters" -> JArray(List(JString(msg)))) ~
+      ("messageParameters" -> JObject(List("message" -> JString(msg)))) ~
       ("queryContext" -> JArray(List.empty))
     compact(render(jValue))
   }

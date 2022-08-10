@@ -125,7 +125,7 @@ SELECT double('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'N A N'","\"STRING\"","\"DOUBLE\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"double('N A N'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'N A N'","sourceType":"\"STRING\"","targetType":"\"DOUBLE\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"double('N A N'"}]}
 
 
 -- !query
@@ -134,7 +134,7 @@ SELECT double('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'NaN x'","\"STRING\"","\"DOUBLE\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"double('NaN x'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'NaN x'","sourceType":"\"STRING\"","targetType":"\"DOUBLE\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":21,"fragment":"double('NaN x'"}]}
 
 
 -- !query
@@ -143,7 +143,7 @@ SELECT double(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["' INFINITY    x'","\"STRING\"","\"DOUBLE\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":30,"fragment":"double(' INFINITY    x'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"' INFINITY    x'","sourceType":"\"STRING\"","targetType":"\"DOUBLE\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":30,"fragment":"double(' INFINITY    x'"}]}
 
 
 -- !query
@@ -176,7 +176,7 @@ SELECT double(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":["'nan'","\"STRING\"","\"DECIMAL(10,0)\"","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":14,"stopIndex":27,"fragment":"decimal('nan'"}]}
+{"errorClass":"CAST_INVALID_INPUT","sqlState":"42000","messageParameters":{"expression":"'nan'","sourceType":"\"STRING\"","targetType":"\"DECIMAL(10,0)\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":14,"stopIndex":27,"fragment":"decimal('nan'"}]}
 
 
 -- !query
@@ -830,7 +830,7 @@ SELECT bigint(double('-9223372036854780000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":["-9.22337203685478E18D","\"DOUBLE\"","\"BIGINT\"","\"spark.sql.ansi.enabled\""],"queryContext":[]}
+{"errorClass":"CAST_OVERFLOW","sqlState":"22005","messageParameters":{"value":"-9.22337203685478E18D","sourceType":"\"DOUBLE\"","targetType":"\"BIGINT\"","ansiConfig":"\"spark.sql.ansi.enabled\""},"queryContext":[]}
 
 
 -- !query

@@ -149,7 +149,7 @@ select bit_count("bit count")
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'bit_count('bit count')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''bit count'' is of string type.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'bit_count('bit count')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''bit count'' is of string type.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -158,7 +158,7 @@ select bit_count('a')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":["cannot resolve 'bit_count('a')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''a'' is of string type.; line 1 pos 7"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'bit_count('a')' due to data type mismatch: argument 1 requires (integral or boolean) type, however, ''a'' is of string type.; line 1 pos 7"},"queryContext":[]}
 
 
 -- !query
@@ -260,7 +260,7 @@ select getbit(11L, -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Invalid bit position: -1 is less than zero"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid bit position: -1 is less than zero"},"queryContext":[]}
 
 
 -- !query
@@ -269,4 +269,4 @@ select getbit(11L, 64)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":["Invalid bit position: 64 exceeds the bit upper limit"],"queryContext":[]}
+{"errorClass":"legacy","messageParameters":{"message":"Invalid bit position: 64 exceeds the bit upper limit"},"queryContext":[]}

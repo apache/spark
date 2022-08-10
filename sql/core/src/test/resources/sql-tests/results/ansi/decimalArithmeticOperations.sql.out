@@ -73,7 +73,7 @@ select (5e36BD + 0.1) + 5e36BD
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 10000000000000000000000000000000000000.1, 39, 1)","38","1","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":29,"fragment":"(5e36BD + 0.1) + 5e36B"}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 10000000000000000000000000000000000000.1, 39, 1)","precision":"38","scale":"1","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":29,"fragment":"(5e36BD + 0.1) + 5e36B"}]}
 
 
 -- !query
@@ -82,7 +82,7 @@ select (-4e36BD - 0.1) - 7e36BD
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, -11000000000000000000000000000000000000.1, 39, 1)","38","1","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":30,"fragment":"(-4e36BD - 0.1) - 7e36B"}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, -11000000000000000000000000000000000000.1, 39, 1)","precision":"38","scale":"1","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":30,"fragment":"(-4e36BD - 0.1) - 7e36B"}]}
 
 
 -- !query
@@ -91,7 +91,7 @@ select 12345678901234567890.0 * 12345678901234567890.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 152415787532388367501905199875019052100, 39, 0)","38","2","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":53,"fragment":"12345678901234567890.0 * 12345678901234567890."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 152415787532388367501905199875019052100, 39, 0)","precision":"38","scale":"2","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":53,"fragment":"12345678901234567890.0 * 12345678901234567890."}]}
 
 
 -- !query
@@ -100,7 +100,7 @@ select 1e35BD / 0.1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 1000000000000000000000000000000000000.00000000000000000000000000000000000000, 75, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":18,"fragment":"1e35BD / 0."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 1000000000000000000000000000000000000.00000000000000000000000000000000000000, 75, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":18,"fragment":"1e35BD / 0."}]}
 
 
 -- !query
@@ -133,7 +133,7 @@ select 1.0123456789012345678901234567890123456e36BD / 0.1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 10123456789012345678901234567890123456.00000000000000000000000000000000000000, 76, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e36BD / 0."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 10123456789012345678901234567890123456.00000000000000000000000000000000000000, 76, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e36BD / 0."}]}
 
 
 -- !query
@@ -142,7 +142,7 @@ select 1.0123456789012345678901234567890123456e35BD / 1.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 101234567890123456789012345678901234.56000000000000000000000000000000000000, 74, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e35BD / 1."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 101234567890123456789012345678901234.56000000000000000000000000000000000000, 74, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e35BD / 1."}]}
 
 
 -- !query
@@ -151,7 +151,7 @@ select 1.0123456789012345678901234567890123456e34BD / 1.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 10123456789012345678901234567890123.45600000000000000000000000000000000000, 73, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e34BD / 1."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 10123456789012345678901234567890123.45600000000000000000000000000000000000, 73, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e34BD / 1."}]}
 
 
 -- !query
@@ -160,7 +160,7 @@ select 1.0123456789012345678901234567890123456e33BD / 1.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 1012345678901234567890123456789012.34560000000000000000000000000000000000, 72, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e33BD / 1."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 1012345678901234567890123456789012.34560000000000000000000000000000000000, 72, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e33BD / 1."}]}
 
 
 -- !query
@@ -169,7 +169,7 @@ select 1.0123456789012345678901234567890123456e32BD / 1.0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e32BD / 1."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e32BD / 1."}]}
 
 
 -- !query
@@ -186,7 +186,7 @@ select 1.0123456789012345678901234567890123456e31BD / 0.1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":["Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)","38","6","\"spark.sql.ansi.enabled\""],"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e31BD / 0."}]}
+{"errorClass":"CANNOT_CHANGE_DECIMAL_PRECISION","sqlState":"22005","messageParameters":{"value":"Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)","precision":"38","scale":"6","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":56,"fragment":"1.0123456789012345678901234567890123456e31BD / 0."}]}
 
 
 -- !query

@@ -5,7 +5,7 @@ SELECT try_element_at(array(1, 2, 3), 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":[],"queryContext":[]}
+{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":{},"queryContext":[]}
 
 
 -- !query

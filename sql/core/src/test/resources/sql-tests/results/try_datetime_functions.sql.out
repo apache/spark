@@ -45,4 +45,4 @@ select try_to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":["'dd MM yyyy EEEEEE'","\"spark.sql.legacy.timeParserPolicy\""],"queryContext":[]}
+{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd MM yyyy EEEEEE'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
