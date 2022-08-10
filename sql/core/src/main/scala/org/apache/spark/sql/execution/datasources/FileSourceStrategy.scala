@@ -216,19 +216,25 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         }.toSeq
       }.getOrElse(Seq.empty)
 
-      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
-        metadataColumns.map(_.name).flatMap {
-          case FileFormat.ROW_INDEX =>
-            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
-          case _ => None
-        }
-
       val fileConstantMetadataColumns: Seq[Attribute] =
         metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
 
       val readDataColumns = dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
+
+      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
+        metadataColumns.map(_.name).flatMap {
+          case FileFormat.ROW_INDEX =>
+            if ((readDataColumns ++ partitionColumns).map(_.name)
+                .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
+              throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
+                " is a reserved column name that cannot be read in combination with " +
+                s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
+            }
+            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
+          case _ => None
+        }
 
       val outputSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns).toStructType
 

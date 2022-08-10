@@ -17,34 +17,44 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  val expected_row_idx_col = "expected_row_idx"
+  val EXPECTED_ROW_ID_COL = "expected_row_idx"
+  val EXPECTED_EXTRA_COL = "expected_extra_col"
+  val EXPECTED_PARTITION_COL = "experted_pb_col"
+  val NUM_ROWS = 100
 
-  def withReadDataFrame
-      (format: String, partitioned: Boolean = false)
+  def withReadDataFrame(
+         format: String,
+         partitionCol: String = null,
+         extraCol: String = "ec",
+         extraSchemaFields: Seq[StructField] = Seq.empty)
       (f: DataFrame => Unit): Unit = {
     withTempPath { path =>
-      val schema = if (partitioned) {
-        val writeDf = spark.range(0, 100, 1, 1).toDF("id")
-          .select(
-            ($"id" % 10) as expected_row_idx_col,
-            lit("a text").as("text"),
-            ($"id" / 10).cast("int").cast("string").as("pb"))
-        writeDf.write.format(format).partitionBy("pb").save(path.getAbsolutePath)
+      val baseDf = spark.range(0, NUM_ROWS, 1, 1).toDF("id")
+        .withColumn(extraCol, $"id" + lit(1000 * 1000))
+        .withColumn(EXPECTED_EXTRA_COL, col(extraCol))
+      val writeSchema: StructType = if (partitionCol != null) {
+        val writeDf = baseDf
+          .withColumn(partitionCol, ($"id" / 10).cast("int") + lit(1000))
+          .withColumn(EXPECTED_PARTITION_COL, col(partitionCol))
+          .withColumn(EXPECTED_ROW_ID_COL, $"id" % 10)
+        writeDf.write.format(format).partitionBy(partitionCol).save(path.getAbsolutePath)
         writeDf.schema
       } else {
-        val writeDf = spark.range(0, 10, 1, 1).toDF(expected_row_idx_col)
+        val writeDf = baseDf
+          .withColumn(EXPECTED_ROW_ID_COL, $"id")
         writeDf.write.format(format).save(path.getAbsolutePath)
         writeDf.schema
       }
-      val readDf = spark.read.format(format).schema(schema).load(path.getAbsolutePath)
+      val readSchema: StructType = new StructType(writeSchema.fields ++ extraSchemaFields)
+      val readDf = spark.read.format(format).schema(readSchema).load(path.getAbsolutePath)
       f(readDf)
     }
   }
@@ -77,9 +87,9 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
       withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> useVectorizedReader.toString,
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> useOffHeapMemory.toString) {
-        withReadDataFrame("parquet", partitioned) { df =>
+        withReadDataFrame("parquet", partitionCol = "pb") { df =>
           val res = df.select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}")
-            .where(s"$expected_row_idx_col != ${FileFormat.ROW_INDEX}")
+            .where(s"$EXPECTED_ROW_ID_COL != ${FileFormat.ROW_INDEX}")
           assert(res.count() == 0)
         }
       }
@@ -129,10 +139,57 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
           assert(mixedCaseRowIndex.toLowerCase() == FileFormat.ROW_INDEX)
 
           assert(df.select("*", s"${FileFormat.METADATA_NAME}.$mixedCaseRowIndex")
-            .where(s"$expected_row_idx_col != $mixedCaseRowIndex")
+            .where(s"$EXPECTED_ROW_ID_COL != $mixedCaseRowIndex")
             .count == 0)
         }
       }
+    }
+  }
+
+  test(s"reading ${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} - not present in a table") {
+    // File format supporting row index generation populates the column with row indexes.
+    withReadDataFrame("parquet", extraSchemaFields =
+        Seq(StructField(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType))) { df =>
+      assert(df
+          .where(col(EXPECTED_ROW_ID_COL) === col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          .count == NUM_ROWS)
+    }
+
+    // File format not supporting row index generation populates missing column with nulls.
+    withReadDataFrame("json", extraSchemaFields =
+        Seq(StructField(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)))  { df =>
+      assert(df
+          .where(col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME).isNull)
+          .count == NUM_ROWS)
+    }
+  }
+
+  test(s"reading ${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} - present in a table") {
+    withReadDataFrame("parquet", extraCol = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME) { df =>
+      // Column values are read from the file, rather than populated with generated row indexes.
+      // FIXME
+//      assert(df
+//        .where(col(EXPECTED_EXTRA_COL) === col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+//        .count == NUM_ROWS)
+
+      // Column cannot be read in combination with _metadata.row_index.
+      intercept[AnalysisException](df.select("*", FileFormat.METADATA_NAME).collect())
+      intercept[AnalysisException](df
+        .select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}").collect())
+    }
+  }
+
+  test(s"reading ${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} - as partition col") {
+    withReadDataFrame("parquet", partitionCol = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME) { df =>
+      // Column values are set for each partition, rather than populated with generated row indexes.
+      assert(df
+        .where(col(EXPECTED_PARTITION_COL) === col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+        .count == NUM_ROWS)
+
+      // Column cannot be read in combination with _metadata.row_index.
+      intercept[AnalysisException](df.select("*", FileFormat.METADATA_NAME).collect())
+      intercept[AnalysisException](df
+        .select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}").collect())
     }
   }
 }
