@@ -303,28 +303,54 @@ public class RocksDBSuite {
     assertTrue(!dbPathForCloseTest.exists());
   }
 
-
   @Test
-  public void testHasNextAfterIteratorClose() throws Exception {
-    String prefix = "test_db_hasNext.";
+  public void testHasNextAndNextAfterIteratorClose() throws Exception {
+    String prefix = "test_db_iter_close.";
     String suffix = ".rdb";
     File path = File.createTempFile(prefix, suffix);
     path.delete();
     RocksDB db = new RocksDB(path);
-    // Write two records for test
+    // Write one records for test
     db.write(createCustomType1(0));
-    db.write(createCustomType1(1));
 
-    KVStoreView<CustomType1> view = db.view(CustomType1.class);
-    KVStoreIterator<CustomType1> iter = view.closeableIterator();
-    assertEquals("key0", iter.next().key);
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
     // iter should be true
     assertTrue(iter.hasNext());
+    // close iter
     iter.close();
-    // iter should be false after iter close
+    // iter.hasNext should be false after iter close
     assertFalse(iter.hasNext());
+    // iter.next should throw NoSuchElementException after iter close
+    assertThrows(NoSuchElementException.class, iter::next);
 
     db.close();
+    assertTrue(path.exists());
+    FileUtils.deleteQuietly(path);
+    assertFalse(path.exists());
+  }
+
+  @Test
+  public void testHasNextAndNextAfterDBClose() throws Exception {
+    String prefix = "test_db_db_close.";
+    String suffix = ".rdb";
+    File path = File.createTempFile(prefix, suffix);
+    path.delete();
+    RocksDB db = new RocksDB(path);
+    // Write one record for test
+    db.write(createCustomType1(0));
+
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // iter.hasNext should be false after db close
+    assertFalse(iter.hasNext());
+    // iter.next should throw NoSuchElementException after db close
+    assertThrows(NoSuchElementException.class, iter::next);
+
     assertTrue(path.exists());
     FileUtils.deleteQuietly(path);
     assertFalse(path.exists());
