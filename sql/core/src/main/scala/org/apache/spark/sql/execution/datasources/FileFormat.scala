@@ -235,11 +235,6 @@ object FileFormat {
           // the modificationTime from the file is in millisecond,
           // while internally, the TimestampType `file_modification_time` is stored in microsecond
           row.update(i, fileModificationTime * 1000L)
-        case ROW_INDEX =>
-          // Reserve the spot in the row for a LongType value. The metadata fields that have
-          // identical values for each row of the file are set by this function, while fields that
-          // have different values (such as row index) are set separately.
-          row.update(i, -1L)
       }
     }
     row
