@@ -980,3 +980,11 @@ org.apache.spark.SparkArithmeticException
 == SQL(line 1, position 8) ==
 select cast(interval '10.123' second as decimal(1, 0))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+-- !query
+select cast(10.123456BD as interval day to second)
+-- !query schema
+struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+0 00:00:10.123456000

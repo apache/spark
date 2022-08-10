@@ -1355,6 +1355,21 @@ object IntervalUtils {
     }
   }
 
+  def decimalToDayTimeInterval(d: Decimal, p: Int, s: Int, endField: Byte): Long = {
+    try {
+      val micros = endField match {
+        case DAY => d.toBigDecimal * MICROS_PER_DAY
+        case HOUR => d.toBigDecimal * MICROS_PER_HOUR
+        case MINUTE => d.toBigDecimal * MICROS_PER_MINUTE
+        case SECOND => d.toBigDecimal * MICROS_PER_SECOND
+      }
+      micros.setScale(0, BigDecimal.RoundingMode.HALF_UP).toLongExact
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.castingCauseOverflowError(d, DecimalType(p, s), DT(endField))
+    }
+  }
+
   def dayTimeIntervalToInt(v: Long, startField: Byte, endField: Byte): Int = {
     val vLong = dayTimeIntervalToLong(v, startField, endField)
     val vInt = vLong.toInt
