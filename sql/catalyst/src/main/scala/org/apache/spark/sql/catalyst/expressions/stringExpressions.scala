@@ -250,6 +250,8 @@ case class ConcatWs(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
+      > SELECT _FUNC_(1, encode('scala', 'utf-8'), encode('java', 'utf-8'));
+       scala
   """,
   since = "2.0.0",
   group = "string_funcs")
@@ -537,9 +539,15 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
     Examples:
       > SELECT _FUNC_('Spark SQL', 'Spark');
        true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+       true
       > SELECT _FUNC_('Spark SQL', 'SPARK');
        false
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('SPARK', 'utf-8'));
+       false
       > SELECT _FUNC_('Spark SQL', null);
+       NULL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), null);
        NULL
       > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
        true
@@ -572,9 +580,15 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     Examples:
       > SELECT _FUNC_('Spark SQL', 'Spark');
        true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+       true
       > SELECT _FUNC_('Spark SQL', 'SQL');
        false
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
+       false
       > SELECT _FUNC_('Spark SQL', null);
+       NULL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), null);
        NULL
       > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
        true
@@ -609,7 +623,11 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     Examples:
       > SELECT _FUNC_('Spark SQL', 'SQL');
        true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
+       true
       > SELECT _FUNC_('Spark SQL', 'Spark');
+       false
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
@@ -1502,9 +1520,15 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
        ???hi
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 5, encode('??', 'utf-8'));
+       ???hi
       > SELECT _FUNC_('hi', 1, '??');
        h
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 1, encode('??', 'utf-8'));
+       h
       > SELECT _FUNC_('hi', 5);
+          hi
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 5);
           hi
       > SELECT hex(_FUNC_(unhex('aabb'), 5));
        000000AABB
@@ -1581,9 +1605,15 @@ case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Ex
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
        hi???
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 5, encode('??', 'utf-8'));
+       hi???
       > SELECT _FUNC_('hi', 1, '??');
        h
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 1, encode('??', 'utf-8'));
+       h
       > SELECT _FUNC_('hi', 5);
+       hi
+      > SELECT _FUNC_(encode('hi', 'utf-8'), 5);
        hi
       > SELECT hex(_FUNC_(unhex('aabb'), 5));
        AABB000000
@@ -1855,15 +1885,27 @@ case class StringSpace(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
        k SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
+       k SQL
       > SELECT _FUNC_('Spark SQL', -3);
+       SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), -3);
        SQL
       > SELECT _FUNC_('Spark SQL', 5, 1);
        k
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5, 1);
+       k
       > SELECT _FUNC_('Spark SQL' FROM 5);
+       k SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') FROM 5);
        k SQL
       > SELECT _FUNC_('Spark SQL' FROM -3);
        SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') FROM -3);
+       SQL
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
+       k
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') FROM 5 FOR 1);
        k
   """,
   since = "1.5.0",
@@ -1956,6 +1998,8 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 3);
+       Spa
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -1987,6 +2031,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL ');
+       10
+      > SELECT _FUNC_(encode('Spark SQL ', 'utf-8'));
        10
       > SELECT CHAR_LENGTH('Spark SQL ');
        10
@@ -2025,6 +2071,8 @@ case class Length(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'));
+       72
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2060,6 +2108,8 @@ case class BitLength(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       9
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'));
        9
   """,
   since = "2.3.0",
@@ -2249,6 +2299,8 @@ case class Chr(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       U3BhcmsgU1FM
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'));
        U3BhcmsgU1FM
   """,
   since = "1.5.0",
