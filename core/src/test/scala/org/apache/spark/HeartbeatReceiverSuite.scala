@@ -65,6 +65,8 @@ class HeartbeatReceiverSuite
   private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
   private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
   private val _waitingList = PrivateMethod[mutable.HashMap[String, Long]](Symbol("waitingList"))
+  private val _waitingListTimeout = PrivateMethod[Long](Symbol("waitingListTimeout"))
+
   var conf: SparkConf = _
 
   /**
@@ -324,8 +326,14 @@ class HeartbeatReceiverSuite
     assert(trackedExecutors.size === 2)
     assert(waitingList.size === 0)
 
+    // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled, but we did not set the
+    // value of HEARTBEAT_WAITINGLIST_TIMEOUT. Hence, waitingListTimeout is same as
+    // default value (30s = 30000ms).
+    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
+    assert(waitingListTimeout == 30000)
+
     // Advance the clock and only trigger a heartbeat for the first executor
-    heartbeatReceiverClock.advance(executorTimeout / 2)
+    heartbeatReceiverClock.advance(waitingListTimeout)
     triggerHeartbeat(executorId1, executorShouldReregister = false)
     heartbeatReceiverClock.advance(executorTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
@@ -409,6 +417,7 @@ class HeartbeatReceiverSuite
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
       .set(Network.NETWORK_TIMEOUT.key, "100s")
+      .set(Network.HEARTBEAT_WAITINGLIST_TIMEOUT.key, "50s")
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -418,6 +427,11 @@ class HeartbeatReceiverSuite
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     assert(executorTimeout == 100000)
+
+    // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is not enabled, so the value
+    // of waitingListTimeout is 0.
+    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
+    assert(waitingListTimeout == 0)
   }
 
   test("check executorTimeout value when NETWORK_EXECUTOR_TIMEOUT is set") {
@@ -428,6 +442,8 @@ class HeartbeatReceiverSuite
       .set(DYN_ALLOCATION_TESTING, true)
       .set(Network.NETWORK_EXECUTOR_TIMEOUT.key, "50s")
       .set(Network.NETWORK_TIMEOUT_INTERVAL.key, "15s")
+      .set(Network.HEARTBEAT_WAITINGLIST_TIMEOUT.key, "20s")
+      .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -437,6 +453,10 @@ class HeartbeatReceiverSuite
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     assert(executorTimeout == 50000)
+
+    // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled.
+    val waitingListTimeout = heartbeatReceiver.invokePrivate(_waitingListTimeout())
+    assert(waitingListTimeout == 20000)
   }
 
   test("expire dead hosts should kill executors with replacement (SPARK-8119)") {

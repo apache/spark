@@ -115,8 +115,16 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   /**
    * Currently, [SPARK-39984] is only for StandaloneSchedulerBackend.
+   *
+   * `checkWorkerLastHeartbeat`: A flag to enable two-phase executor timeout.
+   * `waitingListTimeout`: The timeout used for waitingList.
    */
   private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+  private val waitingListTimeout = checkWorkerLastHeartbeat match {
+    case true =>
+      sc.conf.get(Network.HEARTBEAT_WAITINGLIST_TIMEOUT).getOrElse(Utils.timeStringAsMs("30s"))
+    case false => Utils.timeStringAsMs("0s")
+  }
 
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
@@ -306,7 +314,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * [Warning 1]
    * Worker will send heartbeats to Master every (conf.get(WORKER_TIMEOUT) * 1000 / 4) milliseconds.
    * Check deploy/worker/Worker.scala for more details. This new mechanism design is based on the
-   * assumption: (executorTimeoutMs / 2) > (conf.get(WORKER_TIMEOUT) * 1000 / 4).
+   * assumption: `waitingListTimeout` > (conf.get(WORKER_TIMEOUT) * 1000 / 4).
    *
    * [Warning 2]
    * Not every deployment method schedules driver on master.
@@ -328,7 +336,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       }
     } else {
       for ((executorId, workerLastHeartbeat) <- waitingList) {
-        if (now - workerLastHeartbeat > executorTimeoutMs / 2) {
+        if (now - workerLastHeartbeat > waitingListTimeout) {
           killExecutor(executorId, now - workerLastHeartbeat)
           waitingList.remove(executorId)
           executorLastSeen.remove(executorId)
@@ -347,7 +355,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           backend.client.workerLastHeartbeat(sc.applicationId, buf) match {
             case Some(workerLastHeartbeats) =>
               for ((executorId, workerLastHeartbeat) <- buf zip workerLastHeartbeats) {
-                if (now - workerLastHeartbeat > executorTimeoutMs / 2) {
+                if (now - workerLastHeartbeat > waitingListTimeout) {
                   val lastSeenMs = executorLastSeen.get(executorId).get
                   killExecutor(executorId, now - lastSeenMs)
                   waitingList.remove(executorId)
