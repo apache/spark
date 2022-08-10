@@ -120,9 +120,11 @@ select cast(interval '1000000' second as smallint);
 -- cast integrals to ANSI intervals
 select cast(1Y as interval year);
 select cast(-122S as interval year to month);
+select cast(ym as interval year to month) from values(-122S) as t(ym);
 select cast(1000 as interval month);
 select cast(-10L as interval second);
 select cast(100Y as interval hour to second);
+select cast(dt as interval hour to second) from values(100Y) as t(dt);
 select cast(-1000S as interval day to second);
 select cast(10 as interval day);
 
