@@ -26,9 +26,9 @@ import scala.collection.JavaConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.TickerType._
 
@@ -310,7 +310,10 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      logInfo(s"Committed $newVersion, stats = ${metrics.json}")
+      val start = System.nanoTime()
+      logWarning(s"Committed $newVersion, stats = ${metrics.json}")
+      val end = System.nanoTime()
+      logWarning(s"Time = ${end - start}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -643,17 +646,17 @@ case class RocksDBMetrics(
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long]) {
-  def json: String = Serialization.write(this)(RocksDBMetrics.format)
+  def json: String = RocksDBMetrics.mapper.writeValueAsString(this)
 }
 
 object RocksDBMetrics {
-  val format = Serialization.formats(NoTypeHints)
+  val mapper: ObjectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
 }
 
 /** Class to wrap RocksDB's native histogram */
 case class RocksDBNativeHistogram(
     sum: Long, avg: Double, stddev: Double, median: Double, p95: Double, p99: Double, count: Long) {
-  def json: String = Serialization.write(this)(RocksDBMetrics.format)
+  def json: String = RocksDBMetrics.mapper.writeValueAsString(this)
 }
 
 object RocksDBNativeHistogram {
