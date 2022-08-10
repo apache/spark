@@ -54,7 +54,7 @@ private[spark] object Network {
   private[spark] val NETWORK_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.network.executorTimeout")
       .version("3.4.0")
-      .timeConf(TimeUnit.SECONDS)
+      .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT =

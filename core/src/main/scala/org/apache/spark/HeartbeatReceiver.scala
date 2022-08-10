@@ -104,7 +104,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT
   ).getOrElse(
     sc.conf.get(Network.NETWORK_EXECUTOR_TIMEOUT) match {
-      case Some(executorTimeout) => Utils.timeStringAsMs(s"${executorTimeout}s")
+      case Some(executorTimeout) => executorTimeout
       case None => Utils.timeStringAsMs(s"${sc.conf.get(Network.NETWORK_TIMEOUT)}s")
     }
   )
