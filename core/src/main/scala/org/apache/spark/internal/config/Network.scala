@@ -64,7 +64,7 @@ private[spark] object Network {
         "[SPARK-39984] for more details")
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createOptional
+      .createWithDefaultString("30s")
 
   private[spark] val RPC_ASK_TIMEOUT =
     ConfigBuilder("spark.rpc.askTimeout")

@@ -121,10 +121,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    */
   private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
   private val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
-    case true =>
-      sc.conf.get(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
-        .getOrElse(Utils.timeStringAsMs("30s"))
-    case false => Utils.timeStringAsMs("0s")
+    case true => sc.conf.get(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
+    case false => 0
   }
 
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
