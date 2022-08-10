@@ -899,7 +899,8 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
-  def arrayElementNullable: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
+  def resultArrayElementNullable: Boolean =
+    arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
@@ -935,7 +936,7 @@ trait ArraySortLike extends ExpectsInputTypes {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
       val canPerformFastSort = CodeGenerator.isPrimitiveType(elementType) &&
-        elementType != BooleanType && !arrayElementNullable
+        elementType != BooleanType && !resultArrayElementNullable
       val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
@@ -1083,7 +1084,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val arrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val resultArrayElementNullable =
+    dataType.asInstanceOf[ArrayType].containsNull
 
   @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
@@ -1124,7 +1126,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
-      i, s"$indices[$i]", arrayElementNullable)
+      i, s"$indices[$i]", resultArrayElementNullable)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1168,7 +1170,8 @@ case class Reverse(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val arrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val resultArrayElementNullable =
+    dataType.asInstanceOf[ArrayType].containsNull
 
   override def nullSafeEval(input: Any): Any = doReverse(input)
 
@@ -1204,7 +1207,7 @@ case class Reverse(child: Expression)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, childName, i, j, arrayElementNullable)
+      arrayData, elementType, childName, i, j, resultArrayElementNullable)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1567,7 +1570,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def dataType: DataType = x.dataType
 
-  @transient private lazy val arrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val resultArrayElementNullable =
+    dataType.asInstanceOf[ArrayType].containsNull
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
 
@@ -1641,7 +1645,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val allocation = CodeGenerator.createArrayData(
       values, elementType, resLength, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
-      i, s"$i + $startIdx", arrayElementNullable)
+      i, s"$i + $startIdx", resultArrayElementNullable)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -2363,6 +2367,9 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     }
   }
 
+  @transient private lazy val resultArrayElementNullable =
+    dataType.asInstanceOf[ArrayType].containsNull
+
   private def javaType: String = CodeGenerator.javaType(dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -2494,8 +2501,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"args[$y]", counter, z,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, s"args[$y]", counter, z, resultArrayElementNullable)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2544,6 +2550,9 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
   override def nullable: Boolean = child.nullable || childDataType.containsNull
 
   @transient override lazy val dataType: DataType = childDataType.elementType
+
+  @transient private lazy val resultArrayElementNullable =
+    dataType.asInstanceOf[ArrayType].containsNull
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
@@ -2614,8 +2623,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
     val allocation = CodeGenerator.createArrayData(
       tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      tempArrayDataName, elementType, arr, counter, l,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      tempArrayDataName, elementType, arr, counter, l, resultArrayElementNullable)
 
     s"""
     |$numElemCode
@@ -3496,7 +3504,7 @@ trait ArraySetLike {
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(et)
 
-  protected def arrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
+  protected def resultArrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
 
   protected def genGetValue(array: String, i: String): String =
     CodeGenerator.getValue(array, et, i)
@@ -3533,7 +3541,7 @@ trait ArraySetLike {
       body: String,
       value: String,
       nullElementIndex: String): String = {
-    if (dt.asInstanceOf[ArrayType].containsNull) {
+    if (resultArrayElementNullable) {
       s"""
          |$body
          |if ($nullElementIndex >= 0) {
@@ -3674,7 +3682,7 @@ case class ArrayDistinct(child: Expression)
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
         // Only need to track null element index when array's element is nullable.
-        val declareNullTrackVariables = if (arrayElementNullable) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
@@ -3704,8 +3712,8 @@ case class ArrayDistinct(child: Expression)
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(
-          arrayElementNullable,
-          arrayElementNullable,
+          resultArrayElementNullable,
+          resultArrayElementNullable,
           array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -3892,8 +3900,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
                      """.stripMargin)
 
         val processArray = SQLOpenHashSet.withNullCheckCode(
-          arrayElementNullable,
-          arrayElementNullable,
+          resultArrayElementNullable,
+          resultArrayElementNullable,
           array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
@@ -3902,7 +3910,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (arrayElementNullable) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
@@ -3997,9 +4005,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck
-    ArrayType(elementType,
-      left.dataType.asInstanceOf[ArrayType].containsNull &&
-        right.dataType.asInstanceOf[ArrayType].containsNull)
+    ArrayType(elementType, leftArrayElementNullable && rightArrayElementNullable)
   }
 
   override def dataType: DataType = internalDataType
@@ -4171,7 +4177,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (arrayElementNullable) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
              |int $nullElementIndex = -1;
            """.stripMargin
