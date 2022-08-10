@@ -3496,6 +3496,36 @@
         </dependency>
       </dependencies>
     </profile>
+
+    <profile>
+      <id>hadoop-2.10</id>
+      <properties>
+        <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
+        <hadoop.version>2.10.1</hadoop.version>
+        <curator.version>2.12.0</curator.version>
+        <commons-io.version>2.8.0</commons-io.version>
+        <!--
+          the declaration site above of these variables explains why we need to re-assign them here
+        -->
+        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+        <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
+        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+        <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
+        <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.directory.api</groupId>
+          <artifactId>api-util</artifactId>
+          <version>1.0.3</version>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.directory.api</groupId>
+          <artifactId>api-asn1-api</artifactId>
+          <version>1.0.3</version>
+        </dependency>
+      </dependencies>
+    </profile>
     
     
     <profile>
@@ -3504,7 +3534,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
-            <version>2.7.4</version>
+            <version>2.10.1</version>
             <scope>runtime</scope>
             <exclusions>
               <exclusion>
@@ -3515,8 +3545,8 @@
           </dependency>
         <dependency>
           <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk</artifactId>
-          <version>1.7.4</version>
+          <artifactId>aws-java-sdk-bundle</artifactId>
+          <version>1.11.271</version>
           <scope>runtime</scope>
           <exclusions>
             <exclusion>
