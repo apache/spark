@@ -33,28 +33,28 @@ import org.apache.spark.storage.StorageLevel
 abstract class Catalog {
 
   /**
-   * Returns the current default database in this session.
+   * Returns the current database (namespace) in this session.
    *
    * @since 2.0.0
    */
   def currentDatabase: String
 
   /**
-   * Sets the current default database in this session.
+   * Sets the current database (namespace) in this session.
    *
    * @since 2.0.0
    */
   def setCurrentDatabase(dbName: String): Unit
 
   /**
-   * Returns a list of databases available across all sessions.
+   * Returns a list of databases (namespaces) available within the current catalog.
    *
    * @since 2.0.0
    */
   def listDatabases(): Dataset[Database]
 
   /**
-   * Returns a list of tables/views in the current database.
+   * Returns a list of tables/views in the current database (namespace).
    * This includes all temporary views.
    *
    * @since 2.0.0
@@ -62,7 +62,8 @@ abstract class Catalog {
   def listTables(): Dataset[Table]
 
   /**
-   * Returns a list of tables/views in the specified database.
+   * Returns a list of tables/views in the specified database (namespace) (the name can be qualified
+   * with catalog).
    * This includes all temporary views.
    *
    * @since 2.0.0
@@ -71,16 +72,17 @@ abstract class Catalog {
   def listTables(dbName: String): Dataset[Table]
 
   /**
-   * Returns a list of functions registered in the current database.
-   * This includes all temporary functions
+   * Returns a list of functions registered in the current database (namespace).
+   * This includes all temporary functions.
    *
    * @since 2.0.0
    */
   def listFunctions(): Dataset[Function]
 
   /**
-   * Returns a list of functions registered in the specified database.
-   * This includes all temporary functions
+   * Returns a list of functions registered in the specified database (namespace) (the name can be
+   * qualified with catalog).
+   * This includes all built-in and temporary functions.
    *
    * @since 2.0.0
    */
@@ -90,21 +92,22 @@ abstract class Catalog {
   /**
    * Returns a list of columns for the given table/view or temporary view.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table/view.
-   *                  If no database identifier is provided, it refers to a temporary view or
-   *                  a table/view in the current database.
+   * @param tableName is either a qualified or unqualified name that designates a table/view. It
+   *                  follows the same resolution rule with SQL: search for temp views first then
+   *                  table/views in the current database (namespace).
    * @since 2.0.0
    */
   @throws[AnalysisException]("table does not exist")
   def listColumns(tableName: String): Dataset[Column]
 
   /**
-   * Returns a list of columns for the given table/view in the specified database.
+   * Returns a list of columns for the given table/view in the specified database under the Hive
+   * Metastore.
    *
-   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
-   * use listColumns(tableName) instead.
+   * To list columns for table/view in other catalogs, please use `listColumns(tableName)` with
+   * qualified table/view name instead.
    *
-   * @param dbName is a name that designates a database.
+   * @param dbName is an unqualified name that designates a database.
    * @param tableName is an unqualified name that designates a table/view.
    * @since 2.0.0
    */
@@ -112,8 +115,8 @@ abstract class Catalog {
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
-   * Get the database with the specified name. This throws an AnalysisException when the database
-   * cannot be found.
+   * Get the database (namespace) with the specified name (can be qualified with catalog). This
+   * throws an AnalysisException when the database (namespace) cannot be found.
    *
    * @since 2.1.0
    */
@@ -124,20 +127,20 @@ abstract class Catalog {
    * Get the table or view with the specified name. This table can be a temporary view or a
    * table/view. This throws an AnalysisException when no Table can be found.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table/view.
-   *                  If no database identifier is provided, it refers to a table/view in
-   *                  the current database.
+   * @param tableName is either a qualified or unqualified name that designates a table/view. It
+   *                  follows the same resolution rule with SQL: search for temp views first then
+   *                  table/views in the current database (namespace).
    * @since 2.1.0
    */
   @throws[AnalysisException]("table does not exist")
   def getTable(tableName: String): Table
 
   /**
-   * Get the table or view with the specified name in the specified database. This throws an
-   * AnalysisException when no Table can be found.
+   * Get the table or view with the specified name in the specified database under the Hive
+   * Metastore. This throws an AnalysisException when no Table can be found.
    *
-   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
-   * use getTable(tableName) instead.
+   * To get table/view in other catalogs, please use `getTable(tableName)` with qualified table/view
+   * name instead.
    *
    * @since 2.1.0
    */
@@ -148,22 +151,22 @@ abstract class Catalog {
    * Get the function with the specified name. This function can be a temporary function or a
    * function. This throws an AnalysisException when the function cannot be found.
    *
-   * @param functionName is either a qualified or unqualified name that designates a function.
-   *                     If no database identifier is provided, it refers to a temporary function
-   *                     or a function in the current database.
+   * @param functionName is either a qualified or unqualified name that designates a function. It
+   *                     follows the same resolution rule with SQL: search for built-in/temp
+   *                     functions first then functions in the current database (namespace).
    * @since 2.1.0
    */
   @throws[AnalysisException]("function does not exist")
   def getFunction(functionName: String): Function
 
   /**
-   * Get the function with the specified name. This throws an AnalysisException when the function
-   * cannot be found.
+   * Get the function with the specified name in the specified database under the Hive Metastore.
+   * This throws an AnalysisException when the function cannot be found.
    *
-   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
-   * use getFunction(functionName) instead.
+   * To get functions in other catalogs, please use `getFunction(functionName)` with qualified
+   * function name instead.
    *
-   * @param dbName is a name that designates a database.
+   * @param dbName is an unqualified name that designates a database.
    * @param functionName is an unqualified name that designates a function in the specified database
    * @since 2.1.0
    */
@@ -171,7 +174,8 @@ abstract class Catalog {
   def getFunction(dbName: String, functionName: String): Function
 
   /**
-   * Check if the database with the specified name exists.
+   * Check if the database (namespace) with the specified name exists (the name can be qualified
+   * with catalog).
    *
    * @since 2.1.0
    */
@@ -181,20 +185,21 @@ abstract class Catalog {
    * Check if the table or view with the specified name exists. This can either be a temporary
    * view or a table/view.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table/view.
-   *                  If no database identifier is provided, it refers to a table/view in
-   *                  the current database.
+   * @param tableName is either a qualified or unqualified name that designates a table/view. It
+   *                  follows the same resolution rule with SQL: search for temp views first then
+   *                  table/views in the current database (namespace).
    * @since 2.1.0
    */
   def tableExists(tableName: String): Boolean
 
   /**
-   * Check if the table or view with the specified name exists in the specified database.
+   * Check if the table or view with the specified name exists in the specified database under the
+   * Hive Metastore.
    *
-   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
-   * use tableExists(tableName) instead.
+   * To check existence of table/view in other catalogs, please use `tableExists(tableName)` with
+   * qualified table/view name instead.
    *
-   * @param dbName is a name that designates a database.
+   * @param dbName is an unqualified name that designates a database.
    * @param tableName is an unqualified name that designates a table.
    * @since 2.1.0
    */
@@ -204,20 +209,21 @@ abstract class Catalog {
    * Check if the function with the specified name exists. This can either be a temporary function
    * or a function.
    *
-   * @param functionName is either a qualified or unqualified name that designates a function.
-   *                     If no database identifier is provided, it refers to a function in
-   *                     the current database.
+   * @param functionName is either a qualified or unqualified name that designates a function. It
+   *                     follows the same resolution rule with SQL: search for built-in/temp
+   *                     functions first then functions in the current database (namespace).
    * @since 2.1.0
    */
   def functionExists(functionName: String): Boolean
 
   /**
-   * Check if the function with the specified name exists in the specified database.
+   * Check if the function with the specified name exists in the specified database under the
+   * Hive Metastore.
    *
-   * This API does not support 3 layer namespace since 3.4.0. To use 3 layer namespace,
-   * use functionExists(functionName) instead.
+   * To check existence of functions in other catalogs, please use `functionExists(functionName)`
+   * with qualified function name instead.
    *
-   * @param dbName is a name that designates a database.
+   * @param dbName is an unqualified name that designates a database.
    * @param functionName is an unqualified name that designates a function.
    * @since 2.1.0
    */

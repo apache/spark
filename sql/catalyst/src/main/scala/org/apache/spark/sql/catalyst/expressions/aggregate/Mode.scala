@@ -49,7 +49,7 @@ case class Mode(
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
-  override val dataType: DataType = child.dataType
+  override def dataType: DataType = child.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 

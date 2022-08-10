@@ -115,7 +115,7 @@
     <slf4j.version>1.7.36</slf4j.version>
     <log4j.version>2.18.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.3</hadoop.version>
+    <hadoop.version>3.3.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -165,11 +165,7 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <!--
-      SPARK-39502: Please don't upgrade the version to 4.6.2 due to
-      there is a compilation issue when run `mvn test` with Java 8
-      -->
-    <scala-maven-plugin.version>4.6.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
