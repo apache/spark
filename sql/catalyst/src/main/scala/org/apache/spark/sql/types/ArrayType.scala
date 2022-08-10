@@ -103,8 +103,6 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     f(this) || elementType.existsRecursively(f)
   }
 
-  def nullable: Boolean = containsNull
-
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
     private[this] val elementOrdering: Ordering[Any] = elementType match {
