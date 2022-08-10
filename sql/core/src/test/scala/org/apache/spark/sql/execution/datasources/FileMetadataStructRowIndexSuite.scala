@@ -192,4 +192,42 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
         .select("*", s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}").collect())
     }
   }
+
+  test(s"cannot make ${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} a partition column") {
+    withTempPath { srcPath =>
+      spark.range(0, 10, 1, 1).toDF("id").write.parquet(srcPath.getAbsolutePath)
+
+      withTempPath { dstPath =>
+        intercept[AnalysisException] {
+          spark.read.parquet(srcPath.getAbsolutePath)
+            .select("*", FileFormat.METADATA_NAME)
+            .write
+            .partitionBy(s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}")
+            .save(dstPath.getAbsolutePath)
+        }
+      }
+    }
+  }
+
+  test(s"read user created ${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column") {
+    withReadDataFrame("parquet", partitionCol = "pb") { df =>
+      withTempPath { dir =>
+        // The `df` has 10 input files with 10 rows each. Therefore the `_metadata.row_index` values
+        // will be { 10 x 0, 10 x 1, ..., 10 x 9 }. We store all these values in a single file.
+        df.select("id", s"${FileFormat.METADATA_NAME}")
+          .coalesce(1)
+          .write.parquet(dir.getAbsolutePath)
+
+        assert(spark
+          .read.parquet(dir.getAbsolutePath)
+          .count == NUM_ROWS)
+
+        // The _metadata.row_index is returning data from the file, not generated metadata.
+        assert(spark
+          .read.parquet(dir.getAbsolutePath)
+          .select(s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}")
+          .distinct.count == NUM_ROWS / 10)
+      }
+    }
+  }
 }
