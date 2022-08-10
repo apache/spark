@@ -414,7 +414,6 @@ class GroupedData(PandasGroupedOpsMixin):
         Examples
         --------
         >>> from pyspark.sql import Row
-        >>> spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
         >>> df1 = spark.createDataFrame([
         ...     Row(course="dotNET", year=2012, earnings=10000),
         ...     Row(course="Java", year=2012, earnings=20000),
@@ -491,8 +490,6 @@ def _test() -> None:
 
     globs = pyspark.sql.group.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
-    sc = spark.sparkContext
-    globs["sc"] = sc
     globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(
