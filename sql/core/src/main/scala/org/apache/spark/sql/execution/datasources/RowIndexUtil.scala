@@ -20,7 +20,7 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 
 object RowIndexUtil {
-  def findColumnIndexInSchema(sparkSchema: StructType): Int = {
+  def findRowIndexColumnIndexInSchema(sparkSchema: StructType): Int = {
     sparkSchema.fields.zipWithIndex.find { case (field: StructField, _: Int) =>
       field.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
     } match {
@@ -35,6 +35,6 @@ object RowIndexUtil {
   }
 
   def isNeededForSchema(sparkSchema: StructType): Boolean = {
-    findColumnIndexInSchema(sparkSchema) >= 0
+    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
   }
 }

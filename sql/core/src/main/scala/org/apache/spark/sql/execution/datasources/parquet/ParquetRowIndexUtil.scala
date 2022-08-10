@@ -26,7 +26,7 @@ import org.apache.parquet.hadoop.ParquetRecordReader
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, RowIndexUtil}
-import org.apache.spark.sql.execution.datasources.RowIndexUtil.findColumnIndexInSchema
+import org.apache.spark.sql.execution.datasources.RowIndexUtil.findRowIndexColumnIndexInSchema
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.StructType
 
@@ -68,7 +68,7 @@ object ParquetRowIndexUtil {
   }
 
   def createGeneratorIfNeeded(sparkSchema: StructType): RowIndexGenerator = {
-    val columnIdx = findColumnIndexInSchema(sparkSchema)
+    val columnIdx = findRowIndexColumnIndexInSchema(sparkSchema)
     if (columnIdx >= 0) new RowIndexGenerator(columnIdx)
     else null
   }
@@ -106,7 +106,7 @@ object ParquetRowIndexUtil {
   def addRowIndexToRecordReaderIfNeeded(
       reader: ParquetRecordReader[InternalRow],
       sparkSchema: StructType): RecordReader[Void, InternalRow] = {
-    val rowIndexColumnIdx = RowIndexUtil.findColumnIndexInSchema(sparkSchema)
+    val rowIndexColumnIdx = RowIndexUtil.findRowIndexColumnIndexInSchema(sparkSchema)
     if (rowIndexColumnIdx >= 0) {
       new RecordReaderWithRowIndexes(reader, rowIndexColumnIdx)
     } else {
