@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
+import org.apache.spark.sql.catalyst.expressions.Cast.{canUpCast, forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
 
 case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -91,7 +91,16 @@ case class TryCast(child: Expression, toType: DataType, timeZoneId: Option[Strin
     (!Cast.needsTimeZone(child.dataType, toType) || timeZoneId.isDefined)
 
   override lazy val replacement = {
-    TryEval(Cast(child, toType, timeZoneId = timeZoneId, ansiEnabled = true))
+    if (equivalentToNonAnsiCast) {
+      Cast(child, toType, timeZoneId = timeZoneId, ansiEnabled = false)
+    } else {
+      TryEval(Cast(child, toType, timeZoneId = timeZoneId, ansiEnabled = true))
+    }
+  }
+
+  private def equivalentToNonAnsiCast: Boolean = {
+    val fromType = child.dataType
+    canUpCast(fromType, toType) || fromType == StringType
   }
 
   // If the target data type is a complex type which can't have Null values, we should guarantee
