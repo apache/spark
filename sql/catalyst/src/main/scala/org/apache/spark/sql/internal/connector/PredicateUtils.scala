@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.sources.{AlwaysFalse, AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not, Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types.StringType
 
@@ -134,15 +133,7 @@ private[sql] object PredicateUtils {
     }
   }
 
-  def toV1(
-      predicates: Array[Predicate],
-      skipIfNotConvertible: Boolean): Array[Filter] = {
-    predicates.flatMap { predicate =>
-      val filter = toV1(predicate)
-      if (filter.isEmpty && !skipIfNotConvertible) {
-        throw QueryCompilationErrors.unsupportedPredicateToFilterConversionError(predicate.name())
-      }
-      filter
-    }
+  def toV1(predicates: Array[Predicate]): Array[Filter] = {
+    predicates.flatMap(toV1(_))
   }
 }

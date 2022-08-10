@@ -73,15 +73,13 @@ public interface SupportsDelete extends SupportsDeleteV2 {
   void deleteWhere(Filter[] filters);
 
   default boolean canDeleteWhere(Predicate[] predicates) {
-    try {
-      return this.canDeleteWhere(PredicateUtils.toV1(predicates, false));
-    } catch (UnsupportedOperationException e) {
-      return false;
-    }
+    Filter[] v1Filters = PredicateUtils.toV1(predicates);
+    if (v1Filters.length < predicates.length) return false;
+    return this.canDeleteWhere(v1Filters);
   }
 
   default void deleteWhere(Predicate[] predicates) {
-    this.deleteWhere(PredicateUtils.toV1(predicates, false));
+    this.deleteWhere(PredicateUtils.toV1(predicates));
   }
 
   @Override
