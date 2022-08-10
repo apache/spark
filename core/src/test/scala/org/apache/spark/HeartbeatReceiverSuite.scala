@@ -423,6 +423,7 @@ class HeartbeatReceiverSuite
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
       .set(Network.NETWORK_EXECUTOR_TIMEOUT.key, "50s")
+      .set(Network.NETWORK_TIMEOUT_INTERVAL.key, "15s")
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
