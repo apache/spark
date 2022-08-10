@@ -190,4 +190,20 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "columnName" -> "`col`")
     )
   }
+
+  test("CAST_OVERFLOW: from long to ANSI intervals") {
+    Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select CAST(9223372036854775807L AS $it)").collect()
+        },
+        errorClass = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> "9223372036854775807L",
+          "sourceType" -> "\"BIGINT\"",
+          "targetType" -> s""""$it"""",
+          "ansiConfig" -> ansiConf),
+        sqlState = "22005")
+    }
+  }
 }
