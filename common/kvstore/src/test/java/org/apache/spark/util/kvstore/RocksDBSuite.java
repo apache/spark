@@ -303,6 +303,33 @@ public class RocksDBSuite {
     assertTrue(!dbPathForCloseTest.exists());
   }
 
+
+  @Test
+  public void testHasNextAfterIteratorClose() throws Exception {
+    String prefix = "test_db_hasNext.";
+    String suffix = ".rdb";
+    File path = File.createTempFile(prefix, suffix);
+    path.delete();
+    RocksDB db = new RocksDB(path);
+    // Write two records for test
+    db.write(createCustomType1(0));
+    db.write(createCustomType1(1));
+
+    KVStoreView<CustomType1> view = db.view(CustomType1.class);
+    KVStoreIterator<CustomType1> iter = view.closeableIterator();
+    assertEquals("key0", iter.next().key);
+    // iter should be true
+    assertTrue(iter.hasNext());
+    iter.close();
+    // iter should be false after iter close
+    assertFalse(iter.hasNext());
+
+    db.close();
+    assertTrue(path.exists());
+    FileUtils.deleteQuietly(path);
+    assertFalse(path.exists());
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
