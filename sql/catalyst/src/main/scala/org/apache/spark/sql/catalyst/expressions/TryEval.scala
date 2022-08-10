@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{canUpCast, forceNullable,
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StringType, StructType}
 
 case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -100,7 +100,8 @@ case class TryCast(child: Expression, toType: DataType, timeZoneId: Option[Strin
 
   private def equivalentToNonAnsiCast: Boolean = {
     val fromType = child.dataType
-    canUpCast(fromType, toType) || fromType == StringType
+    canUpCast(fromType, toType) ||
+      (fromType == StringType && !toType.isInstanceOf[AnsiIntervalType])
   }
 
   // If the target data type is a complex type which can't have Null values, we should guarantee

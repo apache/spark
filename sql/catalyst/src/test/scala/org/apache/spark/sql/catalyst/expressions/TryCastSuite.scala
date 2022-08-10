@@ -41,6 +41,12 @@ class TryCastSuite extends SparkFunSuite {
   test("nullability") {
     assert(!cast("abcdef", StringType).nullable)
     assert(!cast("abcdef", BinaryType).nullable)
+    DataTypeTestUtils.numericAndInterval.foreach { dt =>
+      assert(cast("abcdef", dt).nullable)
+    }
+    DataTypeTestUtils.atomicTypes.foreach { dt =>
+      assert(!cast(Literal.default(dt), StringType).nullable)
+    }
   }
 
   test("only require timezone for datetime types") {
