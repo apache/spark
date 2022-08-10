@@ -566,6 +566,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         plan.mapChildren { child =>
           if (first) {
             first = false
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
+            // output attributes could return incorrect result.
             removeRedundantAliases(child, excluded ++ child.outputSet)
           } else {
             removeRedundantAliases(child, excluded)
