@@ -488,8 +488,8 @@ private[spark] object Config extends Logging {
       .doc("If Spark should poll Kubernetes for executor pod status. " +
         "You should leave this enabled unless you're encountering issues with your etcd.")
       .version("3.4.0")
-      .booleanConf
       .internal()
+      .booleanConf
       .createWithDefault(true)
 
   val KUBERNETES_EXECUTOR_ENABLE_API_WATCHER =
@@ -497,8 +497,8 @@ private[spark] object Config extends Logging {
       .doc("If Spark should create watchers for executor pod status. " +
         "You should leave this enabled unless you're encountering issues with your etcd.")
       .version("3.4.0")
-      .booleanConf
       .internal()
+      .booleanConf
       .createWithDefault(true)
 
 
