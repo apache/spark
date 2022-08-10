@@ -448,7 +448,14 @@ class ArrayType(DataType):
 
     Examples
     --------
-    >>> from pyspark.sql.types import ArrayType, StringType
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+
+    The below example demonstrates how to create ArrayType:
+
+    >>> arr = ArrayType(StringType())
+
+    The array can contain null (None) values by default:
+
     >>> ArrayType(StringType()) == ArrayType(StringType(), True)
     True
     >>> ArrayType(StringType(), False) == ArrayType(StringType())
@@ -513,6 +520,13 @@ class MapType(DataType):
     Examples
     --------
     >>> from pyspark.sql.types import IntegerType, FloatType, MapType, StringType
+
+    The below example demonstrates how to create MapType:
+
+    >>> map_type = MapType(StringType(), IntegerType())
+
+    The values of the map can contain null (None) values by default:
+
     >>> (MapType(StringType(), IntegerType())
     ...        == MapType(StringType(), IntegerType(), True))
     True
@@ -664,7 +678,7 @@ class StructType(DataType):
 
     Examples
     --------
-    >>> from pyspark.sql.types import CharType, IntegerType, StringType, StructField, StructType, VarcharType
+    >>> from pyspark.sql.types import *
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
     StructField('f1', StringType(), True)
@@ -688,6 +702,30 @@ class StructType(DataType):
     ...     StructField("f2", IntegerType(), False)])
     >>> struct1 == struct2
     False
+
+    The below example demonstrates how to create a struct using StructType & StructField on
+    DataFrame:
+
+    >>> data = [("Alice", ["Java", "Scala"]), ("Bob", ["Python", "Scala"])]
+    >>> schema = StructType([
+    ...     StructField("name", StringType()),
+    ...     StructField("languagesSkills", ArrayType(StringType())),
+    ... ])
+    >>> df = spark.createDataFrame(data=data, schema=schema)
+    >>> df.printSchema()
+    root
+     |-- name: string (nullable = true)
+     |-- languagesSkills: array (nullable = true)
+     |    |-- element: string (containsNull = true)
+    <BLANKLINE>
+    >>> df.show()
+    +-----+---------------+
+    | name|languagesSkills|
+    +-----+---------------+
+    |Alice|  [Java, Scala]|
+    |  Bob|[Python, Scala]|
+    +-----+---------------+
+    <BLANKLINE>
     """
 
     def __init__(self, fields: Optional[List[StructField]] = None):
@@ -1115,18 +1153,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
     Examples
     --------
-    >>> from pyspark.sql.types import (
-            ArrayType,
-            BinaryType,
-            BooleanType,
-            CharType,
-            DecimalType,
-            LongType,
-            MapType,
-            StringType,
-            StructType,
-            VarcharType,
-        )
+    >>> from pyspark.sql.types import *
+    >>> from pyspark.sql.types import _all_atomic_types, _parse_datatype_json_string
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
@@ -1668,19 +1696,8 @@ def _make_type_verifier(
 
     Examples
     --------
-    >>> from pyspark.sql.types import (
-    ...     ArrayType,
-    ...     BooleanType,
-    ...     ByteType,
-    ...     DecimalType,
-    ...     IntegerType,
-    ...     LongType,
-    ...     MapType,
-    ...     ShortType,
-    ...     StringType,
-    ...     StructType,
-    ...     _make_type_verifier
-    ... )
+    >>> from pyspark.sql.types import *
+    >>> from pyspark.sql.types import _make_type_verifier
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
