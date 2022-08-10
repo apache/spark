@@ -281,8 +281,10 @@ private[spark] object HadoopFSUtils extends Logging {
               parallelismMax = parallelismMax)
           }
       }
-      val allFiles = topLevelFiles ++ nestedFiles
-      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
+      val filteredTopLevelFiles =
+        if (filter != null) topLevelFiles.filter(f => filter.accept(f.getPath))
+        else topLevelFiles
+      filteredTopLevelFiles ++ nestedFiles
     }
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
