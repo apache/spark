@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.{DYN_ALLOCATION_TESTING, Network}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_TESTING, HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, Network}
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -171,6 +171,7 @@ class HeartbeatReceiverSuite
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
+      .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -230,6 +231,7 @@ class HeartbeatReceiverSuite
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
+      .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -288,6 +290,7 @@ class HeartbeatReceiverSuite
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
+      .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
@@ -351,6 +354,7 @@ class HeartbeatReceiverSuite
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
+      .set(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, true)
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
