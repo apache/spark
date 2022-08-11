@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -66,7 +66,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
     CatalogTable(
-      identifier = CatalystIdentifier.attachSessionCatalog(name),
+      identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(
@@ -698,7 +698,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     createDatabase(catalog, "dbx")
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     createTable(catalog, tableIdent1)
-    val expectedTable = generateTable(catalog, tableIdent1)
+    val expectedTable = generateTable(
+      catalog, tableIdent1.copy(catalog = Some(SESSION_CATALOG_NAME)))
     checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
   }
 
@@ -783,7 +784,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         sql("ALTER TABLE tab1 RENAME TO default.tab2")
       }
       assert(e.getMessage.contains(
-        s"RENAME TEMPORARY VIEW from '`tab1`' to '`$SESSION_CATALOG_NAME`.`default`.`tab2`': " +
+        s"RENAME TEMPORARY VIEW from '`tab1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
@@ -808,7 +809,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         sql("ALTER TABLE view1 RENAME TO default.tab2")
       }
       assert(e.getMessage.contains(
-        s"RENAME TEMPORARY VIEW from '`view1`' to '`$SESSION_CATALOG_NAME`.`default`.`tab2`': " +
+        s"RENAME TEMPORARY VIEW from '`view1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
