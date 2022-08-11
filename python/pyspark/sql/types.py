@@ -450,7 +450,7 @@ class ArrayType(DataType):
     --------
     >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
-    The below example demonstrates how to create ArrayType:
+    The below example demonstrates how to create class:`ArrayType`:
 
     >>> arr = ArrayType(StringType())
 
@@ -521,11 +521,11 @@ class MapType(DataType):
     --------
     >>> from pyspark.sql.types import IntegerType, FloatType, MapType, StringType
 
-    The below example demonstrates how to create MapType:
+    The below example demonstrates how to create class:`MapType`:
 
     >>> map_type = MapType(StringType(), IntegerType())
 
-    The values of the map can contain null (None) values by default:
+    The values of the map can contain null (``None``) values by default:
 
     >>> (MapType(StringType(), IntegerType())
     ...        == MapType(StringType(), IntegerType(), True))
@@ -703,8 +703,8 @@ class StructType(DataType):
     >>> struct1 == struct2
     False
 
-    The below example demonstrates how to create a struct using StructType & StructField on
-    DataFrame:
+    The below example demonstrates how to create a struct using class:`StructType`
+    and class:`StructField` on DataFrame:
 
     >>> data = [("Alice", ["Java", "Scala"]), ("Bob", ["Python", "Scala"])]
     >>> schema = StructType([
@@ -717,7 +717,6 @@ class StructType(DataType):
      |-- name: string (nullable = true)
      |-- languagesSkills: array (nullable = true)
      |    |-- element: string (containsNull = true)
-    <BLANKLINE>
     >>> df.show()
     +-----+---------------+
     | name|languagesSkills|
@@ -725,7 +724,6 @@ class StructType(DataType):
     |Alice|  [Java, Scala]|
     |  Bob|[Python, Scala]|
     +-----+---------------+
-    <BLANKLINE>
     """
 
     def __init__(self, fields: Optional[List[StructField]] = None):
@@ -1080,7 +1078,6 @@ def _parse_datatype_string(s: str) -> DataType:
 
     Examples
     --------
-    >>> from pyspark.sql.types import _parse_datatype_string
     >>> _parse_datatype_string("int ")
     IntegerType()
     >>> _parse_datatype_string("INT ")
@@ -1153,8 +1150,6 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
-    >>> from pyspark.sql.types import _all_atomic_types, _parse_datatype_json_string
     >>> import pickle
     >>> def check_datatype(datatype):
     ...     pickled = pickle.loads(pickle.dumps(datatype))
@@ -1696,8 +1691,6 @@ def _make_type_verifier(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
-    >>> from pyspark.sql.types import _make_type_verifier
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
@@ -2188,7 +2181,9 @@ def _test() -> None:
     sc = SparkContext("local[4]", "PythonTest")
     globs["sc"] = sc
     globs["spark"] = SparkSession.builder.getOrCreate()
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    )
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)
