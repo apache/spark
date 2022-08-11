@@ -58,7 +58,7 @@ object ArrayType extends AbstractDataType {
  * The field of `containsNull` is used to specify if the array can have `null` values.
  *
  * @param elementType The data type of values.
- * @param containsNull Indicates if values can have `null` values
+ * @param containsNull Indicates if the array can have `null` values
  *
  * @since 1.3.0
  */
