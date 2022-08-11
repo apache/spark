@@ -387,7 +387,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: integer (nullable = true)
          |-- name: string (nullable = true)
-        <BLANKLINE>
         """
         print(self._jdf.schema().treeString())
 
