@@ -25,11 +25,12 @@ import unittest
 from typing import cast
 
 from pyspark.sql import SparkSession, Row
-from pyspark.sql.functions import col, lit, count, sum, mean
+from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.types import (
     StringType,
     IntegerType,
     DoubleType,
+    LongType,
     StructType,
     StructField,
     BooleanType,
@@ -533,11 +534,155 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
+    def test_unpivot(self):
+        # SPARK-39877: test the DataFrame.unpivot method
+        df = self.spark.createDataFrame(
+            [
+                (1, 10, 1.0, "one"),
+                (2, 20, 2.0, "two"),
+                (3, 30, 3.0, "three"),
+            ],
+            ["id", "int", "double", "str"],
+        )
+
+        with self.subTest(desc="with no identifier and no value columns"):
+            # select only columns that have common data type (double)
+            actual = df.select("id", "int", "double").unpivot(
+                ids=None, values=None, variableColumnName="var", valueColumnName="val"
+            )
+            self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
+            self.assertEqual(
+                actual.collect(),
+                [
+                    Row(variable="id", value=1.0),
+                    Row(variable="int", value=10.0),
+                    Row(variable="double", value=1.0),
+                    Row(variable="id", value=2.0),
+                    Row(variable="int", value=20.0),
+                    Row(variable="double", value=2.0),
+                    Row(variable="id", value=3.0),
+                    Row(variable="int", value=30.0),
+                    Row(variable="double", value=3.0),
+                ],
+            )
+
+        with self.subTest(desc="with no identifier column and multiple value columns"):
+            for id in [None, [], ()]:
+                for values in [["int", "double"], ("int", "double")]:
+                    with self.subTest(ids=id, values=values):
+                        actual = df.unpivot(id, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(), "struct<var:string,val:double>"
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(variable="int", value=10.0),
+                                Row(variable="double", value=1.0),
+                                Row(variable="int", value=20.0),
+                                Row(variable="double", value=2.0),
+                                Row(variable="int", value=30.0),
+                                Row(variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with single identifier column and multiple value columns"):
+            for id in ["id", ["id"], ("id",)]:
+                for values in [["int", "double"], ("int", "double")]:
+                    with self.subTest(ids=id, values=values):
+                        actual = df.unpivot(id, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,var:string,val:double>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, variable="int", value=10.0),
+                                Row(id=1, variable="double", value=1.0),
+                                Row(id=2, variable="int", value=20.0),
+                                Row(id=2, variable="double", value=2.0),
+                                Row(id=3, variable="int", value=30.0),
+                                Row(id=3, variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with multiple identifier columns and single given value columns"):
+            for ids in [["id", "double"], ("id", "double")]:
+                for values in ["str", ["str"], ("str",)]:
+                    with self.subTest(ids=ids, values=values):
+                        actual = df.unpivot(ids, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,double:double,var:string,val:string>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, double=1.0, variable="str", value="one"),
+                                Row(id=2, double=2.0, variable="str", value="two"),
+                                Row(id=3, double=3.0, variable="str", value="three"),
+                            ],
+                        )
+
+        with self.subTest(desc="with multiple identifier columns but no given value columns"):
+            for ids in [["id", "str"], ("id", "str")]:
+                for values in [None, [], ()]:
+                    with self.subTest(ids=ids, values=values):
+                        actual = df.unpivot(ids, values, "var", "val")
+                        self.assertEqual(
+                            actual.schema.simpleString(),
+                            "struct<id:bigint,str:string,var:string,val:double>",
+                        )
+                        self.assertEqual(
+                            actual.collect(),
+                            [
+                                Row(id=1, str="one", variable="int", value=10.0),
+                                Row(id=1, str="one", variable="double", value=1.0),
+                                Row(id=2, str="two", variable="int", value=20.0),
+                                Row(id=2, str="two", variable="double", value=2.0),
+                                Row(id=3, str="three", variable="int", value=30.0),
+                                Row(id=3, str="three", variable="double", value=3.0),
+                            ],
+                        )
+
+        with self.subTest(desc="with value columns without common data type"):
+            with self.assertRaisesRegex(
+                AnalysisException,
+                r"\[UNPIVOT_VALUE_DATA_TYPE_MISMATCH\] Unpivot value columns must share "
+                r"a least common type, some types do not: .*",
+            ):
+                df.unpivot("id", ["int", "str"], "var", "val")
+
+        with self.subTest(desc="with columns"):
+            for id in [df.id, [df.id], (df.id,)]:
+                for values in [[df.int, df.double], (df.int, df.double)]:
+                    with self.subTest(ids=id, values=values):
+                        self.assertEqual(
+                            df.unpivot(id, values, "var", "val").collect(),
+                            df.unpivot("id", ["int", "double"], "var", "val").collect(),
+                        )
+
+        with self.subTest(desc="with column names and columns"):
+            for ids in [[df.id, "str"], (df.id, "str")]:
+                for values in [[df.int, "double"], (df.int, "double")]:
+                    with self.subTest(ids=ids, values=values):
+                        self.assertEqual(
+                            df.unpivot(ids, values, "var", "val").collect(),
+                            df.unpivot(["id", "str"], ["int", "double"], "var", "val").collect(),
+                        )
+
+        with self.subTest(desc="melt alias"):
+            self.assertEqual(
+                df.unpivot("id", ["int", "double"], "var", "val").collect(),
+                df.melt("id", ["int", "double"], "var", "val").collect(),
+            )
+
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation
 
-        df = SparkSession(self.sc).createDataFrame(
+        df = self.spark.createDataFrame(
             [
                 (1, 1.0, "one"),
                 (2, 2.0, "two"),
@@ -581,14 +726,49 @@ class DataFrameTests(ReusedSQLTestCase):
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(AssertionError, "exprs should not be empty"):
+        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
             df.observe(Observation())
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(AssertionError, "all exprs should be Column"):
+                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
                     df.observe(Observation(), *args)
+
+    def test_observe_str(self):
+        # SPARK-38760: tests the DataFrame.observe(str, *Column) method
+        from pyspark.sql.streaming import StreamingQueryListener
+
+        observed_metrics = None
+
+        class TestListener(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                nonlocal observed_metrics
+                observed_metrics = event.progress.observedMetrics
+
+            def onQueryTerminated(self, event):
+                pass
+
+        self.spark.streams.addListener(TestListener())
+
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = df.observe("metric", count(lit(1)).alias("cnt"), sum(col("value")).alias("sum"))
+        q = df.writeStream.format("noop").queryName("test").start()
+        self.assertTrue(q.isActive)
+        time.sleep(10)
+        q.stop()
+
+        self.assertTrue(isinstance(observed_metrics, dict))
+        self.assertTrue("metric" in observed_metrics)
+        row = observed_metrics["metric"]
+        self.assertTrue(isinstance(row, Row))
+        self.assertTrue(hasattr(row, "cnt"))
+        self.assertTrue(hasattr(row, "sum"))
+        self.assertGreaterEqual(row.cnt, 0)
+        self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
         self.assertRaisesRegex(
@@ -1163,6 +1343,39 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(
             self.spark.createDataFrame(data=[Decimal("NaN")], schema="decimal").collect(),
             [Row(value=None)],
+        )
+
+    def test_to(self):
+        schema = StructType(
+            [StructField("i", StringType(), True), StructField("j", IntegerType(), True)]
+        )
+        df = self.spark.createDataFrame([("a", 1)], schema)
+
+        schema1 = StructType([StructField("j", StringType()), StructField("i", StringType())])
+        df1 = df.to(schema1)
+        self.assertEqual(schema1, df1.schema)
+        self.assertEqual(df.count(), df1.count())
+
+        schema2 = StructType([StructField("j", LongType())])
+        df2 = df.to(schema2)
+        self.assertEqual(schema2, df2.schema)
+        self.assertEqual(df.count(), df2.count())
+
+        schema3 = StructType([StructField("struct", schema1, False)])
+        df3 = df.select(struct("i", "j").alias("struct")).to(schema3)
+        self.assertEqual(schema3, df3.schema)
+        self.assertEqual(df.count(), df3.count())
+
+        # incompatible field nullability
+        schema4 = StructType([StructField("j", LongType(), False)])
+        self.assertRaisesRegex(
+            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4)
+        )
+
+        # field cannot upcast
+        schema5 = StructType([StructField("i", LongType())])
+        self.assertRaisesRegex(
+            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5)
         )
 
 

@@ -391,7 +391,7 @@ private[spark] class Client(
           throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
               s" Please check YARN version and make sure it is 2.9+ or 3.x")
       }
-      setTokensConfMethod.invoke(ByteBuffer.wrap(dob.getData))
+      setTokensConfMethod.invoke(amContainer, ByteBuffer.wrap(dob.getData))
     }
   }
 
@@ -912,6 +912,7 @@ private[spark] class Client(
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
@@ -986,6 +987,8 @@ private[spark] class Client(
     amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
+
+    javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
     // is added by default. It will not affect Java 8 and Java 11 due to existence of

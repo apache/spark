@@ -166,6 +166,18 @@ abstract class TypeCoercionBase {
     }
   }
 
+  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): DatetimeType =
+    (d1, d2) match {
+      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+        TimestampType
+
+      case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
+        TimestampType
+
+      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
+        TimestampNTZType
+    }
+
   /**
    * Type coercion rule that combines multiple type coercion rules and applies them in a single tree
    * traversal.
@@ -184,6 +196,21 @@ abstract class TypeCoercionBase {
         }
       }
     }
+  }
+
+  /**
+   * Widens the data types of the [[Unpivot]] values.
+   */
+  object UnpivotCoercion extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case up: Unpivot
+        if up.values.nonEmpty && up.values.forall(_.resolved) && !up.valuesTypeCoercioned =>
+        val valueDataType = findWiderTypeWithoutStringPromotion(up.values.map(_.dataType))
+        val values = valueDataType.map(valueType =>
+          up.values.map(value => Alias(Cast(value, valueType), value.name)())
+        ).getOrElse(up.values)
+        up.copy(values = values)
+      }
   }
 
   /**
@@ -760,7 +787,7 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
       case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
@@ -768,7 +795,7 @@ abstract class TypeCoercionBase {
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
         val days = try {
-          AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
+          Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException =>
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
@@ -794,6 +821,7 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
       InConversion ::
@@ -843,16 +871,12 @@ object TypeCoercion extends TypeCoercionBase {
         val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
         Some(numericPrecedence(index))
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
+      case (d1: DatetimeType, d2: DatetimeType) => Some(findWiderDateTimeType(d1, d2))
 
       case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
         Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
       case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
         Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
-
-      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        Some(TimestampNTZType)
 
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }

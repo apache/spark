@@ -27,6 +27,7 @@ import base64
 from array import array
 import ctypes
 from collections.abc import Iterable
+from functools import reduce
 from typing import (
     cast,
     overload,
@@ -41,10 +42,11 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    TYPE_CHECKING,
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import JavaClass, JavaGateway, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
 
@@ -54,12 +56,13 @@ U = TypeVar("U")
 __all__ = [
     "DataType",
     "NullType",
+    "CharType",
     "StringType",
+    "VarcharType",
     "BinaryType",
     "BooleanType",
     "DateType",
     "TimestampType",
-    "TimestampNTZType",
     "DecimalType",
     "DoubleType",
     "FloatType",
@@ -74,6 +77,10 @@ __all__ = [
     "StructField",
     "StructType",
 ]
+
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class DataType:
@@ -174,6 +181,50 @@ class StringType(AtomicType, metaclass=DataTypeSingleton):
     """String data type."""
 
     pass
+
+
+class CharType(AtomicType):
+    """Char data type
+
+    Parameters
+    ----------
+    length : int
+        the length limitation.
+    """
+
+    def __init__(self, length: int):
+        self.length = length
+
+    def simpleString(self) -> str:
+        return "char(%d)" % (self.length)
+
+    def jsonValue(self) -> str:
+        return "char(%d)" % (self.length)
+
+    def __repr__(self) -> str:
+        return "CharType(%d)" % (self.length)
+
+
+class VarcharType(AtomicType):
+    """Varchar data type
+
+    Parameters
+    ----------
+    length : int
+        the length limitation.
+    """
+
+    def __init__(self, length: int):
+        self.length = length
+
+    def simpleString(self) -> str:
+        return "varchar(%d)" % (self.length)
+
+    def jsonValue(self) -> str:
+        return "varchar(%d)" % (self.length)
+
+    def __repr__(self) -> str:
+        return "VarcharType(%d)" % (self.length)
 
 
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
@@ -620,6 +671,14 @@ class StructType(DataType):
     >>> struct2 = StructType([StructField("f1", StringType(), True)])
     >>> struct1 == struct2
     True
+    >>> struct1 = StructType([StructField("f1", CharType(10), True)])
+    >>> struct2 = StructType([StructField("f1", CharType(10), True)])
+    >>> struct1 == struct2
+    True
+    >>> struct1 = StructType([StructField("f1", VarcharType(10), True)])
+    >>> struct2 = StructType([StructField("f1", VarcharType(10), True)])
+    >>> struct1 == struct2
+    True
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct2 = StructType([StructField("f1", StringType(), True),
     ...     StructField("f2", IntegerType(), False)])
@@ -939,6 +998,8 @@ class UserDefinedType(DataType):
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
+    CharType,
+    VarcharType,
     BinaryType,
     BooleanType,
     DecimalType,
@@ -960,7 +1021,8 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-
+_LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
+_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 
@@ -982,6 +1044,10 @@ def _parse_datatype_string(s: str) -> DataType:
     StructType([StructField('a', ByteType(), True), StructField('b', DecimalType(16,8), True)])
     >>> _parse_datatype_string("a DOUBLE, b STRING")
     StructType([StructField('a', DoubleType(), True), StructField('b', StringType(), True)])
+    >>> _parse_datatype_string("a DOUBLE, b CHAR( 50 )")
+    StructType([StructField('a', DoubleType(), True), StructField('b', CharType(50), True)])
+    >>> _parse_datatype_string("a DOUBLE, b VARCHAR( 50 )")
+    StructType([StructField('a', DoubleType(), True), StructField('b', VarcharType(50), True)])
     >>> _parse_datatype_string("a: array< short>")
     StructType([StructField('a', ArrayType(ShortType(), True), True)])
     >>> _parse_datatype_string(" map<string , string > ")
@@ -1050,7 +1116,10 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     >>> for cls in _all_atomic_types.values():
-    ...     check_datatype(cls())
+    ...     if cls is not VarcharType and cls is not CharType:
+    ...         check_datatype(cls())
+    ...     else:
+    ...         check_datatype(cls(1))
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -1074,6 +1143,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     StructField("simpleMap", simple_maptype, True),
     ...     StructField("simpleStruct", simple_structtype, True),
     ...     StructField("boolean", BooleanType(), False),
+    ...     StructField("chars", CharType(10), False),
+    ...     StructField("words", VarcharType(10), False),
     ...     StructField("withMeta", DoubleType(), False, {"name": "age"})])
     >>> check_datatype(complex_structtype)
 
@@ -1106,6 +1177,12 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
+        elif _LENGTH_CHAR.match(json_value):
+            m = _LENGTH_CHAR.match(json_value)
+            return CharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif _LENGTH_VARCHAR.match(json_value):
+            m = _LENGTH_VARCHAR.match(json_value)
+            return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
     else:
@@ -1213,9 +1290,30 @@ if sys.version_info[0] < 4:
     _array_type_mappings["u"] = StringType
 
 
+def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
+    """Convert NumPy type to Spark data type."""
+    import numpy as np
+
+    if nt == np.dtype("int8"):
+        return ByteType()
+    elif nt == np.dtype("int16"):
+        return ShortType()
+    elif nt == np.dtype("int32"):
+        return IntegerType()
+    elif nt == np.dtype("int64"):
+        return LongType()
+    elif nt == np.dtype("float32"):
+        return FloatType()
+    elif nt == np.dtype("float64"):
+        return DoubleType()
+
+    return None
+
+
 def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
+    infer_array_from_first_element: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> DataType:
     """Infer the DataType from obj"""
@@ -1242,23 +1340,48 @@ def _infer_type(
             for key, value in obj.items():
                 if key is not None and value is not None:
                     struct.add(
-                        key, _infer_type(value, infer_dict_as_struct, prefer_timestamp_ntz), True
+                        key,
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
+                        True,
                     )
             return struct
         else:
             for key, value in obj.items():
                 if key is not None and value is not None:
                     return MapType(
-                        _infer_type(key, infer_dict_as_struct, prefer_timestamp_ntz),
-                        _infer_type(value, infer_dict_as_struct, prefer_timestamp_ntz),
+                        _infer_type(
+                            key,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            prefer_timestamp_ntz,
+                        ),
                         True,
                     )
             return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
-        for v in obj:
-            if v is not None:
+        if len(obj) > 0:
+            if infer_array_from_first_element:
                 return ArrayType(
                     _infer_type(obj[0], infer_dict_as_struct, prefer_timestamp_ntz), True
+                )
+            else:
+                return ArrayType(
+                    reduce(
+                        _merge_type,
+                        (_infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz) for v in obj),
+                    ),
+                    True,
                 )
         return ArrayType(NullType(), True)
     elif isinstance(obj, array):
@@ -1268,7 +1391,11 @@ def _infer_type(
             raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
-            return _infer_schema(obj, infer_dict_as_struct=infer_dict_as_struct)
+            return _infer_schema(
+                obj,
+                infer_dict_as_struct=infer_dict_as_struct,
+                infer_array_from_first_element=infer_array_from_first_element,
+            )
         except TypeError:
             raise TypeError("not supported type: %s" % type(obj))
 
@@ -1277,6 +1404,7 @@ def _infer_schema(
     row: Any,
     names: Optional[List[str]] = None,
     infer_dict_as_struct: bool = False,
+    infer_array_from_first_element: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
@@ -1306,7 +1434,16 @@ def _infer_schema(
     for k, v in items:
         try:
             fields.append(
-                StructField(k, _infer_type(v, infer_dict_as_struct, prefer_timestamp_ntz), True)
+                StructField(
+                    k,
+                    _infer_type(
+                        v,
+                        infer_dict_as_struct,
+                        infer_array_from_first_element,
+                        prefer_timestamp_ntz,
+                    ),
+                    True,
+                )
             )
         except TypeError as e:
             raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
@@ -1484,6 +1621,8 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str,),
+    CharType: (str,),
+    VarcharType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
@@ -1594,8 +1733,8 @@ def _make_type_verifier(
                 new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
             )
 
-    if isinstance(dataType, StringType):
-        # StringType can work with any types
+    if isinstance(dataType, (StringType, CharType, VarcharType)):
+        # StringType, CharType and VarcharType can work with any types
         def verify_value(obj: Any) -> None:
             pass
 
@@ -1930,7 +2069,7 @@ class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
-    def convert(self, obj: datetime.date, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.date, gateway_client: GatewayClient) -> JavaObject:
         Date = JavaClass("java.sql.Date", gateway_client)
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
@@ -1939,7 +2078,7 @@ class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
-    def convert(self, obj: datetime.datetime, gateway_client: JavaGateway) -> JavaObject:
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
         seconds = (
             calendar.timegm(obj.utctimetuple()) if obj.tzinfo else time.mktime(obj.timetuple())
@@ -1959,27 +2098,25 @@ class DatetimeNTZConverter:
             and is_timestamp_ntz_preferred()
         )
 
-    def convert(self, obj: datetime.datetime, gateway_client: JavaGateway) -> JavaObject:
-        from pyspark import SparkContext
-
+    def convert(self, obj: datetime.datetime, gateway_client: GatewayClient) -> JavaObject:
         seconds = calendar.timegm(obj.utctimetuple())
-        jvm = SparkContext._jvm
-        assert jvm is not None
-        return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
-            int(seconds) * 1000000 + obj.microsecond
+        DateTimeUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.DateTimeUtils",
+            gateway_client,
         )
+        return DateTimeUtils.microsToLocalDateTime(int(seconds) * 1000000 + obj.microsecond)
 
 
 class DayTimeIntervalTypeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.timedelta)
 
-    def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
-        from pyspark import SparkContext
-
-        jvm = SparkContext._jvm
-        assert jvm is not None
-        return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
+    def convert(self, obj: datetime.timedelta, gateway_client: GatewayClient) -> JavaObject:
+        IntervalUtils = JavaClass(
+            "org.apache.spark.sql.catalyst.util.IntervalUtils",
+            gateway_client,
+        )
+        return IntervalUtils.microsToDuration(
             (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
         )
 

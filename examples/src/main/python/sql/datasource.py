@@ -28,12 +28,25 @@ from pyspark.sql import Row
 
 def generic_file_source_options_example(spark: SparkSession) -> None:
     # $example on:ignore_corrupt_files$
-    # enable ignore corrupt files
+    # enable ignore corrupt files via the data source option
+    # dir1/file3.json is corrupt from parquet's view
+    test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true")\
+        .parquet("examples/src/main/resources/dir1/",
+                 "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df0.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+
+    # enable ignore corrupt files via the configuration
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
     # dir1/file3.json is corrupt from parquet's view
-    test_corrupt_df = spark.read.parquet("examples/src/main/resources/dir1/",
-                                         "examples/src/main/resources/dir1/dir2/")
-    test_corrupt_df.show()
+    test_corrupt_df1 = spark.read.parquet("examples/src/main/resources/dir1/",
+                                          "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df1.show()
     # +-------------+
     # |         file|
     # +-------------+

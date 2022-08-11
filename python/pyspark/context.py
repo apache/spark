@@ -306,6 +306,11 @@ class SparkContext:
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
+        if sys.version_info[:2] < (3, 8):
+            with warnings.catch_warnings():
+                warnings.simplefilter("once")
+                warnings.warn("Python 3.7 support is deprecated in Spark 3.4.", FutureWarning)
+
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
@@ -679,10 +684,10 @@ class SparkContext:
         data: Iterable[T],
         serializer: Serializer,
         reader_func: Callable,
-        createRDDServer: Callable,
+        server_func: Callable,
     ) -> JavaObject:
         """
-        Using py4j to send a large dataset to the jvm is really slow, so we use either a file
+        Using Py4J to send a large dataset to the jvm is slow, so we use either a file
         or a socket if we have encryption enabled.
 
         Examples
@@ -693,13 +698,13 @@ class SparkContext:
         reader_func : function
             A function which takes a filename and reads in the data in the jvm and
             returns a JavaRDD. Only used when encryption is disabled.
-        createRDDServer : function
-            A function which creates a PythonRDDServer in the jvm to
+        server_func : function
+            A function which creates a SocketAuthServer in the JVM to
             accept the serialized data, for use when encryption is enabled.
         """
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
-            server = createRDDServer()
+            server = server_func()
             (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)
@@ -1244,8 +1249,32 @@ class SparkContext:
         ...        return [x * fileVal for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
+        >>> sc.listFiles
+        ['file:/.../test.txt']
+        >>> path2 = os.path.join(tempdir, "test2.txt")
+        >>> with open(path2, "w") as testFile:
+        ...    _ = testFile.write("100")
+        >>> sc.addFile(path2)
+        >>> sorted(sc.listFiles)
+        ['file:/.../test.txt', 'file:/.../test2.txt']
         """
         self._jsc.sc().addFile(path, recursive)
+
+    @property
+    def listFiles(self) -> List[str]:
+        """Returns a list of file paths that are added to resources.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        SparkContext.addFile
+        """
+        return list(
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+                self._jsc.sc().listFiles()
+            )
+        )
 
     def addPyFile(self, path: str) -> None:
         """
@@ -1299,6 +1328,16 @@ class SparkContext:
         ...         _ = f.write("100")
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path)
+        >>> sc.listArchives
+        ['file:/.../test.zip']
+        >>> zip_path2 = os.path.join(tempdir, "test2.zip")
+        >>> with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as zipped:
+        ...     with open(path, "w") as f:
+        ...         _ = f.write("100")
+        ...     zipped.write(path, os.path.basename(path))
+        >>> sc.addArchive(zip_path2)
+        >>> sorted(sc.listArchives)
+        ['file:/.../test.zip', 'file:/.../test2.zip']
 
         Reads the '100' as an integer in the zipped file, and processes
         it with the data in the RDD.
@@ -1311,6 +1350,22 @@ class SparkContext:
         [100, 200, 300, 400]
         """
         self._jsc.sc().addArchive(path)
+
+    @property
+    def listArchives(self) -> List[str]:
+        """Returns a list of archive paths that are added to resources.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        SparkContext.addArchive
+        """
+        return list(
+            self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
+                self._jsc.sc().listArchives()
+            )
+        )
 
     def setCheckpointDir(self, dirName: str) -> None:
         """

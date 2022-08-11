@@ -206,7 +206,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
     val resultDF = getSelectionTestResult(dataset.toDF)
 
     def getTopIndices(k: Int): Array[Int] = {

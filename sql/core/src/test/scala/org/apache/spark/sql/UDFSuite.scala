@@ -471,11 +471,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   }
 
-  test("use untyped Scala UDF should fail by default") {
-    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
-    assert(e.getMessage.contains("You're using untyped Scala UDF"))
-  }
-
   test("SPARK-26308: udf with decimal") {
     val df1 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(new BigDecimal("2011000000000002456556")))),
@@ -730,8 +725,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
     val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
-    assert(error.getErrorClass == "MISSING_COLUMN")
-    assert(error.messageParameters.sameElements(Array("b", "a")))
+    assert(error.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(error.messageParameters.sameElements(Array("`b`", "`a`")))
   }
 
   test("wrong order of input fields for case class") {

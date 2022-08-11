@@ -345,9 +345,7 @@ private[spark] class BlockManager(
         }
       } catch {
         case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
-          // We need to have detailed log message to catch environmental problems easily.
-          // Further details: https://issues.apache.org/jira/browse/SPARK-37710
-          processKryoException(ex, blockId)
+          logInfo(extendMessageWithBlockDetails(ex.getMessage, blockId))
           throw ex
       } finally {
         IOUtils.closeQuietly(inputStream)
@@ -516,9 +514,27 @@ private[spark] class BlockManager(
       ret
     }
 
+    // Register Executors' configuration with the local shuffle service, if one should exist.
+    // Registration with the ESS should happen before registering the block manager with the
+    // BlockManagerMaster. In push-based shuffle, the registered BM is selected by the driver
+    // as a merger. However, for the ESS on this host to be able to merge blocks successfully,
+    // it needs the merge directories metadata which is provided by the local executor during
+    // the registration with the ESS. Therefore, this registration should be prior to
+    // the BlockManager registration. See SPARK-39647.
+    if (externalShuffleServiceEnabled) {
+      logInfo(s"external shuffle service port = $externalShuffleServicePort")
+      shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
+        externalShuffleServicePort)
+      if (!isDriver) {
+        registerWithExternalShuffleServer()
+      }
+    }
+
     val id =
       BlockManagerId(executorId, blockTransferService.hostName, blockTransferService.port, None)
 
+    // The idFromMaster has just additional topology information. Otherwise, it has the same
+    // executor id/host/port of idWithoutTopologyInfo which is not expected to be changed.
     val idFromMaster = master.registerBlockManager(
       id,
       diskBlockManager.localDirsString,
@@ -528,16 +544,8 @@ private[spark] class BlockManager(
 
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
-    shuffleServerId = if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service port = $externalShuffleServicePort")
-      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
-    } else {
-      blockManagerId
-    }
-
-    // Register Executors' configuration with the local shuffle service, if one should exist.
-    if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
-      registerWithExternalShuffleServer()
+    if (!externalShuffleServiceEnabled) {
+      shuffleServerId = blockManagerId
     }
 
     hostLocalDirManager = {
@@ -905,6 +913,10 @@ private[spark] class BlockManager(
     throw SparkCoreErrors.readLockedBlockNotFoundError(blockId)
   }
 
+  private def isIORelatedException(t: Throwable): Boolean =
+    t.isInstanceOf[IOException] ||
+      (t.isInstanceOf[KryoException] && t.getCause.isInstanceOf[IOException])
+
   /**
    * Get block from local block manager as an iterator of Java objects.
    */
@@ -933,31 +945,37 @@ private[spark] class BlockManager(
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
+          var diskData: BlockData = null
           try {
-            val diskData = diskStore.getBytes(blockId)
-            val iterToReturn: Iterator[Any] = {
-              if (level.deserialized) {
-                val diskValues = serializerManager.dataDeserializeStream(
-                  blockId,
-                  diskData.toInputStream())(info.classTag)
-                maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
-              } else {
-                val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
-                  .map { _.toInputStream(dispose = false) }
-                  .getOrElse { diskData.toInputStream() }
-                serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
-              }
+            diskData = diskStore.getBytes(blockId)
+            val iterToReturn = if (level.deserialized) {
+              val diskValues = serializerManager.dataDeserializeStream(
+                blockId,
+                diskData.toInputStream())(info.classTag)
+              maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
+            } else {
+              val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
+                .map { _.toInputStream(dispose = false) }
+                .getOrElse { diskData.toInputStream() }
+              serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
             val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
               releaseLockAndDispose(blockId, diskData, taskContext)
             })
             Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
           } catch {
-            case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
-              // We need to have detailed log message to catch environmental problems easily.
-              // Further details: https://issues.apache.org/jira/browse/SPARK-37710
-              processKryoException(ex, blockId)
-              throw ex
+            case t: Throwable =>
+              if (diskData != null) {
+                diskData.dispose()
+                diskData = null
+              }
+              releaseLock(blockId, taskContext)
+              if (isIORelatedException(t)) {
+                logInfo(extendMessageWithBlockDetails(t.getMessage, blockId))
+                // Remove the block so that its unavailability is reported to the driver
+                removeBlock(blockId)
+              }
+              throw t
           }
         } else {
           handleLocalReadFailure(blockId)
@@ -965,14 +983,18 @@ private[spark] class BlockManager(
     }
   }
 
-  private def processKryoException(ex: KryoException, blockId: BlockId): Unit = {
-    var message =
-      "%s. %s - blockId: %s".format(ex.getMessage, blockManagerId.toString, blockId)
+  /**
+   *  We need to have detailed log message to catch environmental problems easily.
+   *  Further details: https://issues.apache.org/jira/browse/SPARK-37710
+   */
+   private def extendMessageWithBlockDetails(msg: String, blockId: BlockId): String = {
+    val message: String = "%s. %s - blockId: %s".format(msg, blockManagerId.toString, blockId)
     val file = diskBlockManager.getFile(blockId)
     if (file.exists()) {
-      message = "%s - blockDiskPath: %s".format(message, file.getAbsolutePath)
+      "%s - blockDiskPath: %s".format(message, file.getAbsolutePath)
+    } else {
+      message
     }
-    logInfo(message)
   }
 
   /**
@@ -1819,7 +1841,7 @@ private[spark] class BlockManager(
     }
 
     logDebug(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
-    return true
+    true
   }
 
   /**
@@ -2040,7 +2062,7 @@ private[spark] object BlockManager {
     }
 
     val blockManagers = new HashMap[BlockId, Seq[String]]
-    for (i <- 0 until blockIds.length) {
+    for (i <- blockIds.indices) {
       blockManagers(blockIds(i)) = blockLocations(i).map { loc =>
         ExecutorCacheTaskLocation(loc.host, loc.executorId).toString
       }

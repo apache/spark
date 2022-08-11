@@ -78,7 +78,7 @@ class SparkEnv (
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
-    CacheBuilder.newBuilder().softValues().build[String, AnyRef]().asMap()
+    CacheBuilder.newBuilder().maximumSize(1000).softValues().build[String, AnyRef]().asMap()
 
   private[spark] var driverTmpDir: Option[String] = None
 
@@ -169,6 +169,7 @@ object SparkEnv extends Logging {
       isLocal: Boolean,
       listenerBus: LiveListenerBus,
       numCores: Int,
+      sparkContext: SparkContext,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
@@ -191,6 +192,7 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey,
       listenerBus = listenerBus,
+      Option(sparkContext),
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
@@ -235,6 +237,7 @@ object SparkEnv extends Logging {
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */
+  // scalastyle:off argcount
   private def create(
       conf: SparkConf,
       executorId: String,
@@ -245,7 +248,9 @@ object SparkEnv extends Logging {
       numUsableCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       listenerBus: LiveListenerBus = null,
+      sc: Option[SparkContext] = None,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+    // scalastyle:on argcount
 
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
@@ -391,7 +396,12 @@ object SparkEnv extends Logging {
     }
 
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
-      new OutputCommitCoordinator(conf, isDriver)
+      if (isDriver) {
+        new OutputCommitCoordinator(conf, isDriver, sc)
+      } else {
+        new OutputCommitCoordinator(conf, isDriver)
+      }
+
     }
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
@@ -429,14 +439,14 @@ object SparkEnv extends Logging {
    * class paths. Map keys define the category, and map values represent the corresponding
    * attributes as a sequence of KV pairs. This is used mainly for SparkListenerEnvironmentUpdate.
    */
-  private[spark]
-  def environmentDetails(
+  private[spark] def environmentDetails(
       conf: SparkConf,
       hadoopConf: Configuration,
       schedulingMode: String,
       addedJars: Seq[String],
       addedFiles: Seq[String],
-      addedArchives: Seq[String]): Map[String, Seq[(String, String)]] = {
+      addedArchives: Seq[String],
+      metricsProperties: Map[String, String]): Map[String, Seq[(String, String)]] = {
 
     import Properties._
     val jvmInformation = Seq(
@@ -478,6 +488,7 @@ object SparkEnv extends Logging {
       "Spark Properties" -> sparkProperties,
       "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
-      "Classpath Entries" -> classPaths)
+      "Classpath Entries" -> classPaths,
+      "Metrics Properties" -> metricsProperties.toSeq.sorted)
   }
 }

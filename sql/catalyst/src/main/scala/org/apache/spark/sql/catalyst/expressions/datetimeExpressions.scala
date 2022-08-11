@@ -219,7 +219,7 @@ case class Now() extends CurrentTimestampLike {
        2020-04-25 15:49:11.914
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
   with TimeZoneAwareExpression with CodegenFallback {
 
@@ -1111,7 +1111,7 @@ case class GetTimestamp(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit
 object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -1148,13 +1148,57 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit
 object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+    }
+  }
+}
+
+/**
+ * * Parses a column to a timestamp based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp. The function always returns null on an invalid input with/without ANSI SQL
+      mode enabled. By default, it follows casting rules to a timestamp if the `fmt` is omitted.
+      The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+      > SELECT _FUNC_('foo', 'yyyy-MM-dd');
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object TryToTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToTimestamp(
+        expressions.head,
+        expressions.drop(1).lastOption,
+        SQLConf.get.timestampType,
+        failOnError = false)
     } else {
       throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
     }
@@ -1211,12 +1255,10 @@ abstract class ToTimestamp
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
               }
             } catch {
-              case e: DateTimeParseException if failOnError =>
-                throw QueryExecutionErrors.ansiDateTimeParseError(e)
               case e: DateTimeException if failOnError =>
-                throw QueryExecutionErrors.ansiDateTimeError(e)
+                throw QueryExecutionErrors.ansiDateTimeParseError(e)
               case e: ParseException if failOnError =>
-                throw QueryExecutionErrors.ansiParseError(e)
+                throw QueryExecutionErrors.ansiDateTimeParseError(e)
               case e if isParseError(e) => null
             }
           }
@@ -1226,8 +1268,8 @@ abstract class ToTimestamp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
-    def parseErrorBranch(method: String): String = if (failOnError) {
-      s"throw QueryExecutionErrors.$method(e);"
+    val parseErrorBranch: String = if (failOnError) {
+      s"throw QueryExecutionErrors.ansiDateTimeParseError(e);"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -1250,12 +1292,10 @@ abstract class ToTimestamp
           s"""
              |try {
              |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |  ${parseErrorBranch("ansiDateTimeParseError")}
              |} catch (java.time.DateTimeException e) {
-             |  ${parseErrorBranch("ansiDateTimeError")}
+             |  ${parseErrorBranch}
              |} catch (java.text.ParseException e) {
-             |  ${parseErrorBranch("ansiParseError")}
+             |  ${parseErrorBranch}
              |}
              |""".stripMargin)
       }.getOrElse {
@@ -1272,12 +1312,10 @@ abstract class ToTimestamp
              |  true);
              |try {
              |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |    ${parseErrorBranch("ansiDateTimeParseError")}
              |} catch (java.time.DateTimeException e) {
-             |    ${parseErrorBranch("ansiDateTimeError")}
+             |    ${parseErrorBranch}
              |} catch (java.text.ParseException e) {
-             |    ${parseErrorBranch("ansiParseError")}
+             |    ${parseErrorBranch}
              |}
              |""".stripMargin)
       }
@@ -2054,12 +2092,13 @@ case class ParseToTimestamp(
     left: Expression,
     format: Option[Expression],
     override val dataType: DataType,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    GetTimestamp(left, f, dataType, timeZoneId)
-  }.getOrElse(Cast(left, dataType, timeZoneId))
+    GetTimestamp(left, f, dataType, timeZoneId, failOnError = failOnError)
+  }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
@@ -2114,7 +2153,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     val level = if (format.foldable) {
       truncLevel
     } else {
-      DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+      DateTimeUtils.parseTruncLevel(format.eval(input).asInstanceOf[UTF8String])
     }
     if (level < minLevel) {
       // unknown format or too small level
@@ -2440,7 +2479,7 @@ case class MakeDate(
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit
 object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -2487,7 +2526,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit
 object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -3015,7 +3054,7 @@ object SubtractDates {
        2021-12-06 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.3.0")
+  since = "3.4.0")
 // scalastyle:on line.size.limit
 case class ConvertTimezone(
     sourceTz: Expression,

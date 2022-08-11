@@ -148,7 +148,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(spaces);
   }
 
-  protected UTF8String(Object base, long offset, int numBytes) {
+  private UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
@@ -1315,7 +1315,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toLong(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   /**
@@ -1329,7 +1329,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public short toShortExact() {
@@ -1338,7 +1338,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public byte toByteExact() {
@@ -1347,7 +1347,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   @Override
@@ -1511,12 +1511,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(sx);
   }
 
+  @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
     out.writeInt(bytes.length);
     out.write(bytes);
   }
 
+  @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();

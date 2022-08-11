@@ -23,13 +23,25 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
+import org.apache.spark.sql.connector.expressions.aggregate.Avg;
+import org.apache.spark.sql.connector.expressions.aggregate.Max;
+import org.apache.spark.sql.connector.expressions.aggregate.Min;
+import org.apache.spark.sql.connector.expressions.aggregate.Count;
+import org.apache.spark.sql.connector.expressions.aggregate.CountStar;
+import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc;
+import org.apache.spark.sql.connector.expressions.aggregate.Sum;
+import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
 import org.apache.spark.sql.types.DataType;
 
 /**
  * The builder to generate SQL from V2 expressions.
+ *
+ * @since 3.3.0
  */
 public class V2ExpressionSQLBuilder {
 
@@ -41,6 +53,9 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Cast) {
       Cast cast = (Cast) expr;
       return visitCast(build(cast.expression()), cast.dataType());
+    } else if (expr instanceof Extract) {
+      Extract extract = (Extract) expr;
+      return visitExtract(extract.field(), build(extract.source()));
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -93,15 +108,113 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "ABS":
+        case "COALESCE":
+        case "GREATEST":
+        case "LEAST":
+        case "RAND":
+        case "LOG":
+        case "LOG10":
+        case "LOG2":
+        case "LN":
+        case "EXP":
+        case "POWER":
+        case "SQRT":
+        case "FLOOR":
+        case "CEIL":
+        case "ROUND":
+        case "SIN":
+        case "SINH":
+        case "COS":
+        case "COSH":
+        case "TAN":
+        case "TANH":
+        case "COT":
+        case "ASIN":
+        case "ASINH":
+        case "ACOS":
+        case "ACOSH":
+        case "ATAN":
+        case "ATANH":
+        case "ATAN2":
+        case "CBRT":
+        case "DEGREES":
+        case "RADIANS":
+        case "SIGN":
+        case "WIDTH_BUCKET":
+        case "SUBSTRING":
+        case "UPPER":
+        case "LOWER":
+        case "TRANSLATE":
+        case "DATE_ADD":
+        case "DATE_DIFF":
+        case "TRUNC":
+        case "AES_ENCRYPT":
+        case "AES_DECRYPT":
+        case "SHA1":
+        case "SHA2":
+        case "MD5":
+        case "CRC32":
+        case "BIT_LENGTH":
+        case "CHAR_LENGTH":
+        case "CONCAT":
+          return visitSQLFunction(name,
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
           List<String> children =
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
         }
+        case "TRIM":
+          return visitTrim("BOTH",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "LTRIM":
+          return visitTrim("LEADING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "RTRIM":
+          return visitTrim("TRAILING",
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
+        case "OVERLAY":
+          return visitOverlay(
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         // TODO supports other expressions
         default:
           return visitUnexpectedExpr(expr);
       }
+    } else if (expr instanceof Min) {
+      Min min = (Min) expr;
+      return visitAggregateFunction("MIN", false,
+        Arrays.stream(min.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Max) {
+      Max max = (Max) expr;
+      return visitAggregateFunction("MAX", false,
+        Arrays.stream(max.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Count) {
+      Count count = (Count) expr;
+      return visitAggregateFunction("COUNT", count.isDistinct(),
+        Arrays.stream(count.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof Sum) {
+      Sum sum = (Sum) expr;
+      return visitAggregateFunction("SUM", sum.isDistinct(),
+        Arrays.stream(sum.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof CountStar) {
+      return visitAggregateFunction("COUNT", false, new String[]{"*"});
+    } else if (expr instanceof Avg) {
+      Avg avg = (Avg) expr;
+      return visitAggregateFunction("AVG", avg.isDistinct(),
+        Arrays.stream(avg.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof GeneralAggregateFunc) {
+      GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
+      return visitAggregateFunction(f.name(), f.isDistinct(),
+        Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof UserDefinedScalarFunc) {
+      UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
+      return visitUserDefinedScalarFunction(f.name(), f.canonicalName(),
+        Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
+    } else if (expr instanceof UserDefinedAggregateFunc) {
+      UserDefinedAggregateFunc f = (UserDefinedAggregateFunc) expr;
+      return visitUserDefinedAggregateFunction(f.name(), f.canonicalName(), f.isDistinct(),
+        Arrays.stream(f.children()).map(c -> build(c)).toArray(String[]::new));
     } else {
       return visitUnexpectedExpr(expr);
     }
@@ -210,7 +323,56 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
+  protected String visitSQLFunction(String funcName, String[] inputs) {
+    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+  }
+
+  protected String visitAggregateFunction(
+      String funcName, boolean isDistinct, String[] inputs) {
+    if (isDistinct) {
+      return funcName +
+        "(DISTINCT " + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    } else {
+      return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    }
+  }
+
+  protected String visitUserDefinedScalarFunction(
+      String funcName, String canonicalName, String[] inputs) {
+    throw new UnsupportedOperationException(
+      this.getClass().getSimpleName() + " does not support user defined function: " + funcName);
+  }
+
+  protected String visitUserDefinedAggregateFunction(
+      String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
+    throw new UnsupportedOperationException(this.getClass().getSimpleName() +
+      " does not support user defined aggregate function: " + funcName);
+  }
+
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+  }
+
+  protected String visitOverlay(String[] inputs) {
+    assert(inputs.length == 3 || inputs.length == 4);
+    if (inputs.length == 3) {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] + ")";
+    } else {
+      return "OVERLAY(" + inputs[0] + " PLACING " + inputs[1] + " FROM " + inputs[2] +
+        " FOR " + inputs[3]+ ")";
+    }
+  }
+
+  protected String visitTrim(String direction, String[] inputs) {
+    assert(inputs.length == 1 || inputs.length == 2);
+    if (inputs.length == 1) {
+      return "TRIM(" + direction + " FROM " + inputs[0] + ")";
+    } else {
+      return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
+    }
+  }
+
+  protected String visitExtract(String field, String source) {
+    return "EXTRACT(" + field + " FROM " + source + ")";
   }
 }

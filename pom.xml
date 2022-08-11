@@ -43,16 +43,10 @@
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
-  <developers>
-    <developer>
-      <id>matei</id>
-      <name>Matei Zaharia</name>
-      <email>matei.zaharia@gmail.com</email>
-      <url>https://cs.stanford.edu/people/matei</url>
-      <organization>Apache Software Foundation</organization>
-      <organizationUrl>https://spark.apache.org</organizationUrl>
-    </developer>
-  </developers>
+  <organization>
+    <name>Apache Software Foundation</name>
+    <url>https://www.apache.org</url>
+  </organization>
   <issueManagement>
     <system>JIRA</system>
     <url>https://issues.apache.org/jira/browse/SPARK</url>
@@ -115,13 +109,13 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.8.4</maven.version>
+    <maven.version>3.8.6</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.32</slf4j.version>
-    <log4j.version>2.17.2</log4j.version>
+    <slf4j.version>1.7.36</slf4j.version>
+    <log4j.version>2.18.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.2</hadoop.version>
+    <hadoop.version>3.3.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -134,12 +128,12 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.1.0</kafka.version>
+    <kafka.version>3.2.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.12.2</parquet.version>
-    <orc.version>1.7.3</orc.version>
-    <jetty.version>9.4.44.v20210927</jetty.version>
+    <parquet.version>1.12.3</parquet.version>
+    <orc.version>1.7.5</orc.version>
+    <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -148,7 +142,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.7</codahale.metrics.version>
+    <codahale.metrics.version>4.2.10</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -163,21 +157,20 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.15</scala.version>
+    <scala.version>2.12.16</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
-    <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
+    <scalatest-maven-plugin.version>2.1.0</scalatest-maven-plugin.version>
     <!--
       This needs to be managed in different profiles to avoid
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-
-    <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.2.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.13.3</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.13.3</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
@@ -192,29 +185,34 @@
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.0.16</janino.version>
-    <jersey.version>2.35</jersey.version>
-    <joda.version>2.10.13</joda.version>
+    <janino.version>3.1.7</janino.version>
+    <jersey.version>2.36</jersey.version>
+    <joda.version>2.10.14</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
-    <htmlunit.version>2.50.0</htmlunit.version>
+    <htmlunit.version>2.62.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.1</tink.version>
+    <!-- When upgrading `netty.version`, need to check whether
+         the version of `netty-tcnative-classes.version` also needs to be upgraded
+    -->
+    <netty.version>4.1.77.Final</netty.version>
+    <netty-tcnative-classes.version>2.0.52.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>7.0.0</arrow.version>
+    <arrow.version>9.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.12.1</kubernetes-client.version>
+    <kubernetes-client.version>5.12.3</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -248,7 +246,7 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.storage.version>2.7.2</hive.storage.version>
+    <hive.storage.version>2.7.3</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>
@@ -403,7 +401,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -458,13 +456,19 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.github.jnr</groupId>
+        <artifactId>jnr-posix</artifactId>
+        <version>3.1.15</version>
+        <scope>test</scope>
+      </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.20</version>
+        <version>4.21</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -670,7 +674,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.0.3</version>
+        <version>7.4.4</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -786,7 +790,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-2</version>
+        <version>1.5.2-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -814,12 +818,14 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.25</version>
+        <version>0.9.30</version>
       </dependency>
+
+      <!-- Netty Begin -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.75.Final</version>
+        <version>${netty.version}</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -893,7 +899,38 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-transport-udt</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.jctools</groupId>
+            <artifactId>jctools-core</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+      <!-- SPARK-38885: After Netty 4.1.76, add the following `Netty` dependencies explicitly
+           to ensure `./dev/test-dependencies.sh` produce the same results on Linux and MacOS.
+      -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-x86_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-x86_64</classifier>
       </dependency>
       <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
            `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
@@ -903,8 +940,10 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-classes</artifactId>
-        <version>2.0.50.Final</version>
+        <version>${netty-tcnative-classes.version}</version>
       </dependency>
+      <!-- Netty End -->
+
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
@@ -1041,7 +1080,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>1.2</version>
+        <version>2.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
@@ -1052,7 +1091,7 @@
       <dependency>
         <groupId>com.chuusai</groupId>
         <artifactId>shapeless_${scala.binary.version}</artifactId>
-        <version>2.3.7</version>
+        <version>2.3.9</version>
       </dependency>
       <dependency>
         <groupId>org.json4s</groupId>
@@ -1109,8 +1148,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
-        <version>3.2.11.0</version>
+        <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
+        <version>3.2.12.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1122,13 +1161,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1175,7 +1214,7 @@
       <dependency>
         <groupId>mysql</groupId>
         <artifactId>mysql-connector-java</artifactId>
-        <version>8.0.27</version>
+        <version>8.0.30</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1380,6 +1419,10 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1398,7 +1441,7 @@
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
-        <version>2.12.0</version>
+        <version>2.12.2</version>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
@@ -2317,7 +2360,7 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.0 -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.3 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
@@ -2338,7 +2381,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>3.1.2</version>
+        <version>3.1.3</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>
@@ -2864,7 +2907,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.6</version>
+                <version>1.7.9</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -2910,6 +2953,7 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
             <systemProperties>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -3106,12 +3150,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>9.1</version>
+              <version>9.3</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>9.1</version>
+              <version>9.3</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -3528,7 +3572,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.15</scala.version>
+        <scala.version>2.12.16</scala.version>
       </properties>
       <build>
         <pluginManagement>
@@ -3697,26 +3741,6 @@
         <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
         <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
       </properties>
-    </profile>
-
-    <!--
-      Deprecated: com.github.fommil.netlib has been replaced by dev.ludovic.netlib which
-      doesn't package or distribute any GPL/LGPL dependencies. There should now be hardware
-      acceleration out-of-the-box without enabling any additional profile.
-      However, we need to keep the dependency for now because the last release of
-      org.scalanlp:breeze still depends on `com.github.fommil.netlib`. It's been updated with
-      https://github.com/scalanlp/breeze/pull/811 but it hasn't been released yet.
-    -->
-    <profile>
-      <id>netlib-lgpl</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
     </profile>
     <profile>
       <id>only-eclipse</id>

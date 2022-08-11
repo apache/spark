@@ -134,6 +134,7 @@ Computations / Descriptive Stats
    Series.abs
    Series.all
    Series.any
+   Series.autocorr
    Series.between
    Series.clip
    Series.corr
@@ -221,6 +222,7 @@ Missing data handling
    Series.pad
    Series.dropna
    Series.fillna
+   Series.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -255,6 +257,7 @@ Time series-related
    :toctree: api/
 
    Series.asof
+   Series.resample
    Series.shift
    Series.first_valid_index
    Series.last_valid_index

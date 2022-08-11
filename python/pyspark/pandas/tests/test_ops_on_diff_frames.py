@@ -1512,9 +1512,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         pser_other = pd.Series([90, 91, 85], index=[0, 1, 3])
         psser_other = ps.from_pandas(pser_other)
+        pser_other2 = pd.Series([90, 91, 85, 100], index=[0, 1, 3, 5])
+        psser_other2 = ps.from_pandas(pser_other2)
 
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
             psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", False), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
+        ):
+            psser.dot(psser_other2)
 
         with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
             ValueError, "matrices are not aligned"
@@ -1748,7 +1755,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psser_other = ps.from_pandas(pser_other)
 
         self.assert_eq(pser.pow(pser_other), psser.pow(psser_other).sort_index())
-        self.assert_eq(pser ** pser_other, (psser ** psser_other).sort_index())
+        self.assert_eq(pser**pser_other, (psser**psser_other).sort_index())
         self.assert_eq(pser.rpow(pser_other), psser.rpow(psser_other).sort_index())
 
     def test_shift(self):
@@ -1841,6 +1848,35 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pcov = pser1.cov(pser2, min_periods=3)
         pscov = psser1.cov(psser2, min_periods=3)
         self.assert_eq(pcov, pscov, almost=True)
+
+    def test_corrwith(self):
+        df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
+        df2 = ps.DataFrame({"A": [5, 3, 6, 4], "B": [11, 2, 4, 3], "C": [4, 3, 8, np.nan]})
+        self._test_corrwith(df1, df2)
+        self._test_corrwith((df1 + 1), df2.B)
+        self._test_corrwith((df1 + 1), (df2.B + 2))
+
+        df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
+        ser_bool = ps.Series([True, True, False, True])
+        self._test_corrwith(df_bool, ser_bool)
+
+        self._test_corrwith(self.psdf1, self.psdf1)
+        self._test_corrwith(self.psdf1, self.psdf2)
+        self._test_corrwith(self.psdf2, self.psdf3)
+        self._test_corrwith(self.psdf3, self.psdf4)
+
+        self._test_corrwith(self.psdf1, self.psdf1.a)
+        self._test_corrwith(self.psdf1, self.psdf2.b)
+        self._test_corrwith(self.psdf2, self.psdf3.c)
+        self._test_corrwith(self.psdf3, self.psdf4.f)
+
+    def _test_corrwith(self, psdf, psobj):
+        pdf = psdf.to_pandas()
+        pobj = psobj.to_pandas()
+        for drop in [True, False]:
+            p_corr = pdf.corrwith(pobj, drop=drop)
+            ps_corr = psdf.corrwith(psobj, drop=drop)
+            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_series_eq(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
@@ -2028,7 +2064,7 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.pow(psser_other)
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            psser ** psser_other
+            psser**psser_other
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.rpow(psser_other)
 

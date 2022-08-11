@@ -140,7 +140,8 @@ def lit(col: Any) -> Column:
 @since(1.3)
 def col(col: str) -> Column:
     """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
+
     Examples
     --------
     >>> col('x')
@@ -184,6 +185,40 @@ def abs(col: "ColumnOrName") -> Column:
     Computes the absolute value.
     """
     return _invoke_function_over_columns("abs", col)
+
+
+def mode(col: "ColumnOrName") -> Column:
+    """
+    Returns the most frequent value in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the most frequent value in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(mode("year")).show()
+    +------+----------+
+    |course|mode(year)|
+    +------+----------+
+    |  Java|      2012|
+    |dotNET|      2012|
+    +------+----------+
+    """
+    return _invoke_function_over_columns("mode", col)
 
 
 @since(1.3)
@@ -302,6 +337,40 @@ def mean(col: "ColumnOrName") -> Column:
     Aggregate function: returns the average of the values in a group.
     """
     return _invoke_function_over_columns("mean", col)
+
+
+def median(col: "ColumnOrName") -> Column:
+    """
+    Returns the median of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the median of the values in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(median("earnings")).show()
+    +------+----------------+
+    |course|median(earnings)|
+    +------+----------------+
+    |  Java|         22000.0|
+    |dotNET|         10000.0|
+    +------+----------------+
+    """
+    return _invoke_function_over_columns("median", col)
 
 
 @since(1.3)
@@ -1008,6 +1077,45 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     return _invoke_binary_math_function("pow", col1, col2)
 
 
+def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
+    """
+    Returns the positive value of dividend mod divisor.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    dividend : str, :class:`~pyspark.sql.Column` or float
+        the column that contains dividend, or the specified dividend value
+    divisor : str, :class:`~pyspark.sql.Column` or float
+        the column that contains divisor, or the specified divisor value
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import pmod
+    >>> df = spark.createDataFrame([
+    ...     (1.0, float('nan')), (float('nan'), 2.0), (10.0, 3.0),
+    ...     (float('nan'), float('nan')), (-3.0, 4.0), (-10.0, 3.0),
+    ...     (-5.0, -6.0), (7.0, -8.0), (1.0, 2.0)],
+    ...     ("a", "b"))
+    >>> df.select(pmod("a", "b")).show()
+    +----------+
+    |pmod(a, b)|
+    +----------+
+    |       NaN|
+    |       NaN|
+    |       1.0|
+    |       NaN|
+    |       1.0|
+    |       2.0|
+    |      -5.0|
+    |       7.0|
+    |       1.0|
+    +----------+
+    """
+    return _invoke_binary_math_function("pmod", dividend, divisor)
+
+
 @since(1.6)
 def row_number() -> Column:
     """
@@ -1240,6 +1348,17 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|         2|
+    |  Bob|         5|
+    +-----+----------+
     """
     return _invoke_function("first", _to_java_column(col), ignorenulls)
 
@@ -1716,6 +1835,8 @@ def when(condition: Column, value: Any) -> Column:
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
 
+    Examples
+    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
@@ -1913,6 +2034,28 @@ def current_timestamp() -> Column:
     column. All calls of current_timestamp within the same query return the same value.
     """
     return _invoke_function("current_timestamp")
+
+
+def localtimestamp() -> Column:
+    """
+    Returns the current timestamp without time zone at the start of query evaluation
+    as a timestamp without time zone column. All calls of localtimestamp within the
+    same query return the same value.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import localtimestamp
+    >>> df = spark.range(0, 100)
+    >>> df.select(localtimestamp()).distinct().show()
+    +--------------------+
+    |    localtimestamp()|
+    +--------------------+
+    |20...-...-... ...:...:...|
+    +--------------------+
+    """
+    return _invoke_function("localtimestamp")
 
 
 def date_format(date: "ColumnOrName", format: str) -> Column:
@@ -2505,19 +2648,25 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
 
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
+    Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
+    to a timestamp.
+
     .. versionadded:: 3.1.0
 
     Examples
     --------
     >>> from pyspark.sql.functions import timestamp_seconds
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
     +-------------------+
     |                 ts|
     +-------------------+
-    |2008-12-25 07:30:00|
+    |2008-12-25 15:30:00|
     +-------------------+
+    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
@@ -4353,6 +4502,39 @@ def flatten(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("flatten", col)
 
 
+def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Returns true if the map contains the key.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    value :
+        a literal value
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_contains_key
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_contains_key("data", 1)).show()
+    +---------------------------------+
+    |array_contains(map_keys(data), 1)|
+    +---------------------------------+
+    |                             true|
+    +---------------------------------+
+    >>> df.select(map_contains_key("data", -1)).show()
+    +----------------------------------+
+    |array_contains(map_keys(data), -1)|
+    +----------------------------------+
+    |                             false|
+    +----------------------------------+
+    """
+    return _invoke_function("map_contains_key", _to_java_column(col), value)
+
+
 def map_keys(col: "ColumnOrName") -> Column:
     """
     Collection function: Returns an unordered array containing the keys of the map.
@@ -5314,6 +5496,58 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         else _to_java_column(numBuckets)
     )
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
+
+
+def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
+    """
+    Call an user-defined function.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    udfName : str
+        name of the user defined function (UDF)
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in the UDF
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import call_udf, col
+    >>> from pyspark.sql.types import IntegerType, StringType
+    >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
+    >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
+    >>> df.select(call_udf("intX2", "id")).show()
+    +---------+
+    |intX2(id)|
+    +---------+
+    |        2|
+    |        4|
+    |        6|
+    +---------+
+    >>> _ = spark.udf.register("strX2", lambda s: s * 2, StringType())
+    >>> df.select(call_udf("strX2", col("name"))).show()
+    +-----------+
+    |strX2(name)|
+    +-----------+
+    |         aa|
+    |         bb|
+    |         cc|
+    +-----------+
+    """
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
+    return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
+
+
+def unwrap_udt(col: "ColumnOrName") -> Column:
+    """
+    Unwrap UDT data type column into its underlying type.
+
+    .. versionadded:: 3.4.0
+
+    """
+    return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
 # ---------------------------- User Defined Function ----------------------------------

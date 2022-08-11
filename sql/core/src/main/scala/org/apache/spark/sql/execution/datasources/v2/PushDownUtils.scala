@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
-object PushDownUtils extends PredicateHelper {
+object PushDownUtils {
   /**
    * Pushes down filters to the data source reader
    *
@@ -80,7 +80,7 @@ object PushDownUtils extends PredicateHelper {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+              filterExpr, Some(translatedFilterToExpr))
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -98,7 +98,7 @@ object PushDownUtils extends PredicateHelper {
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (Left(f.pushedFilters), postScanFilters)
+        (Right(f.pushedFilters), postScanFilters)
       case _ => (Left(Nil), filters)
     }
   }
@@ -116,18 +116,39 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down LIMIT to the data source Scan
+   * Pushes down LIMIT to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Limit and do it again.
    */
-  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
-      case s: SupportsPushDownLimit =>
-        s.pushLimit(limit)
+      case s: SupportsPushDownLimit if s.pushLimit(limit) =>
+        (true, s.isPartiallyPushed)
+      case _ => (false, false)
+    }
+  }
+
+  /**
+   * Pushes down OFFSET to the data source Scan.
+   *
+   * @return the Boolean value represents whether to push down.
+   */
+  def pushOffset(scanBuilder: ScanBuilder, offset: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownOffset =>
+        s.pushOffset(offset)
       case _ => false
     }
   }
 
   /**
-   * Pushes down top N to the data source Scan
+   * Pushes down top N to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Sort and Limit and do it again.
    */
   def pushTopN(
       scanBuilder: ScanBuilder,
@@ -179,7 +200,7 @@ object PushDownUtils extends PredicateHelper {
     }
   }
 
-  private def toOutputAttrs(
+  def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap

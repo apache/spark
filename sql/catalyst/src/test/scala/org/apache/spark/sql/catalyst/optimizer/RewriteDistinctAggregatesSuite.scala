@@ -45,8 +45,8 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   test("single distinct group with partial aggregates") {
     val input = testRelation
       .groupBy($"a", $"d")(
-        countDistinct($"e", $"c").as(Symbol("agg1")),
-        max($"b").as(Symbol("agg2")))
+        countDistinct($"e", $"c").as("agg1"),
+        max($"b").as("agg2"))
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)

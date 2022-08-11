@@ -40,13 +40,12 @@ import org.apache.spark.util.sketch.BloomFilter
  */
 case class BloomFilterMightContain(
     bloomFilterExpression: Expression,
-    valueExpression: Expression) extends BinaryExpression {
+    valueExpression: Expression) extends BinaryExpression with Predicate {
 
   override def nullable: Boolean = true
   override def left: Expression = bloomFilterExpression
   override def right: Expression = valueExpression
   override def prettyName: String = "might_contain"
-  override def dataType: DataType = BooleanType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
@@ -55,6 +54,9 @@ case class BloomFilterMightContain(
         bloomFilterExpression match {
           case e : Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
           case subquery : PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
+            TypeCheckResult.TypeCheckSuccess
+          case GetStructField(subquery: PlanExpression[_], _, _)
+            if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
           case _ =>
             TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +

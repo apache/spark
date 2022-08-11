@@ -22,6 +22,7 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -225,11 +226,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
+  def toPlainString: String = toBigDecimal.bigDecimal.toPlainString
+
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
-      s"Decimal(expanded,$decimalVal,$precision,$scale})"
+      s"Decimal(expanded, $decimalVal, $precision, $scale)"
     } else {
-      s"Decimal(compact,$longVal,$precision,$scale})"
+      s"Decimal(compact, $longVal, $precision, $scale)"
     }
   }
 
@@ -261,14 +264,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toByte) {
         actualLongVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, ByteType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ByteType)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
         doubleVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, ByteType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ByteType)
       }
     }
   }
@@ -283,14 +288,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toShort) {
         actualLongVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, ShortType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ShortType)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
         doubleVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, ShortType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ShortType)
       }
     }
   }
@@ -305,14 +312,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toInt) {
         actualLongVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, IntegerType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), IntegerType)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
         doubleVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, IntegerType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), IntegerType)
       }
     }
   }
@@ -332,7 +341,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         decimalVal.bigDecimal.toBigInteger.longValueExact()
       } catch {
         case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(this, LongType)
+          throw QueryExecutionErrors.castingCauseOverflowError(
+            this, DecimalType(this.precision, this.scale), LongType)
       }
     }
   }
@@ -356,7 +366,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       precision: Int,
       scale: Int,
       roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
-      nullOnOverflow: Boolean = true): Decimal = {
+      nullOnOverflow: Boolean = true,
+      context: SQLQueryContext = null): Decimal = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
@@ -364,7 +375,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (nullOnOverflow) {
         null
       } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(this, precision, scale)
+        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+          this, precision, scale, context)
       }
     }
   }
@@ -472,9 +484,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def isZero: Boolean = if (decimalVal.ne(null)) decimalVal == BIG_DEC_ZERO else longVal == 0
 
+  // We should follow DecimalPrecision promote if use longVal for add and subtract:
+  // Operation    Result Precision                        Result Scale
+  // ------------------------------------------------------------------------
+  // e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
+  // e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   def + (that: Decimal): Decimal = {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
+      Decimal(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       Decimal(toBigDecimal.bigDecimal.add(that.toBigDecimal.bigDecimal))
     }
@@ -482,7 +499,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def - (that: Decimal): Decimal = {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
+      Decimal(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
       Decimal(toBigDecimal.bigDecimal.subtract(that.toBigDecimal.bigDecimal))
     }
@@ -493,7 +510,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def / (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, MATH_CONTEXT))
+    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
+      DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
 
   def % (that: Decimal): Decimal =
     if (that.isZero) null
@@ -611,7 +629,10 @@ object Decimal {
     }
   }
 
-  def fromStringANSI(str: UTF8String): Decimal = {
+  def fromStringANSI(
+      str: UTF8String,
+      to: DecimalType = DecimalType.USER_DEFAULT,
+      context: SQLQueryContext = null): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
@@ -624,7 +645,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str)
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, context)
     }
   }
 

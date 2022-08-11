@@ -7,14 +7,14 @@
             :- * Project (4)
             :  +- * Filter (3)
             :     +- * ColumnarToRow (2)
-            :        +- Scan parquet default.lineitem (1)
+            :        +- Scan parquet spark_catalog.default.lineitem (1)
             +- BroadcastExchange (8)
                +- * Filter (7)
                   +- * ColumnarToRow (6)
-                     +- Scan parquet default.part (5)
+                     +- Scan parquet spark_catalog.default.part (5)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [6]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, l_shipinstruct#5, l_shipmode#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -32,7 +32,7 @@ Condition : ((((isnotnull(l_shipinstruct#5) AND l_shipmode#6 IN (AIR,AIR REG)) A
 Output [4]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4]
 Input [6]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, l_shipinstruct#5, l_shipmode#6]
 
-(5) Scan parquet default.part
+(5) Scan parquet spark_catalog.default.part
 Output [4]: [p_partkey#7, p_brand#8, p_size#9, p_container#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
@@ -48,11 +48,12 @@ Condition : (((isnotnull(p_size#9) AND (p_size#9 >= 1)) AND isnotnull(p_partkey#
 
 (8) BroadcastExchange
 Input [4]: [p_partkey#7, p_brand#8, p_size#9, p_container#10]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]
 Right keys [1]: [p_partkey#7]
+Join type: Inner
 Join condition: (((((((p_brand#8 = Brand#11) AND p_container#10 IN (SM CASE,SM BOX,SM PACK,SM PKG)) AND (l_quantity#2 >= 1)) AND (l_quantity#2 <= 11)) AND (p_size#9 <= 5)) OR (((((p_brand#8 = Brand#12) AND p_container#10 IN (MED BAG,MED BOX,MED PKG,MED PACK)) AND (l_quantity#2 >= 10)) AND (l_quantity#2 <= 20)) AND (p_size#9 <= 10))) OR (((((p_brand#8 = Brand#13) AND p_container#10 IN (LG CASE,LG BOX,LG PACK,LG PKG)) AND (l_quantity#2 >= 20)) AND (l_quantity#2 <= 30)) AND (p_size#9 <= 15)))
 
 (10) Project [codegen id : 2]
@@ -62,18 +63,18 @@ Input [8]: [l_partkey#1, l_quantity#2, l_extendedprice#3, l_discount#4, p_partke
 (11) HashAggregate [codegen id : 2]
 Input [2]: [l_extendedprice#3, l_discount#4]
 Keys: []
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum#15, isEmpty#16]
-Results [2]: [sum#17, isEmpty#18]
+Functions [1]: [partial_sum((l_extendedprice#3 * (1 - l_discount#4)))]
+Aggregate Attributes [2]: [sum#14, isEmpty#15]
+Results [2]: [sum#16, isEmpty#17]
 
 (12) Exchange
-Input [2]: [sum#17, isEmpty#18]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#19]
+Input [2]: [sum#16, isEmpty#17]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (13) HashAggregate [codegen id : 3]
-Input [2]: [sum#17, isEmpty#18]
+Input [2]: [sum#16, isEmpty#17]
 Keys: []
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#20]
-Results [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#3 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#4 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#20 AS revenue#21]
+Functions [1]: [sum((l_extendedprice#3 * (1 - l_discount#4)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#3 * (1 - l_discount#4)))#18]
+Results [1]: [sum((l_extendedprice#3 * (1 - l_discount#4)))#18 AS revenue#19]
 

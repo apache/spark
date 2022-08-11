@@ -453,7 +453,10 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TryAverage]("try_avg"),
     expression[TrySum]("try_sum"),
+    expression[TryToBinary]("try_to_binary"),
+    expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -465,6 +468,7 @@ object FunctionRegistry {
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
     expression[First]("first_value", true),
+    expression[AnyValue]("any_value"),
     expression[Kurtosis]("kurtosis"),
     expression[Last]("last"),
     expression[Last]("last_value", true),
@@ -474,6 +478,7 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
+    expression[Median]("median"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
@@ -487,7 +492,7 @@ object FunctionRegistry {
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
-    expression[CollectList]("array_agg", true),
+    expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[BoolAnd]("every", true),
@@ -499,6 +504,12 @@ object FunctionRegistry {
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
     expression[RegrR2]("regr_r2"),
+    expression[RegrSXX]("regr_sxx"),
+    expression[RegrSXY]("regr_sxy"),
+    expression[RegrSYY]("regr_syy"),
+    expression[RegrSlope]("regr_slope"),
+    expression[RegrIntercept]("regr_intercept"),
+    expression[Mode]("mode"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -519,6 +530,8 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
     expression[ToNumber]("to_number"),
+    expression[TryToNumber]("try_to_number"),
+    expression[ToCharacter]("to_char"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -533,7 +546,6 @@ object FunctionRegistry {
     expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
-    expression[ParseUrl]("parse_url"),
     expression[StringLocate]("position", true),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
@@ -573,6 +585,14 @@ object FunctionRegistry {
     expression[XPathLong]("xpath_long"),
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
+    expression[RegExpCount]("regexp_count"),
+    expression[RegExpSubStr]("regexp_substr"),
+    expression[RegExpInStr]("regexp_instr"),
+
+    // url functions
+    expression[UrlEncode]("url_encode"),
+    expression[UrlDecode]("url_decode"),
+    expression[ParseUrl]("parse_url"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -706,10 +726,12 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CurrentCatalog]("current_catalog"),
     expression[CurrentUser]("current_user"),
+    expression[CurrentUser]("user", setAlias = true),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
+    expression[EqualNull]("equal_null"),
 
     // grouping sets
     expression[Grouping]("grouping"),

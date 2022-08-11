@@ -166,7 +166,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage.contains("Cannot resolve column name c4"))
+      assert(e1.getMessage.contains(
+        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
+          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
     }
   }
 
@@ -276,7 +278,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
       }
-      assert(e.getMessage.contains("Found duplicate keys 'c'"))
+      assert(e.getMessage.contains("Found duplicate keys `c`"))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
@@ -314,7 +316,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
             }.getMessage
-            assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            assert(errorMsg.contains(
+              """The value 'ansi' of the type "STRING" cannot be cast to "INT""""))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)

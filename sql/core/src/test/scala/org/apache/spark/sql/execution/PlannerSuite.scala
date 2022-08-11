@@ -242,6 +242,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("TakeOrderedAndProjectExec appears only when limit + offset is below the threshold.") {
+    withTempView("testLimitAndOffset") {
+      testData.createOrReplaceTempView("testLimitAndOffset")
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
+        val query0 = sql("select value from testLimitAndOffset order by key limit 100 offset 100")
+        val planned0 = query0.queryExecution.executedPlan
+        assert(planned0.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+
+        val query1 = sql("select value from testLimitAndOffset order by key limit 100 offset 1000")
+        val planned1 = query1.queryExecution.executedPlan
+        assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+      }
+    }
+  }
+
   test("PartitioningCollection") {
     withTempView("normal", "small", "tiny") {
       testData.createOrReplaceTempView("normal")
@@ -863,7 +878,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("Do not analyze subqueries twice") {
     // Analyzing the subquery twice will result in stacked
-    // CheckOverflow & PromotePrecision expressions.
+    // CheckOverflow expressions.
     val df = sql(
       """
         |SELECT id,
@@ -875,8 +890,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     subquery.foreach { node =>
       node.expressions.foreach { expression =>
         expression.foreach {
-          case PromotePrecision(_: PromotePrecision) =>
-            fail(s"$expression contains stacked PromotePrecision expressions.")
           case CheckOverflow(_: CheckOverflow, _, _) =>
             fail(s"$expression contains stacked CheckOverflow expressions.")
           case _ => // Ok
@@ -1262,6 +1275,40 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
     checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
     checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+  }
+
+  test("SPARK-39397: Relax AliasAwareOutputExpression to support alias with expression") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = Seq("a").toDF("c1")
+      val df2 = Seq("A").toDF("c2")
+      val df = df1.join(df2, upper($"c1") === $"c2").groupBy(upper($"c1")).agg(max($"c1"))
+      val numShuffles = collect(df.queryExecution.executedPlan) {
+        case e: ShuffleExchangeExec => e
+      }
+      val numSorts = collect(df.queryExecution.executedPlan) {
+        case e: SortExec => e
+      }
+      // before: numShuffles is 3, numSorts is 4
+      assert(numShuffles.size == 2)
+      assert(numSorts.size == 2)
+    }
+  }
+
+  test("SPARK-39890: Make TakeOrderedAndProjectExec inherit AliasAwareOutputOrdering") {
+    val df = spark.range(20).repartition($"id")
+      .orderBy("id")
+      .selectExpr("id as c")
+      .limit(10)
+      .orderBy("c")
+
+    val topKs = collect(df.queryExecution.executedPlan) {
+      case topK: TakeOrderedAndProjectExec => topK
+    }
+    val sorts = collect(df.queryExecution.executedPlan) {
+      case sort: SortExec => sort
+    }
+    assert(topKs.size == 1)
+    assert(sorts.isEmpty)
   }
 }
 

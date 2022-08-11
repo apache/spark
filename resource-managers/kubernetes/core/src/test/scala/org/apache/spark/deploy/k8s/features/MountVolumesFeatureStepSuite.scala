@@ -16,10 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.internal.config.EXECUTOR_INSTANCES
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts hostPath volumes") {
@@ -146,6 +149,40 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(executorPod.pod.getSpec.getVolumes.size() === 1)
     val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
     assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
+  }
+
+  test("SPARK-39006: Check PVC ClaimName") {
+    val claimName = s"pvc-${UUID.randomUUID().toString}"
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      mountReadOnly = true,
+      KubernetesPVCVolumeConf(claimName)
+    )
+    // Create pvc without specified claimName unsuccessfully when requiring multiple executors
+    val conf = new SparkConf().set(EXECUTOR_INSTANCES, 2)
+    var executorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = conf, volumes = Seq(volumeConf))
+    var executorStep = new MountVolumesFeatureStep(executorConf)
+    assertThrows[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }
+    assert(intercept[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }.getMessage.equals(s"PVC ClaimName: $claimName " +
+      "should contain OnDemand or SPARK_EXECUTOR_ID when requiring multiple executors"))
+
+    // Create and mount pvc with any claimName successfully when requiring one executor
+    conf.set(EXECUTOR_INSTANCES, 1)
+    executorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = conf, volumes = Seq(volumeConf))
+    executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName.equals(claimName))
   }
 
   test("Mounts emptyDir") {

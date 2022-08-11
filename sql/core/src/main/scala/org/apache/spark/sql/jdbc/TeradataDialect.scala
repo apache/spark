@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Types
 import java.util.Locale
 
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.types._
 
 
@@ -31,38 +31,12 @@ private case object TeradataDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.teradata.com/r/Teradata-VantageTM-SQL-Functions-Expressions-and-Predicates/March-2019/Aggregate-Functions
   // scalastyle:on line.size.limit
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"CORR(${f.children().head}, ${f.children().last})")
-        case _ => None
-      }
-    )
-  }
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
@@ -95,5 +69,32 @@ private case object TeradataDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC =>
+        if (md == null) {
+          Some(DecimalType.SYSTEM_DEFAULT)
+        } else {
+          val scale = md.build().getLong("scale")
+          // In Teradata, define Number without parameter means precision and scale is flexible.
+          // However, in this case, the scale returned from JDBC is 0, which will lead to
+          // fractional part loss. And the precision returned from JDBC is 40, which conflicts to
+          // DecimalType.MAX_PRECISION.
+          // Handle this special case by adding explicit conversion to system default decimal type.
+          if (size == 40) {
+            if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
+            // In Teradata, Number(*, scale) is valid but in this case, the precision
+            // returned from JDBC is also 40, which conflicts to DecimalType.MAX_PRECISION.
+            else Some(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          } else {
+            // Normal case, Number(precision, scale) is explicitly set in Teradata
+            Some(DecimalType(size, scale.toInt))
+          }
+        }
+        case _ => None
+    }
   }
 }

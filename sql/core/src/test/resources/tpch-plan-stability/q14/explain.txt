@@ -7,14 +7,14 @@
             :- * Project (4)
             :  +- * Filter (3)
             :     +- * ColumnarToRow (2)
-            :        +- Scan parquet default.lineitem (1)
+            :        +- Scan parquet spark_catalog.default.lineitem (1)
             +- BroadcastExchange (8)
                +- * Filter (7)
                   +- * ColumnarToRow (6)
-                     +- Scan parquet default.part (5)
+                     +- Scan parquet spark_catalog.default.part (5)
 
 
-(1) Scan parquet default.lineitem
+(1) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -32,7 +32,7 @@ Condition : (((isnotnull(l_shipdate#4) AND (l_shipdate#4 >= 1995-09-01)) AND (l_
 Output [3]: [l_partkey#1, l_extendedprice#2, l_discount#3]
 Input [4]: [l_partkey#1, l_extendedprice#2, l_discount#3, l_shipdate#4]
 
-(5) Scan parquet default.part
+(5) Scan parquet spark_catalog.default.part
 Output [2]: [p_partkey#5, p_type#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
@@ -48,11 +48,12 @@ Condition : isnotnull(p_partkey#5)
 
 (8) BroadcastExchange
 Input [2]: [p_partkey#5, p_type#6]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]
 Right keys [1]: [p_partkey#5]
+Join type: Inner
 Join condition: None
 
 (10) Project [codegen id : 2]
@@ -62,18 +63,18 @@ Input [5]: [l_partkey#1, l_extendedprice#2, l_discount#3, p_partkey#5, p_type#6]
 (11) HashAggregate [codegen id : 2]
 Input [3]: [l_extendedprice#2, l_discount#3, p_type#6]
 Keys: []
-Functions [2]: [partial_sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) ELSE 0 END), partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [4]: [sum#8, isEmpty#9, sum#10, isEmpty#11]
-Results [4]: [sum#12, isEmpty#13, sum#14, isEmpty#15]
+Functions [2]: [partial_sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END), partial_sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [4]: [sum#7, isEmpty#8, sum#9, isEmpty#10]
+Results [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
 
 (12) Exchange
-Input [4]: [sum#12, isEmpty#13, sum#14, isEmpty#15]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#16]
+Input [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (13) HashAggregate [codegen id : 3]
-Input [4]: [sum#12, isEmpty#13, sum#14, isEmpty#15]
+Input [4]: [sum#11, isEmpty#12, sum#13, isEmpty#14]
 Keys: []
-Functions [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) ELSE 0 END), sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
-Aggregate Attributes [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) ELSE 0 END)#17, sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18]
-Results [1]: [CheckOverflow((promote_precision(CheckOverflow((100.00 * promote_precision(cast(sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) ELSE 0 END)#17 as decimal(34,2)))), DecimalType(38,2))) / promote_precision(cast(sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18 as decimal(38,2)))), DecimalType(38,6)) AS promo_revenue#19]
+Functions [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END), sum((l_extendedprice#2 * (1 - l_discount#3)))]
+Aggregate Attributes [2]: [sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END)#15, sum((l_extendedprice#2 * (1 - l_discount#3)))#16]
+Results [1]: [((100.00 * sum(CASE WHEN StartsWith(p_type#6, PROMO) THEN (l_extendedprice#2 * (1 - l_discount#3)) ELSE 0 END)#15) / sum((l_extendedprice#2 * (1 - l_discount#3)))#16) AS promo_revenue#17]
 

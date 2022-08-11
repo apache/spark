@@ -646,7 +646,7 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
@@ -931,8 +931,12 @@ package object config {
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
     ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
       .internal()
+      .doc("The number of listeners that have timers to track the elapsed time of" +
+        "processing events. If 0 is set, disables this feature. If -1 is set," +
+        "it sets no limit to the number.")
       .version("2.3.0")
       .intConf
+      .checkValue(_ >= -1, "The number of listeners should be larger than -1.")
       .createWithDefault(128)
 
   private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
@@ -1493,6 +1497,14 @@ package object config {
       .version("0.9.0")
       .longConf
       .createWithDefault(10000)
+
+  private[spark] val SHUFFLE_MERGE_PREFER_NIO =
+    ConfigBuilder("spark.file.transferTo")
+      .doc("If true, NIO's `transferTo` API will be preferentially used when merging " +
+        "Spark shuffle spill files")
+      .version("1.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD =
     ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")
@@ -2064,6 +2076,41 @@ package object config {
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
+    ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
+      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
+        "is, the more tasks will be possibly considered as inefficient.")
+      .version("3.4.0")
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
+      .createWithDefault(0.75)
+
+  private[spark] val SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR =
+    ConfigBuilder("spark.speculation.efficiency.longRunTaskFactor")
+      .doc(s"A task will be speculated anyway as long as its duration has exceeded the value of " +
+        s"multiplying the factor and the time threshold (either be ${SPECULATION_MULTIPLIER.key} " +
+        s"* successfulTaskDurations.median or ${SPECULATION_MIN_THRESHOLD.key}) regardless of " +
+        s"it's data process rate is good or not. This avoids missing the inefficient tasks when " +
+        s"task slow isn't related to data process rate.")
+      .version("3.4.0")
+      .doubleConf
+      .checkValue(_ >= 1.0, "Duration factor must be >= 1.0")
+      .createWithDefault(2.0)
+
+  private[spark] val SPECULATION_EFFICIENCY_ENABLE =
+    ConfigBuilder("spark.speculation.efficiency.enabled")
+      .doc(s"When set to true, spark will evaluate the efficiency of task processing through the " +
+        s"stage task metrics or its duration, and only need to speculate the inefficient tasks. " +
+        s"A task is inefficient when 1)its data process rate is less than the average data " +
+        s"process rate of all successful tasks in the stage multiplied by a multiplier or 2)its " +
+        s"duration has exceeded the value of multiplying " +
+        s"${SPECULATION_EFFICIENCY_TASK_DURATION_FACTOR.key} and the time threshold (either be " +
+        s"${SPECULATION_MULTIPLIER.key} * successfulTaskDurations.median or " +
+        s"${SPECULATION_MIN_THRESHOLD.key}).")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val DECOMMISSION_ENABLED =
     ConfigBuilder("spark.decommission.enabled")

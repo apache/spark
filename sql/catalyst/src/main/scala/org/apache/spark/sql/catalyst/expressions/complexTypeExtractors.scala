@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -235,8 +236,11 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator)
-  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
+    failOnError: Boolean = SQLConf.get.strictIndexOperator) extends BinaryExpression
+  with GetArrayItemUtil
+  with ExpectsInputTypes
+  with ExtractValue
+  with SupportQueryContext {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -263,7 +267,8 @@ case class GetArrayItem(
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw QueryExecutionErrors.invalidArrayIndexError(index, baseValue.numElements)
+        throw QueryExecutionErrors.invalidArrayIndexError(
+          index, baseValue.numElements, getContextOrNull())
       } else {
         null
       }
@@ -287,7 +292,10 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
+        val errorContext = getContextOrNullCode(ctx)
+        // scalastyle:off line.size.limit
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
+        // scalastyle:on line.size.limit
       } else {
         s"${ev.isNull} = true;"
       }
@@ -306,6 +314,12 @@ case class GetArrayItem(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 /**
@@ -339,9 +353,8 @@ trait GetArrayItemUtil {
 /**
  * Common trait for [[GetMapValue]] and [[ElementAt]].
  */
-trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
-
-  protected val isElementAtFunction: Boolean = false
+trait GetMapValueUtil
+  extends BinaryExpression with ImplicitCastInputTypes with SupportQueryContext {
 
   // todo: current search is O(n), improve it.
   def getValueEval(
@@ -367,7 +380,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction, origin.context)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, getContextOrNull())
       } else {
         null
       }
@@ -400,11 +413,11 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    lazy val errorContext = getContextOrNullCode(ctx)
+    val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError(" +
-          s"$eval2, $isElementAtFunction, $errorContext);"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $keyDt, $errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -449,7 +462,7 @@ case class GetMapValue(
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)
 
-  private def keyType = child.dataType.asInstanceOf[MapType].keyType
+  private[catalyst] def keyType = child.dataType.asInstanceOf[MapType].keyType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -490,4 +503,10 @@ case class GetMapValue(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetMapValue =
     copy(child = newLeft, key = newRight)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }

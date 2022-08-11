@@ -49,6 +49,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
 
@@ -63,8 +64,8 @@ import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
+abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
+  with MockitoSugar with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
   private val logDir = getTestResourcePath("spark-events")
@@ -73,7 +74,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
+  private val localhost: String = Utils.localHostNameForURI()
   private var port: Int = -1
+
+  protected def diskBackend: HybridStoreDiskBackend.Value
+
+  def getExpRoot: File = expRoot
 
   def init(extraConf: (String, String)*): Unit = {
     Utils.deleteRecursively(storeDir)
@@ -85,11 +91,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
+      .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     conf.setAll(extraConf)
-    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
-    if (Utils.isMacOnAppleSilicon) {
-      conf.remove(LOCAL_STORE_DIR)
-    }
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -393,10 +396,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove(IS_TESTING)
-    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
-    if (Utils.isMacOnAppleSilicon) {
-      myConf.remove(LOCAL_STORE_DIR)
-    }
+      .set(HYBRID_STORE_DISK_BACKEND, diskBackend.toString)
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
@@ -429,12 +429,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     // build a URL for an app or app/attempt plus a page underneath
     def buildURL(appId: String, suffix: String): URL = {
-      new URL(s"http://localhost:$port/history/$appId$suffix")
+      new URL(s"http://$localhost:$port/history/$appId$suffix")
     }
 
     // build a rest URL for the application and suffix.
     def applications(appId: String, suffix: String): URL = {
-      new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
+      new URL(s"http://$localhost:$port/api/v1/applications/$appId$suffix")
     }
 
     // start initial job
@@ -587,11 +587,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val port = server.boundPort
     val testUrls = Seq(
-      s"http://localhost:$port/api/v1/applications/$appId/1/jobs",
-      s"http://localhost:$port/history/$appId/1/jobs/",
-      s"http://localhost:$port/api/v1/applications/$appId/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+      s"http://$localhost:$port/api/v1/applications/$appId/1/jobs",
+      s"http://$localhost:$port/history/$appId/1/jobs/",
+      s"http://$localhost:$port/api/v1/applications/$appId/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/2/logs")
 
     tests.foreach { case (user, expectedCode) =>
       testUrls.foreach { url =>
@@ -610,9 +610,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val port = server.boundPort
     val testUrls = Seq(
-      s"http://localhost:$port/api/v1/applications/$appId/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
-      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+      s"http://$localhost:$port/api/v1/applications/$appId/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://$localhost:$port/api/v1/applications/$appId/2/logs")
 
     testUrls.foreach { url =>
       TestUtils.httpResponseCode(new URL(url))
@@ -637,9 +637,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
       attemptId match {
         case Some(id) =>
-          new URL(s"http://localhost:$port/history/$appId/$id")
+          new URL(s"http://$localhost:$port/history/$appId/$id")
         case None =>
-          new URL(s"http://localhost:$port/history/$appId")
+          new URL(s"http://$localhost:$port/history/$appId")
       }
     }
 
@@ -664,7 +664,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://$localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
@@ -672,7 +672,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   def generateURL(path: String): URL = {
-    new URL(s"http://localhost:$port/api/v1/$path")
+    new URL(s"http://$localhost:$port/api/v1/$path")
   }
 
   def generateExpectation(name: String, path: String): Unit = {
@@ -687,7 +687,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   test("SPARK-31697: HistoryServer should set Content-Type") {
     val port = server.boundPort
     val nonExistenceAppId = "local-non-existence"
-    val url = new URL(s"http://localhost:$port/history/$nonExistenceAppId")
+    val url = new URL(s"http://$localhost:$port/history/$nonExistenceAppId")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("GET")
     conn.connect()
@@ -698,7 +698,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   test("Redirect to the root page when accessed to /history/") {
     val port = server.boundPort
-    val url = new URL(s"http://localhost:$port/history/")
+    val url = new URL(s"http://$localhost:$port/history/")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("GET")
     conn.setUseCaches(false)
@@ -706,7 +706,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     conn.setInstanceFollowRedirects(false)
     conn.connect()
     assert(conn.getResponseCode === 302)
-    assert(conn.getHeaderField("Location") === s"http://localhost:$port/")
+    assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
   }
 }
 
@@ -715,9 +715,10 @@ object HistoryServerSuite {
     // generate the "expected" results for the characterization tests.  Just blindly assume the
     // current behavior is correct, and write out the returned json to the test/resource files
 
-    val suite = new HistoryServerSuite
-    FileUtils.deleteDirectory(suite.expRoot)
-    suite.expRoot.mkdirs()
+    // SPARK-38851: Use LevelDB backend because it is the default.
+    val suite = new LevelDBBackendHistoryServerSuite
+    FileUtils.deleteDirectory(suite.getExpRoot)
+    suite.getExpRoot.mkdirs()
     try {
       suite.init()
       suite.cases.foreach { case (name, path) =>
@@ -791,4 +792,15 @@ class FakeAuthFilter extends Filter {
 
 object FakeAuthFilter {
   val FAKE_HTTP_USER = "HTTP_USER"
+}
+
+@ExtendedLevelDBTest
+class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
+}
+
+class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
 }

@@ -32,7 +32,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "does_not_exist") :: Nil,
       TestRelation2,
       tableSpec,
@@ -49,7 +49,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "does_not_exist.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -66,7 +66,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "point.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -83,7 +83,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "does_not_exist", "point.z") :: Nil,
       TestRelation2,
       tableSpec,
@@ -101,7 +101,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "id") :: Nil,
       TestRelation2,
       tableSpec,
@@ -115,7 +115,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "point.x") :: Nil,
       TestRelation2,
       tableSpec,
@@ -129,7 +129,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
-      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+      UnresolvedIdentifier(Array("table_name")),
       Expressions.bucket(4, "point") :: Nil,
       TestRelation2,
       tableSpec,

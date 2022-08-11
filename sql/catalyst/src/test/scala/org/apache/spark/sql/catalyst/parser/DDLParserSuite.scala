@@ -776,7 +776,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -785,8 +785,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None),
-          QualifiedColType(None, "y", StringType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None),
+          QualifiedColType(None, "y", StringType, true, None, None, None)
       )))
   }
 
@@ -795,7 +795,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -804,7 +804,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -813,7 +813,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -822,7 +822,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, None)
       )))
   }
 
@@ -831,7 +831,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -846,7 +846,8 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(first())))
+          Some(UnresolvedFieldPosition(first())),
+          None)
       )))
 
     comparePlans(
@@ -859,7 +860,8 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(after("y"))))
+          Some(UnresolvedFieldPosition(after("y"))),
+          None)
       )))
   }
 
@@ -869,7 +871,7 @@ class DDLParserSuite extends AnalysisTest {
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
-          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None)
+          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -885,6 +887,7 @@ class DDLParserSuite extends AnalysisTest {
             IntegerType,
             true,
             Some("doc"),
+            None,
             None),
           QualifiedColType(
             Some(UnresolvedFieldName(Seq("a"))),
@@ -892,7 +895,8 @@ class DDLParserSuite extends AnalysisTest {
             StringType,
             true,
             None,
-            Some(UnresolvedFieldPosition(first())))
+            Some(UnresolvedFieldPosition(first())),
+            None)
       )))
   }
 
@@ -931,6 +935,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -950,6 +955,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -962,6 +968,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         Some("new comment"),
+        None,
         None))
   }
 
@@ -974,7 +981,8 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None,
-        Some(UnresolvedFieldPosition(first()))))
+        Some(UnresolvedFieldPosition(first())),
+        None))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1000,6 +1008,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Some(false),
         None,
+        None,
         None))
 
     comparePlans(
@@ -1010,6 +1019,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Some(true),
         None,
+        None,
         None))
   }
 
@@ -1018,7 +1028,15 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
       DropColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c")))))
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
+      DropColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
+        ifExists = true))
   }
 
   test("alter table: drop multiple columns") {
@@ -1030,7 +1048,20 @@ class DDLParserSuite extends AnalysisTest {
           UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
           Seq(UnresolvedFieldName(Seq("x")),
             UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c")))))
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = false))
+    }
+
+    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
+    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
+      comparePlans(
+        parsePlan(drop),
+        DropColumns(
+          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS", None),
+          Seq(UnresolvedFieldName(Seq("x")),
+            UnresolvedFieldName(Seq("y")),
+            UnresolvedFieldName(Seq("a", "b", "c"))),
+          ifExists = true))
     }
   }
 
@@ -1047,6 +1078,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
+        None,
         None))
 
     comparePlans(
@@ -1057,6 +1089,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         Some("new_comment"),
+        None,
         None))
 
     comparePlans(
@@ -1067,7 +1100,8 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
-        Some(UnresolvedFieldPosition(after("other_col")))))
+        Some(UnresolvedFieldPosition(after("other_col"))),
+        None))
 
     // renaming column not supported in hive style ALTER COLUMN.
     intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
@@ -1087,21 +1121,21 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql1),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(None, "x", StringType, true, None, None))))
+        Seq(QualifiedColType(None, "x", StringType, true, None, None, None))))
 
     comparePlans(
       parsePlan(sql2),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None))))
+        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None, None))))
 
     comparePlans(
       parsePlan(sql3),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
-          QualifiedColType(None, "y", IntegerType, true, None, None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None, None),
+          QualifiedColType(None, "y", IntegerType, true, None, None, None)
         )))
 
     comparePlans(
@@ -1109,8 +1143,8 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
-          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None, None),
+          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None, None)
         )))
 
     intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
@@ -1133,65 +1167,6 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO", true),
         Seq("x", "y", "z"),
         isView = true))
-  }
-
-  test("describe table column") {
-    comparePlans(parsePlan("DESCRIBE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc.xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("abc", "xyz")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("a.b", "x.y")),
-        isExtended = false))
-
-    comparePlans(parsePlan("DESCRIBE TABLE t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = false))
-    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
-      DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        UnresolvedAttribute(Seq("col")),
-        isExtended = true))
-
-    val caught = intercept[AnalysisException](
-      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
-    assert(caught.getMessage.contains(
-        "DESC TABLE COLUMN for a specific partition is not supported"))
-  }
-
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    comparePlans(parsePlan("describe t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
-    comparePlans(parsePlan("describe table extended t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
-    comparePlans(parsePlan("describe table formatted t"),
-      DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -1905,97 +1880,6 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin)
   }
 
-  test("alter table: SerDe properties") {
-    val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
-    val hint = Some("Please use ALTER VIEW instead.")
-    val parsed1 = parsePlan(sql1)
-    val expected1 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      None,
-      None)
-    comparePlans(parsed1, expected1)
-
-    val sql2 =
-      """
-        |ALTER TABLE table_name SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed2 = parsePlan(sql2)
-    val expected2 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed2, expected2)
-
-    val sql3 =
-      """
-        |ALTER TABLE table_name
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed3 = parsePlan(sql3)
-    val expected3 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed3, expected3)
-
-    val sql4 =
-      """
-        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed4 = parsePlan(sql4)
-    val expected4 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed4, expected4)
-
-    val sql5 =
-      """
-        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed5 = parsePlan(sql5)
-    val expected5 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed5, expected5)
-
-    val sql6 =
-      """
-        |ALTER TABLE a.b.c SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed6 = parsePlan(sql6)
-    val expected6 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed6, expected6)
-
-    val sql7 =
-      """
-        |ALTER TABLE a.b.c PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed7 = parsePlan(sql7)
-    val expected7 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed7, expected7)
-  }
-
   test("alter view: AS Query") {
     val parsed = parsePlan("ALTER VIEW a.b.c AS SELECT 1")
     val expected = AlterViewAs(
@@ -2021,51 +1905,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
       DescribeFunction(createFuncPlan(Seq("a", "b", "c")), true))
-  }
-
-  test("SHOW FUNCTIONS") {
-    val nsPlan = UnresolvedNamespace(Nil)
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(nsPlan, true, false, None))
-    comparePlans(
-      parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(nsPlan, false, true, None))
-    comparePlans(
-      parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(nsPlan, true, true, None))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctions(nsPlan, true, true, Some("funct*")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
-      ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
-    val sql = "SHOW other FUNCTIONS"
-    intercept(sql, s"$sql not supported")
-    intercept("SHOW FUNCTIONS IN db f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
-    intercept("SHOW FUNCTIONS IN db LIKE f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
-
-    // The legacy syntax.
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a"),
-      ShowFunctions(nsPlan, true, true, Some("a")))
-    comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
   }
 
   test("REFRESH FUNCTION") {
@@ -2123,7 +1962,7 @@ class DDLParserSuite extends AnalysisTest {
       plan match {
         case create: CreateTable =>
           TableSpec(
-            create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            create.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(create.tableSchema),
             create.partitioning,
             create.tableSpec.properties,
@@ -2135,7 +1974,7 @@ class DDLParserSuite extends AnalysisTest {
             create.tableSpec.external)
         case replace: ReplaceTable =>
           TableSpec(
-            replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            replace.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
             replace.tableSpec.properties,
@@ -2146,7 +1985,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.tableSpec.serde)
         case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            ctas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
             ctas.tableSpec.properties,
@@ -2158,7 +1997,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.tableSpec.external)
         case rtas: ReplaceTableAsSelect =>
           TableSpec(
-            rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            rtas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
             Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
             rtas.tableSpec.properties,
@@ -2241,21 +2080,6 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
-    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
-    // implemented yet.
-    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
-    }.getMessage.contains(unsupportedError))
     // These CREATE/REPLACE TABLE statements should parse successfully.
     val schemaWithDefaultColumn = new StructType()
       .add("a", IntegerType, true)
@@ -2265,14 +2089,58 @@ class DDLParserSuite extends AnalysisTest {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
+    // THese ALTER TABLE statements should parse successfully.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
+      AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("42")))
+    // It is possible to pass an empty string default value using quotes.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("''")))
+    // It is not possible to pass an empty string default value without using quotes.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ",
+      "Syntax error at or near end of input")
+    // It is not possible to both SET DEFAULT and DROP DEFAULT at the same time.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT SET DEFAULT 42",
+      "Syntax error at or near 'SET'")
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("")))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       intercept(

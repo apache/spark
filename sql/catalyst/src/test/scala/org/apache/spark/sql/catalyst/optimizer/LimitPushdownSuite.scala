@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -45,8 +45,8 @@ class LimitPushdownSuite extends PlanTest {
   private val testRelation2 = LocalRelation.fromExternalRows(
     Seq("d".attr.int, "e".attr.int, "f".attr.int),
     1.to(6).map(_ => Row(1, 2, 3)))
-  private val x = testRelation.subquery(Symbol("x"))
-  private val y = testRelation.subquery(Symbol("y"))
+  private val x = testRelation.subquery("x")
+  private val y = testRelation.subquery("y")
 
   // Union ---------------------------------------------------------------------------------------
 
@@ -153,7 +153,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
-    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery(Symbol("x"))
+    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("x")
     assert(xBig.stats.sizeInBytes > y.stats.sizeInBytes)
     val originalQuery = xBig.join(y, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -162,7 +162,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
-    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery(Symbol("y"))
+    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("y")
     assert(x.stats.sizeInBytes < yBig.stats.sizeInBytes)
     val originalQuery = x.join(yBig, FullOuter).limit(1).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -269,5 +269,33 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
+  }
+
+  test("Push down limit 1 through Offset") {
+    comparePlans(
+      Optimize.execute(testRelation.offset(2).limit(1).analyze),
+      GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y, joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(y.limit(2), joinType).analyze),
+        x.join(LocalLimit(1, y), joinType).analyze)
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery1 = x.join(LocalLimit(1, y), joinType).analyze
+      val originalQuery2 = x.join(y.limit(1), joinType).analyze
+
+      comparePlans(Optimize.execute(originalQuery1), originalQuery1)
+      comparePlans(Optimize.execute(originalQuery2), originalQuery2)
+    }
   }
 }

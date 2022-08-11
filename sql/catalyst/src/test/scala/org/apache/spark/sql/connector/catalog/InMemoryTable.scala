@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Distribution, Distributions}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
@@ -52,11 +52,12 @@ class InMemoryTable(
     override val properties: util.Map[String, String],
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
-    val numPartitions: Option[Int] = None)
+    val numPartitions: Option[Int] = None,
+    val isDistributionStrictlyRequired: Boolean = true)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
-  private object PartitionKeyColumn extends MetadataColumn {
+  protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
     override def comment: String = "Partition key used to store the row"
@@ -104,7 +105,11 @@ class InMemoryTable(
   private val UTC = ZoneId.of("UTC")
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
-  private def getKey(row: InternalRow): Seq[Any] = {
+  protected def getKey(row: InternalRow): Seq[Any] = {
+    getKey(row, schema)
+  }
+
+  protected def getKey(row: InternalRow, rowSchema: StructType): Seq[Any] = {
     @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
@@ -124,7 +129,7 @@ class InMemoryTable(
       }
     }
 
-    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(rowSchema)
     partitioning.map {
       case IdentityTransform(ref) =>
         extractor(ref.fieldNames, cleanedSchema, row)._1
@@ -219,9 +224,15 @@ class InMemoryTable(
     dataMap(key).clear()
   }
 
-  def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
+  def withData(data: Array[BufferedRows]): InMemoryTable = {
+    withData(data, schema)
+  }
+
+  def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
-      val key = getKey(row)
+      val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
         .getOrElse(key -> new BufferedRows(key).withRow(row))
@@ -257,12 +268,11 @@ class InMemoryTable(
 
   case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
 
-  case class InMemoryBatchScan(
+  abstract class BatchScanBaseClass(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
-        with SupportsReportPartitioning {
+    extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -281,9 +291,12 @@ class InMemoryTable(
     }
 
     override def outputPartitioning(): Partitioning = {
-      InMemoryTable.this.distribution match {
-        case cd: ClusteredDistribution => new KeyGroupedPartitioning(cd.clustering(), data.size)
-        case _ => new UnknownPartitioning(data.size)
+      if (InMemoryTable.this.partitioning.nonEmpty) {
+        new KeyGroupedPartitioning(
+          InMemoryTable.this.partitioning.map(_.asInstanceOf[Expression]),
+          data.size)
+      } else {
+        new UnknownPartitioning(data.size)
       }
     }
 
@@ -294,6 +307,13 @@ class InMemoryTable(
       val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
       new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
     }
+  }
+
+  case class InMemoryBatchScan(
+      var _data: Seq[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType)
+    extends BatchScanBaseClass (_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
@@ -338,7 +358,8 @@ class InMemoryTable(
       override def overwrite(filters: Array[Filter]): WriteBuilder = {
         assert(writer == Append)
         writer = new Overwrite(filters)
-        streamingWriter = new StreamingNotSupportedOperation(s"overwrite ($filters)")
+        streamingWriter = new StreamingNotSupportedOperation(
+          s"overwrite (${filters.mkString("filters(", ", ", ")")})")
         this
       }
 
@@ -351,6 +372,8 @@ class InMemoryTable(
 
       override def build(): Write = new Write with RequiresDistributionAndOrdering {
         override def requiredDistribution: Distribution = distribution
+
+        override def distributionStrictlyRequired = isDistributionStrictlyRequired
 
         override def requiredOrdering: Array[SortOrder] = ordering
 
@@ -372,7 +395,7 @@ class InMemoryTable(
     }
   }
 
-  private abstract class TestBatchWrite extends BatchWrite {
+  protected abstract class TestBatchWrite extends BatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }

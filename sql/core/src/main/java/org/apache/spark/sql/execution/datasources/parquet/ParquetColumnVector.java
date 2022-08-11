@@ -60,8 +60,9 @@ final class ParquetColumnVector {
       WritableColumnVector vector,
       int capacity,
       MemoryMode memoryMode,
-      Set<ParquetColumn> missingColumns) {
-
+      Set<ParquetColumn> missingColumns,
+      boolean isTopLevel,
+      Object defaultValue) {
     DataType sparkType = column.sparkType();
     if (!sparkType.sameType(vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + sparkType +
@@ -74,25 +75,47 @@ final class ParquetColumnVector {
     this.isPrimitive = column.isPrimitive();
 
     if (missingColumns.contains(column)) {
-      vector.setAllNull();
-      return;
+      if (defaultValue == null) {
+        vector.setAllNull();
+        return;
+      }
+      // For Parquet tables whose columns have associated DEFAULT values, this reader must return
+      // those values instead of NULL when the corresponding columns are not present in storage.
+      // Here we write the 'defaultValue' to each element in the new WritableColumnVector using
+      // the appendObjects method. This delegates to some specific append* method depending on the
+      // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
+      // appendFloats method.
+      if (!vector.appendObjects(capacity, defaultValue).isPresent()) {
+        throw new IllegalArgumentException("Cannot assign default column value to result " +
+          "column batch in vectorized Parquet reader because the data type is not supported: " +
+          defaultValue);
+      } else {
+        vector.setIsConstant();
+      }
     }
 
     if (isPrimitive) {
-      // TODO: avoid allocating these if not necessary, for instance, the node is of top-level
-      //  and is not repeated, or the node is not top-level but its max repetition level is 0.
-      repetitionLevels = allocateLevelsVector(capacity, memoryMode);
-      definitionLevels = allocateLevelsVector(capacity, memoryMode);
+      if (column.repetitionLevel() > 0) {
+        repetitionLevels = allocateLevelsVector(capacity, memoryMode);
+      }
+      // We don't need to create and store definition levels if the column is top-level.
+      if (!isTopLevel) {
+        definitionLevels = allocateLevelsVector(capacity, memoryMode);
+      }
     } else {
       Preconditions.checkArgument(column.children().size() == vector.getNumChildren());
+      boolean allChildrenAreMissing = true;
+
       for (int i = 0; i < column.children().size(); i++) {
         ParquetColumnVector childCv = new ParquetColumnVector(column.children().apply(i),
-          vector.getChild(i), capacity, memoryMode, missingColumns);
+          vector.getChild(i), capacity, memoryMode, missingColumns, false, null);
         children.add(childCv);
+
 
         // Only use levels from non-missing child, this can happen if only some but not all
         // fields of a struct are missing.
         if (!childCv.vector.isAllNull()) {
+          allChildrenAreMissing = false;
           this.repetitionLevels = childCv.repetitionLevels;
           this.definitionLevels = childCv.definitionLevels;
         }
@@ -100,7 +123,7 @@ final class ParquetColumnVector {
 
       // This can happen if all the fields of a struct are missing, in which case we should mark
       // the struct itself as a missing column
-      if (repetitionLevels == null) {
+      if (allChildrenAreMissing) {
         vector.setAllNull();
       }
     }
@@ -163,8 +186,12 @@ final class ParquetColumnVector {
     if (vector.isAllNull()) return;
 
     vector.reset();
-    repetitionLevels.reset();
-    definitionLevels.reset();
+    if (repetitionLevels != null) {
+      repetitionLevels.reset();
+    }
+    if (definitionLevels != null) {
+      definitionLevels.reset();
+    }
     for (ParquetColumnVector child : children) {
       child.reset();
     }
@@ -289,7 +316,8 @@ final class ParquetColumnVector {
     vector.reserve(definitionLevels.getElementsAppended());
 
     int rowId = 0;
-    boolean hasRepetitionLevels = repetitionLevels.getElementsAppended() > 0;
+    boolean hasRepetitionLevels =
+      repetitionLevels != null && repetitionLevels.getElementsAppended() > 0;
     for (int i = 0; i < definitionLevels.getElementsAppended(); i++) {
       // If repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
       // element in struct<array<int>>), and we should skip the definition level since it doesn't

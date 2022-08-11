@@ -22,8 +22,8 @@ import java.util.{Locale, Properties}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedDBObjectName, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
@@ -336,10 +336,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  UnresolvedDBObjectName(
-                    catalog.name +: ident.namespace.toSeq :+ ident.name,
-                    isNamespace = false
-                  ),
+                  UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   tableSpec,
@@ -603,7 +600,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           serde = None,
           external = false)
         ReplaceTableAsSelect(
-          UnresolvedDBObjectName(nameParts, isNamespace = false),
+          UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
@@ -624,7 +621,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           external = false)
 
         CreateTableAsSelect(
-          UnresolvedDBObjectName(nameParts, isNamespace = false),
+          UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
@@ -641,7 +638,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val catalog = df.sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdent)
     val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-    val tableIdentWithDB = tableIdent.copy(database = Some(db))
+    val tableIdentWithDB = CatalystIdentifier.attachSessionCatalog(
+      tableIdent.copy(database = Some(db)))
     val tableName = tableIdentWithDB.unquotedString
 
     (tableExists, mode) match {
@@ -676,7 +674,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(tableIdentWithDB)
 
-      case _ => createTable(tableIdent)
+      case _ => createTable(tableIdentWithDB)
     }
   }
 

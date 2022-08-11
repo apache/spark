@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.NodeWithOnlyDeterministicProjectAndFilter
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -50,11 +50,13 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
   private def removeUnnecessaryDynamicPruningSubquery(plan: LogicalPlan): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case f @ Filter(condition, _) =>
-        val unnecessaryPruningKeys = ExpressionSet(collectEqualityConditionExpressions(condition))
+        lazy val unnecessaryPruningKeys =
+          ExpressionSet(collectEqualityConditionExpressions(condition))
         val newCondition = condition.transformWithPruning(
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery
-              if unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
+              if dynamicPruning.pruningKey.references.isEmpty ||
+                unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
             TrueLiteral
         }
         f.copy(condition = newCondition)
@@ -70,12 +72,15 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       // No-op for trees that do not contain dynamic pruning.
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
-      case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) =>
+      case p @ NodeWithOnlyDeterministicProjectAndFilter(
+          LogicalRelation(_: HadoopFsRelation, _, _, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
       // pass through anything that is pushed down into PhysicalOperation
-      case p @ PhysicalOperation(_, _, HiveTableRelation(_, _, _, _, _)) =>
+      case p @ NodeWithOnlyDeterministicProjectAndFilter(
+          HiveTableRelation(_, _, _, _, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
-      case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) =>
+      case p @ NodeWithOnlyDeterministicProjectAndFilter(
+          _: DataSourceV2ScanRelation) =>
         removeUnnecessaryDynamicPruningSubquery(p)
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>

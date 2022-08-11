@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.{URI, URISyntaxException}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
-import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -30,12 +28,12 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, _}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -252,13 +250,16 @@ case class ConcatWs(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
+      > SELECT _FUNC_(2, 'a', 1);
+       1
   """,
   since = "2.0.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Elt(
     children: Seq[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression
+  with SupportQueryContext {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
@@ -297,7 +298,8 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidArrayIndexError(
+            index, inputExprs.length, getContextOrNull())
         } else {
           null
         }
@@ -349,10 +351,11 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      val errorContext = getContextOrNullCode(ctx)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length}, $errorContext);
          |}
        """.stripMargin
       // scalastyle:on line.size.limit
@@ -381,6 +384,12 @@ case class Elt(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 
@@ -1461,15 +1470,17 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
-      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+        && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
       } else {
         createStringPad(expressions(0), expressions(1), expressions(2))
@@ -1616,181 +1627,6 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
-object ParseUrl {
-  private val HOST = UTF8String.fromString("HOST")
-  private val PATH = UTF8String.fromString("PATH")
-  private val QUERY = UTF8String.fromString("QUERY")
-  private val REF = UTF8String.fromString("REF")
-  private val PROTOCOL = UTF8String.fromString("PROTOCOL")
-  private val FILE = UTF8String.fromString("FILE")
-  private val AUTHORITY = UTF8String.fromString("AUTHORITY")
-  private val USERINFO = UTF8String.fromString("USERINFO")
-  private val REGEXPREFIX = "(&|^)"
-  private val REGEXSUBFIX = "=([^&]*)"
-}
-
-/**
- * Extracts a part from a URL
- */
-@ExpressionDescription(
-  usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
-       spark.apache.org
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
-       query=1
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
-       1
-  """,
-  since = "2.0.0",
-  group = "string_funcs")
-case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends Expression with ExpectsInputTypes with CodegenFallback {
-  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
-
-  override def nullable: Boolean = true
-  override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
-  override def prettyName: String = "parse_url"
-
-  // If the url is a constant, cache the URL object so that we don't need to convert url
-  // from UTF8String to String to URL for every row.
-  @transient private lazy val cachedUrl = children(0) match {
-    case Literal(url: UTF8String, _) if url ne null => getUrl(url)
-    case _ => null
-  }
-
-  // If the key is a constant, cache the Pattern object so that we don't need to convert key
-  // from UTF8String to String to StringBuilder to String to Pattern for every row.
-  @transient private lazy val cachedPattern = children(2) match {
-    case Literal(key: UTF8String, _) if key ne null => getPattern(key)
-    case _ => null
-  }
-
-  // If the partToExtract is a constant, cache the Extract part function so that we don't need
-  // to check the partToExtract for every row.
-  @transient private lazy val cachedExtractPartFunc = children(1) match {
-    case Literal(part: UTF8String, _) => getExtractPartFunc(part)
-    case _ => null
-  }
-
-  import ParseUrl._
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size > 3 || children.size < 2) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName function requires two or three arguments")
-    } else {
-      super[ExpectsInputTypes].checkInputDataTypes()
-    }
-  }
-
-  private def getPattern(key: UTF8String): Pattern = {
-    Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
-  }
-
-  private def getUrl(url: UTF8String): URI = {
-    try {
-      new URI(url.toString)
-    } catch {
-      case e: URISyntaxException if failOnError =>
-        throw QueryExecutionErrors.invalidUrlError(url, e)
-      case _: URISyntaxException => null
-    }
-  }
-
-  private def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
-
-    // partToExtract match {
-    //   case HOST => _.toURL().getHost
-    //   case PATH => _.toURL().getPath
-    //   case QUERY => _.toURL().getQuery
-    //   case REF => _.toURL().getRef
-    //   case PROTOCOL => _.toURL().getProtocol
-    //   case FILE => _.toURL().getFile
-    //   case AUTHORITY => _.toURL().getAuthority
-    //   case USERINFO => _.toURL().getUserInfo
-    //   case _ => (url: URI) => null
-    // }
-
-    partToExtract match {
-      case HOST => _.getHost
-      case PATH => _.getRawPath
-      case QUERY => _.getRawQuery
-      case REF => _.getRawFragment
-      case PROTOCOL => _.getScheme
-      case FILE =>
-        (url: URI) =>
-          if (url.getRawQuery ne null) {
-            url.getRawPath + "?" + url.getRawQuery
-          } else {
-            url.getRawPath
-          }
-      case AUTHORITY => _.getRawAuthority
-      case USERINFO => _.getRawUserInfo
-      case _ => (url: URI) => null
-    }
-  }
-
-  private def extractValueFromQuery(query: UTF8String, pattern: Pattern): UTF8String = {
-    val m = pattern.matcher(query.toString)
-    if (m.find()) {
-      UTF8String.fromString(m.group(2))
-    } else {
-      null
-    }
-  }
-
-  private def extractFromUrl(url: URI, partToExtract: UTF8String): UTF8String = {
-    if (cachedExtractPartFunc ne null) {
-      UTF8String.fromString(cachedExtractPartFunc.apply(url))
-    } else {
-      UTF8String.fromString(getExtractPartFunc(partToExtract).apply(url))
-    }
-  }
-
-  private def parseUrlWithoutKey(url: UTF8String, partToExtract: UTF8String): UTF8String = {
-    if (cachedUrl ne null) {
-      extractFromUrl(cachedUrl, partToExtract)
-    } else {
-      val currentUrl = getUrl(url)
-      if (currentUrl ne null) {
-        extractFromUrl(currentUrl, partToExtract)
-      } else {
-        null
-      }
-    }
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val evaluated = children.map{e => e.eval(input).asInstanceOf[UTF8String]}
-    if (evaluated.contains(null)) return null
-    if (evaluated.size == 2) {
-      parseUrlWithoutKey(evaluated(0), evaluated(1))
-    } else {
-      // 3-arg, i.e. QUERY with key
-      assert(evaluated.size == 3)
-      if (evaluated(1) != QUERY) {
-        return null
-      }
-
-      val query = parseUrlWithoutKey(evaluated(0), evaluated(1))
-      if (query eq null) {
-        return null
-      }
-
-      if (cachedPattern ne null) {
-        extractValueFromQuery(query, cachedPattern)
-      } else {
-        extractValueFromQuery(query, getPattern(evaluated(2)))
-      }
-    }
-  }
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ParseUrl =
-    copy(children = newChildren)
-}
-
 /**
  * Returns the input formatted according do printf-style format strings
  */
@@ -1808,7 +1644,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1894,8 +1732,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
    */
   private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
     case StringLiteral(pattern) if pattern.contains("%0$") =>
-      throw QueryCompilationErrors.illegalSubstringError(
-        "The argument_index of string format", "position 0$")
+      throw QueryCompilationErrors.zeroArgumentIndexError()
     case _ => // do nothing
   }
 }
@@ -2030,6 +1867,8 @@ case class StringSpace(child: Expression)
        SQL
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
+       k SQL
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2121,6 +1960,8 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 3);
+       Spa
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2153,6 +1994,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL ');
        10
+      > SELECT _FUNC_(x'537061726b2053514c');
+       9
       > SELECT CHAR_LENGTH('Spark SQL ');
        10
       > SELECT CHARACTER_LENGTH('Spark SQL ');
@@ -2190,6 +2033,8 @@ case class Length(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
+      > SELECT _FUNC_(x'537061726b2053514c');
+       72
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2225,6 +2070,8 @@ case class BitLength(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       9
+      > SELECT _FUNC_(x'537061726b2053514c');
        9
   """,
   since = "2.3.0",
@@ -2415,6 +2262,8 @@ case class Chr(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        U3BhcmsgU1FM
+      > SELECT _FUNC_(x'537061726b2053514c');
+       U3BhcmsgU1FM
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2501,9 +2350,10 @@ object Decode {
   usage = """
     _FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
 
-    _FUNC_(expr, search, result [, search, result ] ... [, default]) - Decode compares expr
-      to each search value one by one. If expr is equal to a search, returns the corresponding result.
-      If no match is found, then Oracle returns default. If default is omitted, returns null.
+    _FUNC_(expr, search, result [, search, result ] ... [, default]) - Compares expr
+      to each search value in order. If expr is equal to a search value, _FUNC_ returns
+      the corresponding result. If no match is found, then it returns default. If default
+      is omitted, it returns null.
   """,
   examples = """
     Examples:
@@ -2638,7 +2488,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Option[Expression]) extends RuntimeReplaceable
+case class ToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
   with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
@@ -2651,6 +2504,7 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
         case "hex" => Unhex(expr)
         case "utf-8" => Encode(expr, Literal("UTF-8"))
         case "base64" => UnBase64(expr)
+        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
         case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
           "to_binary", "format", other,
           Some("The value has to be a case-insensitive string literal of " +
@@ -2659,16 +2513,18 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
     }
   }.getOrElse(Unhex(expr))
 
-  def this(expr: Expression) = this(expr, None)
+  def this(expr: Expression) = this(expr, None, false)
 
   def this(expr: Expression, format: Expression) = this(expr, Some({
-    // We perform this check in the constructor to make it eager and not go through type coercion.
-    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-      format
-    } else {
-      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-    }
-  }))
+      // We perform this check in the constructor to make it eager and not go through type coercion.
+      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+        format
+      } else {
+        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+      }
+    }),
+    false
+    )
 
   override def prettyName: String = "to_binary"
 

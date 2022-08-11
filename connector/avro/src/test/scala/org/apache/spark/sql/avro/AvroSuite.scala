@@ -550,8 +550,8 @@ abstract class AvroSuite
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()
     assert(fixed.map(_(0).asInstanceOf[Array[Byte]]).exists(p => p(1) == 3))
 
-    val enum = spark.read.format("avro").load(testAvro).select("enum").collect()
-    assert(enum.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
+    val enums = spark.read.format("avro").load(testAvro).select("enum").collect()
+    assert(enums.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
 
     val record = spark.read.format("avro").load(testAvro).select("record").collect()
     assert(record(0)(0).getClass.toString.contains("Row"))
@@ -2335,7 +2335,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2368,7 +2368,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2408,7 +2408,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val basePath = dir.getCanonicalPath + "/avro"
       val expected_plan_fragment =
         s"""
-           |\\(1\\) BatchScan
+           |\\(1\\) BatchScan avro
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
@@ -2449,7 +2449,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {
