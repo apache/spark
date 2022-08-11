@@ -184,10 +184,7 @@ object MimaExcludes {
     // [SPARK-39506] In terms of 3 layer namespace effort, add currentCatalog, setCurrentCatalog and listCatalogs API to Catalog interface
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.currentCatalog"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.setCurrentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
-
-    // org.apache.spark.sql.SparkSession#Builder.config(key, value): value type `Any` changed
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.SparkSession#Builder.config")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs")
   )
 
   def excludes(version: String) = version match {
