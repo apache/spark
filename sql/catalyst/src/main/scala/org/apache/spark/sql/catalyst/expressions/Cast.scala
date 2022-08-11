@@ -1208,7 +1208,7 @@ case class Cast(
     })
   }
 
-  protected[this] def cast(from: DataType, to: DataType): Any => Any = {
+  private def castInternal(from: DataType, to: DataType): Any => Any = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
@@ -1250,17 +1250,21 @@ case class Cast(
     }
   }
 
-  protected[this] lazy val cast: Any => Any = if (!isTryCast) {
-    cast(child.dataType, dataType)
-  } else {
-    (input: Any) =>
-      try {
-        cast(child.dataType, dataType)(input)
-      } catch {
-        case _: Exception =>
-          null
-      }
+  private def cast(from: DataType, to: DataType): Any => Any = {
+    if (!isTryCast) {
+      castInternal(from, to)
+    } else {
+      (input: Any) =>
+        try {
+          castInternal(from, to)(input)
+        } catch {
+          case _: Exception =>
+            null
+        }
+    }
   }
+
+  protected[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
