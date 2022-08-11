@@ -72,7 +72,6 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     }
   }
 
-
   protected def leftArrayElementNullable = left.dataType.asInstanceOf[ArrayType].containsNull
   protected def rightArrayElementNullable = right.dataType.asInstanceOf[ArrayType].containsNull
 }
