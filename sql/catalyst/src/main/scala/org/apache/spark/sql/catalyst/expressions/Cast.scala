@@ -538,7 +538,10 @@ case class Cast(
   override def nullable: Boolean = if (!isTryCast) {
     child.nullable || Cast.forceNullable(child.dataType, dataType)
   } else {
-    true
+    (child.dataType, dataType) match {
+      case (StringType, BinaryType) => child.nullable
+      case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
+    }
   }
 
   override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {

@@ -17,20 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 // A test suite to check analysis behaviors of `TryCast`.
-class TryCastSuite extends SparkFunSuite {
+class TryCastSuite extends CastSuiteBase {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
+  override def evalMode: EvalMode.Value = EvalMode.TRY
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
       case lit: Expression => Cast(lit, targetType, timeZoneId, EvalMode.TRY)
       case _ => Cast(Literal(v), targetType, timeZoneId, EvalMode.TRY)
     }
+  }
+
+  override def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      expectedErrMsg: String): Unit = {
+    checkEvaluation(expression, null, inputRow)
   }
 
   test("print string") {
@@ -39,8 +49,8 @@ class TryCastSuite extends SparkFunSuite {
   }
 
   test("nullability") {
-    assert(cast("abcdef", StringType).nullable)
-    assert(cast("abcdef", BinaryType).nullable)
+    assert(!cast("abcdef", StringType).nullable)
+    assert(!cast("abcdef", BinaryType).nullable)
   }
 
   test("only require timezone for datetime types") {

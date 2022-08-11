@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
-  override def ansiEnabled: Boolean = true
+  override def evalMode: EvalMode.Value = EvalMode.ANSI
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
