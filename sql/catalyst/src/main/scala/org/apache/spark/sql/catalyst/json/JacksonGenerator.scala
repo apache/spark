@@ -227,7 +227,8 @@ private[sql] class JacksonGenerator(
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
-      } else if (!options.ignoreNullFields) {
+      } else if (!options.ignoreNullFields ||
+        (options.defaultColumnsForceNullFields && field.getCurrentDefaultValue().isDefined)) {
         gen.writeFieldName(field.name)
         gen.writeNull()
       }

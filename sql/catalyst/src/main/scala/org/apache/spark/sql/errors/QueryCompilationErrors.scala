@@ -2528,14 +2528,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       s"Failed to execute $statementType command because DEFAULT values are not supported when " +
         "adding new columns to previously existing target data source with table " +
-        "provider: \"" + dataSource + "\"")
-  }
-
-  def jsonDefaultColumnsNotAllowedWhenIgnoringNullFields(statementType: String): Throwable = {
-    new AnalysisException(
-      s"Failed to execute $statementType command because DEFAULT values are not supported for " +
-        "JSON tables when the 'spark.sql.jsonGenerator.ignoreNullFields' configuration is set to " +
-        "true; please disable that configuration and retry the command again")
+        "provider: \"" + dataSource + "\"; please add the column without a default value first, " +
+        "then run a second ALTER TABLE ALTER COLUMN SET DEFAULT command to apply for future " +
+        "inserted rows instead")
   }
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {

@@ -1621,9 +1621,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             Some(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> "false")))),
       TestCase(
         dataSource = "json",
-        // Note that no test case wth JSON_GENERATOR_IGNORE_NULL_FIELDS set to true is included here
-        // since that configuration value is mutually exclusive with DEFAULT values in JSON tables.
         Seq(
+          Config(
+            None),
           Config(
             Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
       TestCase(
@@ -1643,14 +1643,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             insertNullsToStorage = false)))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
-        config.sqlConf.map { kv: (String, String) =>
-          withSQLConf(kv) {
-            // Run the test with the pair of custom SQLConf values.
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc,parquet") {
+          config.sqlConf.map { kv: (String, String) =>
+            withSQLConf(kv) {
+              // Run the test with the pair of custom SQLConf values.
+              runTest(testCase.dataSource, config)
+            }
+          }.getOrElse {
+            // Run the test with default settings.
             runTest(testCase.dataSource, config)
           }
-        }.getOrElse {
-          // Run the test with default settings.
-          runTest(testCase.dataSource, config)
         }
       }
     }
@@ -1658,23 +1660,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-40001 JSON DEFAULT columns require JSON_GENERATOR_IGNORE_NULL_FIELDS off") {
     val error = "DEFAULT values are not supported for JSON tables"
-    withTable("t") {
-      assert(intercept[AnalysisException] {
+    // Check that the DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS config overrides the
+    // JSON_GENERATOR_IGNORE_NULL_FIELDS config.
+    withSQLConf(SQLConf.DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS.key -> "true",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
         sql("create table t (a int default 42) using json")
-      }.getMessage.contains(error))
+        sql("insert into t values (null)")
+        checkAnswer(spark.table("t"), Row(null))
+      }
     }
-    withTable("t") {
-      sql("create table t (a int) using json")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column (b int default 42)")
-      }.getMessage.contains(error))
+    withSQLConf(SQLConf.DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS.key -> "false",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
+        sql("create table t (a int default 42) using json")
+        sql("insert into t values (null)")
+        checkAnswer(spark.table("t"), Row(42))
+      }
     }
-    withTable("t") {
-      sql("create table t (a int) using json")
-      sql("alter table t alter column a set default 42")
-      assert(intercept[AnalysisException] {
-        sql("insert into t values (default)")
-      }.getMessage.contains(error))
+    // Check that we cannot run ALTER TABLE ALTER COLUMN commands with DEFAULT values on JSON
+    // tables, with a descriptive error message.
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "json*") {
+      withTable("t") {
+        sql("create table t (a int) using json")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column (b int default 42)")
+        }.getMessage.contains(QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
+          "ALTER TABLE ADD COLUMNS", "json").getMessage))
+      }
     }
   }
 
@@ -1833,9 +1846,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     Seq("csv", "json", "orc", "parquet").foreach { provider =>
       withTable("t1") {
         // Set the allowlist of table providers to include the new table type for all SQL commands.
-        withSQLConf(
-          SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider,
-          SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
           // It is OK to create a new table with a column DEFAULT value assigned if the table
           // provider is in the allowlist.
           sql(s"create table t1(a int default 42) using $provider")
@@ -1849,8 +1860,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         // Now update the allowlist of table providers to prohibit ALTER TABLE ADD COLUMN commands
         // from assigning DEFAULT values.
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*",
-          SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*") {
           assert(intercept[AnalysisException] {
             // Try to add another column to the existing table again. This fails because the table
             // provider is now in the denylist.

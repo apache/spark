@@ -2922,18 +2922,19 @@ object SQLConf {
         "provided values when the corresponding fields are not present in storage.")
       .version("3.4.0")
       .stringConf
-      .createWithDefault("csv,json,orc,parquet")
+      .createWithDefault("csv,json*,orc,parquet")
 
-  val DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS =
-    buildConf("spark.sql.defaultColumn.allowJsonGeneratorIgnoreNullFields")
+  val DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS =
+    buildConf("spark.sql.defaultColumn.jsonGeneratorForceNullFields")
       .internal()
-      .doc("When true, allow DEFAULT column values with JSON tables when the " +
-        "JSON_GENERATOR_IGNORE_NULL_FIELDS conf is enabled. Otherwise, the two become mutually " +
-        "exclusive. This can be useful to enforce that inserted NULL values are present in " +
+      .doc("When true, when writing NULL values to columns of JSON tables with explicit DEFAULT " +
+        "values using INSERT, UPDATE, or MERGE commands, never skip writing the NULL values to " +
+        "storage, overriding spark.sql.jsonGenerator.ignoreNullFields or the ignoreNullFields " +
+        "option. This can be useful to enforce that inserted NULL values are present in " +
         "storage to differentiate from missing data.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -4534,8 +4535,8 @@ class SQLConf extends Serializable with Logging {
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
-  def defaultColumnAllowJsonGeneratorIgnoreNullFields: Boolean =
-    getConf(DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS)
+  def defaultColumnJsonGeneratorForceNullFields: Boolean =
+    getConf(DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)

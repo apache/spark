@@ -121,12 +121,6 @@ object ResolveDefaultColumns {
             throw QueryCompilationErrors
               .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
           }
-          if (givenTableProvider.equalsIgnoreCase("json") &&
-            !SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOW_JSON_GENERATOR_IGNORE_NULL_FIELDS) &&
-            SQLConf.get.getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)) {
-            throw QueryCompilationErrors
-              .jsonDefaultColumnsNotAllowedWhenIgnoringNullFields(statementType)
-          }
           val analyzed: Expression = analyze(field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
