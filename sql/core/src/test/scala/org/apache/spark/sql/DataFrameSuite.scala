@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
@@ -3426,6 +3427,19 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = spark.sql("select * from values(1) where 1 < rand()").repartition(2)
       assert(df.queryExecution.executedPlan.execute().getNumPartitions == 2)
+    }
+  }
+
+  test("SPARK-XXXXX Projecting NULLs from non-nullable input should throw NPE with helpful msg") {
+    // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
+    // that the column/field identifiers are populated as expected in a "real" plan
+    val valueType = new StructType().add("f", StringType, nullable = false)
+    for (topLevelNullable <- Seq(false, true)) {
+      val df = spark.createDataFrame(List(Row(Row(null))).asJava,
+        new StructType().add("nest", valueType, nullable = topLevelNullable))
+      val e = intercept[NullPointerException](df.collect())
+      assert(e.getMessage.contains("top-level column (pos 0)"))
+      assert(e.getCause.asInstanceOf[NullPointerException].getMessage.contains("nested field 'f'"))
     }
   }
 }
