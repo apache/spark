@@ -78,8 +78,8 @@ case class FlatMapCoGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left, leftGroup)
-    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right, rightGroup)
+    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left.output, leftGroup)
+    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right.output, rightGroup)
 
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>

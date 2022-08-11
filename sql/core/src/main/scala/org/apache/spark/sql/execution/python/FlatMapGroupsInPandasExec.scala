@@ -75,7 +75,7 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
+    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {

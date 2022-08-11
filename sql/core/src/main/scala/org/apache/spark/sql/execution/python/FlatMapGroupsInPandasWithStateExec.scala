@@ -78,9 +78,9 @@ case class FlatMapGroupsInPandasWithStateExec(
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
-  private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
-  private lazy val unsafeProj = UnsafeProjection.create(
-    dedupAttributes, groupingAttributes ++ dedupAttributes)
+  private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
+    groupingAttributes ++ child.output, groupingAttributes)
+  private lazy val unsafeProj = UnsafeProjection.create(dedupAttributes, child.output)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -129,7 +129,7 @@ case class FlatMapGroupsInPandasWithStateExec(
             new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
         Iterator.single(Iterator.single(joinedKeyRow))
       } else {
-        Iterator.single(valueRowIter)
+        Iterator.single(valueRowIter.map(unsafeProj))
       }
 
       val ret = executePython(inputIter, output, runner).toArray
