@@ -2938,9 +2938,14 @@ object SQLConf {
   val ADD_DEFAULTS_FOR_INSERTS_WITHOUT_USER_SPECIFIED_FIELDS =
     buildConf("spark.sql.defaultColumn.addDefaultsForInsertsWithoutUserSpecifiedFields")
       .internal()
-      .doc("When true, for each INSERT command without any user-specified fields where the " +
-        "of values in the INSERT command is less than the number of columns in the target table, " +
-        "automatically append DEFAULT values for all remaining columns with explicit DEFAULTs.")
+      .doc("When true, for each INSERT command without any user-specified fields (for example, " +
+        "when the command looks like INSERT INTO mytable(columnA, columnB) VALUES (...)), if the " +
+        "number of values in the INSERT command is less than the number of columns in the target " +
+        "table, automatically append DEFAULT values for all remaining columns with explicit " +
+        "DEFAULTs. Note that if spark.sql.defaultColumn.useNullsForMissingDefaultValues is true " +
+        "and one of these missing columns does not have an explicit DEFAULT value, then NULL " +
+        "will be appended. Otherwise, the command will fail with an error message reporting that " +
+        "the number of columns provided is incorrect.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
