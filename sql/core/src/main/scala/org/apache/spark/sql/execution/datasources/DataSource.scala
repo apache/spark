@@ -110,7 +110,7 @@ case class DataSource(
     }
   }
 
-  def providingInstance(): Any = providingClass.getConstructor().newInstance()
+  private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
   private def newHadoopConfiguration(): Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(options)
