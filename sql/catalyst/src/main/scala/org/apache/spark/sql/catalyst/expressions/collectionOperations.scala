@@ -899,7 +899,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
-  def resultArrayElementNullable: Boolean =
+  private def resultArrayElementNullable: Boolean =
     arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
   def sortEval(array: Any, ascending: Boolean): Any = {
