@@ -819,42 +819,9 @@ object SparkSession extends Logging {
      * Sets a config option. Options set using this method are automatically propagated to
      * both `SparkConf` and SparkSession's own configuration.
      *
-     * @since 2.0.0
+     * @since 3.3.0
      */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
-
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
-
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
-
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
+    def config(key: String, value: Any): Builder = synchronized {
       options += key -> value.toString
       this
     }
