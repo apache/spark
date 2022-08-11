@@ -242,7 +242,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy xmlrunner
+        python3.8 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests

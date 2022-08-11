@@ -198,7 +198,7 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("to_unix_timestamp" in functions)
             self.assertTrue("current_database" in functions)
             self.assertEqual(functions["+"].name, "+")
-            self.assertEqual(functions["+"].description, None)
+            self.assertEqual(functions["+"].description, "expr1 + expr2 - Returns `expr1`+`expr2`.")
             self.assertEqual(
                 functions["+"].className, "org.apache.spark.sql.catalyst.expressions.Add"
             )

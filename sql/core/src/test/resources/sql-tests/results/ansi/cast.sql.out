@@ -841,6 +841,96 @@ org.apache.spark.SparkArithmeticException
 
 
 -- !query
+select cast(1Y as interval year)
+-- !query schema
+struct<CAST(1 AS INTERVAL YEAR):interval year>
+-- !query output
+1-0
+
+
+-- !query
+select cast(-122S as interval year to month)
+-- !query schema
+struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
+-- !query output
+-10-2
+
+
+-- !query
+select cast(ym as interval year to month) from values(-122S) as t(ym)
+-- !query schema
+struct<ym:interval year to month>
+-- !query output
+-10-2
+
+
+-- !query
+select cast(1000 as interval month)
+-- !query schema
+struct<CAST(1000 AS INTERVAL MONTH):interval month>
+-- !query output
+83-4
+
+
+-- !query
+select cast(-10L as interval second)
+-- !query schema
+struct<CAST(-10 AS INTERVAL SECOND):interval second>
+-- !query output
+-0 00:00:10.000000000
+
+
+-- !query
+select cast(100Y as interval hour to second)
+-- !query schema
+struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
+-- !query output
+0 00:01:40.000000000
+
+
+-- !query
+select cast(dt as interval hour to second) from values(100Y) as t(dt)
+-- !query schema
+struct<dt:interval hour to second>
+-- !query output
+0 00:01:40.000000000
+
+
+-- !query
+select cast(-1000S as interval day to second)
+-- !query schema
+struct<CAST(-1000 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+-0 00:16:40.000000000
+
+
+-- !query
+select cast(10 as interval day)
+-- !query schema
+struct<CAST(10 AS INTERVAL DAY):interval day>
+-- !query output
+10 00:00:00.000000000
+
+
+-- !query
+select cast(2147483647 as interval year)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+[CAST_OVERFLOW] The value 2147483647 of the type "INT" cannot be cast to "INTERVAL YEAR" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+
+
+-- !query
+select cast(-9223372036854775808L as interval day)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+[CAST_OVERFLOW] The value -9223372036854775808L of the type "BIGINT" cannot be cast to "INTERVAL DAY" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+
+
+-- !query
 select cast(interval '-1' year as decimal(10, 0))
 -- !query schema
 struct<CAST(INTERVAL '-1' YEAR AS DECIMAL(10,0)):decimal(10,0)>

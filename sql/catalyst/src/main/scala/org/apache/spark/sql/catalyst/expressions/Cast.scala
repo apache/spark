@@ -112,6 +112,7 @@ object Cast {
     case (StringType, _: AnsiIntervalType) => true
 
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
+    case (_: IntegralType, _: AnsiIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -196,6 +197,7 @@ object Cast {
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
+    case (_: IntegralType, _: AnsiIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -786,7 +788,6 @@ case class Cast(
     case _: DayTimeIntervalType => buildCast[Long](_, s =>
       IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
           x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
@@ -804,7 +805,6 @@ case class Cast(
     case _: YearMonthIntervalType => buildCast[Int](_, s =>
       IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
           x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
@@ -1803,7 +1803,6 @@ case class Cast(
           $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
         """
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       if (x == LongType) {
         (c, evPrim, _) =>
@@ -1834,7 +1833,6 @@ case class Cast(
           $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
         """
     case x: IntegralType =>
-      assert(it.startField == it.endField)
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       if (x == LongType) {
         (c, evPrim, _) =>
@@ -2371,7 +2369,7 @@ case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends U
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
-      QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+      throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
         child.child.dataType,
         child.dataType,
         columnName)
@@ -2400,4 +2398,8 @@ case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends U
   }
 
   override def dataType: DataType = child.dataType
+
+  override def sql: String = child.sql
+
+  override def toString: String = child.toString
 }

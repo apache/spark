@@ -42,4 +42,9 @@ public class Cast implements Expression, Serializable {
 
   @Override
   public Expression[] children() { return new Expression[]{ expression() }; }
+
+  @Override
+  public String toString() {
+    return "CAST(" + expression.describe() + " AS " + dataType.typeName() + ")";
+  }
 }

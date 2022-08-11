@@ -971,13 +971,17 @@ class SessionCatalog(
   }
 
   def lookupTempView(name: TableIdentifier): Option[View] = {
-    val tableName = formatTableName(name.table)
-    if (name.database.isEmpty) {
-      tempViews.get(tableName).map(getTempViewPlan)
-    } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName).map(getTempViewPlan)
-    } else {
-      None
+    lookupLocalOrGlobalRawTempView(name.database.toSeq :+ name.table).map(getTempViewPlan)
+  }
+
+  /**
+   * Return the raw logical plan of a temporary local or global view for the given name.
+   */
+  def lookupLocalOrGlobalRawTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
+    name match {
+      case Seq(v) => getRawTempView(v)
+      case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
+      case _ => None
     }
   }
 

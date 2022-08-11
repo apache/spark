@@ -457,18 +457,20 @@ public class ExternalShuffleBlockResolver {
       throws IOException {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
-      DBIterator itr = db.iterator();
-      itr.seek(APP_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-      while (itr.hasNext()) {
-        Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), StandardCharsets.UTF_8);
-        if (!key.startsWith(APP_KEY_PREFIX)) {
-          break;
+      try (DBIterator itr = db.iterator()) {
+        itr.seek(APP_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+        while (itr.hasNext()) {
+          Map.Entry<byte[], byte[]> e = itr.next();
+          String key = new String(e.getKey(), StandardCharsets.UTF_8);
+          if (!key.startsWith(APP_KEY_PREFIX)) {
+            break;
+          }
+          AppExecId id = parseDbAppExecKey(key);
+          logger.info("Reloading registered executors: " +  id.toString());
+          ExecutorShuffleInfo shuffleInfo =
+            mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
+          registeredExecutors.put(id, shuffleInfo);
         }
-        AppExecId id = parseDbAppExecKey(key);
-        logger.info("Reloading registered executors: " +  id.toString());
-        ExecutorShuffleInfo shuffleInfo = mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
-        registeredExecutors.put(id, shuffleInfo);
       }
     }
     return registeredExecutors;

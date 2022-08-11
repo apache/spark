@@ -21,7 +21,6 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint}
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -166,7 +165,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
       assert(spark.catalog.tableExists(globalTempDB, "src"))
       assert(spark.catalog.getTable(globalTempDB, "src").toString == new Table(
         name = "src",
-        catalog = CatalogManager.SESSION_CATALOG_NAME,
+        catalog = null,
         namespace = Array(globalTempDB),
         description = null,
         tableType = "TEMPORARY",

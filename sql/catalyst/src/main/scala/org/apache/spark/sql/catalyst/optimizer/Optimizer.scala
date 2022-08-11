@@ -528,9 +528,11 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Remove redundant alias expression from a LogicalPlan and its subtree. A set of excludes is used
-   * to prevent the removal of seemingly redundant aliases used to deduplicate the input for a
-   * (self) join or to prevent the removal of top-level subquery attributes.
+   * Remove redundant alias expression from a LogicalPlan and its subtree.
+   * A set of excludes is used to prevent the removal of:
+   * - seemingly redundant aliases used to deduplicate the input for a (self) join,
+   * - top-level subquery attributes and
+   * - attributes of a Union's first child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -557,6 +559,21 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
+      case _: Union =>
+        var first = true
+        plan.mapChildren { child =>
+          if (first) {
+            first = false
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
+            // output attributes could return incorrect result.
+            removeRedundantAliases(child, excluded ++ child.outputSet)
+          } else {
+            removeRedundantAliases(child, excluded)
+          }
+        }
+
       case _ =>
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
@@ -566,9 +583,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -1257,9 +1271,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 object TransposeWindow extends Rule[LogicalPlan] {
   private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
-    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
-      case (l, r) => l.semanticEquals(r)
-    })
+    ps1.length < ps2.length && ps1.forall { expr1 =>
+      ps2.exists(expr1.semanticEquals)
+    }
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
