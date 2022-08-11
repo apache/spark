@@ -31,11 +31,9 @@ kill -s SIGPWR ${WORKER_PID}
 # If the worker does exit stop blocking K8s cleanup. Note this is a "soft"
 # block since the pod it's self will have a maximum decommissioning time which will
 # overload this.
-wait ${WORKER_PID}
-sleep 1
-# Just incase we didn't find the right java process...
-killall -w -s SIGPWR java
 echo "Waiting for worker pid to exit"
+tail --pid=${WORKER_PID} -f /dev/null
+sleep 1
 date
 echo "Done"
 date
