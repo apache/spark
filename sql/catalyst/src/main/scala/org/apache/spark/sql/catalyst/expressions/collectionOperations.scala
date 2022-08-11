@@ -1084,8 +1084,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   override def dataType: DataType = child.dataType
 
-  private def resultArrayElementNullable =
-    dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
@@ -1170,8 +1169,7 @@ case class Reverse(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val resultArrayElementNullable =
-    dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   override def nullSafeEval(input: Any): Any = doReverse(input)
 
@@ -1570,8 +1568,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def dataType: DataType = x.dataType
 
-  @transient private lazy val resultArrayElementNullable =
-    dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
 
@@ -2367,8 +2364,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     }
   }
 
-  @transient private lazy val resultArrayElementNullable =
-    dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   private def javaType: String = CodeGenerator.javaType(dataType)
 
@@ -2551,8 +2547,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
   @transient override lazy val dataType: DataType = childDataType.elementType
 
-  @transient private lazy val resultArrayElementNullable =
-    dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
