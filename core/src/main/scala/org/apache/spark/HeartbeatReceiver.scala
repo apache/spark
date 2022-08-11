@@ -258,11 +258,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         //    those executors to avoid app hang
         sc.schedulerBackend match {
           case backend: CoarseGrainedSchedulerBackend =>
+            // TODO (SPARK-39984): Update causedByApp when we have a hanging task detector
             backend.driverEndpoint.send(RemoveExecutor(executorId,
               ExecutorProcessLost(
-                s"Executor heartbeat timed out after ${timeout} ms",
-                causedByApp = !checkWorkerLastHeartbeat || !isStandalone())))
-
+                s"Executor heartbeat timed out after ${timeout} ms")))
           // LocalSchedulerBackend is used locally and only has one single executor
           case _: LocalSchedulerBackend =>
 
@@ -297,7 +296,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * reasons (e.g. full GC). To address this, we designed a new Heartbeat Receiver mechanism for
    * standalone deployments.
    *
-   * [How it works?]
    * For standalone deployments:
    * If driver does not receive any heartbeat from the executor for `executorTimeoutMs` seconds,
    * HeartbeatReceiver will send a request to master to ask for the latest heartbeat from the
@@ -305,22 +303,11 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * is caused by network issues or other issues (e.g. GC). If the heartbeat loss is not caused by
    * network issues, the HeartbeatReceiver will put the executor into `executorExpiryCandidates`
    * rather than expiring it immediately.
-   *
-   * [Why it works?]
-   * An executor is running on a worker but in different JVMs, and a driver is running on a master
-   * but in different JVMs. Hence, the network connection between driver/executor and master/worker
-   * is the same. Because executor and worker are running on different JVMs, worker can still send
-   * heartbeat to master when executor performs GC.
-   *
-   * [Warning 1]
-   * Worker will send heartbeats to Master every (conf.get(WORKER_TIMEOUT) * 1000 / 4) milliseconds.
-   * Check deploy/worker/Worker.scala for more details. This new mechanism design is based on the
-   * assumption: `expiryCandidatesTimeout` > (conf.get(WORKER_TIMEOUT) * 1000 / 4).
-   *
-   * [Warning 2]
-   * Not every deployment method schedules driver on master.
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
+    logWarning(s"Keep `expiryCandidatesTimeout` larger than `HEARTBEAT_MILLIS` in" +
+      s"deploy/worker/Worker.scala to know whether master lost any heartbeat from the" +
+      s"worker or not.")
     val now = clock.getTimeMillis()
     if (!checkWorkerLastHeartbeat || !isStandalone()) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
