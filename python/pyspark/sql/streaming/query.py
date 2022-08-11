@@ -165,6 +165,11 @@ class StreamingQuery:
 
         Examples
         --------
+        >>> sdf = spark.readStream.format("text").load("python/test_support/sql/streaming")
+        >>> sdf.printSchema()
+        root
+          |-- value: string (nullable = true)
+
         >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
         >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
         >>> sq.explain()
@@ -224,6 +229,11 @@ class StreamingQueryManager:
 
         Examples
         --------
+        >>> sdf = spark.readStream.format("text").load("python/test_support/sql/streaming")
+        >>> sdf.printSchema()
+        root
+          |-- value: string (nullable = true)
+
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
@@ -241,6 +251,11 @@ class StreamingQueryManager:
 
         Examples
         --------
+        >>> sdf = spark.readStream.format("text").load("python/test_support/sql/streaming")
+        >>> sdf.printSchema()
+        root
+          |-- value: string (nullable = true)
+
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
         'this_query'
@@ -337,7 +352,6 @@ def _test() -> None:
 
     globs["spark"] = spark
     globs["sqlContext"] = SQLContext.getOrCreate(spark.sparkContext)
-    globs["sdf"] = spark.readStream.format("text").load("python/test_support/sql/streaming")
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming.query,
