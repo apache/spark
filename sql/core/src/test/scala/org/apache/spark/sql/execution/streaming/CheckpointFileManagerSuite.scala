@@ -35,7 +35,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
   protected def withTempHadoopPath(p: Path => Unit): Unit
 
-  protected def checkLeakingCrcFiles(path: Path)
+  protected def checkLeakingCrcFiles(path: Path): Unit
 
   protected def createManager(path: Path): CheckpointFileManager
 
@@ -149,7 +149,7 @@ abstract class CheckpointFileManagerTestsOnLocalFs
     }
   }
 
-  protected def checkLeakingCrcFiles(path: Path) {
+  protected def checkLeakingCrcFiles(path: Path): Unit {
     // crc file should not be leaked when origin file doesn't exist.
     // The implementation of Hadoop filesystem may filter out checksum file, so
     // listing files from local filesystem.
