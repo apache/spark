@@ -2777,24 +2777,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39833: overlapped columns between data and partition schema in data source tables") {
-    // SPARK-39833 changed behaviour of the column order in the case of overlapping columns between
-    // data and partition schemas: data schema does not include partition columns anymore and the
-    // overlapping columns would appear at the end of the schema together with other partition
-    // columns.
+  test("SPARK-22356: overlapped columns between data and partition schema in data source tables") {
     withTempPath { path =>
       Seq((1, 1, 1), (1, 2, 1)).toDF("i", "p", "j")
         .write.mode("overwrite").parquet(new File(path, "p=1").getCanonicalPath)
       withTable("t") {
         sql(s"create table t using parquet options(path='${path.getCanonicalPath}')")
-        // MSCK command is required now to update partitions in the catalog.
-        sql(s"msck repair table t")
-
-        assert(spark.table("t").columns === Array("i", "j", "p"))
+        // We should respect the column order in data schema.
+        assert(spark.table("t").columns === Array("i", "p", "j"))
         checkAnswer(spark.table("t"), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
-          .as[String].collect().mkString(",").contains("i,j,p"))
+          .as[String].collect().mkString(",").contains("i,p,j"))
       }
     }
   }
