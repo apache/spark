@@ -97,10 +97,10 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary text file to read it.
-        ...     _ = f.write("hello\\nthis".encode("utf-8"))
-        ...     f.flush()
+        ...     spark.createDataFrame(
+        ...         [("hello",), ("this",)]).write.mode("overwrite").format("text").save(d)
         ...
         ...     # Start a streaming query to read the text file.
         ...     q = spark.readStream.format("text").load(d).writeStream.format("console").start()
@@ -141,11 +141,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
-        ...     # Write a temporary CSV file to read it.
-        ...     _ = f.write("1,2".encode("utf-8"))
-        ...     f.flush()
-        ...
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Start a streaming query to read the CSV file.
         ...     spark.readStream.schema("col0 INT, col1 STRING").format("csv").load(d).printSchema()
         root
@@ -252,11 +248,11 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> import json
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary JSON file to read it.
-        ...     _ = f.write(json.dumps({"age": 100, "name": "Hyukjin Kwon"}).encode("utf-8"))
-        ...     f.flush()
+        ...     spark.createDataFrame(
+        ...         [(100, "Hyukjin Kwon"),], ["age", "name"]
+        ...     ).write.mode("overwrite").format("json").save(d)
         ...
         ...     # Start a streaming query to read the JSON file.
         ...     q = spark.readStream.schema(
@@ -344,11 +340,11 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> import json
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary JSON file to read it.
-        ...     _ = f.write(json.dumps({"age": 100, "name": "Hyukjin Kwon"}).encode("utf-8"))
-        ...     f.flush()
+        ...     spark.createDataFrame(
+        ...         [(100, "Hyukjin Kwon"),], ["age", "name"]
+        ...     ).write.mode("overwrite").format("json").save(d)
         ...
         ...     # Start a streaming query to read the JSON file.
         ...     q = spark.readStream.schema(
@@ -412,15 +408,11 @@ class DataStreamReader(OptionUtils):
         >>> import tempfile
         >>> import time
         >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Create a temporary path to use.
-        ...     with tempfile.NamedTemporaryFile(dir=d, delete=True) as f:
-        ...         p = f.name
-        ...
         ...     # Write a temporary ORC file to read it.
-        ...     spark.range(10).write.format("orc").mode("overwrite").save(p)
+        ...     spark.range(10).write.mode("overwrite").format("orc").save(d)
         ...
         ...     # Start a streaming query to read the ORC file.
-        ...     q = spark.readStream.schema("id LONG").orc(p).writeStream.format("console").start()
+        ...     q = spark.readStream.schema("id LONG").orc(d).writeStream.format("console").start()
         ...     time.sleep(3)
         ...     q.stop()
         """
@@ -469,15 +461,12 @@ class DataStreamReader(OptionUtils):
         >>> import tempfile
         >>> import time
         >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Create a temporary path to use.
-        ...     with tempfile.NamedTemporaryFile(dir=d, delete=True) as f:
-        ...         p = f.name
-        ...
         ...     # Write a temporary Parquet file to read it.
-        ...     spark.range(10).write.format("parquet").mode("overwrite").save(p)
+        ...     spark.range(10).write.mode("overwrite").format("parquet").save(d)
         ...
         ...     # Start a streaming query to read the Parquet file.
-        ...     q = spark.readStream.schema("id LONG").parquet(p).writeStream.format("console").start()
+        ...     q = spark.readStream.schema(
+        ...         "id LONG").parquet(d).writeStream.format("console").start()
         ...     time.sleep(3)
         ...     q.stop()
         """
@@ -535,10 +524,10 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary text file to read it.
-        ...     _ = f.write("hello\\nthis".encode("utf-8"))
-        ...     f.flush()
+        ...     spark.createDataFrame(
+        ...         [("hello",), ("this",)]).write.mode("overwrite").format("text").save(d)
         ...
         ...     # Start a streaming query to read the text file.
         ...     q = spark.readStream.text(d).writeStream.format("console").start()
@@ -625,10 +614,9 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile(dir=d) as f:
-        ...     # Write a temporary CSV file to read it.
-        ...     _ = f.write("1,2".encode("utf-8"))
-        ...     f.flush()
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a temporary text file to read it.
+        ...     spark.createDataFrame([(1, "2"),]).write.mode("overwrite").format("csv").save(d)
         ...
         ...     # Start a streaming query to read the CSV file.
         ...     q = spark.readStream.schema(
@@ -1029,11 +1017,6 @@ class DataStreamWriter:
         >>> df.writeStream.trigger(processingTime='5 seconds')
         <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
 
-        Trigger the query for just once batch of data
-
-        >>> df.writeStream.trigger(once=True)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
-
         Trigger the query for execution every 5 seconds
 
         >>> df.writeStream.trigger(continuous='5 seconds')
@@ -1193,7 +1176,7 @@ class DataStreamWriter:
         ...     def close(self, error):
         ...         print("Closed with error: %s" % str(error))
         ...
-        >>> q = df.writeStream.trigger(once=True).foreach(print_row).start()
+        >>> q = df.writeStream.foreach(print_row).start()
         >>> time.sleep(3)
         >>> q.stop()
         """
