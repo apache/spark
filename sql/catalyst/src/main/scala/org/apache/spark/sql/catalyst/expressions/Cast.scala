@@ -473,7 +473,14 @@ case class Cast(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
-  def ansiEnabled: Boolean = evalMode == EvalMode.ANSI
+  def ansiEnabled: Boolean = {
+    evalMode == EvalMode.ANSI || evalMode == EvalMode.TRY
+  }
+
+  // Whether this expression is used for `try_cast()`.
+  def isTryCast: Boolean = {
+    evalMode == EvalMode.TRY
+  }
 
   private def typeCheckFailureMessage: String = if (ansiEnabled) {
     if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
@@ -497,7 +504,11 @@ case class Cast(
     }
   }
 
-  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
+  override def nullable: Boolean = if (!isTryCast) {
+    child.nullable || Cast.forceNullable(child.dataType, dataType)
+  } else {
+    true
+  }
 
   override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
     Some(origin.context)
@@ -1197,7 +1208,17 @@ case class Cast(
     }
   }
 
-  protected[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
+  protected[this] lazy val cast: Any => Any = if (!isTryCast) {
+    cast(child.dataType, dataType)
+  } else {
+    (input: Any) =>
+      try {
+        cast(child.dataType, dataType)(input)
+      } catch {
+        case _: Exception =>
+          null
+      }
+  }
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
@@ -1262,11 +1283,22 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
+    val addTryCatchOnCastIfNeeded = if (!isTryCast) {
+      s"${cast(input, result, resultIsNull)}"
+    } else {
+      s"""
+         |try {
+         |  ${cast(input, result, resultIsNull)}
+         |} catch (Exception e) {
+         |  $resultIsNull = true;
+         |}
+         |""".stripMargin
+    }
     code"""
       boolean $resultIsNull = $inputIsNull;
       $javaType $result = ${CodeGenerator.defaultValue(resultType)};
       if (!$inputIsNull) {
-        ${cast(input, result, resultIsNull)}
+        $addTryCatchOnCastIfNeeded
       }
     """
   }
@@ -2340,14 +2372,22 @@ case class Cast(
       """
   }
 
-  override def toString: String = s"cast($child as ${dataType.simpleString})"
+  override def prettyName: String = if (!isTryCast) {
+    "cast"
+  } else {
+    "try_cast"
+  }
+
+  override def toString: String = {
+    s"$prettyName($child as ${dataType.simpleString})"
+  }
 
   override def sql: String = dataType match {
     // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
     // type of casting can only be introduced by the analyzer, and can be omitted when converting
     // back to SQL query string.
     case _: ArrayType | _: MapType | _: StructType => child.sql
-    case _ => s"CAST(${child.sql} AS ${dataType.sql})"
+    case _ => s"${prettyName.toUpperCase(Locale.ROOT)}(${child.sql} AS ${dataType.sql})"
   }
 }
 
