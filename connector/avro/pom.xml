@@ -80,9 +80,57 @@
       <groupId>org.tukaani</groupId>
       <artifactId>xz</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>3.12.2</version>
+    </dependency>
+<!--    <dependency>-->
+<!--      <groupId>com.squareup</groupId>-->
+<!--      <artifactId>protoparser</artifactId>-->
+<!--      <version>4.0.3</version>-->
+<!--    </dependency>-->
+<!--    <dependency>-->
+<!--      <groupId>io.confluent</groupId>-->
+<!--      <artifactId>kafka-protobuf-serializer</artifactId>-->
+<!--      <version>7.2.0</version>-->
+<!--    </dependency>-->
+<!--    <dependency>-->
+<!--      <groupId>io.confluent</groupId>-->
+<!--      <artifactId>kafka-avro-serializer</artifactId>-->
+<!--      <version>7.2.0</version>-->
+<!--    </dependency>-->
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>com.github.os72</groupId>
+        <artifactId>protoc-jar-maven-plugin</artifactId>
+        <version>3.11.4</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <includeMavenTypes>direct</includeMavenTypes>
+              <inputDirectories>
+                <include>${project.basedir}/src/main/protobuf</include>
+              </inputDirectories>
+              <outputTargets>
+                <outputTarget>
+                  <type>java</type>
+                  <addSources>main</addSources>
+                  <outputDirectory>${project.basedir}/target/generated-sources/protobuf</outputDirectory>
+                </outputTarget>
+              </outputTargets>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 </project>

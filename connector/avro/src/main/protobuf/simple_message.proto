@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+import "other.proto";
+
+package org.apache.spark.sql.proto;
+option java_outer_classname = "SimpleMessageProtos";
+
+message SimpleMessage {
+    string key = 1;
+    string query = 2;
+    int32  results_per_page = 3;
+    bool   is_active = 4;
+    int64 tstamp = 6;
+    repeated string array_key = 7;
+    enum Corpus {
+        UNIVERSAL = 0;
+        WEB = 1;
+        IMAGES = 2;
+        LOCAL = 3;
+        NEWS = 4;
+        PRODUCTS = 5;
+        VIDEO = 6;
+    }
+    Corpus corpus = 8;
+    OtherMessage other = 9;
+}
