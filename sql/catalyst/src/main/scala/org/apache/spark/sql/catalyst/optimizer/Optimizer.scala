@@ -719,8 +719,22 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
   private def pushLocalLimitThroughJoin(limitExpr: Expression, join: Join): Join = {
     join.joinType match {
-      case RightOuter => join.copy(right = maybePushLocalLimit(limitExpr, join.right))
-      case LeftOuter => join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+      case RightOuter =>
+        if (join.condition.isEmpty) {
+          join.copy(
+            left = maybePushLocalLimit(limitExpr, join.left),
+            right = maybePushLocalLimit(limitExpr, join.right))
+        } else {
+          join.copy(right = maybePushLocalLimit(limitExpr, join.right))
+        }
+      case LeftOuter =>
+        if (join.condition.isEmpty) {
+          join.copy(
+            left = maybePushLocalLimit(limitExpr, join.left),
+            right = maybePushLocalLimit(limitExpr, join.right))
+        } else {
+          join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+        }
       case _: InnerLike if join.condition.isEmpty =>
         join.copy(
           left = maybePushLocalLimit(limitExpr, join.left),
