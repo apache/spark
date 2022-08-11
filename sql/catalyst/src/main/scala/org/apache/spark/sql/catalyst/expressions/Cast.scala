@@ -426,6 +426,19 @@ object Cast {
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
     }
+
+  def apply(
+      child: Expression,
+      dataType: DataType,
+      ansiEnabled: Boolean): Cast =
+    Cast(child, dataType, None, EvalMode.fromBoolean(ansiEnabled))
+
+  def apply(
+      child: Expression,
+      dataType: DataType,
+      timeZoneId: Option[String],
+      ansiEnabled: Boolean): Cast =
+    Cast(child, dataType, timeZoneId, EvalMode.fromBoolean(ansiEnabled))
 }
 
 /**
@@ -447,11 +460,11 @@ case class Cast(
     child: Expression,
     dataType: DataType,
     timeZoneId: Option[String] = None,
-    ansiEnabled: Boolean = SQLConf.get.ansiEnabled) extends UnaryExpression
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends UnaryExpression
   with TimeZoneAwareExpression with NullIntolerant with SupportQueryContext {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
-    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
+    this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -459,6 +472,8 @@ case class Cast(
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
+
+  def ansiEnabled: Boolean = evalMode == EvalMode.ANSI
 
   private def typeCheckFailureMessage: String = if (ansiEnabled) {
     if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
