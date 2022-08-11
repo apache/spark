@@ -310,10 +310,7 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      val start = System.nanoTime()
-      logWarning(s"Committed $newVersion, stats = ${metrics.json}")
-      val end = System.nanoTime()
-      logWarning(s"Time = ${end - start}")
+      logInfo(s"Committed $newVersion, stats = ${metrics.json}")
       loadedVersion
     } catch {
       case t: Throwable =>
