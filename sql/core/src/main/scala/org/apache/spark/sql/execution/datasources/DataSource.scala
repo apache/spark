@@ -205,16 +205,10 @@ case class DataSource(
     }.orElse {
       // Remove "path" option so that it is not added to the paths returned by
       // `tempFileIndex.allFiles()`.
-      //
-      // SPARK-39833: Also remove columns that match partition column names similar to the case of
-      // user-provided schema above.
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions - "path",
-        tempFileIndex.allFiles()
-      ).map { schema =>
-        StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
-      }
+        tempFileIndex.allFiles())
     }.getOrElse {
       throw QueryCompilationErrors.dataSchemaNotSpecifiedError(format.toString)
     }
@@ -230,11 +224,6 @@ case class DataSource(
         equality)
     } catch {
       case e: AnalysisException => logWarning(e.getMessage)
-    }
-
-    if (dataSchema.isEmpty) {
-      logWarning("Data schema is empty, this is likely due to column name duplication in the " +
-        "data schema and the partition schema")
     }
 
     (dataSchema, partitionSchema)
