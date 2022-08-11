@@ -653,6 +653,22 @@ class QueryExecutionErrorsSuite
         "alternative" -> "",
         "config" -> SQLConf.ANSI_ENABLED.key))
   }
+
+  test("CAST_OVERFLOW: from long to ANSI intervals") {
+    Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select CAST(9223372036854775807L AS $it)").collect()
+        },
+        errorClass = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> "9223372036854775807L",
+          "sourceType" -> "\"BIGINT\"",
+          "targetType" -> s""""$it"""",
+          "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+        sqlState = "22005")
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
