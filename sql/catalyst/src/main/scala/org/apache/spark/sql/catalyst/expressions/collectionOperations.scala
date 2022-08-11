@@ -1084,7 +1084,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val resultArrayElementNullable =
+  private def resultArrayElementNullable =
     dataType.asInstanceOf[ArrayType].containsNull
 
   @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
