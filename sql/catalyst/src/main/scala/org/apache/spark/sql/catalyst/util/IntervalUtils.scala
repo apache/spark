@@ -1377,7 +1377,8 @@ object IntervalUtils {
     }
   }
 
-  def decimalToDayTimeInterval(d: Decimal, p: Int, s: Int, endField: Byte): Long = {
+  def decimalToDayTimeInterval(
+      d: Decimal, p: Int, s: Int, startField: Byte, endField: Byte): Long = {
     try {
       val micros = endField match {
         case DAY => d.toBigDecimal * MICROS_PER_DAY
@@ -1388,7 +1389,8 @@ object IntervalUtils {
       micros.setScale(0, BigDecimal.RoundingMode.HALF_UP).toLongExact
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.castingCauseOverflowError(d, DecimalType(p, s), DT(endField))
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          d, DecimalType(p, s), DT(startField, endField))
     }
   }
 

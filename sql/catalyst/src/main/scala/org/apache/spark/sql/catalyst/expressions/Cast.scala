@@ -796,7 +796,8 @@ case class Cast(
           x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
-      buildCast[Decimal](_, d => IntervalUtils.decimalToDayTimeInterval(d, p, s, it.endField))
+      buildCast[Decimal](_, d =>
+        IntervalUtils.decimalToDayTimeInterval(d, p, s, it.startField, it.endField))
   }
 
   private[this] def castToYearMonthInterval(
@@ -1818,10 +1819,11 @@ case class Cast(
           """
       }
     case DecimalType.Fixed(p, s) =>
-      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) =>
         code"""
-          $evPrim = $util.decimalToDayTimeInterval($c, $p, $s, (byte)${it.endField});
+          $evPrim = $iu.decimalToDayTimeInterval(
+            $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
         """
   }
 
