@@ -81,11 +81,11 @@ import org.apache.spark.util.{CallSite, Utils}
  */
 @Stable
 class SparkSession private(
-                            @transient val sparkContext: SparkContext,
-                            @transient private val existingSharedState: Option[SharedState],
-                            @transient private val parentSessionState: Option[SessionState],
-                            @transient private[sql] val extensions: SparkSessionExtensions,
-                            @transient private[sql] val initialSessionOptions: Map[String, String])
+    @transient val sparkContext: SparkContext,
+    @transient private val existingSharedState: Option[SharedState],
+    @transient private val parentSessionState: Option[SessionState],
+    @transient private[sql] val extensions: SparkSessionExtensions,
+    @transient private[sql] val initialSessionOptions: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.
@@ -98,8 +98,8 @@ class SparkSession private(
    * running extensions.
    */
   private[sql] def this(
-                         sc: SparkContext,
-                         initialSessionOptions: java.util.HashMap[String, String]) = {
+      sc: SparkContext,
+      initialSessionOptions: java.util.HashMap[String, String]) = {
     this(sc, None, None,
       SparkSession.applyExtensions(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
@@ -404,7 +404,7 @@ class SparkSession private(
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
-      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+    // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
@@ -558,9 +558,9 @@ class SparkSession private(
    * Creates a `DataFrame` from an `RDD[InternalRow]`.
    */
   private[sql] def internalCreateDataFrame(
-                                            catalystRows: RDD[InternalRow],
-                                            schema: StructType,
-                                            isStreaming: Boolean = false): DataFrame = {
+      catalystRows: RDD[InternalRow],
+      schema: StructType,
+      isStreaming: Boolean = false): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(
@@ -735,8 +735,8 @@ class SparkSession private(
    * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
    */
   private[sql] def applySchemaToPythonRDD(
-                                           rdd: RDD[Array[Any]],
-                                           schemaString: String): DataFrame = {
+      rdd: RDD[Array[Any]],
+      schemaString: String): DataFrame = {
     val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     applySchemaToPythonRDD(rdd, schema)
   }
@@ -747,8 +747,8 @@ class SparkSession private(
    * @note Used by PySpark only
    */
   private[sql] def applySchemaToPythonRDD(
-                                           rdd: RDD[Array[Any]],
-                                           schema: StructType): DataFrame = {
+      rdd: RDD[Array[Any]],
+      schema: StructType): DataFrame = {
     val rowRdd = rdd.mapPartitions { iter =>
       val fromJava = python.EvaluatePython.makeFromJava(schema)
       iter.map(r => fromJava(r).asInstanceOf[InternalRow])
@@ -821,6 +821,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
+    @deprecated("use conf", "3.3.1")
     def config(key: String, value: String): Builder = synchronized {
       options += key -> value
       this
@@ -832,6 +833,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
+    @deprecated("use conf", "3.3.1")
     def config(key: String, value: Long): Builder = synchronized {
       options += key -> value.toString
       this
@@ -843,6 +845,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
+    @deprecated("use conf", "3.3.1")
     def config(key: String, value: Double): Builder = synchronized {
       options += key -> value.toString
       this
@@ -854,7 +857,19 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
+    @deprecated("use conf", "3.3.1")
     def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.3.1
+     */
+    def conf(key: String, value: Any): Builder = synchronized {
       options += key -> value.toString
       this
     }
@@ -1063,8 +1078,8 @@ object SparkSession extends Logging {
    * both in Scala and Python, so put this under [[SparkSession]] object.
    */
   private[sql] def applyModifiableSettings(
-                                            session: SparkSession,
-                                            options: java.util.HashMap[String, String]): Unit = {
+      session: SparkSession,
+      options: java.util.HashMap[String, String]): Unit = {
     // Lazy val to avoid an unnecessary session state initialization
     lazy val conf = session.sessionState.conf
 
@@ -1102,8 +1117,8 @@ object SparkSession extends Logging {
    * the original SparkSession if all configurations are already disabled.
    */
   private[sql] def getOrCloneSessionWithConfigsOff(
-                                                    session: SparkSession,
-                                                    configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
+      session: SparkSession,
+      configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
     val configsEnabled = configurations.filter(session.conf.get[Boolean])
     if (configsEnabled.isEmpty) {
       session
@@ -1164,8 +1179,8 @@ object SparkSession extends Logging {
    * The result is either `SessionState` or a Hive based `SessionState`.
    */
   private def instantiateSessionState(
-                                       className: String,
-                                       sparkSession: SparkSession): SessionState = {
+      className: String,
+      sparkSession: SparkSession): SessionState = {
     try {
       // invoke new [Hive]SessionStateBuilder(
       //   SparkSession,
@@ -1214,8 +1229,8 @@ object SparkSession extends Logging {
    * extensions passed into this function.
    */
   private def applyExtensions(
-                               extensionConfClassNames: Seq[String],
-                               extensions: SparkSessionExtensions): SparkSessionExtensions = {
+      extensionConfClassNames: Seq[String],
+      extensions: SparkSessionExtensions): SparkSessionExtensions = {
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)
