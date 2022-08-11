@@ -148,6 +148,7 @@ class QueryCompilationErrorsSuite
 
   test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
 
     val df1 = Seq(
       (536361, "85123A", 2, 17850),
