@@ -2174,17 +2174,13 @@ register_input_converter(DayTimeIntervalTypeConverter())
 
 def _test() -> None:
     import doctest
-    from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
 
     globs = globals()
-    sc = SparkContext("local[4]", "PythonTest")
-    globs["sc"] = sc
     globs["spark"] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
-    globs["sc"].stop()
     if failure_count:
         sys.exit(-1)
 
