@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -44,7 +46,7 @@ import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests with DatasourceV2SQLBase {
+  with AlterTableTests with DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -2546,6 +2548,47 @@ class DataSourceV2SQLSuite
       Seq(sqlQuery, dfQuery).foreach { query =>
         checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
       }
+    }
+  }
+
+  test("Move the post-Scan Filters to the far right") {
+    val t1 = s"${catalogAndNamespace}table"
+    val sbq = "sbq"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val filterBefore = spark.sql(
+        s"""
+           |SELECT id, data FROM $t1
+           |where md5(data) = '8cde774d6f7333752ed72cacddb05126'
+           |and trim(data) = 'a'
+           |and id =2
+           |""".stripMargin
+      )
+      val filtersBefore = find(filterBefore.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+        .head.asInstanceOf[FilterExec]
+        .condition.toString
+        .split("AND")
+      assert(filtersBefore.length == 5
+        && filtersBefore(3).trim.startsWith("(md5(cast(data")
+        && filtersBefore(4).trim.startsWith("(trim(data"))
+
+      val filterAfter = spark.sql(
+        s"""
+           |SELECT id, data FROM $t1
+           |where id =2
+           |and md5(data) = '8cde774d6f7333752ed72cacddb05126'
+           |and trim(data) = 'a'
+           |""".stripMargin
+      )
+      val filtersAfter = find(filterAfter.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+        .head.asInstanceOf[FilterExec]
+        .condition.toString
+        .split("AND")
+      assert(filtersAfter.length == 5
+        && filtersAfter(3).trim.startsWith("(md5(cast(data")
+        && filtersAfter(4).trim.startsWith("(trim(data"))
     }
   }
 

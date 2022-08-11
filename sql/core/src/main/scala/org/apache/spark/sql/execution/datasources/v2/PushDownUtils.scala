@@ -65,7 +65,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (Left(r.pushedFilters()), (untranslatableExprs ++ postScanFilters).toSeq)
+        (Left(r.pushedFilters()), (postScanFilters ++ untranslatableExprs).toSeq)
 
       case r: SupportsPushDownV2Filters =>
         // A map from translated data source leaf node filters to original catalyst filter
