@@ -642,7 +642,7 @@ class TaskSetManagerSuite
 
     // Driver receives StatusUpdate(RUNNING) from Executors
     for ((tid, info) <- manager.taskInfos if info.running) {
-      manager.taskInfos(tid).launchSucceeded
+      manager.taskInfos(tid).launchSucceeded()
     }
     sched.removeExecutor("execC")
     manager.executorLost(

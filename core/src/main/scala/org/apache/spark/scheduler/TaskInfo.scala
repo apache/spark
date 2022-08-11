@@ -110,7 +110,7 @@ class TaskInfo(
     }
   }
 
-  private[spark] def launchSucceeded: Unit = {
+  private[spark] def launchSucceeded(): Unit = {
     launching = false
   }
 

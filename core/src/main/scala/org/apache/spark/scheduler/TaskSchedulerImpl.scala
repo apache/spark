@@ -826,7 +826,7 @@ private[spark] class TaskSchedulerImpl(
               }
             }
             if (state == TaskState.RUNNING) {
-              taskSet.taskInfos(tid).launchSucceeded
+              taskSet.taskInfos(tid).launchSucceeded()
             }
           case None =>
             logError(
