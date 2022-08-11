@@ -65,6 +65,11 @@
     ],
     "sqlState" : "22005"
   },
+  "CONVERSION_INVALID_INPUT" : {
+    "message" : [
+      "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format.<hint>"
+    ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
