@@ -169,9 +169,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       var reregisterBlockManager = !sc.isStopped
       if (scheduler != null) {
-        val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
         if (executorLastSeen.contains(executorId) ||
-          (checkWorkerLastHeartbeat && isStandalone &&
+          (checkWorkerLastHeartbeat && isStandalone() &&
             executorExpiryCandidates.contains(executorId))) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           removeExecutorFromExpiryCandidates(executorId)
@@ -259,11 +258,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         //    those executors to avoid app hang
         sc.schedulerBackend match {
           case backend: CoarseGrainedSchedulerBackend =>
-            val isStandalone = backend.isInstanceOf[StandaloneSchedulerBackend]
             backend.driverEndpoint.send(RemoveExecutor(executorId,
               ExecutorProcessLost(
                 s"Executor heartbeat timed out after ${timeout} ms",
-                causedByApp = !checkWorkerLastHeartbeat || !isStandalone)))
+                causedByApp = !checkWorkerLastHeartbeat || !isStandalone())))
 
           // LocalSchedulerBackend is used locally and only has one single executor
           case _: LocalSchedulerBackend =>
@@ -275,9 +273,15 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     })
   }
 
+  private def isStandalone(): Boolean = {
+    sc.schedulerBackend match {
+      case backend: StandaloneSchedulerBackend => true
+      case _ => false
+    }
+  }
+
   private def removeExecutorFromExpiryCandidates(executorId: String): Unit = {
-    val isStandalone = sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
-    if (checkWorkerLastHeartbeat && isStandalone) {
+    if (checkWorkerLastHeartbeat && isStandalone()) {
       executorExpiryCandidates.remove(executorId)
     }
   }
@@ -285,21 +289,22 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private def expireDeadHosts(): Unit = {
   /**
    * [SPARK-39984]
-   * The driver’s HeartbeatReceiver will expire an executor if it does not receive any heartbeat from
-   * the executor for `executorTimeoutMs` (default 120s) seconds. However, lowering from 120 seconds
-   * has other challenges. For example: when executor is performing full GC, it cannot send/reply any
-   * message for tens of seconds (based on your environment). Hence, HeartbeatReceiver cannot whether
-   * the heartbeat loss is caused by network issues or other reasons (e.g. full GC). To address this,
-   * we designed a new Heartbeat Receiver mechanism for standalone deployments.
+   * The driver’s HeartbeatReceiver will expire an executor if it does not receive any heartbeat
+   * from the executor for `executorTimeoutMs` (default 120s) seconds. However, lowering from 120
+   * seconds has other challenges. For example: when executor is performing full GC, it cannot
+   * send/reply any message for tens of seconds (based on your environment). Hence,
+   * HeartbeatReceiver cannot whether the heartbeat loss is caused by network issues or other
+   * reasons (e.g. full GC). To address this, we designed a new Heartbeat Receiver mechanism for
+   * standalone deployments.
    *
    * [How it works?]
    * For standalone deployments:
    * If driver does not receive any heartbeat from the executor for `executorTimeoutMs` seconds,
-   * HeartbeatReceiver will send a request to master to ask for the latest heartbeat from the worker
-   * which the executor runs on. HeartbeatReceiver can determine whether the heartbeat loss is caused
-   * by network issues or other issues (e.g. GC). If the heartbeat loss is not caused by network
-   * issues, the HeartbeatReceiver will put the executor into `executorExpiryCandidates`` rather than
-   * expiring it immediately.
+   * HeartbeatReceiver will send a request to master to ask for the latest heartbeat from the
+   * worker which the executor runs on. HeartbeatReceiver can determine whether the heartbeat loss
+   * is caused by network issues or other issues (e.g. GC). If the heartbeat loss is not caused by
+   * network issues, the HeartbeatReceiver will put the executor into `executorExpiryCandidates`
+   * rather than expiring it immediately.
    *
    * [Why it works?]
    * An executor is running on a worker but in different JVMs, and a driver is running on a master
@@ -317,13 +322,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = clock.getTimeMillis()
-    var isStandalone = sc.schedulerBackend match {
-      case backend: CoarseGrainedSchedulerBackend =>
-        backend.isInstanceOf[StandaloneSchedulerBackend]
-      case _ => false
-    }
-
-    if (!checkWorkerLastHeartbeat || !isStandalone) {
+    if (!checkWorkerLastHeartbeat || !isStandalone()) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
           killExecutor(executorId, now - lastSeenMs)
