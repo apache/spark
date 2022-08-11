@@ -127,7 +127,7 @@ private[sql] class SessionState(
     createQueryExecution(plan, mode)
 
   def closeState(): Unit = {
-    val cache = FileStatusCache.sessionToCache.get(sessionUUID)
+    val cache = FileStatusCache.sessionToCache.remove(sessionUUID)
     cache.foreach(_.invalidateAll())
   }
 }
