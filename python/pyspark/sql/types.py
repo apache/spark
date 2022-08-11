@@ -703,8 +703,8 @@ class StructType(DataType):
     >>> struct1 == struct2
     False
 
-    The below example demonstrates how to create a struct using class:`StructType`
-    and class:`StructField` on DataFrame:
+    The below example demonstrates how to create a DataFrame based on a struct created
+    using class:`StructType` and class:`StructField`:
 
     >>> data = [("Alice", ["Java", "Scala"]), ("Bob", ["Python", "Scala"])]
     >>> schema = StructType([
