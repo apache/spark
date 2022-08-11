@@ -17,18 +17,32 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.{lit, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
-class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession {
+class ReplaceNullWithFalseInPredicateWithAQEEndToEndSuite extends
+  ReplaceNullWithFalseInPredicateEndToEndSuite {
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.sql.adaptive.forceApply", "true")
+  }
+}
+
+class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession with
+  AdaptiveSparkPlanHelper {
   import testImplicits._
 
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.sql.adaptive.forceApply", "false")
+  }
+
   private def checkPlanIsEmptyLocalScan(df: DataFrame): Unit =
-    df.queryExecution.executedPlan match {
+    stripAQEPlan(df.queryExecution.executedPlan) match {
       case s: LocalTableScanExec => assert(s.rows.isEmpty)
       case p => fail(s"$p is not LocalTableScanExec")
     }
