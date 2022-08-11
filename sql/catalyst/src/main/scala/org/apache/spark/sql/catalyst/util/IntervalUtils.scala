@@ -1277,6 +1277,16 @@ object IntervalUtils {
     intToYearMonthInterval(vInt, endField)
   }
 
+  def decimalToYearMonthInterval(d: Decimal, p: Int, s: Int, endField: Byte): Int = {
+    try {
+      val micros = if (endField == YEAR) d.toBigDecimal * MONTHS_PER_YEAR else d.toBigDecimal
+      micros.setScale(0, BigDecimal.RoundingMode.HALF_UP).toIntExact
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.castingCauseOverflowError(d, DecimalType(p, s), YM(endField))
+    }
+  }
+
   def yearMonthIntervalToInt(v: Int, startField: Byte, endField: Byte): Int = {
     endField match {
       case YEAR => v / MONTHS_PER_YEAR
