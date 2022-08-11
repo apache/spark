@@ -26,16 +26,16 @@ import org.apache.spark.unsafe.types.UTF8String
 // A test suite to check analysis behaviors of `TryCast`.
 class TryCastSuite extends SparkFunSuite {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): TryCast = {
+  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
-      case lit: Expression => TryCast(lit, targetType, timeZoneId)
-      case _ => TryCast(Literal(v), targetType, timeZoneId)
+      case lit: Expression => Cast(lit, targetType, timeZoneId, EvalMode.TRY)
+      case _ => Cast(Literal(v), targetType, timeZoneId, EvalMode.TRY)
     }
   }
 
   test("print string") {
-    assert(TryCast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
-    assert(TryCast(Literal("1"), IntegerType).sql == "TRY_CAST('1' AS INT)")
+    assert(cast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
+    assert(cast(Literal("1"), IntegerType).sql == "TRY_CAST('1' AS INT)")
   }
 
   test("nullability") {

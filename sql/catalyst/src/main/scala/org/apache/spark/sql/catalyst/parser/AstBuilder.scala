@@ -1795,9 +1795,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         cast
 
       case SqlBaseParser.TRY_CAST =>
-        // `TryCast` can only be user-specified and we don't need to set the USER_SPECIFIED_CAST
-        // tag, which is only used by `Cast`
-        TryCast(expression(ctx.expression), dataType)
+        val cast = Cast(expression(ctx.expression), dataType, evalMode = EvalMode.TRY)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
     }
   }
 

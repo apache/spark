@@ -146,6 +146,33 @@ object Cast {
     case _ => false
   }
 
+  // If the target data type is a complex type which can't have Null values, we should guarantee
+  // that the casting between the element types won't produce Null results.
+  def canTryCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case _ =>
+      Cast.canAnsiCast(from, to)
+  }
+
   /**
    * A tag to identify if a CAST added by the table insertion resolver.
    */
@@ -482,7 +509,7 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
-  private def typeCheckFailureMessage: String = if (ansiEnabled) {
+  private def typeCheckFailureMessage: String = if (evalMode == EvalMode.ANSI) {
     if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
       Cast.typeCheckFailureMessage(child.dataType, dataType,
         Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
@@ -495,9 +522,13 @@ case class Cast(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (ansiEnabled && Cast.canAnsiCast(child.dataType, dataType)) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (!ansiEnabled && Cast.canCast(child.dataType, dataType)) {
+    val canCast = evalMode match {
+      case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
+      case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
+      case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
+      case other => throw new IllegalArgumentException(s"Unknown EvalMode value: $other")
+    }
+    if (canCast) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
