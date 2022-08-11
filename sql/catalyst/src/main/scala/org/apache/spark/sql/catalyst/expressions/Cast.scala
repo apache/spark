@@ -2365,7 +2365,7 @@ case class CheckOverflowInTableInsert(child: AnsiCast, columnName: String) exten
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
-      QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+      throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
         child.child.dataType,
         child.dataType,
         columnName)

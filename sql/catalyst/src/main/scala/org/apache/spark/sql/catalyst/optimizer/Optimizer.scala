@@ -1176,9 +1176,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 object TransposeWindow extends Rule[LogicalPlan] {
   private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
-    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
-      case (l, r) => l.semanticEquals(r)
-    })
+    ps1.length < ps2.length && ps1.forall { expr1 =>
+      ps2.exists(expr1.semanticEquals)
+    }
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
@@ -1466,6 +1466,12 @@ object EliminateSorts extends Rule[LogicalPlan] {
     plan match {
       case Sort(_, global, child) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
+      case Sort(sortOrder, true, child) =>
+        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
+        // so here we only preserve its output partitioning using `RepartitionByExpression`.
+        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
+        // This behavior is same with original global sort.
+        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
       case other if canEliminateGlobalSort(other) =>
