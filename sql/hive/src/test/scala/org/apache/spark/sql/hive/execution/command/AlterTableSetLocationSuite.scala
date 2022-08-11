@@ -26,10 +26,10 @@ import org.apache.spark.sql.execution.command.v1
 class AlterTableSetLocationSuite extends v1.AlterTableSetLocationSuiteBase with CommandSuiteBase {
 
   override def buildCreateTableSQL(t: String): String = {
-    s"CREATE TABLE $t (col1 int, col2 string, a int, b int) " +
-      s"PARTITIONED BY (a, b) " +
-      s"ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' " +
-      s"STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.SequenceFileInputFormat' " +
-      s"OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat'"
+    s"""CREATE TABLE $t (col1 int, col2 string, a int, b int)
+      |PARTITIONED BY (a, b)
+      |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+      |STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.SequenceFileInputFormat'
+      |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat'""".stripMargin
   }
 }

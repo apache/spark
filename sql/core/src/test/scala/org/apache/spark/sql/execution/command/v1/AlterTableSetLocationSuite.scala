@@ -48,8 +48,10 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
   }
 
   // Verify that the location is set to the expected string
-  private def checkLocation(tableIdent: TableIdentifier, expected: URI,
-    spec: Option[TablePartitionSpec] = None): Unit = {
+  private def checkLocation(
+      tableIdent: TableIdentifier,
+      expected: URI,
+      spec: Option[TablePartitionSpec] = None): Unit = {
     val storageFormat = spec
       .map { s => sessionCatalog.getPartition(tableIdent, s).storage }
       .getOrElse { sessionCatalog.getTableMetadata(tableIdent).storage }
@@ -102,18 +104,25 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
       val table = sessionCatalog.getTableMetadata(TableIdentifier("tbl"))
       val viennaPartPath = new Path(new Path(table.location), "vienna")
       checkLocation(tableIdent, CatalogUtils.stringToURI(viennaPartPath.toString), Some(partSpec))
+    }
+  }
 
-      // table to alter does not exist
-      val e1 = intercept[AnalysisException] {
-        sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
-      }
-      assert(e1.getMessage.contains("Table not found: ns.does_not_exist"))
+  test("table to alter set location does not exist") {
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE ns.does_not_exist SET LOCATION '/mister/spark'")
+    }
+    assert(e.getMessage.contains("Table not found: ns.does_not_exist"))
+  }
 
-      // partition to alter does not exist
-      val e2 = intercept[AnalysisException] {
+  test("partition to alter set location does not exist") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(buildCreateTableSQL(t))
+
+      sql(s"INSERT INTO $t PARTITION (a = '1', b = '2') SELECT 1, 'abc'")
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t PARTITION (b='2') SET LOCATION '/mister/spark'")
       }
-      assert(e2.getMessage == "Partition spec is invalid. The spec (b) must match the partition " +
+      assert(e.getMessage == "Partition spec is invalid. The spec (b) must match the partition " +
         "spec (a, b) defined in table '`spark_catalog`.`ns`.`tbl`'")
     }
   }

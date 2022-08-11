@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution.command.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.command
@@ -40,12 +39,8 @@ class AlterTableSetLocationSuite
     v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
-
-  test("alter Table set location") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
+  test("alter table set location") {
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
 
@@ -58,8 +53,7 @@ class AlterTableSetLocationSuite
   }
 
   test("alter table set partition location") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) USING foo")
 
       val e = intercept[AnalysisException] {
