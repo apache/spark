@@ -150,6 +150,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean skip(long n) {
+    if(closed) return false;
+
     long skipped = 0;
     while (skipped < n) {
       if (next != null) {

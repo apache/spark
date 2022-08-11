@@ -304,15 +304,8 @@ public class RocksDBSuite {
   }
 
   @Test
-  public void testHasNextAndNextAfterIteratorClose() throws Exception {
-    String prefix = "test_db_iter_close.";
-    String suffix = ".rdb";
-    File path = File.createTempFile(prefix, suffix);
-    path.delete();
-    RocksDB db = new RocksDB(path);
-    // Write one records for test
+  public void testHasNextAfterIteratorClose() throws Exception {
     db.write(createCustomType1(0));
-
     KVStoreIterator<CustomType1> iter =
       db.view(CustomType1.class).closeableIterator();
     // iter should be true
@@ -321,25 +314,11 @@ public class RocksDBSuite {
     iter.close();
     // iter.hasNext should be false after iter close
     assertFalse(iter.hasNext());
-    // iter.next should throw NoSuchElementException after iter close
-    assertThrows(NoSuchElementException.class, iter::next);
-
-    db.close();
-    assertTrue(path.exists());
-    FileUtils.deleteQuietly(path);
-    assertFalse(path.exists());
   }
 
   @Test
-  public void testHasNextAndNextAfterDBClose() throws Exception {
-    String prefix = "test_db_db_close.";
-    String suffix = ".rdb";
-    File path = File.createTempFile(prefix, suffix);
-    path.delete();
-    RocksDB db = new RocksDB(path);
-    // Write one record for test
+  public void testHasNextAfterDBClose() throws Exception {
     db.write(createCustomType1(0));
-
     KVStoreIterator<CustomType1> iter =
       db.view(CustomType1.class).closeableIterator();
     // iter should be true
@@ -348,12 +327,58 @@ public class RocksDBSuite {
     db.close();
     // iter.hasNext should be false after db close
     assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.next should throw NoSuchElementException after iter close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    iter.close();
     // iter.next should throw NoSuchElementException after db close
     assertThrows(NoSuchElementException.class, iter::next);
+  }
 
-    assertTrue(path.exists());
-    FileUtils.deleteQuietly(path);
-    assertFalse(path.exists());
+  @Test
+  public void testSkipAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // close iter
+    iter.close();
+    // skip should always return false after iter close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testSkipAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // skip should always return false after db close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
   }
 
   private CustomType1 createCustomType1(int i) {
