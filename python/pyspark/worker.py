@@ -523,14 +523,19 @@ def read_udfs(pickleSer, infile, eval_type):
             idx += offsets_len
         return parsed
 
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+    if eval_type in (
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+    ):
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
 
-        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, state=state
+        )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         # Create function like this:
@@ -538,23 +543,6 @@ def read_udfs(pickleSer, infile, eval_type):
         def mapper(a):
             keys = [a[o] for o in parsed_offsets[0][0]]
             vals = [a[o] for o in parsed_offsets[0][1]]
-            return f(keys, vals)
-
-    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        # We assume there is only one UDF here because grouped map doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        # See PythonFlatMapGroupsWithStateExec for how arg_offsets are used to
-        # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, state=state
-        )
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        def mapper(a):
-            keys = [a[o] for o in parsed_offsets[0][0]]
-            vals = a  # it's always all series.
             return f(keys, vals)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
