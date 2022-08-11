@@ -285,31 +285,27 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private def expireDeadHosts(): Unit = {
   /**
    * [SPARK-39984]
-   * Originally, the driver’s HeartbeatReceiver will expire an executor if it does not receive any
-   * heartbeat from the executor for 120 seconds. However, 120 seconds is too long, but we will face
-   * other challenges when we try to lower the timeout threshold. To elaborate, when an executor is
-   * performing full GC, it cannot send/reply any message. Next paragraphs describe the solution to
-   * detect network disconnection between driver and executor in a short time.
+   * The driver’s HeartbeatReceiver will expire an executor if it does not receive any heartbeat from
+   * the executor for `executorTimeoutMs` (default 120s) seconds. However, lowering from 120 seconds
+   * has other challenges. For example: when executor is performing full GC, it cannot send/reply any
+   * message for tens of seconds (based on your environment). Hence, HeartbeatReceiver cannot whether
+   * the heartbeat loss is caused by network issues or other reasons (e.g. full GC). To address this,
+   * we designed a new Heartbeat Receiver mechanism for standalone deployments.
    *
+   * [How it works?]
+   * For standalone deployments:
+   * If driver does not receive any heartbeat from the executor for `executorTimeoutMs` seconds,
+   * HeartbeatReceiver will send a request to master to ask for the latest heartbeat from the worker
+   * which the executor runs on. HeartbeatReceiver can determine whether the heartbeat loss is caused
+   * by network issues or other issues (e.g. GC). If the heartbeat loss is not caused by network
+   * issues, the HeartbeatReceiver will put the executor into `executorExpiryCandidates`` rather than
+   * expiring it immediately.
+   *
+   * [Why it works?]
    * An executor is running on a worker but in different JVMs, and a driver is running on a master
    * but in different JVMs. Hence, the network connection between driver/executor and master/worker
    * is the same. Because executor and worker are running on different JVMs, worker can still send
    * heartbeat to master when executor performs GC.
-   *
-   * For new Heartbeat Receiver, if driver does not receive any heartbeat from the executor for
-   * `executorTimeoutMs` (default: 60s) seconds, HeartbeatReceiver will send a request to master to
-   * ask for the latest heartbeat from the worker which the executor runs on `workerLastHeartbeat`.
-   * HeartbeatReceiver can determine whether the heartbeat loss is caused by network issues or other
-   * issues (e.g. GC). If the heartbeat loss is not caused by network issues, the HeartbeatReceiver
-   * will put the executor into a executorExpiryCandidates rather than expiring it immediately.
-   *
-   * [Note]: Definition of `network issues`
-   * Here, the definition `network issues` is the issues that related to network directly. If the
-   * network is connected, the issues do not included in `network issues`. For example, an
-   * executor's JVM is closed by a problematic task, so the JVM will notify driver that the socket
-   * is closed. If the network is connected, driver will receive the notification and trigger the
-   * function `onDisconnected`. This issue is not a `network issue` because the network is
-   * connected.
    *
    * [Warning 1]
    * Worker will send heartbeats to Master every (conf.get(WORKER_TIMEOUT) * 1000 / 4) milliseconds.
