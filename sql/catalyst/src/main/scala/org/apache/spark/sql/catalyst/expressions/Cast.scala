@@ -509,16 +509,20 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
-  private def typeCheckFailureMessage: String = if (evalMode == EvalMode.ANSI) {
-    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
-    } else {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.ANSI_ENABLED.key -> "false"))
-    }
-  } else {
-    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+  private def typeCheckFailureMessage: String = evalMode match {
+    case EvalMode.ANSI =>
+      if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
+        Cast.typeCheckFailureMessage(child.dataType, dataType,
+          Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
+            SQLConf.StoreAssignmentPolicy.LEGACY.toString))
+      } else {
+        Cast.typeCheckFailureMessage(child.dataType, dataType,
+          Some(SQLConf.ANSI_ENABLED.key -> "false"))
+      }
+    case EvalMode.TRY =>
+      Cast.typeCheckFailureMessage(child.dataType, dataType, None)
+    case _ =>
+      s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -540,6 +544,10 @@ case class Cast(
   } else {
     (child.dataType, dataType) match {
       case (StringType, BinaryType) => child.nullable
+      // TODO: Implement a more accurate method for checking whether a decimal value can be cast
+      //       as integral types without overflow. Currently, the cast can overflow even if
+      //       "Cast.canUpCast" method returns true.
+      case (_: DecimalType, _: IntegralType) => true
       case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
     }
   }

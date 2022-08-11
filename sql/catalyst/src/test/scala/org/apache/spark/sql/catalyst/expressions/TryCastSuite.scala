@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 // A test suite to check analysis behaviors of `TryCast`.
-class TryCastSuite extends CastSuiteBase {
+class TryCastSuite extends CastWithAnsiOnSuite {
 
   override def evalMode: EvalMode.Value = EvalMode.TRY
 
@@ -41,6 +41,15 @@ class TryCastSuite extends CastSuiteBase {
       inputRow: InternalRow,
       expectedErrMsg: String): Unit = {
     checkEvaluation(expression, null, inputRow)
+  }
+
+  override def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+    checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
+  }
+
+  override def checkCastToNumericError(l: Literal, to: DataType,
+      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
+    checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 
   test("print string") {
