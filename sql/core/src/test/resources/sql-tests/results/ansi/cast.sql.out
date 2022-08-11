@@ -857,6 +857,14 @@ struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
 
 
 -- !query
+select cast(ym as interval year to month) from values(-122S) as t(ym)
+-- !query schema
+struct<ym:interval year to month>
+-- !query output
+-10-2
+
+
+-- !query
 select cast(1000 as interval month)
 -- !query schema
 struct<CAST(1000 AS INTERVAL MONTH):interval month>
@@ -876,6 +884,14 @@ struct<CAST(-10 AS INTERVAL SECOND):interval second>
 select cast(100Y as interval hour to second)
 -- !query schema
 struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
+-- !query output
+0 00:01:40.000000000
+
+
+-- !query
+select cast(dt as interval hour to second) from values(100Y) as t(dt)
+-- !query schema
+struct<dt:interval hour to second>
 -- !query output
 0 00:01:40.000000000
 
