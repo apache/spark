@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.types._
@@ -96,5 +97,16 @@ class TryCastSuite extends CastWithAnsiOnSuite {
       .add("a", BooleanType, nullable = true)
       .add("b", BooleanType, nullable = false))
     assert(!c4.resolved)
+  }
+}
+
+class TryCastThrowExceptionSuite extends SparkFunSuite with ExpressionEvalHelper {
+  // The method checkExceptionInExpression is overridedn in TryCastSuite, so here we have a
+  // new test suite for testing exceptions from the child of `try_cast()`.
+  test("TryCast should not catch the exception from it's child") {
+    val child = Divide(Literal(1.0), Literal(0.0), failOnError = true)
+    checkExceptionInExpression[Exception](
+      Cast(child, StringType, None, EvalMode.TRY),
+      "Division by zero")
   }
 }
