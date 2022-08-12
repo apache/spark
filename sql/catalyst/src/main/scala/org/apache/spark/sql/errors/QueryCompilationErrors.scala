@@ -2528,9 +2528,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       s"Failed to execute $statementType command because DEFAULT values are not supported when " +
         "adding new columns to previously existing target data source with table " +
-        "provider: \"" + dataSource + "\"; please add the column without a default value first, " +
-        "then run a second ALTER TABLE ALTER COLUMN SET DEFAULT command to apply for future " +
-        "inserted rows instead")
+        "provider: \"" + dataSource + "\"")
   }
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {

@@ -1643,16 +1643,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             insertNullsToStorage = false)))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc,parquet") {
-          config.sqlConf.map { kv: (String, String) =>
-            withSQLConf(kv) {
-              // Run the test with the pair of custom SQLConf values.
-              runTest(testCase.dataSource, config)
-            }
-          }.getOrElse {
-            // Run the test with default settings.
+        config.sqlConf.map { kv: (String, String) =>
+          withSQLConf(kv) {
+            // Run the test with the pair of custom SQLConf values.
             runTest(testCase.dataSource, config)
           }
+        }.getOrElse {
+          // Run the test with default settings.
+          runTest(testCase.dataSource, config)
         }
       }
     }
@@ -1676,17 +1674,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t (a int default 42) using json")
         sql("insert into t values (null)")
         checkAnswer(spark.table("t"), Row(42))
-      }
-    }
-    // Check that we cannot run ALTER TABLE ALTER COLUMN commands with DEFAULT values on JSON
-    // tables, with a descriptive error message.
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "json*") {
-      withTable("t") {
-        sql("create table t (a int) using json")
-        assert(intercept[AnalysisException] {
-          sql("alter table t add column (b int default 42)")
-        }.getMessage.contains(QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
-          "ALTER TABLE ADD COLUMNS", "json").getMessage))
       }
     }
   }

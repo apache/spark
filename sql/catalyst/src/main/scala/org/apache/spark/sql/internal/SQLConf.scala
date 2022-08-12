@@ -2922,7 +2922,7 @@ object SQLConf {
         "provided values when the corresponding fields are not present in storage.")
       .version("3.4.0")
       .stringConf
-      .createWithDefault("csv,json*,orc,parquet")
+      .createWithDefault("csv,json,orc,parquet")
 
   val DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS =
     buildConf("spark.sql.defaultColumn.jsonGeneratorForceNullFields")
