@@ -201,7 +201,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      logError("Fail to get the latest Spark versions to test.")
+      if (PROCESS_TABLES.isPythonVersionAtLeast37) {
+        logError("Fail to get the latest Spark versions to test.")
+      } else {
+        logError("Python version <  3.7.0, the running environment is unavailable.")
+      }
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -233,6 +237,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   test("backward compatibility") {
+    assume(PROCESS_TABLES.isPythonVersionAtLeast37)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
@@ -249,6 +254,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  val isPythonVersionAtLeast37 = TestUtils.isPythonVersionAtLeast37()
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
@@ -267,7 +273,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       case NonFatal(_) => Nil
     }
     versions
-      .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
+      .filter(v => v.startsWith("3") && isPythonVersionAtLeast37)
       .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
       .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
         SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))

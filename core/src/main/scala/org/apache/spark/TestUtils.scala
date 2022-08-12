@@ -281,9 +281,13 @@ private[spark] object TestUtils {
     attempt.isSuccess && attempt.get == 0
   }
 
-  def isPythonVersionAtLeast38(): Boolean = {
+  def isPythonVersionAtLeast37(): Boolean = isPythonVersionAtLeast(3, 7, 0)
+
+  def isPythonVersionAtLeast38(): Boolean = isPythonVersionAtLeast(3, 8, 0)
+
+  private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
-    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
     Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
