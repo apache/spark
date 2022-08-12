@@ -166,11 +166,13 @@ class FileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession 
 
   test(s"reading ${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} - present in a table") {
     withReadDataFrame("parquet", extraCol = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME) { df =>
-      // Column values are read from the file, rather than populated with generated row indexes.
-      // FIXME
-//      assert(df
-//        .where(col(EXPECTED_EXTRA_COL) === col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
-//        .count == NUM_ROWS)
+      // Values of FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME column are always populated with
+      // generated row indexes, rather than read from the file.
+      // TODO(SPARK-40059): Allow users to include columns named
+      //                    FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME in their schemas.
+      assert(df
+        .where(col(EXPECTED_ROW_ID_COL) === col(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+        .count == NUM_ROWS)
 
       // Column cannot be read in combination with _metadata.row_index.
       intercept[AnalysisException](df.select("*", FileFormat.METADATA_NAME).collect())
