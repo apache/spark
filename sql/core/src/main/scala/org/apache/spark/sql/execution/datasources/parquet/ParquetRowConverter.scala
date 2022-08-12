@@ -226,7 +226,22 @@ private[parquet] class ParquetRowConverter(
       } else {
         Map.empty[Int, Int]
       }
-
+    // If any fields in the Catalyst result schema have associated existence default values,
+    // maintain a boolean array to track which fields have been explicitly assigned for each row.
+    if (catalystType.hasExistenceDefaultValues) {
+      for (i <- 0 until catalystType.existenceDefaultValues.size) {
+        catalystType.existenceDefaultsBitmask(i) =
+          // Assume the schema for a Parquet file-based table contains N fields. Then if we later
+          // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
+          // adds one field to the Catalyst schema. Then if we query the old files with the new
+          // Catalyst schema, we should only apply the existence default value to all columns > N.
+          if (i < parquetType.getFieldCount) {
+            false
+          } else {
+            catalystType.existenceDefaultValues(i) != null
+          }
+      }
+    }
     parquetType.getFields.asScala.map { parquetField =>
       val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
@@ -236,20 +251,8 @@ private[parquet] class ParquetRowConverter(
         catalystFieldIdxByName(parquetField.getName)
       }
       val catalystField = catalystType(catalystFieldIndex)
-      // Create a RowUpdater instance for converting Parquet objects to Catalyst rows. If any fields
-      // in the Catalyst result schema have associated existence default values, maintain a boolean
-      // array to track which fields have been explicitly assigned for each row.
+      // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
       val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
-      if (catalystType.hasExistenceDefaultValues) {
-        for (i <- 0 until catalystType.existenceDefaultValues.size) {
-          catalystType.existenceDefaultsBitmask(i) =
-            if (i < parquetType.getFieldCount) {
-              false
-            } else {
-              catalystType.existenceDefaultValues(i) != null
-            }
-        }
-      }
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
       newConverter(parquetField, catalystField.dataType, rowUpdater)
     }.toArray
