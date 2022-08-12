@@ -252,10 +252,11 @@ class StreamingQuery:
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
-        Blocks query until all available data in the source has been processed and committed to the sink
+        Blocks query until all available data in the source
+        has been processed and committed to the sink
 
         >>> sq.processAllAvailable
-        <bound method StreamingQuery.processAllAvailable of <pyspark.sql.streaming.query.StreamingQuery object at ...>
+        <bound method StreamingQuery.processAllAvailable ...>
 
         >>> sq.stop()
         """
@@ -435,7 +436,8 @@ class StreamingQueryManager:
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
-        Return wheter any of the query on the associated SparkSession has terminated or not within 5 seconds
+        Return wheter any of the query on the associated SparkSession
+        has terminated or not within 5 seconds
 
         >>> spark.streams.awaitAnyTermination(5)
         False
