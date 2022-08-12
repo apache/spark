@@ -184,49 +184,6 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  /**
-   * Subclass of RowUpdater that also updates a boolean array bitmask. In this way, after all
-   * assignments are complete, it is possible to inspect the bitmask to determine which columns have
-   * been written at least once.
-   */
-  private final class RowUpdaterWithBitmask(
-      row: InternalRow,
-      ordinal: Int,
-      bitmask: Array[Boolean]) extends RowUpdater(row, ordinal) {
-    override def set(value: Any): Unit = {
-      bitmask(ordinal) = false
-      super.set(value)
-    }
-    override def setBoolean(value: Boolean): Unit = {
-      bitmask(ordinal) = false
-      super.setBoolean(value)
-    }
-    override def setByte(value: Byte): Unit = {
-      bitmask(ordinal) = false
-      super.setByte(value)
-    }
-    override def setShort(value: Short): Unit = {
-      bitmask(ordinal) = false
-      super.setShort(value)
-    }
-    override def setInt(value: Int): Unit = {
-      bitmask(ordinal) = false
-      super.setInt(value)
-    }
-    override def setLong(value: Long): Unit = {
-      bitmask(ordinal) = false
-      super.setLong(value)
-    }
-    override def setDouble(value: Double): Unit = {
-      bitmask(ordinal) = false
-      super.setDouble(value)
-    }
-    override def setFloat(value: Float): Unit = {
-      bitmask(ordinal) = false
-      super.setFloat(value)
-    }
-  }
-
   private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   /**
@@ -282,14 +239,17 @@ private[parquet] class ParquetRowConverter(
       // Create a RowUpdater instance for converting Parquet objects to Catalyst rows. If any fields
       // in the Catalyst result schema have associated existence default values, maintain a boolean
       // array to track which fields have been explicitly assigned for each row.
-      val rowUpdater: RowUpdater =
-        if (catalystType.hasExistenceDefaultValues) {
-          resetExistenceDefaultsBitmask(catalystType)
-          new RowUpdaterWithBitmask(
-            currentRow, catalystFieldIndex, catalystType.existenceDefaultsBitmask)
-        } else {
-          new RowUpdater(currentRow, catalystFieldIndex)
+      val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
+      if (catalystType.hasExistenceDefaultValues) {
+        for (i <- 0 until catalystType.existenceDefaultValues.size) {
+          catalystType.existenceDefaultsBitmask(i) =
+            if (i < parquetType.getFieldCount) {
+              false
+            } else {
+              catalystType.existenceDefaultValues(i) != null
+            }
         }
+      }
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
       newConverter(parquetField, catalystField.dataType, rowUpdater)
     }.toArray
