@@ -2924,32 +2924,6 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
-  val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
-      .internal()
-      .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
-        "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
-        "For example, this allows most INSERT INTO statements to specify only a prefix of the " +
-        "columns in the target table, and the remaining columns will receive NULL values.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val ADD_DEFAULTS_FOR_INSERTS_WITHOUT_USER_SPECIFIED_FIELDS =
-    buildConf("spark.sql.defaultColumn.addDefaultsForInsertsWithoutUserSpecifiedFields")
-      .internal()
-      .doc("When true, for each INSERT command without any user-specified fields (for example, " +
-        "when the command looks like INSERT INTO mytable(columnA, columnB) VALUES (...)), if the " +
-        "number of values in the INSERT command is less than the number of columns in the target " +
-        "table, automatically append DEFAULT values for all remaining columns with explicit " +
-        "DEFAULTs. Note that if spark.sql.defaultColumn.useNullsForMissingDefaultValues is true " +
-        "and one of these missing columns does not have an explicit DEFAULT value, then NULL " +
-        "will be appended. Otherwise, the command will fail with an error message reporting that " +
-        "the number of columns provided is incorrect.")
-      .version("3.4.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
       "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
@@ -4537,12 +4511,6 @@ class SQLConf extends Serializable with Logging {
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-
-  def useNullsForMissingDefaultColumnValues: Boolean =
-    getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
-
-  def addDefaultsForInsertsWithoutUserSpecifiedFields: Boolean =
-    getConf(SQLConf.ADD_DEFAULTS_FOR_INSERTS_WITHOUT_USER_SPECIFIED_FIELDS)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
