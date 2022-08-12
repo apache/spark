@@ -2075,9 +2075,8 @@ case class ArrayPosition(left: Expression, right: Expression)
       If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
       for invalid indices.
 
-    _FUNC_(map, key) - Returns value for given key. The function returns NULL
-      if the key is not contained in the map and `spark.sql.ansi.enabled` is set to false.
-      If `spark.sql.ansi.enabled` is set to true, it throws NoSuchElementException instead.
+    _FUNC_(map, key) - Returns value for given key. The function returns NULL if the key is not
+       contained in the map.
   """,
   examples = """
     Examples:
@@ -2094,7 +2093,7 @@ case class ElementAt(
     // The value to return if index is out of bound
     defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
+  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext {
 
   def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
@@ -2197,7 +2196,7 @@ case class ElementAt(
         }
       }
     case _: MapType =>
-      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering, failOnError)
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2253,7 +2252,7 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], failOnError)
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
     }
   }
 
