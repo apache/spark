@@ -60,8 +60,8 @@ class StreamingQuery:
 
         Get the unique id of this query that persists across restarts from checkpoint data
 
-        >>> sq.id # ID is unique
-        '53f3c572-1452-458b-9054-0556c8d49c4b'
+        >>> sq.id # doctest: +ELLIPSIS
+        '...'
 
         >>> sq.stop()
         """
@@ -81,8 +81,8 @@ class StreamingQuery:
 
         Get the unique id of this query that does not persist across restarts
 
-        >>> sq.runId # ID is unique
-        '56d6d296-4523-44f6-b893-5d2dac91e725'
+        >>> sq.runId # doctest: +ELLIPSIS
+        '...'
 
         >>> sq.stop()
         """
@@ -174,8 +174,8 @@ class StreamingQuery:
 
         Get the current status of the query
 
-        >>> sq.status
-        {'message': 'Writing offsets to log', 'isDataAvailable': False, 'isTriggerActive': True}
+        >>> sq.status # doctest: +ELLIPSIS
+        {'message': '...', 'isDataAvailable': ..., 'isTriggerActive': ...}
 
         >>> sq.stop()
         """
@@ -196,8 +196,8 @@ class StreamingQuery:
 
         Get an array of the most recent query progress updates for this query
 
-        >>> sq.recentProgress
-        [{'id': ..., 'runId': ...},{'id': ..., 'runId': ...,...]
+        >>> sq.recentProgress # doctest: +ELLIPSIS
+        [...]
 
         >>> sq.stop()
         """
@@ -440,7 +440,7 @@ class StreamingQueryManager:
         has terminated or not within 5 seconds
 
         >>> spark.streams.awaitAnyTermination(5)
-        False
+        True
         >>> sq.stop()
         """
         if timeout is not None:
