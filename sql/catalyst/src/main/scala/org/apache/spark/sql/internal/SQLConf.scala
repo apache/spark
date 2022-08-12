@@ -4536,7 +4536,7 @@ class SQLConf extends Serializable with Logging {
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
   def jsonWriteNullIfWithDefaultValue: Boolean =
-    getConf(DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS)
+    getConf(JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE)
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
