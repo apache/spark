@@ -146,7 +146,8 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Cast(Literal("2"), IntegerType) + Literal(3) + $"a" as "c1",
-          Coalesce(Seq(TryCast(Literal("abc"), IntegerType).replacement, Literal(3))) as "c2")
+          Coalesce(Seq(
+            Cast(Literal("abc"), IntegerType, evalMode = EvalMode.TRY), Literal(3))) as "c2")
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
