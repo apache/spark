@@ -1670,8 +1670,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         Seq(
           Config(
             None),
-        Config(
-        Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
+          Config(
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
