@@ -236,7 +236,7 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator) extends BinaryExpression
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryExpression
   with GetArrayItemUtil
   with ExpectsInputTypes
   with ExtractValue
@@ -423,7 +423,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         }
 
         if (!$found) {
-          s"${ev.isNull} = true;"
+          ${ev.isNull} = true;
         } $nullCheck else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }

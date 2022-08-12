@@ -2,25 +2,17 @@
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NULL
 
 
 -- !query
 select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select map(1, 'a', 2, 'b')[5]
-       ^^^^^^^^^^^^^^^^^^^^^^
+NULL
 
 
 -- !query
@@ -108,22 +100,14 @@ NULL
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NULL
 
 
 -- !query
 select element_at(map('a', 1, 'b', 2), 'c')
 -- !query schema
-struct<>
+struct<element_at(map(a, 1, b, 2), c):int>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 'c' does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map('a', 1, 'b', 2), 'c')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NULL
