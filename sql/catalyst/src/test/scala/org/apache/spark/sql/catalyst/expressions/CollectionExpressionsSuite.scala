@@ -2163,6 +2163,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayExcept(oneNull, empty), Seq(null))
     checkEvaluation(ArrayExcept(twoNulls, empty), Seq(null))
+
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType))),
+      Seq(2d, null))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+      Seq(2d, null))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(2d))
+    checkEvaluation(ArrayExcept(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(2d))
   }
 
   test("Array Intersect") {
@@ -2288,6 +2305,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
     checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
+
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d, null), ArrayType(DoubleType)),
+      Literal.create(Seq(1d), ArrayType(DoubleType, false))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(1d))
+    checkEvaluation(ArrayIntersect(
+      Literal.create(Seq(1d, 2d), ArrayType(DoubleType, false)),
+      Literal.create(Seq(1d, null), ArrayType(DoubleType))),
+      Seq(1d))
   }
 
   test("SPARK-31980: Start and end equal in month range") {
