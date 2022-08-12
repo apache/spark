@@ -387,7 +387,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: integer (nullable = true)
          |-- name: string (nullable = true)
-        <BLANKLINE>
         """
         print(self._jdf.schema().treeString())
 
@@ -3380,10 +3379,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             else:
                 raise TypeError("col should be a string or a Column")
         else:
-            for col in cols:
-                if not isinstance(col, str):
-                    raise TypeError("each col in the param list should be a string")
-            jdf = self._jdf.drop(self._jseq(cols))
+            jcols = [_to_java_column(c) for c in cols]
+            first_column, *remaining_columns = jcols
+            jdf = self._jdf.drop(first_column, self._jseq(remaining_columns))
 
         return DataFrame(jdf, self.sparkSession)
 

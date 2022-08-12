@@ -492,7 +492,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
-        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryBaseTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -525,7 +525,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
-        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryBaseTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -1536,8 +1536,29 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom with v2 filtering: basic - delete all") {
+    val t = "testv2filter.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t")
+      checkAnswer(spark.table(t), Seq())
+    }
+  }
+
   test("DeleteFrom: basic - delete with where clause") {
     val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t WHERE id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom with v2 filtering: basic - delete with where clause") {
+    val t = "testv2filter.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
@@ -1558,8 +1579,30 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom with v2 filtering: delete from aliased target table") {
+    val t = "testv2filter.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
   test("DeleteFrom: normalize attribute names") {
     val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom with v2 filtering: normalize attribute names") {
+    val t = "testv2filter.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
@@ -1583,6 +1626,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom with v2 filtering: fail if has subquery") {
+    val t = "testv2filter.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
+    }
+  }
+
   test("DeleteFrom: delete with unsupported predicates") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1590,6 +1647,34 @@ class DataSourceV2SQLSuite
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       val exc = intercept[AnalysisException] {
         sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
+    }
+  }
+
+  test("DeleteFrom with v2 filtering: delete with unsupported predicates") {
+    val t = "testv2filter.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
+    }
+  }
+
+  test("DeleteFrom: - delete with invalid predicate") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id = 2 AND id = id")
       }
 
       assert(spark.table(t).count === 3)

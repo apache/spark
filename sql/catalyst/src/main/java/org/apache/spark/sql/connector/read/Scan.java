@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomMetric;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.connector.read.streaming.ContinuousStream;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
@@ -126,5 +127,14 @@ public interface Scan {
    */
   default CustomMetric[] supportedCustomMetrics() {
     return new CustomMetric[]{};
+  }
+
+  /**
+   * Returns an array of custom metrics which are collected with values at the driver side only.
+   * Note that these metrics must be included in the supported custom metrics reported by
+   * `supportedCustomMetrics`.
+   */
+  default CustomTaskMetric[] reportDriverMetrics() {
+    return new CustomTaskMetric[]{};
   }
 }

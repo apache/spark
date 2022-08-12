@@ -1203,4 +1203,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     )
   }
+
+  test("SPARK-40002: ntile should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", ntile(10).over(w)).limit(3),
+      Seq(
+        Row(0, 1),
+        Row(1, 1),
+        Row(2, 1)
+      )
+    )
+  }
 }
