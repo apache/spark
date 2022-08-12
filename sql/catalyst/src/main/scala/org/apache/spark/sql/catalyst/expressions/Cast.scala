@@ -1329,7 +1329,7 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
-    val addTryCatchOnCastIfNeeded = if (!isTryCast) {
+    val castCodeWithTryCatchIfNeeded = if (!isTryCast) {
       s"${cast(input, result, resultIsNull)}"
     } else {
       s"""
@@ -1344,7 +1344,7 @@ case class Cast(
       boolean $resultIsNull = $inputIsNull;
       $javaType $result = ${CodeGenerator.defaultValue(resultType)};
       if (!$inputIsNull) {
-        $addTryCatchOnCastIfNeeded
+        $castCodeWithTryCatchIfNeeded
       }
     """
   }

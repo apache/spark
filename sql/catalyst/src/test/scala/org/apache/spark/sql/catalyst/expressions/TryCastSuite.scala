@@ -101,7 +101,7 @@ class TryCastSuite extends CastWithAnsiOnSuite {
 }
 
 class TryCastThrowExceptionSuite extends SparkFunSuite with ExpressionEvalHelper {
-  // The method checkExceptionInExpression is overridedn in TryCastSuite, so here we have a
+  // The method checkExceptionInExpression is overridden in TryCastSuite, so here we have a
   // new test suite for testing exceptions from the child of `try_cast()`.
   test("TryCast should not catch the exception from it's child") {
     val child = Divide(Literal(1.0), Literal(0.0), failOnError = true)
