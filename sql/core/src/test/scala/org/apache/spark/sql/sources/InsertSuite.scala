@@ -1271,9 +1271,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (I) select true from (select 1)")
-        }.getMessage.contains(
-          "requires that the data to be inserted have the same number of columns as the " +
-            "target table"))
+        }.getMessage.contains("A column or function parameter with name `I` cannot be resolved"))
       }
     }
     withSQLConf(
@@ -1282,7 +1280,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean, s bigint default 42) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t(i) values (default)")
-        }.getMessage.contains(addOneColButExpectedTwo))
+        }.getMessage.contains(
+          "Cannot write to table due to mismatched user specified column size(2) " +
+            "and data column size(1)"))
       }
     }
   }
