@@ -19,9 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import org.scalatest.Assertions.assert
+
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -32,8 +35,8 @@ class InMemoryTableWithV2Filter(
     properties: util.Map[String, String])
   extends InMemoryBaseTable(name, schema, partitioning, properties) with SupportsDeleteV2 {
 
-  override def canDeleteWhere(filters: Array[Predicate]): Boolean = {
-    InMemoryTableWithV2Filter.supportsFilters(filters)
+  override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
+    InMemoryTableWithV2Filter.supportsPredicates(predicates)
   }
 
   override def deleteWhere(filters: Array[Predicate]): Unit = dataMap.synchronized {
@@ -84,6 +87,46 @@ class InMemoryTableWithV2Filter(
       }
     }
   }
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
+
+    new InMemoryWriterBuilderWithOverWrite()
+  }
+
+  private class InMemoryWriterBuilderWithOverWrite() extends InMemoryWriterBuilder
+    with SupportsOverwriteV2 {
+
+    override def truncate(): WriteBuilder = {
+      assert(writer == Append)
+      writer = TruncateAndAppend
+      streamingWriter = StreamingTruncateAndAppend
+      this
+    }
+
+    override def overwrite(predicates: Array[Predicate]): WriteBuilder = {
+      assert(writer == Append)
+      writer = new Overwrite(predicates)
+      streamingWriter = new StreamingNotSupportedOperation(
+        s"overwrite (${predicates.mkString("filters(", ", ", ")")})")
+      this
+    }
+
+    override def canOverwrite(predicates: Array[Predicate]): Boolean = {
+      InMemoryTableWithV2Filter.supportsPredicates(predicates)
+    }
+  }
+
+  private class Overwrite(predicates: Array[Predicate]) extends TestBatchWrite {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+      val deleteKeys = InMemoryTableWithV2Filter.filtersToKeys(
+        dataMap.keys, partCols.map(_.toSeq.quoted), predicates)
+      dataMap --= deleteKeys
+      withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
 }
 
 object InMemoryTableWithV2Filter {
@@ -96,9 +139,10 @@ object InMemoryTableWithV2Filter {
       filters.flatMap(splitAnd).forall {
         case p: Predicate if p.name().equals("=") =>
           p.children()(1).asInstanceOf[LiteralValue[_]].value ==
-            extractValue(p.children()(0).toString, partitionNames, partValues)
+            InMemoryBaseTable.extractValue(p.children()(0).toString, partitionNames, partValues)
         case p: Predicate if p.name().equals("<=>") =>
-          val attrVal = extractValue(p.children()(0).toString, partitionNames, partValues)
+          val attrVal = InMemoryBaseTable
+            .extractValue(p.children()(0).toString, partitionNames, partValues)
           val value = p.children()(1).asInstanceOf[LiteralValue[_]].value
           if (attrVal == null && value == null) {
             true
@@ -109,10 +153,10 @@ object InMemoryTableWithV2Filter {
           }
         case p: Predicate if p.name().equals("IS NULL") =>
           val attr = p.children()(0).toString
-          null == extractValue(attr, partitionNames, partValues)
+          null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
         case p: Predicate if p.name().equals("IS NOT NULL") =>
           val attr = p.children()(0).toString
-          null != extractValue(attr, partitionNames, partValues)
+          null != InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
         case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
@@ -120,26 +164,14 @@ object InMemoryTableWithV2Filter {
     }
   }
 
-  def supportsFilters(filters: Array[Predicate]): Boolean = {
-    filters.flatMap(splitAnd).forall {
+  def supportsPredicates(predicates: Array[Predicate]): Boolean = {
+    predicates.flatMap(splitAnd).forall {
       case p: Predicate if p.name().equals("=") => true
       case p: Predicate if p.name().equals("<=>") => true
       case p: Predicate if p.name().equals("IS NULL") => true
       case p: Predicate if p.name().equals("IS NOT NULL") => true
       case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
       case _ => false
-    }
-  }
-
-  private def extractValue(
-      attr: String,
-      partFieldNames: Seq[String],
-      partValues: Seq[Any]): Any = {
-    partFieldNames.zipWithIndex.find(_._1 == attr) match {
-      case Some((_, partIndex)) =>
-        partValues(partIndex)
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
     }
   }
 
