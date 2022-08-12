@@ -1644,13 +1644,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // Run the test several times using each configuration.
     Seq(
       TestCase(
-        dataSource = "parquet",
-        Seq(
-          Config(
-            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")),
-          Config(
-            None))),
-      TestCase(
         dataSource = "csv",
         Seq(
           Config(
@@ -1671,7 +1664,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Config(
             None),
           Config(
-            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false"))))
+            Some(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")))),
+      TestCase(
+        dataSource = "parquet",
+        Seq(
+          Config(
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")),
+          Config(
+            None)))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
