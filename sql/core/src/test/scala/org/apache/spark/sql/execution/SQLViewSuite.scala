@@ -252,7 +252,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains("default.testView is a view. 'LOAD DATA' expects a table"))
+      assert(e.contains("default.testview is a view. 'LOAD DATA' expects a table"))
     }
   }
 

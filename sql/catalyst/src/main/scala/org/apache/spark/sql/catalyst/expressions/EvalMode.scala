@@ -14,14 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.expressions
 
-package org.apache.spark.sql.hive.execution.command
-
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * The class contains tests for the `SHOW FUNCTIONS` command to check V1 Hive external catalog.
+ * Expression evaluation modes.
+ *   - LEGACY: the default evaluation mode, which is compliant to Hive SQL.
+ *   - ANSI: a evaluation mode which is compliant to ANSI SQL standard.
+ *   - TRY: a evaluation mode for `try_*` functions. It is identical to ANSI evaluation mode
+ *          except for returning null result on errors.
  */
-class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
+
+object EvalMode extends Enumeration {
+  val LEGACY, ANSI, TRY = Value
+
+  def fromSQLConf(conf: SQLConf): Value = if (conf.ansiEnabled) {
+    ANSI
+  } else {
+    LEGACY
+  }
+
+  def fromBoolean(ansiEnabled: Boolean): Value = if (ansiEnabled) {
+    ANSI
+  } else {
+    LEGACY
+  }
 }

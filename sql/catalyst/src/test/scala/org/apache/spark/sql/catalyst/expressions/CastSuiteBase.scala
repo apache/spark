@@ -48,12 +48,12 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  protected def ansiEnabled: Boolean
+  protected def evalMode: EvalMode.Value
 
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId, ansiEnabled)
-      case _ => Cast(Literal(v), targetType, timeZoneId, ansiEnabled)
+      case lit: Expression => Cast(lit, targetType, timeZoneId, evalMode)
+      case _ => Cast(Literal(v), targetType, timeZoneId, evalMode)
     }
   }
 
@@ -76,7 +76,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(message.contains(optionalExpectedMsg.get))
     } else {
       assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
-      if (ansiEnabled) {
+      if (evalMode == EvalMode.ANSI) {
         assert(message.contains("with ANSI mode on"))
         assert(message.contains(s"set ${SQLConf.ANSI_ENABLED.key} as false"))
       }
@@ -986,10 +986,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
       "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
-      val e = intercept[ArithmeticException] {
-        cast(Literal.create(interval), DayTimeIntervalType()).eval()
-      }.getMessage
-      assert(e.contains("long overflow"))
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal.create(interval), DayTimeIntervalType()),
+        "long overflow")
     }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
@@ -1030,10 +1029,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
       .foreach { interval =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("Error parsing interval year-month string: integer overflow"))
+        checkExceptionInExpression[IllegalArgumentException](
+          cast(Literal.create(interval), YearMonthIntervalType()),
+          "Error parsing interval year-month string: integer overflow")
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
@@ -1099,13 +1097,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
       val dataType = YearMonthIntervalType()
-      val e = intercept[IllegalArgumentException] {
-        cast(Literal.create(interval), dataType).eval()
-      }.getMessage
-      assert(e.contains(s"Interval string does not match year-month format of " +
+      val expectedMsg = s"Interval string does not match year-month format of " +
         s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
           .map(format => s"`$format`").mkString(", ")} " +
-        s"when cast to ${dataType.typeName}: $interval"))
+        s"when cast to ${dataType.typeName}: $interval"
+      checkExceptionInExpression[IllegalArgumentException](
+        cast(Literal.create(interval), dataType),
+        expectedMsg
+      )
     }
     Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
       ("1", YearMonthIntervalType(YEAR, MONTH)),
@@ -1118,13 +1117,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
       .foreach { case (interval, dataType) =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), dataType).eval()
-        }.getMessage
-        assert(e.contains(s"Interval string does not match year-month format of " +
+        val expectedMsg = s"Interval string does not match year-month format of " +
           s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval"))
+          s"when cast to ${dataType.typeName}: $interval"
+        checkExceptionInExpression[IllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          expectedMsg)
       }
   }
 
@@ -1238,15 +1237,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("1.23", DayTimeIntervalType(MINUTE)),
       ("1.23", DayTimeIntervalType(MINUTE)))
       .foreach { case (interval, dataType) =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), dataType).eval()
-        }.getMessage
-        assert(e.contains(s"Interval string does not match day-time format of " +
+        val expectedMsg = s"Interval string does not match day-time format of " +
           s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-          "to restore the behavior before Spark 3.0."))
+          "to restore the behavior before Spark 3.0."
+        checkExceptionInExpression[IllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          expectedMsg
+        )
       }
 
     // Check first field outof bound
@@ -1261,19 +1261,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
       ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
       .foreach { case (interval, dataType) =>
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), dataType).eval()
-        }.getMessage
-        assert(e.contains(s"Interval string does not match day-time format of " +
+        val expectedMsg = "Interval string does not match day-time format of " +
           s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-          "to restore the behavior before Spark 3.0."))
+          "to restore the behavior before Spark 3.0."
+        checkExceptionInExpression[IllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          expectedMsg)
       }
   }
 
-  test("cast ANSI intervals to decimals") {
+  test("cast ANSI intervals to/from decimals") {
     Seq(
       (Duration.ZERO, DayTimeIntervalType(DAY), DecimalType(10, 3)) -> Decimal(0, 10, 3),
       (Duration.ofHours(-1), DayTimeIntervalType(HOUR), DecimalType(10, 1)) -> Decimal(-10, 10, 1),
@@ -1293,16 +1293,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         Cast(Literal.create(duration, intervalType), targetType),
         expected)
+      checkEvaluation(
+        Cast(Literal.create(expected, targetType), intervalType),
+        duration)
     }
 
     dayTimeIntervalTypes.foreach { it =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
     }
 
     yearMonthIntervalTypes.foreach { it =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
     }
   }
 

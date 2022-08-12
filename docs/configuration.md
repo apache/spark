@@ -1530,7 +1530,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
-    Default unit is bytes, unless otherwise specified.
+    Default unit is bytes, unless otherwise specified. This configuration only applies to
+    `spark.io.compression.codec`.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1540,7 +1541,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size in Snappy compression, in the case when Snappy compression codec is used. 
     Lowering this block size will also lower shuffle memory usage when Snappy is used.
-    Default unit is bytes, unless otherwise specified.
+    Default unit is bytes, unless otherwise specified. This configuration only applies
+    to `spark.io.compression.codec`.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1549,7 +1551,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>1</td>
   <td>
     Compression level for Zstd compression codec. Increasing the compression level will result in better
-    compression at the expense of more CPU and memory.
+    compression at the expense of more CPU and memory. This configuration only applies to 
+    `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1559,7 +1562,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Buffer size in bytes used in Zstd compression, in the case when Zstd compression codec
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
-    might increase the compression cost because of excessive JNI call overhead.
+    might increase the compression cost because of excessive JNI call overhead. This
+    configuration only applies to `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
 </tr>

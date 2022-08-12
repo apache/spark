@@ -69,7 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
             val fallbackVersion = if (VersionUtils.isHadoop3) {
-              "3.3.3"
+              "3.3.4"
             } else {
               "2.7.4"
             }

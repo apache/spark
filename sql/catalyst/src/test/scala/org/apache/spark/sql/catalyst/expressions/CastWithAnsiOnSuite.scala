@@ -35,7 +35,9 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
-  override def ansiEnabled: Boolean = true
+  override def evalMode: EvalMode.Value = EvalMode.ANSI
+
+  private def isTryCast = evalMode == EvalMode.TRY
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
@@ -334,22 +336,30 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
 
     {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = evalMode == EvalMode.TRY))
       assert(ret.resolved)
-      checkExceptionInExpression[SparkRuntimeException](
-        ret, """cannot be cast to "BOOLEAN"""")
+      if (!isTryCast) {
+        checkExceptionInExpression[SparkRuntimeException](
+          ret, """cannot be cast to "BOOLEAN"""")
+      } else {
+        checkEvaluation(ret, Array(null, true, false))
+      }
     }
   }
 
   test("cast from array III") {
     val from: DataType = ArrayType(DoubleType, containsNull = false)
     val array = Literal.create(Seq(1.0, 2.0), from)
-    val to: DataType = ArrayType(IntegerType, containsNull = false)
+    val to: DataType = ArrayType(IntegerType, containsNull = isTryCast)
     val answer = Literal.create(Seq(1, 2), to).value
     checkEvaluation(cast(array, to), answer)
 
     val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
-    checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
+    if (!isTryCast) {
+      checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
+    } else {
+      checkEvaluation(cast(overflowArray, to), Array(null))
+    }
   }
 
   test("cast from map II") {
@@ -378,26 +388,38 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
     {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkExceptionInExpression[NumberFormatException](
-        ret,
-        castErrMsg("a", IntegerType))
+      if (!isTryCast) {
+        assert(ret.resolved)
+        checkExceptionInExpression[NumberFormatException](
+          ret,
+          castErrMsg("a", IntegerType))
+      } else {
+        assert(!ret.resolved)
+      }
     }
 
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved)
-      checkExceptionInExpression[SparkRuntimeException](
-        ret,
-        castErrMsg("123", BooleanType))
+      if (!isTryCast) {
+        assert(ret.resolved)
+        checkExceptionInExpression[SparkRuntimeException](
+          ret,
+          castErrMsg("123", BooleanType))
+      } else {
+        assert(!ret.resolved)
+      }
     }
 
     {
       val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkExceptionInExpression[NumberFormatException](
-        ret,
-        castErrMsg("a", IntegerType))
+      if (!isTryCast) {
+        assert(ret.resolved)
+        checkExceptionInExpression[NumberFormatException](
+          ret,
+          castErrMsg("a", IntegerType))
+      } else {
+        assert(!ret.resolved)
+      }
     }
   }
 
@@ -406,12 +428,14 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     val map = Literal.create(Map(1.0 -> 2.0), from)
     val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
     val answer = Literal.create(Map(1 -> 2), to).value
-    checkEvaluation(cast(map, to), answer)
+    if (!isTryCast) {
+      checkEvaluation(cast(map, to), answer)
 
-    Seq(
-      Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
-      Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
-      checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
+      Seq(
+        Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
+        Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
+        checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
+      }
     }
   }
 
@@ -471,22 +495,31 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved)
-      checkExceptionInExpression[SparkRuntimeException](
-        ret,
-        castErrMsg("123", BooleanType))
+      if (!isTryCast) {
+        assert(ret.resolved)
+        checkExceptionInExpression[SparkRuntimeException](
+          ret,
+          castErrMsg("123", BooleanType))
+      } else {
+        assert(!ret.resolved)
+      }
     }
   }
 
   test("cast from struct III") {
     val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
     val struct = Literal.create(InternalRow(1.0), from)
-    val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+    val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = isTryCast)))
     val answer = Literal.create(InternalRow(1), to).value
     checkEvaluation(cast(struct, to), answer)
 
     val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
-    checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
+    val ret = cast(overflowStruct, to)
+    if (!isTryCast) {
+      checkExceptionInExpression[ArithmeticException](ret, "overflow")
+    } else {
+      checkEvaluation(ret, Row(null))
+    }
   }
 
   test("complex casting") {
@@ -513,10 +546,14 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         StructType(Seq(
           StructField("l", LongType, nullable = true)))))))
 
-    assert(ret.resolved)
-    checkExceptionInExpression[NumberFormatException](
-      ret,
-      castErrMsg("true", IntegerType))
+    if (!isTryCast) {
+      assert(ret.resolved)
+      checkExceptionInExpression[NumberFormatException](
+        ret,
+        castErrMsg("true", IntegerType))
+    } else {
+      assert(!ret.resolved)
+    }
   }
 
   test("ANSI mode: cast string to timestamp with parse error") {

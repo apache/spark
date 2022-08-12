@@ -54,7 +54,7 @@ private[sql] object PredicateUtils {
           Some(In(attribute, Array.empty[Any]))
         }
 
-      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate =>
+      case "=" | "<=>" | ">" | "<" | ">=" | "<=" if isValidBinaryPredicate() =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         val v1Value = CatalystTypeConverters.convertToScala(value.value, value.dataType)
@@ -77,7 +77,7 @@ private[sql] object PredicateUtils {
         }
         Some(v1Filter)
 
-      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate =>
+      case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate() =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
         if (!value.dataType.sameType(StringType)) return None
@@ -131,5 +131,9 @@ private[sql] object PredicateUtils {
 
       case _ => None
     }
+  }
+
+  def toV1(predicates: Array[Predicate]): Array[Filter] = {
+    predicates.flatMap(toV1(_))
   }
 }
