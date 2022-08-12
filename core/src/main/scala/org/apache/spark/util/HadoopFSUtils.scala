@@ -254,7 +254,7 @@ private[spark] object HadoopFSUtils extends Logging {
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
-      val nestedFiles: Seq[FileStatus] = contextOpt match {
+      val filteredNestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
           parallelListLeafFilesInternal(
             context,
@@ -281,8 +281,12 @@ private[spark] object HadoopFSUtils extends Logging {
               parallelismMax = parallelismMax)
           }
       }
-      val allFiles = topLevelFiles ++ nestedFiles
-      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
+      val filteredTopLevelFiles = if (filter != null) {
+        topLevelFiles.filter(f => filter.accept(f.getPath))
+      } else {
+        topLevelFiles
+      }
+      filteredTopLevelFiles ++ filteredNestedFiles
     }
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
