@@ -1273,7 +1273,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
   }
 
-  test("cast ANSI intervals to decimals") {
+  test("cast ANSI intervals to/from decimals") {
     Seq(
       (Duration.ZERO, DayTimeIntervalType(DAY), DecimalType(10, 3)) -> Decimal(0, 10, 3),
       (Duration.ofHours(-1), DayTimeIntervalType(HOUR), DecimalType(10, 1)) -> Decimal(-10, 10, 1),
@@ -1293,16 +1293,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         Cast(Literal.create(duration, intervalType), targetType),
         expected)
+      checkEvaluation(
+        Cast(Literal.create(expected, targetType), intervalType),
+        duration)
     }
 
     dayTimeIntervalTypes.foreach { it =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
     }
 
     yearMonthIntervalTypes.foreach { it =>
       checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
         Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
     }
   }
 
