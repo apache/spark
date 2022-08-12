@@ -2924,6 +2924,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
+  val ADD_MISSING_DEFAULT_COLUMN_VALUES_FOR_INSERTS_WITH_EXPLICIT_COLUMNS =
+    buildConf("spark.sql.defaultColumn.addMissingValuesForInsertsWithExplicitColumns")
+      .internal()
+      .doc("When true, allow INSERT INTO commands with explicit columns (such as " +
+        "INSERT INTO t(a, b)) to specify fewer columns than the target table; the analyzer will " +
+        "assign default values for remaining columns. Otherwise, if false, return an error.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
       "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
@@ -4511,6 +4521,9 @@ class SQLConf extends Serializable with Logging {
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+
+  def addMissingValuesForInsertsWithExplicitColumns: Boolean =
+    getConf(SQLConf.ADD_MISSING_DEFAULT_COLUMN_VALUES_FOR_INSERTS_WITH_EXPLICIT_COLUMNS)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 

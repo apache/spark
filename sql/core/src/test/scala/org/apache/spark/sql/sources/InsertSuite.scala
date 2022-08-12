@@ -1276,6 +1276,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "target table"))
       }
     }
+    withSQLConf(
+      SQLConf.ADD_MISSING_DEFAULT_COLUMN_VALUES_FOR_INSERTS_WITH_EXPLICIT_COLUMNS.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint default 42) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t(i) values (default)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+    }
   }
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Positive tests") {

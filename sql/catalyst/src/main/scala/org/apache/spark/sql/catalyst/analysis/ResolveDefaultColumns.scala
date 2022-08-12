@@ -319,7 +319,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       numQueryOutputs: Int,
       schema: StructType,
       hasUserSpecifiedFields: Boolean): Seq[Expression] = {
-    if (hasUserSpecifiedFields) {
+    if (hasUserSpecifiedFields && SQLConf.get.addMissingValuesForInsertsWithExplicitColumns) {
       val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
       val numDefaultExpressionsToAdd = remainingFields.size
       Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
