@@ -262,9 +262,10 @@ class Catalog:
         """
         return self._jcatalog.databaseExists(dbName)
 
-    @since(2.0)
     def listTables(self, dbName: Optional[str] = None) -> List[Table]:
         """Returns a list of tables/views in the specified database.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
