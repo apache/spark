@@ -137,7 +137,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                             InputAdapter
                                                                               Scan parquet default.web_site [web_site_sk,web_site_id]
                                   WholeStageCodegen (43)
-                                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
                                         Exchange [channel] #12
                                           WholeStageCodegen (42)

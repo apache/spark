@@ -88,7 +88,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                                                                 InputAdapter
                                                                                                                   ReusedExchange [d_date_sk] #5
                                                   WholeStageCodegen (21)
-                                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
+                                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_state,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
                                                       InputAdapter
                                                         Exchange [s_state] #11
                                                           WholeStageCodegen (20)
