@@ -17,29 +17,24 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{
+  AdaptiveSparkPlanHelper,
+  DisableAdaptiveExecutionSuite,
+  EnableAdaptiveExecutionSuite
+}
 import org.apache.spark.sql.functions.{lit, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
 class ReplaceNullWithFalseInPredicateWithAQEEndToEndSuite extends
-  ReplaceNullWithFalseInPredicateEndToEndSuite {
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.sql.adaptive.forceApply", "true")
-  }
-}
+  ReplaceNullWithFalseInPredicateEndToEndSuite with EnableAdaptiveExecutionSuite
 
 class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession with
-  AdaptiveSparkPlanHelper {
+  AdaptiveSparkPlanHelper with DisableAdaptiveExecutionSuite {
   import testImplicits._
-
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.sql.adaptive.forceApply", "false")
-  }
 
   private def checkPlanIsEmptyLocalScan(df: DataFrame): Unit =
     stripAQEPlan(df.queryExecution.executedPlan) match {
