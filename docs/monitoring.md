@@ -1212,6 +1212,7 @@ This is the component with the largest amount of instrumented metrics
   - executors.numberAllExecutors
   - executors.numberTargetExecutors
   - executors.numberMaxNeededExecutors
+  - executors.numberDecommissioningExecutors
   - executors.numberExecutorsGracefullyDecommissioned.count
   - executors.numberExecutorsDecommissionUnfinished.count
   - executors.numberExecutorsExitedUnexpectedly.count

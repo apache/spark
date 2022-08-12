@@ -1005,6 +1005,8 @@ private[spark] class ExecutorAllocationManagerSource(
   registerGauge("numberMaxNeededExecutors",
     executorAllocationManager.numExecutorsTargetPerResourceProfileId.keys
       .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
+  registerGauge("numberDecommissioningExecutors",
+    executorAllocationManager.executorMonitor.decommissioningCount, 0)
 }
 
 private object ExecutorAllocationManager {
