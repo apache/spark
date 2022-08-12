@@ -2195,14 +2195,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       checkAnswer(spark.table("t1"), Row(1, "str1"))
     }
 
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      withTable("t1") {
-        sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
-        sql("INSERT INTO TABLE t1 select * from jt where a=1")
-        checkAnswer(spark.table("t1"), Row(1, "str1", null))
-        sql("INSERT INTO TABLE t1 select *, 2 from jt where a=2")
-        checkAnswer(spark.table("t1"), Seq(Row(1, "str1", null), Row(2, "str2", 2)))
-      }
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
+      sql("INSERT INTO TABLE t1 (c1, c2, c3) select * from jt where a=1")
+      checkAnswer(spark.table("t1"), Row(1, "str1", null))
+      sql("INSERT INTO TABLE t1  (c1, c2, c3) select *, 2 from jt where a=2")
+      checkAnswer(spark.table("t1"), Seq(Row(1, "str1", null), Row(2, "str2", 2)))
     }
   }
 
