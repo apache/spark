@@ -223,8 +223,6 @@ class StreamingQuery:
         Get the most recent query progress updates for this query
 
         >>> sq.lastProgress
-        {'id': ..., 'runId': ...}
-
         >>> sq.stop()
         """
         lastProgress = self._jsq.lastProgress()
