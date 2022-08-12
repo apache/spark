@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.AbstractExpression;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * @since 3.2.0
  */
 @Evolving
-public final class Min implements AggregateFunc {
+public final class Min extends AbstractExpression implements AggregateFunc {
   private final Expression input;
 
   public Min(Expression column) { this.input = column; }
@@ -35,7 +36,4 @@ public final class Min implements AggregateFunc {
 
   @Override
   public Expression[] children() { return new Expression[]{ input }; }
-
-  @Override
-  public String toString() { return "MIN(" + input.describe() + ")"; }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.AbstractExpression;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
@@ -26,14 +27,11 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * @since 3.2.0
  */
 @Evolving
-public final class CountStar implements AggregateFunc {
+public final class CountStar extends AbstractExpression implements AggregateFunc {
 
   public CountStar() {
   }
 
   @Override
   public Expression[] children() { return EMPTY_EXPRESSION; }
-
-  @Override
-  public String toString() { return "COUNT(*)"; }
 }

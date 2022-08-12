@@ -15,30 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.aggregate;
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.AbstractExpression;
-import org.apache.spark.sql.connector.expressions.Expression;
+import java.io.Serializable;
 
-/**
- * An aggregate function that returns the summation of all the values in a group.
- *
- * @since 3.2.0
- */
-@Evolving
-public final class Sum extends AbstractExpression implements AggregateFunc {
-  private final Expression input;
-  private final boolean isDistinct;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
-  public Sum(Expression column, boolean isDistinct) {
-    this.input = column;
-    this.isDistinct = isDistinct;
-  }
-
-  public Expression column() { return input; }
-  public boolean isDistinct() { return isDistinct; }
-
+public abstract class AbstractExpression implements Expression, Serializable {
   @Override
-  public Expression[] children() { return new Expression[]{ input }; }
+  public String toString() {
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
+  }
 }

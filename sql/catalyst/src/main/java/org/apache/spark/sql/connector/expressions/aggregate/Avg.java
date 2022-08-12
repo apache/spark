@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.AbstractExpression;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * @since 3.3.0
  */
 @Evolving
-public final class Avg implements AggregateFunc {
+public final class Avg extends AbstractExpression implements AggregateFunc {
   private final Expression input;
   private final boolean isDistinct;
 
@@ -40,13 +41,4 @@ public final class Avg implements AggregateFunc {
 
   @Override
   public Expression[] children() { return new Expression[]{ input }; }
-
-  @Override
-  public String toString() {
-    if (isDistinct) {
-      return "AVG(DISTINCT " + input.describe() + ")";
-    } else {
-      return "AVG(" + input.describe() + ")";
-    }
-  }
 }
