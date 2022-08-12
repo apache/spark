@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -64,28 +61,6 @@ sealed trait CatalystIdentifier {
   override def toString: String = quotedString
 }
 
-object CatalystIdentifier {
-  private def sessionCatalogOption(database: Option[String]): Option[String] = {
-    if (!SQLConf.get.getConf(SQLConf.LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME) &&
-      database.isDefined &&
-      database.get != SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)) {
-      Some(SESSION_CATALOG_NAME)
-    } else {
-      None
-    }
-  }
-
-  def attachSessionCatalog(identifier: TableIdentifier): TableIdentifier = {
-    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
-    identifier.copy(catalog = catalog)
-  }
-
-  def attachSessionCatalog(identifier: FunctionIdentifier): FunctionIdentifier = {
-    val catalog = identifier.catalog.orElse(sessionCatalogOption(identifier.database))
-    identifier.copy(catalog = catalog)
-  }
-}
-
 /**
  * Encapsulates an identifier that is either a alias name or an identifier that has table
  * name and a qualifier.
@@ -113,6 +88,7 @@ object AliasIdentifier {
  */
 case class TableIdentifier(table: String, database: Option[String], catalog: Option[String])
   extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = table
 
@@ -138,6 +114,7 @@ object TableIdentifier {
  */
 case class FunctionIdentifier(funcName: String, database: Option[String], catalog: Option[String])
   extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = funcName
 

@@ -1908,18 +1908,9 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Counts the number of elements of an iterator using a while loop rather than calling
-   * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
-   * in the current version of Scala.
+   * Counts the number of elements of an iterator.
    */
-  def getIteratorSize(iterator: Iterator[_]): Long = {
-    var count = 0L
-    while (iterator.hasNext) {
-      count += 1L
-      iterator.next()
-    }
-    count
-  }
+  def getIteratorSize(iterator: Iterator[_]): Long = Iterators.size(iterator)
 
   /**
    * Generate a zipWithIndex iterator, avoid index value overflowing problem

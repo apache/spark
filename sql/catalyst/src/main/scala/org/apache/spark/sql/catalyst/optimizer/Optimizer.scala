@@ -166,8 +166,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators,
       CombineUnions,
       RemoveNoopUnion) ::
-    Batch("OptimizeLimitZero", Once,
-      OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -530,9 +528,11 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   }
 
   /**
-   * Remove redundant alias expression from a LogicalPlan and its subtree. A set of excludes is used
-   * to prevent the removal of seemingly redundant aliases used to deduplicate the input for a
-   * (self) join or to prevent the removal of top-level subquery attributes.
+   * Remove redundant alias expression from a LogicalPlan and its subtree.
+   * A set of excludes is used to prevent the removal of:
+   * - seemingly redundant aliases used to deduplicate the input for a (self) join,
+   * - top-level subquery attributes and
+   * - attributes of a Union's first child
    */
   private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     if (!plan.containsPattern(ALIAS)) {
@@ -559,6 +559,21 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
+      case _: Union =>
+        var first = true
+        plan.mapChildren { child =>
+          if (first) {
+            first = false
+            // `Union` inherits its first child's outputs. We don't remove those aliases from the
+            // first child's tree that prevent aliased attributes to appear multiple times in the
+            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
+            // output attributes could return incorrect result.
+            removeRedundantAliases(child, excluded ++ child.outputSet)
+          } else {
+            removeRedundantAliases(child, excluded)
+          }
+        }
+
       case _ =>
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
@@ -568,9 +583,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           newChild
         }
 
-        // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
-        // case we use the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
@@ -1259,9 +1271,9 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 object TransposeWindow extends Rule[LogicalPlan] {
   private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
-    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
-      case (l, r) => l.semanticEquals(r)
-    })
+    ps1.length < ps2.length && ps1.forall { expr1 =>
+      ps2.exists(expr1.semanticEquals)
+    }
   }
 
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
@@ -1549,6 +1561,12 @@ object EliminateSorts extends Rule[LogicalPlan] {
     plan match {
       case Sort(_, global, child) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
+      case Sort(sortOrder, true, child) =>
+        // For this case, the upper sort is local so the ordering of present sort is unnecessary,
+        // so here we only preserve its output partitioning using `RepartitionByExpression`.
+        // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
+        // This behavior is same with original global sort.
+        RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
       case other if canEliminateGlobalSort(other) =>
@@ -1948,7 +1966,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 /**
  * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
- * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ * 2. Replace [[Limit]]/[[LocalLimit]]/[[GlobalLimit]] operators with empty [[LocalRelation]]
+ *    if the limit value is zero (0).
+ * 3. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
 object EliminateLimits extends Rule[LogicalPlan] {
@@ -1962,6 +1982,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+
+    case LocalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case GlobalLimit(IntegerLiteral(0), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
@@ -2396,40 +2421,5 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
-  }
-}
-
-/**
- * Replaces GlobalLimit 0 and LocalLimit 0 nodes (subtree) with empty Local Relation, as they don't
- * return any rows.
- */
-object OptimizeLimitZero extends Rule[LogicalPlan] {
-  // returns empty Local Relation corresponding to given plan
-  private def empty(plan: LogicalPlan) =
-    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LIMIT, LITERAL)) {
-    // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
-    // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
-    // semantically equivalent to an empty relation.
-    //
-    // In such cases, the effects of Limit 0 can be propagated through the Logical Plan by replacing
-    // the (Global/Local) Limit subtree with an empty LocalRelation, thereby pruning the subtree
-    // below and triggering other optimization rules of PropagateEmptyRelation to propagate the
-    // changes up the Logical Plan.
-    //
-    // Replace Global Limit 0 nodes with empty Local Relation
-    case gl @ GlobalLimit(IntegerLiteral(0), _) =>
-      empty(gl)
-
-    // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
-    // GlobalLimit 0 node would also exist. Thus, the above case would be sufficient to handle
-    // almost all cases. However, if a user explicitly creates a Logical Plan with LocalLimit 0 node
-    // then the following rule will handle that case as well.
-    //
-    // Replace Local Limit 0 nodes with empty Local Relation
-    case ll @ LocalLimit(IntegerLiteral(0), _) =>
-      empty(ll)
   }
 }

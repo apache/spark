@@ -54,13 +54,13 @@ private[sql] class AvroOptions(
    * instead of "string" type in the default converted schema.
    */
   val schema: Option[Schema] = {
-    parameters.get("avroSchema").map(new Schema.Parser().parse).orElse({
+    parameters.get("avroSchema").map(new Schema.Parser().setValidateDefaults(false).parse).orElse({
       val avroUrlSchema = parameters.get("avroSchemaUrl").map(url => {
         log.debug("loading avro schema from url: " + url)
         val fs = FileSystem.get(new URI(url), conf)
         val in = fs.open(new Path(url))
         try {
-          new Schema.Parser().parse(in)
+          new Schema.Parser().setValidateDefaults(false).parse(in)
         } finally {
           in.close()
         }
@@ -79,14 +79,14 @@ private[sql] class AvroOptions(
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.11.0/spec.html#schema_record .
+   * See https://avro.apache.org/docs/1.11.1/spec.html#schema_record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse("recordName", "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.11.0/spec.html#schema_record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.11.1/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
 

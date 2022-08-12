@@ -159,6 +159,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // Analyze the default column values.
       val statementType = "CREATE TABLE"
       assert(ResolveDefaultColumns.analyze(columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns
+        .analyze(columnA, statementType, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        .sql == "41")
       assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(columnC, statementType)
@@ -174,7 +177,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // disabled.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE")
+          db1tbl3.schema, db1tbl3.provider, "CREATE TABLE", false)
         val columnEWithFeatureDisabled: StructField = findField("e", result)
         // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
         assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
@@ -498,16 +501,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter table") {
     withBasicCatalog { catalog =>
-      val tbl1 = catalog.externalCatalog.getTable("db2", "tbl1")
+      val tbl1 = catalog.getTableRawMetadata(TableIdentifier("tbl1", Some("db2")))
       catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
-      val newTbl1 = catalog.externalCatalog.getTable("db2", "tbl1")
+      val newTbl1 = catalog.getTableRawMetadata(TableIdentifier("tbl1", Some("db2")))
       assert(!tbl1.properties.contains("toh"))
       assert(newTbl1.properties.size == tbl1.properties.size + 1)
       assert(newTbl1.properties.get("toh") == Some("frem"))
       // Alter table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
       catalog.alterTable(tbl1.copy(identifier = TableIdentifier("tbl1")))
-      val newestTbl1 = catalog.externalCatalog.getTable("db2", "tbl1")
+      val newestTbl1 = catalog.getTableRawMetadata(TableIdentifier("tbl1", Some("db2")))
       // For hive serde table, hive metastore will set transient_lastDdlTime in table's properties,
       // and its value will be modified, here we ignore it when comparing the two tables.
       assert(newestTbl1.copy(properties = Map.empty) == tbl1.copy(properties = Map.empty))
@@ -567,12 +570,13 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get table") {
     withBasicCatalog { catalog =>
-      assert(catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
-        == catalog.externalCatalog.getTable("db2", "tbl1"))
+      val raw = catalog.externalCatalog.getTable("db2", "tbl1")
+      val withCatalog = raw.copy(
+        identifier = raw.identifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+      assert(catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2"))) == withCatalog)
       // Get table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
-      assert(catalog.getTableMetadata(TableIdentifier("tbl1"))
-        == catalog.externalCatalog.getTable("db2", "tbl1"))
+      assert(catalog.getTableMetadata(TableIdentifier("tbl1")) == withCatalog)
     }
   }
 
@@ -589,12 +593,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get tables by name") {
     withBasicCatalog { catalog =>
+      val rawTables = catalog.externalCatalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
+      val tablesWithCatalog = rawTables.map { t =>
+        t.copy(identifier = t.identifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+      }
       assert(catalog.getTablesByName(
         Seq(
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1", "tbl2")))
+      ) == tablesWithCatalog)
       // Get table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
       assert(catalog.getTablesByName(
@@ -602,18 +610,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl1"),
           TableIdentifier("tbl2")
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1", "tbl2")))
+      ) == tablesWithCatalog)
     }
   }
 
   test("get tables by name when some tables do not exist") {
     withBasicCatalog { catalog =>
+      val rawTables = catalog.externalCatalog.getTablesByName("db2", Seq("tbl1"))
+      val tablesWithCatalog = rawTables.map { t =>
+        t.copy(identifier = t.identifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+      }
       assert(catalog.getTablesByName(
         Seq(
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tblnotexit", Some("db2"))
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      ) == tablesWithCatalog)
       // Get table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
       assert(catalog.getTablesByName(
@@ -621,7 +633,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl1"),
           TableIdentifier("tblnotexit")
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      ) == tablesWithCatalog)
     }
   }
 
@@ -630,12 +642,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     val name = "砖"
     // scalastyle:on
     withBasicCatalog { catalog =>
+      val rawTables = catalog.externalCatalog.getTablesByName("db2", Seq("tbl1"))
+      val tablesWithCatalog = rawTables.map { t =>
+        t.copy(identifier = t.identifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
+      }
       assert(catalog.getTablesByName(
         Seq(
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier(name, Some("db2"))
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      ) == tablesWithCatalog)
       // Get table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
       assert(catalog.getTablesByName(
@@ -643,7 +659,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl1"),
           TableIdentifier(name)
         )
-      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      ) == tablesWithCatalog)
     }
   }
 

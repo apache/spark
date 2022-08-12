@@ -72,6 +72,8 @@ Spark Context APIs
     SparkContext.getOrCreate
     SparkContext.hadoopFile
     SparkContext.hadoopRDD
+    SparkContext.listArchives
+    SparkContext.listFiles
     SparkContext.newAPIHadoopFile
     SparkContext.newAPIHadoopRDD
     SparkContext.parallelize

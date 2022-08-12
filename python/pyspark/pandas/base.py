@@ -1179,6 +1179,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
+        if periods == 0:
+            return self.copy()
+
         col = self.spark.column
         window = (
             Window.partitionBy(*part_cols)

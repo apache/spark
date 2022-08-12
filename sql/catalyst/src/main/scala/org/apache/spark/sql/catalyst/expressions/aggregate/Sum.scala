@@ -148,14 +148,15 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  protected def getEvaluateExpression(
-      context: Option[SQLQueryContext]): Expression = resultType match {
-    case d: DecimalType =>
-      val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
-      If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
-    case _ if shouldTrackIsEmpty =>
-      If(isEmpty, Literal.create(null, resultType), sum)
-    case _ => sum
+  protected def getEvaluateExpression(context: SQLQueryContext = null): Expression = {
+    resultType match {
+      case d: DecimalType =>
+        val checkOverflowInSum = CheckOverflowInSum(sum, d, !useAnsiAdd, context)
+        If(isEmpty, Literal.create(null, resultType), checkOverflowInSum)
+      case _ if shouldTrackIsEmpty =>
+        If(isEmpty, Literal.create(null, resultType), sum)
+      case _ => sum
+    }
   }
 
   // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
@@ -192,7 +193,7 @@ case class Sum(
 
   override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
 
-  override lazy val evaluateExpression: Expression = getEvaluateExpression(queryContext)
+  override lazy val evaluateExpression: Expression = getEvaluateExpression(getContextOrNull())
 
   override def initQueryContext(): Option[SQLQueryContext] = if (useAnsiAdd) {
     Some(origin.context)
@@ -248,17 +249,15 @@ case class TrySum(child: Expression) extends SumBase(child) {
 
   override lazy val mergeExpressions: Seq[Expression] =
     if (useAnsiAdd) {
-      getMergeExpressions.map(TryEval)
+      val expressions = getMergeExpressions
+      // If the length of getMergeExpressions is larger than 1, the tail expressions are for
+      // tracking whether the input is empty, which doesn't need `TryEval` execution.
+      Seq(TryEval(expressions.head)) ++ expressions.tail
     } else {
       getMergeExpressions
     }
 
-  override lazy val evaluateExpression: Expression =
-    if (useAnsiAdd) {
-      TryEval(getEvaluateExpression(None))
-    } else {
-      getEvaluateExpression(None)
-    }
+  override lazy val evaluateExpression: Expression = getEvaluateExpression()
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

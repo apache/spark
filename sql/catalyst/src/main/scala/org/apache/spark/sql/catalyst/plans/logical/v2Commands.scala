@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.{sources, AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
@@ -537,7 +538,7 @@ case class DeleteFromTable(
  */
 case class DeleteFromTableWithFilters(
     table: LogicalPlan,
-    condition: Seq[sources.Filter]) extends LeafCommand
+    condition: Seq[Predicate]) extends LeafCommand
 
 /**
  * The logical plan of the UPDATE TABLE command.

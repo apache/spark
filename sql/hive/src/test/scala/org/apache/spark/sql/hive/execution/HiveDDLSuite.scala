@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -93,7 +93,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
     CatalogTable(
-      identifier = CatalystIdentifier.attachSessionCatalog(name),
+      identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = schema.copy(
@@ -147,14 +147,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testUnsetProperties(isDatasourceTable = false)
   }
 
-  test("alter table: set serde") {
-    testSetSerde(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde partition") {
-    testSetSerdePartition(isDatasourceTable = false)
-  }
-
   test("alter table: change column") {
     testChangeColumn(isDatasourceTable = false)
   }
@@ -170,8 +162,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("SPARK-22431: illegal nested type") {
     val queries = Seq(
       "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
-      "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
 
     queries.foreach(query => {
       val err = intercept[SparkException] {

@@ -826,6 +826,16 @@ class DataFrameSuite extends QueryTest
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
+  test("SPARK-39895: drop two column references") {
+    val col = Column("key")
+    val randomCol = Column("random")
+    val df = testData.drop(col, randomCol)
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
+  }
+
   test("drop unknown column with same name with column reference") {
     val col = Column("key")
     val df = testData.drop(col)
@@ -3347,6 +3357,67 @@ class DataFrameSuite extends QueryTest
   test("SPARK-39612: exceptAll with following count should work") {
     val d1 = Seq("a").toDF
     assert(d1.exceptAll(d1).count() === 0)
+  }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child") {
+    val df = sql(
+      """
+        |SELECT a, b AS a FROM (
+        |  SELECT a, a AS b FROM (SELECT a FROM VALUES (1) AS t(a))
+        |  UNION ALL
+        |  SELECT a, b FROM (SELECT a, b FROM VALUES (1, 2) AS t(a, b))
+        |)
+        |""".stripMargin)
+    val stringCols = df.logicalPlan.output.map(Column(_).cast(StringType))
+    val castedDf = df.select(stringCols: _*)
+    checkAnswer(castedDf, Row("1", "1") :: Row("1", "2") :: Nil)
+  }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child 2") {
+    val df = sql(
+      """
+        |SELECT
+        |  to_date(a) a,
+        |  to_date(b) b
+        |FROM
+        |  (
+        |    SELECT
+        |      a,
+        |      a AS b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a
+        |        FROM
+        |        VALUES
+        |          ('2020-02-01') AS t1(a)
+        |        GROUP BY
+        |          to_date(a)
+        |      ) t3
+        |    UNION ALL
+        |    SELECT
+        |      a,
+        |      b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a,
+        |          to_date(b) b
+        |        FROM
+        |        VALUES
+        |          ('2020-01-01', '2020-01-02') AS t1(a, b)
+        |        GROUP BY
+        |          to_date(a),
+        |          to_date(b)
+        |      ) t4
+        |  ) t5
+        |GROUP BY
+        |  to_date(a),
+        |  to_date(b);
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(java.sql.Date.valueOf("2020-02-01"), java.sql.Date.valueOf("2020-02-01")) ::
+        Row(java.sql.Date.valueOf("2020-01-01"), java.sql.Date.valueOf("2020-01-02")) :: Nil)
   }
 }
 

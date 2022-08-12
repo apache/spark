@@ -4249,6 +4249,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
         self.assert_eq(pdf.shift(3), psdf.shift(3))
         self.assert_eq(pdf.shift().shift(-1), psdf.shift().shift(-1))
+        self.assert_eq(pdf.shift(0), psdf.shift(0))
 
     def test_diff(self):
         pdf = pd.DataFrame(
