@@ -103,6 +103,26 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("limits: combines limits after Projection") {
+    val originalQuery =
+      testRelation
+        .select($"a")
+        .limit(2)
+        .select($"a", $"a" + 1)
+        .limit(5)
+        .select($"a" + 2)
+        .limit(7)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select($"a")
+        .select($"a" + 2)
+        .limit(2).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-33442: Change Combine Limit to Eliminate limit using max row") {
     // test child max row <= limit.
     val query1 = testRelation.select().groupBy()(count(1)).limit(1).analyze
