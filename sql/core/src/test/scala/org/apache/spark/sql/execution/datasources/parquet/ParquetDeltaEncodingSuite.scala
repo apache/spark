@@ -246,7 +246,7 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
         ByteBuffer.allocate(page.length)
       }
       buf.put(page)
-      buf.rewind()
+      buf.flip()
 
       reader.initFromPage(100, ByteBufferInputStream.wrap(buf))
       readData(length, writableColumnVector, 0)
