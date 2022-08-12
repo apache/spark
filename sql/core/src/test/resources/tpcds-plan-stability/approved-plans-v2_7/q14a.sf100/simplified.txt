@@ -290,7 +290,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                                       InputAdapter
                                                                                                         ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #18
                                                                   WholeStageCodegen (239)
-                                                                    HashAggregate [channel,i_brand_id,i_class_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),channel,i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
+                                                                    HashAggregate [channel,i_brand_id,i_class_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                                                                       InputAdapter
                                                                         Exchange [channel,i_brand_id,i_class_id] #27
                                                                           WholeStageCodegen (238)
@@ -324,7 +324,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                                     InputAdapter
                                                                                                       ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
                                                   WholeStageCodegen (361)
-                                                    HashAggregate [channel,i_brand_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),channel,i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
+                                                    HashAggregate [channel,i_brand_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                                                       InputAdapter
                                                         Exchange [channel,i_brand_id] #29
                                                           WholeStageCodegen (360)
@@ -358,7 +358,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                     InputAdapter
                                                                                       ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
                                   WholeStageCodegen (483)
-                                    HashAggregate [channel,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),channel,i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
+                                    HashAggregate [channel,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                                       InputAdapter
                                         Exchange [channel] #31
                                           WholeStageCodegen (482)

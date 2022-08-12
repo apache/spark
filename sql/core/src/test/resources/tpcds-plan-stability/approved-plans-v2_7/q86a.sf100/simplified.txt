@@ -53,7 +53,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,total_sum,i_cl
                                                                             InputAdapter
                                                                               Scan parquet default.item [i_item_sk,i_class,i_category]
                                                   WholeStageCodegen (9)
-                                                    HashAggregate [i_category,sum,isEmpty] [sum(total_sum),total_sum,i_category,i_class,g_category,g_class,lochierarchy,sum,isEmpty]
+                                                    HashAggregate [i_category,sum,isEmpty] [sum(total_sum),total_sum,i_class,g_category,g_class,lochierarchy,sum,isEmpty]
                                                       InputAdapter
                                                         Exchange [i_category] #7
                                                           WholeStageCodegen (8)

@@ -153,7 +153,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                             InputAdapter
                                                                               ReusedExchange [wp_web_page_sk] #13
                                   WholeStageCodegen (51)
-                                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                                    HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),id,sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
                                         Exchange [channel] #16
                                           WholeStageCodegen (50)

@@ -63,7 +63,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                                                               InputAdapter
                                                                                 Scan parquet default.store [s_store_sk,s_state]
                                                   WholeStageCodegen (11)
-                                                    HashAggregate [i_category,sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_category,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
+                                                    HashAggregate [i_category,sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
                                                       InputAdapter
                                                         Exchange [i_category] #8
                                                           WholeStageCodegen (10)
