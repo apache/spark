@@ -234,7 +234,7 @@ private[parquet] class ParquetRowConverter(
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
           // adds one field to the Catalyst schema. Then if we query the old files with the new
-          // Catalyst schema, we should only apply the existence default value to all columns > N.
+          // Catalyst schema, we should only apply the existence default value to all columns >= N.
           if (i < parquetType.getFieldCount) {
             false
           } else {
