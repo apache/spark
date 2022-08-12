@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import java.util.Locale
+
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql.execution.command
@@ -36,6 +38,10 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
   }
   override protected def dropFunction(name: String): Unit = {
     sql(s"DROP FUNCTION IF EXISTS $name")
+  }
+  override protected def qualifiedFunName(ns: String, name: String): String = {
+    // `SessionCatalog` lower-cases function names before creating.
+    super.qualifiedFunName(ns, name).toLowerCase(Locale.ROOT)
   }
 }
 

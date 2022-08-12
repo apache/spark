@@ -39,7 +39,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -652,6 +652,26 @@ class QueryExecutionErrorsSuite
         "message" -> "integer overflow",
         "alternative" -> "",
         "config" -> SQLConf.ANSI_ENABLED.key))
+  }
+
+  test("CAST_OVERFLOW: from long to ANSI intervals") {
+    Seq(
+      LongType -> "9223372036854775807L",
+      DecimalType(19, 0) -> "9223372036854775807BD").foreach { case (sourceType, sourceValue) =>
+      Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            sql(s"select CAST($sourceValue AS $it)").collect()
+          },
+          errorClass = "CAST_OVERFLOW",
+          parameters = Map(
+            "value" -> sourceValue,
+            "sourceType" -> s""""${sourceType.sql}"""",
+            "targetType" -> s""""$it"""",
+            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+          sqlState = "22005")
+      }
+    }
   }
 }
 

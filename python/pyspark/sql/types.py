@@ -448,6 +448,14 @@ class ArrayType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+
+    The below example demonstrates how to create class:`ArrayType`:
+
+    >>> arr = ArrayType(StringType())
+
+    The array can contain null (None) values by default:
+
     >>> ArrayType(StringType()) == ArrayType(StringType(), True)
     True
     >>> ArrayType(StringType(), False) == ArrayType(StringType())
@@ -511,6 +519,14 @@ class MapType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import IntegerType, FloatType, MapType, StringType
+
+    The below example demonstrates how to create class:`MapType`:
+
+    >>> map_type = MapType(StringType(), IntegerType())
+
+    The values of the map can contain null (``None``) values by default:
+
     >>> (MapType(StringType(), IntegerType())
     ...        == MapType(StringType(), IntegerType(), True))
     True
@@ -588,6 +604,7 @@ class StructField(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import StringType, StructField
     >>> (StructField("f1", StringType(), True)
     ...      == StructField("f1", StringType(), True))
     True
@@ -661,6 +678,7 @@ class StructType(DataType):
 
     Examples
     --------
+    >>> from pyspark.sql.types import *
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
     StructField('f1', StringType(), True)
@@ -684,6 +702,28 @@ class StructType(DataType):
     ...     StructField("f2", IntegerType(), False)])
     >>> struct1 == struct2
     False
+
+    The below example demonstrates how to create a DataFrame based on a struct created
+    using class:`StructType` and class:`StructField`:
+
+    >>> data = [("Alice", ["Java", "Scala"]), ("Bob", ["Python", "Scala"])]
+    >>> schema = StructType([
+    ...     StructField("name", StringType()),
+    ...     StructField("languagesSkills", ArrayType(StringType())),
+    ... ])
+    >>> df = spark.createDataFrame(data=data, schema=schema)
+    >>> df.printSchema()
+    root
+     |-- name: string (nullable = true)
+     |-- languagesSkills: array (nullable = true)
+     |    |-- element: string (containsNull = true)
+    >>> df.show()
+    +-----+---------------+
+    | name|languagesSkills|
+    +-----+---------------+
+    |Alice|  [Java, Scala]|
+    |  Bob|[Python, Scala]|
+    +-----+---------------+
     """
 
     def __init__(self, fields: Optional[List[StructField]] = None):
@@ -747,8 +787,9 @@ class StructType(DataType):
 
         Examples
         --------
+        >>> from pyspark.sql.types import IntegerType, StringType, StructField, StructType
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True), \\
+        >>> struct2 = StructType([StructField("f1", StringType(), True),
         ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
@@ -823,6 +864,7 @@ class StructType(DataType):
 
         Examples
         --------
+        >>> from pyspark.sql.types import StringType, StructField, StructType
         >>> struct = StructType([StructField("f1", StringType(), True)])
         >>> struct.fieldNames()
         ['f1']
@@ -1899,6 +1941,7 @@ class Row(tuple):
 
     Examples
     --------
+    >>> from pyspark.sql import Row
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(name='Alice', age=11)
@@ -1972,6 +2015,7 @@ class Row(tuple):
 
         Examples
         --------
+        >>> from pyspark.sql import Row
         >>> Row(name="Alice", age=11).asDict() == {'name': 'Alice', 'age': 11}
         True
         >>> row = Row(key=1, value=Row(name='a', age=2))
@@ -2130,15 +2174,13 @@ register_input_converter(DayTimeIntervalTypeConverter())
 
 def _test() -> None:
     import doctest
-    from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
 
     globs = globals()
-    sc = SparkContext("local[4]", "PythonTest")
-    globs["sc"] = sc
     globs["spark"] = SparkSession.builder.getOrCreate()
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs["sc"].stop()
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    )
     if failure_count:
         sys.exit(-1)
 

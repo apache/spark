@@ -31,7 +31,7 @@ SELECT default.myDoubleAvg(udf(int_col1), udf(3)) as my_avg from t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function spark_catalog.default.myDoubleAvg. Expected: 1; Found: 2; line 1 pos 7
+Invalid number of arguments for function spark_catalog.default.mydoubleavg. Expected: 1; Found: 2; line 1 pos 7
 
 
 -- !query
