@@ -1702,11 +1702,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-40001 JSON DEFAULT columns require JSON_GENERATOR_IGNORE_NULL_FIELDS off") {
+  test("SPARK-40001 JSON DEFAULT columns = JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE off") {
     val error = "DEFAULT values are not supported for JSON tables"
-    // Check that the DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS config overrides the
+    // Check that the JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE config overrides the
     // JSON_GENERATOR_IGNORE_NULL_FIELDS config.
-    withSQLConf(SQLConf.DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS.key -> "true",
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("create table t (a int default 42) using json")
@@ -1714,7 +1714,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row(null))
       }
     }
-    withSQLConf(SQLConf.DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS.key -> "false",
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("create table t (a int default 42) using json")
