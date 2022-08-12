@@ -2924,7 +2924,7 @@ object SQLConf {
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
 
-  val DEFAULT_COLUMN_JSON_GENERATOR_FORCE_NULL_FIELDS =
+  val JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE =
     buildConf("spark.sql.jsonGenerator.writeNullIfWithDefaultValue")
       .internal()
       .doc("When true, when writing NULL values to columns of JSON tables with explicit DEFAULT " +
