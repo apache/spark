@@ -336,7 +336,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }.getMessage
 
         assert(
-          message.contains(s"Table $SESSION_CATALOG_NAME.default.ctasjsontable already exists."),
+          message.contains(s"Table $SESSION_CATALOG_NAME.default.ctasJsonTable already exists."),
           "We should complain that ctasJsonTable already exists")
 
         // The following statement should be fine if it has IF NOT EXISTS.
@@ -526,7 +526,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             intercept[AnalysisException] {
               sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains(
-              s"Table $SESSION_CATALOG_NAME.default.createdjsontable already exists."))
+              s"Table $SESSION_CATALOG_NAME.default.createdJsonTable already exists."))
         }
 
         // Data should not be deleted.

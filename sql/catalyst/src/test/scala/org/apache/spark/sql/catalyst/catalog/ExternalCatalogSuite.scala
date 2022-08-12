@@ -281,7 +281,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val tables = catalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
     assert(tables.map(_.identifier.table).sorted == Seq("tbl1", "tbl2"))
 
-    // After renaming a table, the identifier should still be qualified with catalog.
     catalog.renameTable("db2", "tbl1", "tblone")
     val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
     assert(tables2.map(_.identifier.table).sorted == Seq("tbl2", "tblone"))
@@ -1091,10 +1090,7 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(
-      FunctionIdentifier(name, database),
-      funcClass,
-      Seq.empty[FunctionResource])
+    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[FunctionResource])
   }
 
   /**
