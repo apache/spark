@@ -19,18 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.adaptive.{
-  AdaptiveSparkPlanHelper,
-  DisableAdaptiveExecutionSuite,
-  EnableAdaptiveExecutionSuite
-}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.functions.{lit, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
-
-class ReplaceNullWithFalseInPredicateWithAQEEndToEndSuite extends
-  ReplaceNullWithFalseInPredicateEndToEndSuite with EnableAdaptiveExecutionSuite
 
 class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession with
   AdaptiveSparkPlanHelper with DisableAdaptiveExecutionSuite {
@@ -133,3 +126,6 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
     }
   }
 }
+
+class ReplaceNullWithFalseInPredicateWithAQEEndToEndSuite extends
+  ReplaceNullWithFalseInPredicateEndToEndSuite with EnableAdaptiveExecutionSuite
