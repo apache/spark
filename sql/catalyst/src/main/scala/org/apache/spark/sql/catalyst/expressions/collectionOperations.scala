@@ -3055,21 +3055,22 @@ object Sequence {
         val startMicros: Long = toMicros(num.toLong(start), scale)
         val stopMicros: Long = toMicros(num.toLong(stop), scale)
 
-        val maxEstimatedArrayLength =
+        val estimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
 
         val stepSign = if (intervalStepInMicros > 0) +1 else -1
         val exclusiveItem = stopMicros + stepSign
-        var arr = new Array[T](maxEstimatedArrayLength)
+        var arr = new Array[T](estimatedArrayLength)
         var t = startMicros
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
           val result = fromMicros(t, scale)
+          // if we've underestimated the size of the array, due to crossing a DST
+          // "spring forward" without a corresponding "fall back", make a copy
+          // that's larger by 1
           if (i == arr.length) {
-            print(s"Growing array from ${maxEstimatedArrayLength} to " +
-              s"${maxEstimatedArrayLength + 1}\n")
-            val newArr = new Array[T](maxEstimatedArrayLength + 1)
+            val newArr = new Array[T](estimatedArrayLength + 1)
             arr.copyToArray(newArr, 0)
             arr = newArr
           }
@@ -3181,8 +3182,6 @@ object Sequence {
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
          |    if ($i == $arr.length) {
-         |      System.out.printf("cg: Growing array from %d to %d\\n",
-         |        $i, $i + 1);
          |      $arr = java.util.Arrays.copyOf($arr, $i + 1);
          |    }
          |    $arr[$i] = $fromMicrosCode;
