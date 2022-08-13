@@ -80,17 +80,17 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
-|-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span>      | N    | <span style="color:red">**Y**</span>         | N      | Y       | N      | N     | N   | N      |
+|-----------|--------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
+| Numeric   | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span>      | N    | <span style="color:red">**Y**</span>         | <span style="color:red">**Y**</span>      | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
-| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Date      | N      | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
-| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| Array     | N       | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
-| Map       | N       | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
-| Struct    | N       | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
+| Interval  | <span style="color:red">**Y**</span> | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y      | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | N      | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N      | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
+| Map       | N      | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
+| Struct    | N      | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
 
 In the table above, all the `CAST`s with new syntax are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
@@ -101,16 +101,21 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
 * CAST(Numeric AS String): Always use plain string representation on casting decimal values to strings, instead of using scientific notation if an exponent is needed
+* CAST(Interval AS Numeric): raise an overflow exception if the number of microseconds of the day-time interval or months of year-month interval is out of the target data type's range.
+* CAST(Numeric AS Interval): raise an overflow exception if numeric value times by the target interval's end-unit is out of the range of the Int type for year-month intervals or the Long type for day-time intervals.
 
 ```sql
 -- Examples of explicit casting
 
 -- `spark.sql.ansi.enabled=true`
 SELECT CAST('a' AS INT);
-java.lang.NumberFormatException: invalid input syntax for type numeric: a
+org.apache.spark.SparkNumberFormatException: [CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT CAST('a' AS INT)
+       ^^^^^^^^^^^^^^^^
 
 SELECT CAST(2147483648L AS INT);
-java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
 SELECT CAST(DATE'2020-01-01' AS INT)
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
@@ -155,6 +160,9 @@ SELECT * FROM t;
 |  1|
 +---+
 ```
+
+#### Rounding in cast
+While casting of a decimal with a fraction to an interval type with SECOND as the end-unit like INTERVAL HOUR TO SECOND, Spark rounds the fractional part towards "nearest neighbor" unless both neighbors are equidistant, in which case round up.
 
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
