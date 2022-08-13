@@ -274,7 +274,6 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     }
     versions
       .filter(v => v.startsWith("3") && isPythonVersionAtLeast37)
-      .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
       .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
         SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
   }
