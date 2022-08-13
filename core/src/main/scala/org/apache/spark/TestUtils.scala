@@ -283,8 +283,6 @@ private[spark] object TestUtils {
 
   def isPythonVersionAtLeast37(): Boolean = isPythonVersionAtLeast(3, 7, 0)
 
-  def isPythonVersionAtLeast38(): Boolean = isPythonVersionAtLeast(3, 8, 0)
-
   private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
     val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
