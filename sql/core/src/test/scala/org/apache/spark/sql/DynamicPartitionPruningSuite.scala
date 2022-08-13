@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import org.scalatest.GivenWhenThen
 
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
@@ -32,6 +34,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWra
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -48,6 +51,13 @@ abstract class DynamicPartitionPruningSuiteBase
 
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
+
+  protected def createTable(name: String, df: DataFrame, partitionCols: String*): Unit = {
+    df.write
+      .format(tableFormat)
+      .partitionBy(partitionCols: _*)
+      .saveAsTable(name)
+  }
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -111,45 +121,24 @@ abstract class DynamicPartitionPruningSuiteBase
       spark.sql("set hive.exec.dynamic.partition.mode=nonstrict")
     }
 
-    spark.range(1000)
-      .select($"id" as "product_id", ($"id" % 10) as "store_id", ($"id" + 1) as "code")
-      .write
-      .format(tableFormat)
-      .mode("overwrite")
-      .saveAsTable("product")
+    createTable("product", spark.range(1000)
+      .select($"id" as "product_id", ($"id" % 10) as "store_id", ($"id" + 1) as "code"))
 
-    factData.toDF("date_id", "store_id", "product_id", "units_sold")
-      .write
-      .format(tableFormat)
-      .saveAsTable("fact_np")
+    createTable("fact_np", factData.toDF("date_id", "store_id", "product_id", "units_sold"))
 
-    factData.toDF("date_id", "store_id", "product_id", "units_sold")
-      .write
-      .partitionBy("store_id")
-      .format(tableFormat)
-      .saveAsTable("fact_sk")
+    createTable("fact_sk",
+      factData.toDF("date_id", "store_id", "product_id", "units_sold"),
+      "store_id")
 
-    factData.toDF("date_id", "store_id", "product_id", "units_sold")
-      .write
-      .partitionBy("store_id")
-      .format(tableFormat)
-      .saveAsTable("fact_stats")
+    createTable("fact_stats",
+      factData.toDF("date_id", "store_id", "product_id", "units_sold"),
+      "store_id")
 
-    storeData.toDF("store_id", "state_province", "country")
-      .write
-      .format(tableFormat)
-      .saveAsTable("dim_store")
+    createTable("dim_store", storeData.toDF("store_id", "state_province", "country"))
 
-    storeData.toDF("store_id", "state_province", "country")
-      .write
-      .format(tableFormat)
-      .saveAsTable("dim_stats")
+    createTable("dim_stats", storeData.toDF("store_id", "state_province", "country"))
 
-    storeCode.toDF("store_id", "code")
-      .write
-      .partitionBy("store_id")
-      .format(tableFormat)
-      .saveAsTable("code_stats")
+    createTable("code_stats", storeCode.toDF("store_id", "code"), "store_id")
 
     if (runAnalyzeColumnCommands) {
       sql("ANALYZE TABLE fact_stats COMPUTE STATISTICS FOR COLUMNS store_id")
@@ -581,7 +570,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("filtering ratio with stats disables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.1") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -1851,4 +1841,41 @@ class DynamicPartitionPruningV2FilterSuiteAEOff
 
 class DynamicPartitionPruningV2FilterSuiteAEOn
     extends DynamicPartitionPruningV2FilterSuite
+  with EnableAdaptiveExecutionSuite
+
+abstract class DynamicPartitionPruningV2FileSuite
+    extends DynamicPartitionPruningDataSourceSuiteBase {
+  override protected def runAnalyzeColumnCommands: Boolean = false
+
+  var tempDir: File = _
+
+  override protected def beforeAll(): Unit = {
+    tempDir = Utils.createTempDir()
+    super.beforeAll()
+  }
+
+  override protected def afterAll(): Unit = {
+    super.afterAll()
+    Utils.deleteRecursively(tempDir)
+  }
+
+  override protected def initState(): Unit = {
+    spark.conf.set("spark.sql.sources.useV1SourceList", "")
+  }
+
+  override protected def createTable(name: String, df: DataFrame, partitionCols: String*): Unit = {
+    val tablePath = new File(tempDir, name).getCanonicalPath
+    df.write
+      .format(tableFormat)
+      .partitionBy(partitionCols: _*)
+      .save(tablePath)
+
+    spark.read.format(tableFormat).load(tablePath).createTempView(name)
+  }
+}
+
+class DynamicPartitionPruningV2FileSuiteAEOff extends DynamicPartitionPruningV2FileSuite
+  with DisableAdaptiveExecutionSuite
+
+class DynamicPartitionPruningV2FileSuiteAEOn extends DynamicPartitionPruningV2FileSuite
   with EnableAdaptiveExecutionSuite

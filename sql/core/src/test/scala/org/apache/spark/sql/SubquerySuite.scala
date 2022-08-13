@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
-import org.apache.spark.sql.execution.datasources.FileScanRDD
+import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceRDD}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -1589,6 +1590,34 @@ class SubquerySuite extends QueryTest
                 _.files.forall(_.urlEncodedPath.contains("p=0"))))
         case _ => false
       })
+    }
+  }
+
+  test("SPARK-30628: Allow pushdown of partition pruning subquery filters to file source v2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTable("a", "b") {
+        withTempPaths(2) { case Seq(f1, f2) =>
+          spark.range(4).selectExpr("id", "id % 2 AS p").write.partitionBy("p")
+            .mode("overwrite").save(f1.getCanonicalPath)
+          spark.range(2).write.mode("overwrite").save(f2.getCanonicalPath)
+
+          spark.read.parquet(f1.getCanonicalPath).createOrReplaceTempView("a")
+          spark.read.parquet(f2.getCanonicalPath).createOrReplaceTempView("b")
+
+          val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
+          checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
+          // need to execute the query before we can examine fs.inputRDDs()
+          assert(stripAQEPlan(df.queryExecution.executedPlan) match {
+            case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
+                bs @ BatchScanExec(_, _, runtimeFilters, _, _)))) =>
+              runtimeFilters.exists(ExecSubqueryExpression.hasSubquery)
+                bs.inputRDDs().forall(
+                  _.asInstanceOf[DataSourceRDD].inputPartitions.flatten.forall(
+                    _.asInstanceOf[FilePartition].files.forall(_.filePath.contains("p=0"))))
+            case _ => false
+          })
+        }
+      }
     }
   }
 

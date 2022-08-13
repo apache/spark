@@ -264,6 +264,18 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           case _ =>
         }
         Join(newLeft, newRight, joinType, Some(condition), hint)
+      case f @ Filter(condition, plan) if condition.exists(_.isInstanceOf[ScalarSubquery]) =>
+        val predicates = splitConjunctivePredicates(condition).map {
+          case expr if expr.exists(_.isInstanceOf[ScalarSubquery]) =>
+            if (getFilterableTableScan(expr, plan).isDefined) {
+              DynamicPruningExpression(expr)
+            } else {
+              expr
+            }
+          case expr =>
+            expr
+        }
+        f.copy(condition = predicates.reduce(And))
     }
   }
 

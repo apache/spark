@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 
 /**
  *  Removes the filter nodes with dynamic pruning that were not pushed down to the scan.
@@ -34,8 +34,8 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def collectEqualityConditionExpressions(condition: Expression): Seq[Expression] = {
-    splitConjunctivePredicates(condition).flatMap(_.collect {
+  private def collectEqualityConditionExpressions(conditions: Seq[Expression]): Seq[Expression] = {
+    conditions.flatMap(splitConjunctivePredicates).flatMap(_.collect {
       case EqualTo(l, r) if l.deterministic && r.foldable => l
       case EqualTo(l, r) if r.deterministic && l.foldable => r
       case EqualNullSafe(l, r) if l.deterministic && r.foldable => l
@@ -48,10 +48,17 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
    * can't prune anything. So we should remove it.
    */
   private def removeUnnecessaryDynamicPruningSubquery(plan: LogicalPlan): LogicalPlan = {
+    // Partition filters are pushed down and removed from Filter expressions for V2 sources.
+    // Add this for File sources specifically, but will need to figure out generic V2 handling.
+    lazy val partitionFilters = plan.collect {
+      case r @ DataSourceV2ScanRelation(_, scan: FileScan, _, _, _) =>
+        scan.partitionFilters
+    }.flatten
+
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case f @ Filter(condition, _) =>
         lazy val unnecessaryPruningKeys =
-          ExpressionSet(collectEqualityConditionExpressions(condition))
+          ExpressionSet(collectEqualityConditionExpressions(partitionFilters :+ condition))
         val newCondition = condition.transformWithPruning(
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparabl
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFilters
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -63,22 +64,30 @@ case class BatchScanExec(
   @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
-    val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
-      case _ => None
+    val originalPartitioning = scan match {
+      case s: SupportsRuntimeCatalystFilters =>
+        s.filter(runtimeFilters)
+        Some(outputPartitioning)
+      case s: SupportsRuntimeV2Filtering =>
+        val predicates = runtimeFilters.flatMap {
+          case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+          case _ => None
+        }
+        if (predicates.nonEmpty) {
+          s.filter(predicates.toArray)
+          Some(outputPartitioning)
+        } else {
+          None
+        }
+      case _ =>
+        None
     }
 
-    if (dataSourceFilters.nonEmpty) {
-      val originalPartitioning = outputPartitioning
-
-      // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-      filterableScan.filter(dataSourceFilters.toArray)
-
+    originalPartitioning.map { partitioning =>
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
-      originalPartitioning match {
+      partitioning match {
         case p: KeyGroupedPartitioning =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
             throw new SparkException("Data source must have preserved the original partitioning " +
@@ -112,9 +121,7 @@ case class BatchScanExec(
           newPartitions.map(Seq(_))
       }
 
-    } else {
-      partitions
-    }
+    }.getOrElse { partitions }
   }
 
   override def outputPartitioning: Partitioning = {
