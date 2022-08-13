@@ -260,12 +260,6 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = if (isPythonVersionAtLeast37) {
     import scala.io.Source
-    // SPARK-40053: This set needs to be redefined when there are version releases or EOL.
-    val testableVersions = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)) {
-      Set("3.2, 3.3")
-    } else {
-      Set("3.1, 3.2, 3.3")
-    }
     val versions: Seq[String] = try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
@@ -278,7 +272,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
     }
-    versions.filter(v => testableVersions.exists(v.startsWith))
+    versions.filter(v => !v.startsWith("2.4") && !v.startsWith("3.0"))
+      .filter(v => !(v.startsWith("3.1") &&
+        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
   } else Seq.empty[String]
 
   protected var spark: SparkSession = _
