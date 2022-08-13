@@ -272,9 +272,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
     }
-    versions.filter(v => !v.startsWith("2.4") && !v.startsWith("3.0"))
-      .filter(v => !(v.startsWith("3.1") &&
-        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
+    versions.filter(v => !(v.startsWith("3.1") &&
+      SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
   } else Seq.empty[String]
 
   protected var spark: SparkSession = _
