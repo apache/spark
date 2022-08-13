@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 
 /**
@@ -37,7 +38,8 @@ case class BatchScanExec(
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
+    ordering: Option[Seq[SortOrder]] = None,
+    table: Option[Table] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -132,5 +134,9 @@ case class BatchScanExec(
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
     redact(result)
+  }
+
+  override def nodeName: String = {
+    s"BatchScan ${table.map(_.name()).getOrElse("")}".trim
   }
 }
