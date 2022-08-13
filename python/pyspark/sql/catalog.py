@@ -19,7 +19,6 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
-from pyspark import since
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -331,6 +330,9 @@ class Catalog:
         tableName : str
             name of the table to get.
 
+            .. versionchanged:: 3.4.0
+               Allow `tableName` to be qualified with catalog name.
+
         Returns
         -------
         :class:`Table`
@@ -441,9 +443,6 @@ class Catalog:
         dbName : str, optional
             name of the database to check function existence in.
 
-           .. deprecated:: 3.4.0
-               Use ``functionName`` instead.
-
         Returns
         -------
         bool
@@ -543,9 +542,6 @@ class Catalog:
         dbName : str, optional
             name of the database to find the table to list columns.
 
-            .. deprecated:: 3.4.0
-                Use ``tableName`` instead.
-
         Returns
         -------
         list
@@ -611,10 +607,6 @@ class Catalog:
 
         dbName : str, optional
             name of the database to check table existence in.
-
-           .. deprecated:: 3.4.0
-               Use ``tableName`` instead.
-
 
         Returns
         -------
