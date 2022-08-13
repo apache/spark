@@ -45,10 +45,13 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT 2147483647 + 1
+       ^^^^^^^^^^^^^^
 
 SELECT abs(-2147483648);
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
@@ -117,7 +120,7 @@ SELECT CAST('a' AS INT)
 SELECT CAST(2147483648L AS INT);
 org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
-SELECT CAST(DATE'2020-01-01' AS INT)
+SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
 To convert values from date to int, you can use function UNIX_DATE instead.
 
@@ -189,7 +192,7 @@ During table insertion, Spark will throw exception on numeric value overflow.
 CREATE TABLE test(i INT);
 
 INSERT INTO test VALUES (2147483648L);
-java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW_IN_TABLE_INSERT] Fail to insert a value of "BIGINT" type into the "INT" type column `i` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 ```
 
 ### Type coercion
