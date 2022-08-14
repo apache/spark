@@ -45,7 +45,7 @@ from typing import (
 from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
 
-from pyspark import accumulators, since
+from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
@@ -477,11 +477,25 @@ class SparkContext:
     @classmethod
     def getOrCreate(cls, conf: Optional[SparkConf] = None) -> "SparkContext":
         """
-        Get or instantiate a SparkContext and register it as a singleton object.
+        Get or instantiate a `SparkContext` and register it as a singleton object.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
         conf : :py:class:`pyspark.SparkConf`, optional
+            `SparkConf` that will be used for initialisation of the `SparkContext`.
+
+        Returns
+        -------
+        :class:`pyspark.context.SparkContext`
+            current `SparkContext`, or a new one if it wasn't created before the function call.
+
+        Examples
+        --------
+        >>> from pyspark.context import SparkContext
+        >>> SparkContext.getOrCreate()
+        <SparkContext ...>
         """
         with SparkContext._lock:
             if SparkContext._active_spark_context is None:
@@ -493,14 +507,27 @@ class SparkContext:
         """
         Control our logLevel. This overrides any user-defined log settings.
         Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        logLevel : str
+            The desired log level as a string.
+
+        Examples
+        --------
+        >>> sc.setLogLevel("WARN")
         """
         self._jsc.setLogLevel(logLevel)
 
     @classmethod
     def setSystemProperty(cls, key: str, value: str) -> None:
         """
-        Set a Java system property, such as spark.executor.memory. This must
-        must be invoked before instantiating SparkContext.
+        Set a Java system property, such as `spark.executor.memory`. This must
+        be invoked before instantiating SparkContext.
+
+        .. versionadded:: 0.9.0
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
@@ -510,6 +537,12 @@ class SparkContext:
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
+
+        .. versionadded:: 1.1.0
+
+        Examples
+        --------
+        >>> version = sc.version
         """
         return self._jsc.version()
 
@@ -522,6 +555,8 @@ class SparkContext:
         * in case of local spark app something like 'local-1433865536131'
         * in case of YARN something like 'application_1433865536131_34483'
 
+        .. versionadded:: 1.5.0
+
         Examples
         --------
         >>> sc.applicationId  # doctest: +ELLIPSIS
@@ -531,19 +566,40 @@ class SparkContext:
 
     @property
     def uiWebUrl(self) -> str:
-        """Return the URL of the SparkUI instance started by this SparkContext"""
+        """Return the URL of the SparkUI instance started by this `SparkContext`
+
+        .. versionadded:: 2.1.0
+
+        Examples
+        --------
+        >>> sc.uiWebUrl
+        'http://...'
+        """
         return self._jsc.sc().uiWebUrl().get()
 
     @property
     def startTime(self) -> int:
-        """Return the epoch time when the Spark Context was started."""
+        """Return the epoch time when the `SparkContext` was started.
+
+        .. versionadded:: 1.5.0
+
+        Examples
+        --------
+        >>> start = sc.startTime
+        """
         return self._jsc.startTime()
 
     @property
     def defaultParallelism(self) -> int:
         """
-        Default level of parallelism to use when not given by user (e.g. for
-        reduce tasks)
+        Default level of parallelism to use when not given by user (e.g. for reduce tasks)
+
+        .. versionadded:: 0.7.0
+
+        Examples
+        --------
+        >>> sc.defaultParallelism > 0
+        True
         """
         return self._jsc.sc().defaultParallelism()
 
@@ -551,12 +607,21 @@ class SparkContext:
     def defaultMinPartitions(self) -> int:
         """
         Default min number of partitions for Hadoop RDDs when not given by user
+
+        .. versionadded:: 1.1.0
+
+        Examples
+        --------
+        >>> sc.defaultMinPartitions > 0
+        True
         """
         return self._jsc.sc().defaultMinPartitions()
 
     def stop(self) -> None:
         """
-        Shut down the SparkContext.
+        Shut down the `SparkContext`.
+
+        .. versionadded:: 0.7.0
         """
         if getattr(self, "_jsc", None):
             try:
@@ -579,7 +644,21 @@ class SparkContext:
 
     def emptyRDD(self) -> RDD[Any]:
         """
-        Create an RDD that has no partitions or elements.
+        Create an `RDD` that has no partitions or elements.
+
+        .. versionadded:: 1.5.0
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            An empty RDD
+
+        Examples
+        --------
+        >>> sc.emptyRDD()
+        EmptyRDD...
+        >>> sc.emptyRDD().count()
+        0
         """
         return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
 
@@ -592,15 +671,17 @@ class SparkContext:
         way as python's built-in range() function. If called with a single argument,
         the argument is interpreted as `end`, and `start` is set to 0.
 
+        .. versionadded:: 1.5.0
+
         Parameters
         ----------
         start : int
             the start value
-        end : int, optional
+        end : int, optional, default None
             the end value (exclusive)
-        step : int, optional
-            the incremental step (default: 1)
-        numSlices : int, optional
+        step : int, optional, default 1
+            the incremental step
+        numSlices : int, optional, default None
             the number of partitions of the new RDD
 
         Returns
@@ -616,6 +697,18 @@ class SparkContext:
         [2, 3]
         >>> sc.range(1, 7, 2).collect()
         [1, 3, 5]
+
+        Generate RDD with a negative step
+        >>> sc.range(5, 0, -1).collect()
+        [5, 4, 3, 2, 1]
+        >>> sc.range(0, 5, -1).collect()
+        []
+
+        Control the number of partitions
+        >>> sc.range(5, numSlices=1).getNumPartitions()
+        1
+        >>> sc.range(5, numSlices=10).getNumPartitions()
+        10
         """
         if end is None:
             end = start
@@ -628,12 +721,32 @@ class SparkContext:
         Distribute a local Python collection to form an RDD. Using range
         is recommended if the input represents a range for performance.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        c : :py:class:`collections.abc.Iterable`
+            iterable collection to distribute
+        numSlices : int, optional, default None
+            the number of partitions of the new RDD
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD representing distributed collection.
+
         Examples
         --------
         >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
         [[0], [2], [3], [4], [6]]
         >>> sc.parallelize(range(0, 6, 2), 5).glom().collect()
         [[], [0], [], [2], [4]]
+
+        Deal with a list of strings.
+
+        >>> strings = ["a", "b", "c"]
+        >>> sc.parallelize(strings, 2).glom().collect()
+        [['a'], ['b', 'c']]
         """
         numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
         if isinstance(c, range):
@@ -731,13 +844,48 @@ class SparkContext:
         """
         Load an RDD previously saved using :meth:`RDD.saveAsPickleFile` method.
 
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        name : str
+            directory to the input data files, the path can be comma separated
+            paths as a list of inputs
+        minPartitions : int, optional, default None
+            suggested minimum number of partitions for the resulting RDD
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD representing unpickled data from the file(s).
+
         Examples
         --------
-        >>> tmpFile = NamedTemporaryFile(delete=True)
-        >>> tmpFile.close()
-        >>> sc.parallelize(range(10)).saveAsPickleFile(tmpFile.name, 5)
-        >>> sorted(sc.pickleFile(tmpFile.name, 3).collect())
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     path1 = os.path.join(d.name, "pickled1")
+        ...     path2 = os.path.join(d.name, "pickled2")
+        ...
+        ...     # Write a temporary pickled file
+        ...     sc.parallelize(range(10)).saveAsPickleFile(path1, 3)
+        ...
+        ...     # Write another temporary pickled file
+        ...     sc.parallelize(range(-10, -5)).saveAsPickleFile(path2, 3)
+        ...
+        ...     # Load picked file
+        ...     collected1 = sorted(sc.pickleFile(path1, 3).collect())
+        ...     collected2 = sorted(sc.pickleFile(path2, 4).collect())
+        ...
+        ...     # Load two picked files together
+        ...     collected3 = sorted(sc.pickleFile('{},{}'.format(path1, path2), 5).collect())
+
+        >>> collected1
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        >>> collected2
+        [-10, -9, -8, -7, -6]
+        >>> collected3
+        [-10, -9, -8, -7, -6, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.objectFile(name, minPartitions), self)
@@ -748,21 +896,55 @@ class SparkContext:
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
-        RDD of Strings.
-        The text files must be encoded as UTF-8.
+        RDD of Strings. The text files must be encoded as UTF-8.
 
-        If use_unicode is False, the strings will be kept as `str` (encoding
-        as `utf-8`), which is faster and smaller than unicode. (Added in
-        Spark 1.2)
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        name : str
+            directory to the input data files, the path can be comma separated
+            paths as a list of inputs
+        minPartitions : int, optional, default None
+            suggested minimum number of partitions for the resulting RDD
+        use_unicode : bool, default True
+            If use_unicode is False, the strings will be kept as `str` (encoding
+            as `utf-8`), which is faster and smaller than unicode.
+
+            .. versionadded:: 1.2.0
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD representing text data from the file(s).
 
         Examples
         --------
-        >>> path = os.path.join(tempdir, "sample-text.txt")
-        >>> with open(path, "w") as testFile:
-        ...    _ = testFile.write("Hello world!")
-        >>> textFile = sc.textFile(path)
-        >>> textFile.collect()
-        ['Hello world!']
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     path1 = os.path.join(d.name, "text1")
+        ...     path2 = os.path.join(d.name, "text2")
+        ...
+        ...     # Write a temporary text file
+        ...     sc.parallelize(["x", "y", "z"]).saveAsTextFile(path1)
+        ...
+        ...     # Write another temporary text file
+        ...     sc.parallelize(["aa", "bb", "cc"]).saveAsTextFile(path2)
+        ...
+        ...     # Load picked file
+        ...     collected1 = sorted(sc.textFile(path1, 3).collect())
+        ...     collected2 = sorted(sc.textFile(path2, 4).collect())
+        ...
+        ...     # Load two picked files together
+        ...     collected3 = sorted(sc.textFile('{},{}'.format(path1, path2), 5).collect())
+
+        >>> collected1
+        ['x', 'y', 'z']
+        >>> collected2
+        ['aa', 'bb', 'cc']
+        >>> collected3
+        ['aa', 'bb', 'cc', 'x', 'y', 'z']
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self, UTF8Deserializer(use_unicode))
@@ -778,9 +960,7 @@ class SparkContext:
         value is the content of each file.
         The text files must be encoded as UTF-8.
 
-        If `use_unicode` is False, the strings will be kept as `str` (encoding
-        as `utf-8`), which is faster and smaller than unicode. (Added in
-        Spark 1.2)
+        .. versionadded:: 1.0.0
 
         For example, if you have the following files:
 
@@ -801,21 +981,45 @@ class SparkContext:
             ...
             (a-hdfs-path/part-nnnnn, its content)
 
+        Parameters
+        ----------
+        path : str
+            directory to the input data files, the path can be comma separated
+            paths as a list of inputs
+        minPartitions : int, optional, default None
+            suggested minimum number of partitions for the resulting RDD
+        use_unicode : bool, default True
+            If use_unicode is False, the strings will be kept as `str` (encoding
+            as `utf-8`), which is faster and smaller than unicode.
+
+            .. versionadded:: 1.2.0
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD representing path-content pairs from the file(s).
+
         Notes
         -----
         Small files are preferred, as each file will be loaded fully in memory.
 
         Examples
         --------
-        >>> dirPath = os.path.join(tempdir, "files")
-        >>> os.mkdir(dirPath)
-        >>> with open(os.path.join(dirPath, "1.txt"), "w") as file1:
-        ...    _ = file1.write("1")
-        >>> with open(os.path.join(dirPath, "2.txt"), "w") as file2:
-        ...    _ = file2.write("2")
-        >>> textFiles = sc.wholeTextFiles(dirPath)
-        >>> sorted(textFiles.collect())
-        [('.../1.txt', '1'), ('.../2.txt', '2')]
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     # Write a temporary text file
+        ...     with open(os.path.join(d.name, "1.txt"), "w") as f:
+        ...         _ = f.write("123")
+        ...
+        ...     # Write another temporary text file
+        ...     with open(os.path.join(d.name, "2.txt"), "w") as f:
+        ...         _ = f.write("xyz")
+        ...
+        ...     collected = sorted(sc.wholeTextFiles(d.name).collect())
+
+        >>> collected
+        [('.../1.txt', '123'), ('.../2.txt', 'xyz')]
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(
@@ -832,9 +1036,42 @@ class SparkContext:
         in a key-value pair, where the key is the path of each file, the
         value is the content of each file.
 
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        path : str
+            directory to the input data files, the path can be comma separated
+            paths as a list of inputs
+        minPartitions : int, optional, default None
+            suggested minimum number of partitions for the resulting RDD
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD representing path-content pairs from the file(s).
+
         Notes
         -----
         Small files are preferred, large file is also allowable, but may cause bad performance.
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     # Write a temporary binary file
+        ...     with open(os.path.join(d.name, "1.bin"), "wb") as f1:
+        ...         _ = f1.write(b"binary data I")
+        ...
+        ...     # Write another temporary binary file
+        ...     with open(os.path.join(d.name, "2.bin"), "wb") as f2:
+        ...         _ = f2.write(b"binary data II")
+        ...
+        ...     collected = sorted(sc.binaryFiles(d.name).collect())
+
+        >>> collected
+        [('.../1.bin', b'binary data I'), ('.../2.bin', b'binary data II')]
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(
@@ -849,12 +1086,39 @@ class SparkContext:
         with the specified numerical format (see ByteBuffer), and the number of
         bytes per record is constant.
 
+        .. versionadded:: 1.3.0
+
         Parameters
         ----------
         path : str
             Directory to the input data files
         recordLength : int
             The length at which to split the records
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of data with values, represented as byte arrays
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     # Write a temporary file
+        ...     with open(os.path.join(d.name, "1.bin"), "w") as f:
+        ...         for i in range(3):
+        ...             _ = f.write("%04d" % i)
+        ...
+        ...     # Write another file
+        ...     with open(os.path.join(d.name, "2.bin"), "w") as f:
+        ...         for i in [-1, -2, -10]:
+        ...             _ = f.write("%04d" % i)
+        ...
+        ...     collected = sorted(sc.binaryRecords(d.name, 4).collect())
+
+        >>> collected
+        [b'-001', b'-002', b'-010', b'0000', b'0001', b'0002']
         """
         return RDD(self._jsc.binaryRecords(path, recordLength), self, NoOpSerializer())
 
@@ -888,6 +1152,8 @@ class SparkContext:
             3. If this fails, the fallback is to call 'toString' on each key and value
             4. :class:`CPickleSerializer` is used to deserialize pickled objects on the Python side
 
+        .. versionadded:: 1.3.0
+
         Parameters
         ----------
         path : str
@@ -906,6 +1172,32 @@ class SparkContext:
         batchSize : int, optional
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of tuples of key and corresponding value
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+
+        Set the class of output format
+
+        >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
+
+        >>> with TemporaryDirectory() as d:
+        ...     path = os.path.join(d.name, "hadoop_file")
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, {3.0: "bb"}), (2, {1.0: "aa"}), (3, {2.0: "dd"})])
+        ...     rdd.saveAsNewAPIHadoopFile(path, output_format_class)
+        ...
+        ...     collected = sorted(sc.sequenceFile(path).collect())
+
+        >>> collected
+        [(1, {3.0: 'bb'}), (2, {1.0: 'aa'}), (3, {2.0: 'dd'})]
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         assert self._jvm is not None
@@ -940,6 +1232,8 @@ class SparkContext:
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         path : str
@@ -965,6 +1259,36 @@ class SparkContext:
         batchSize : int, optional
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of tuples of key and corresponding value
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with TemporaryDirectory() as d:
+        ...     path = os.path.join(d.name, "new_hadoop_file")
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsNewAPIHadoopFile(path, output_format_class, key_class, value_class)
+        ...
+        ...     loaded = sc.newAPIHadoopFile(path, input_format_class, key_class, value_class)
+        ...     collected = sorted(loaded.collect())
+
+        >>> collected
+        [(1, ''), (1, 'a'), (3, 'x')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -997,6 +1321,8 @@ class SparkContext:
         This will be converted into a Configuration in Java.
         The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         inputFormatClass : str
@@ -1007,17 +1333,59 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional
+        keyConverter : str, optional, default None
             fully qualified name of a function returning key WritableConverter
             (None by default)
-        valueConverter : str, optional
+        valueConverter : str, optional, default None
             fully qualified name of a function returning value WritableConverter
             (None by default)
-        conf : dict, optional
+        conf : dict, optional, default None
             Hadoop configuration, passed in as a dict (None by default)
-        batchSize : int, optional
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of tuples of key and corresponding value
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with TemporaryDirectory() as d:
+        ...     path = os.path.join(d.name, "new_hadoop_file")
+        ...
+        ...     # Create the conf for writing
+        ...     write_conf = {
+        ...         "mapreduce.job.outputformat.class": (output_format_class),
+        ...         "mapreduce.job.output.key.class": key_class,
+        ...         "mapreduce.job.output.value.class": value_class,
+        ...         "mapreduce.output.fileoutputformat.outputdir": path,
+        ...     }
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsNewAPIHadoopDataset(conf=write_conf)
+        ...
+        ...     # Create the conf for reading
+        ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
+        ...
+        ...     loaded = sc.newAPIHadoopRDD(input_format_class,
+        ...         key_class, value_class, conf=read_conf)
+        ...     collected = sorted(loaded.collect())
+
+        >>> collected
+        [(1, ''), (1, 'a'), (3, 'x')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -1049,9 +1417,13 @@ class SparkContext:
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
         The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
 
+        .. versionadded:: 1.1.0
+
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java.
 
+        Parameters
+        ----------
         path : str
             path to Hadoop file
         inputFormatClass : str
@@ -1062,17 +1434,44 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional
+        keyConverter : str, optional, default None
             fully qualified name of a function returning key WritableConverter
-            (None by default)
-        valueConverter : str, optional
+        valueConverter : str, optional, default None
             fully qualified name of a function returning value WritableConverter
-            (None by default)
-        conf : dict, optional
-            Hadoop configuration, passed in as a dict (None by default)
+        conf : dict, optional, default None
+            Hadoop configuration, passed in as a dict
         batchSize : int, optional
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of tuples of key and corresponding value
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapred.TextOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapred.TextInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with TemporaryDirectory() as d:
+        ...     path = os.path.join(d.name, "old_hadoop_file")
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsHadoopFile(path, output_format_class, key_class, value_class)
+        ...
+        ...     collected = sorted(path, input_format_class, key_class, value_class).collect())
+
+        >>> collected
+        [(0, '1\t'), (0, '1\ta'), (0, '3\tx')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -1105,6 +1504,8 @@ class SparkContext:
         This will be converted into a Configuration in Java.
         The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
 
+        .. versionadded:: 1.1.0
+
         Parameters
         ----------
         inputFormatClass : str
@@ -1115,17 +1516,56 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional
+        keyConverter : str, optional, default None
             fully qualified name of a function returning key WritableConverter
-            (None by default)
-        valueConverter : str, optional
+        valueConverter : str, optional, default None
             fully qualified name of a function returning value WritableConverter
-            (None by default)
-        conf : dict, optional
-            Hadoop configuration, passed in as a dict (None by default)
+        conf : dict, optional, default None
+            Hadoop configuration, passed in as a dict
         batchSize : int, optional
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
+
+        Returns
+        -------
+        :py:class:`pyspark.RDD`
+            RDD of tuples of key and corresponding value
+
+        Examples
+        --------
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+
+        Set the related classes
+
+        >>> output_format_class = "org.apache.hadoop.mapred.TextOutputFormat"
+        >>> input_format_class = "org.apache.hadoop.mapred.TextInputFormat"
+        >>> key_class = "org.apache.hadoop.io.IntWritable"
+        >>> value_class = "org.apache.hadoop.io.Text"
+
+        >>> with TemporaryDirectory() as d:
+        ...     path = os.path.join(d.name, "old_hadoop_file")
+        ...
+        ...     # Create the conf for writing
+        ...     write_conf = {
+        ...         "mapred.output.format.class": output_format_class,
+        ...         "mapreduce.job.output.key.class": key_class,
+        ...         "mapreduce.job.output.value.class": value_class,
+        ...         "mapreduce.output.fileoutputformat.outputdir": path,
+        ...     }
+        ...
+        ...     # Write a temporary Hadoop file
+        ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
+        ...     rdd.saveAsHadoopDataset(conf=write_conf)
+        ...
+        ...     # Create the conf for reading
+        ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
+        ...
+        ...     loaded = sc.hadoopRDD(inputFormatClass, keyClass, valueClass, conf=read_conf)
+        ...     collected = sorted(loaded.collect())
+
+        >>> collected
+        [(0, '1\t'), (0, '1\ta'), (0, '3\tx')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -1153,16 +1593,24 @@ class SparkContext:
         although this forces them to be reserialized using the default
         serializer:
 
+        .. versionadded:: 0.7.0
+
         Examples
         --------
-        >>> path = os.path.join(tempdir, "union-text.txt")
-        >>> with open(path, "w") as testFile:
-        ...    _ = testFile.write("Hello")
-        >>> textFile = sc.textFile(path)
-        >>> textFile.collect()
-        ['Hello']
-        >>> parallelized = sc.parallelize(["World!"])
-        >>> sorted(sc.union([textFile, parallelized]).collect())
+        >>> import os
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as d:
+        ...     # generate a text RDD
+        ...     with open(os.path.join(d.name, "union-text.txt"), "w") as f:
+        ...         _ = f.write("Hello")
+        ...     text_rdd = sc.textFile(d.name)
+        ...
+        ...     # generate another RDD
+        ...     parallelized = sc.parallelize(["World!"])
+        ...
+        ...     unioned = sorted(sc.union([text_rdd, parallelized]).collect())
+
+        >>> unioned
         ['Hello', 'World!']
         """
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
@@ -1194,6 +1642,58 @@ class SparkContext:
         Broadcast a read-only variable to the cluster, returning a :class:`Broadcast`
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        value : T
+            value to broadcast to the Spark nodes
+
+        Returns
+        -------
+        :py:class:`pyspark.broadcast.Broadcast`
+            `Broadcast` object, a read-only variable cached on each machine
+
+        Examples
+        --------
+        >>> mapping = {1: 10001, 2: 10002}
+        >>> bc = sc.broadcast(mapping)
+
+        Broadcasted object can be used in RDD operations:
+
+        >>> rdd = sc.range(5)
+        >>> rdd2 = rdd.map(lambda i: bc.value[i] if i in bc.value else -1)
+        >>> sorted(rdd2.collect())
+        [-1, -1, -1, 10001, 10002]
+
+        Broadcasted object can also be used in UDF:
+
+        >>> df = spark.range(5)
+        >>> df.show()
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        >>> spark.udf.register("MYUDF", lambda i: bc.value[i] if i in bc.value else -1)
+        <function ...>
+        >>> df.select(col("id"), expr("MYUDF(id)").alias("mapped")).show()
+        +---+------+
+        | id|mapped|
+        +---+------+
+        |  0|    -1|
+        |  1| 10001|
+        |  2| 10002|
+        |  3|    -1|
+        |  4|    -1|
+        +---+------+
+
+        >>> bc.destroy()
         """
         return Broadcast(self, value, self._pickled_broadcast_vars)
 
@@ -1206,6 +1706,39 @@ class SparkContext:
         data type if provided. Default AccumulatorParams are used for integers
         and floating-point numbers if you do not provide one. For other types,
         a custom AccumulatorParam can be used.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        value : T
+            initialized value
+        accum_param : :py:class:`pyspark.AccumulatorParam`, optional, default None
+            helper object to define how to add values
+
+        Returns
+        -------
+        :py:class:`pyspark.Accumulator`
+            `Accumulator` object, a shared variable that can be accumulated
+
+        Examples
+        --------
+        >>> acc = sc.accumulator(9)
+        >>> acc.value
+        9
+        >>> acc += 1
+        >>> acc.value
+        10
+
+        Accumulator object can be accumulated in RDD operations:
+
+        >>> rdd = sc.range(5)
+        >>> def f(x):
+        ...     global acc
+        ...     acc += 1
+        >>> rdd.foreach(f)
+        >>> acc.value
+        15
         """
         if accum_param is None:
             if isinstance(value, int):
@@ -1232,16 +1765,36 @@ class SparkContext:
         A directory can be given if the recursive option is set to True.
         Currently directories are only supported for Hadoop-supported filesystems.
 
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        path : str
+            can be either a local file, a file in HDFS (or other Hadoop-supported
+            filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+            use :meth:`SparkFiles.get` to find its download location.
+        recursive : bool, default False
+            whether to recursively add files in the input directory
+
+        See Also
+        --------
+        :meth:`SparkContext.listFiles`
+        :meth:`SparkFiles.get`
+
         Notes
         -----
         A path can be added only once. Subsequent additions of the same path are ignored.
 
         Examples
         --------
+        >>> import os
         >>> from pyspark import SparkFiles
-        >>> path = os.path.join(tempdir, "test.txt")
-        >>> with open(path, "w") as testFile:
-        ...    _ = testFile.write("100")
+        >>> from tempfile import TemporaryDirectory
+
+        >>> d = TemporaryDirectory()
+        >>> path = os.path.join(d.name, "test.txt")
+        >>> with open(path, "w") as f:
+        ...    _ = f.write("100")
         >>> sc.addFile(path)
         >>> def func(iterator):
         ...    with open(SparkFiles.get("test.txt")) as testFile:
@@ -1251,12 +1804,17 @@ class SparkContext:
         [100, 200, 300, 400]
         >>> sc.listFiles
         ['file:/.../test.txt']
-        >>> path2 = os.path.join(tempdir, "test2.txt")
-        >>> with open(path2, "w") as testFile:
-        ...    _ = testFile.write("100")
+
+        Add another file
+
+        >>> path2 = os.path.join(d.name, "test2.txt")
+        >>> with open(path2, "w") as f:
+        ...    _ = f.write("100")
         >>> sc.addFile(path2)
         >>> sorted(sc.listFiles)
         ['file:/.../test.txt', 'file:/.../test2.txt']
+
+        >>> d.cleanup()
         """
         self._jsc.sc().addFile(path, recursive)
 
@@ -1268,7 +1826,7 @@ class SparkContext:
 
         See Also
         --------
-        SparkContext.addFile
+        :meth:`SparkContext.addFile`
         """
         return list(
             self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
@@ -1282,6 +1840,17 @@ class SparkContext:
         SparkContext in the future.  The `path` passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        path : str
+            can be either a .py file or .zip dependency.
+
+        See Also
+        --------
+        :meth:`SparkContext.addFile`
 
         Notes
         -----
@@ -1310,6 +1879,18 @@ class SparkContext:
 
         .. versionadded:: 3.3.0
 
+        Parameters
+        ----------
+        path : str
+            can be either a local file, a file in HDFS (or other Hadoop-supported
+            filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+            use :meth:`SparkFiles.get` to find its download location.
+
+        See Also
+        --------
+        :meth:`SparkContext.listArchives`
+        :meth:`SparkFiles.get`
+
         Notes
         -----
         A path can be added only once. Subsequent additions of the same path are ignored.
@@ -1319,10 +1900,14 @@ class SparkContext:
         --------
         Creates a zipped file that contains a text file written '100'.
 
+        >>> import os
         >>> import zipfile
         >>> from pyspark import SparkFiles
-        >>> path = os.path.join(tempdir, "test.txt")
-        >>> zip_path = os.path.join(tempdir, "test.zip")
+        >>> from tempfile import TemporaryDirectory
+
+        >>> d = TemporaryDirectory()
+        >>> path = os.path.join(d.name, "test.txt")
+        >>> zip_path = os.path.join(d.name, "test.zip")
         >>> with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipped:
         ...     with open(path, "w") as f:
         ...         _ = f.write("100")
@@ -1330,7 +1915,10 @@ class SparkContext:
         >>> sc.addArchive(zip_path)
         >>> sc.listArchives
         ['file:/.../test.zip']
-        >>> zip_path2 = os.path.join(tempdir, "test2.zip")
+
+        Add another zip file.
+
+        >>> zip_path2 = os.path.join(d.name, "test2.zip")
         >>> with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as zipped:
         ...     with open(path, "w") as f:
         ...         _ = f.write("100")
@@ -1348,6 +1936,7 @@ class SparkContext:
         ...        return [x * int(v) for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
+        >>> d.cleanup()
         """
         self._jsc.sc().addArchive(path)
 
@@ -1359,7 +1948,7 @@ class SparkContext:
 
         See Also
         --------
-        SparkContext.addArchive
+        :meth:`SparkContext.addArchive`
         """
         return list(
             self._jvm.scala.collection.JavaConverters.seqAsJavaList(  # type: ignore[union-attr]
@@ -1371,14 +1960,27 @@ class SparkContext:
         """
         Set the directory under which RDDs are going to be checkpointed. The
         directory must be an HDFS path if running on a cluster.
+
+        .. versionadded:: 0.7.0
+
+        Parameters
+        ----------
+        dirName : str
+            path to the directory where checkpoint files will be stored
+            (must be HDFS path if running in cluster)
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
-    @since(3.1)
     def getCheckpointDir(self) -> Optional[str]:
         """
         Return the directory where RDDs are checkpointed. Returns None if no
         checkpoint directory has been set.
+
+        .. versionadded:: 3.1.0
+
+        See Also
+        --------
+        :meth:`SparkContext.setCheckpointDir`
         """
         if not self._jsc.sc().getCheckpointDir().isEmpty():
             return self._jsc.sc().getCheckpointDir().get()
@@ -1411,6 +2013,8 @@ class SparkContext:
 
         The application can use :meth:`SparkContext.cancelJobGroup` to cancel all
         running jobs in this group.
+
+        .. versionadded:: 1.0.0
 
         Notes
         -----
@@ -1457,6 +2061,8 @@ class SparkContext:
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
 
+        .. versionadded:: 1.0.0
+
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
@@ -1468,12 +2074,16 @@ class SparkContext:
         """
         Get a local property set in this thread, or null if it is missing. See
         :meth:`setLocalProperty`.
+
+        .. versionadded:: 1.0.0
         """
         return self._jsc.getLocalProperty(key)
 
     def setJobDescription(self, value: str) -> None:
         """
         Set a human readable description of the current job.
+
+        .. versionadded:: 2.3.0
 
         Notes
         -----
@@ -1485,6 +2095,8 @@ class SparkContext:
     def sparkUser(self) -> str:
         """
         Get SPARK_USER for user who is running SparkContext.
+
+        .. versionadded:: 1.0.0
         """
         return self._jsc.sc().sparkUser()
 
@@ -1492,18 +2104,24 @@ class SparkContext:
         """
         Cancel active jobs for the specified group. See :meth:`SparkContext.setJobGroup`.
         for more information.
+
+        .. versionadded:: 1.1.0
         """
         self._jsc.sc().cancelJobGroup(groupId)
 
     def cancelAllJobs(self) -> None:
         """
         Cancel all jobs that have been scheduled or are running.
+
+        .. versionadded:: 1.1.0
         """
         self._jsc.sc().cancelAllJobs()
 
     def statusTracker(self) -> StatusTracker:
         """
         Return :class:`StatusTracker` object
+
+        .. versionadded:: 1.4.0
         """
         return StatusTracker(self._jsc.statusTracker())
 
@@ -1519,6 +2137,25 @@ class SparkContext:
         returning the result as an array of elements.
 
         If 'partitions' is not specified, this will run over all partitions.
+
+        .. versionadded:: 1.1.0
+
+        Parameters
+        ----------
+        rdd : :py:class:`pyspark.RDD`
+            target RDD to run tasks on
+        partitionFunc : function
+            a function to run on each partition of the RDD
+        partitions : list, optional, default None
+            set of partitions to run on; some jobs may not want to compute on all
+            partitions of the target RDD, e.g. for operations like `first`
+        allowLocal : bool, default False
+            this parameter takes no effect
+
+        Returns
+        -------
+        list
+            results of specified partitions
 
         Examples
         --------
@@ -1542,7 +2179,10 @@ class SparkContext:
         return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self) -> None:
-        """Print the profile stats to stdout"""
+        """Print the profile stats to stdout
+
+        .. versionadded:: 1.2.0
+        """
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
         else:
@@ -1552,7 +2192,10 @@ class SparkContext:
             )
 
     def dump_profiles(self, path: str) -> None:
-        """Dump the profile stats into directory `path`"""
+        """Dump the profile stats into directory `path`
+
+        .. versionadded:: 1.2.0
+        """
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
         else:
@@ -1562,12 +2205,22 @@ class SparkContext:
             )
 
     def getConf(self) -> SparkConf:
+        """Return a copy of this SparkContext's configuration.
+
+        .. versionadded:: 2.1.0
+        """
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
 
     @property
     def resources(self) -> Dict[str, ResourceInformation]:
+        """
+        Return the resource information of this SparkContext.
+        A resource could be a GPU, FPGA, etc.
+
+        .. versionadded:: 3.0.0
+        """
         resources = {}
         jresources = self._jsc.resources()
         for x in jresources:
@@ -1589,14 +2242,10 @@ class SparkContext:
 
 
 def _test() -> None:
-    import atexit
     import doctest
-    import tempfile
 
     globs = globals().copy()
     globs["sc"] = SparkContext("local[4]", "PythonTest")
-    globs["tempdir"] = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(globs["tempdir"]))
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
