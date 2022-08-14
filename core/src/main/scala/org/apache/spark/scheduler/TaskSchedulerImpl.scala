@@ -388,16 +388,15 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
-      val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
-      val targetExecutorRpID = prof.targetExecutorRpId
 
-      // make the resource profile id a hard requirement for now - ie only put tasksets
-      // on executors where resource profile exactly matches.
-      if (targetExecutorRpID == shuffledOffers(i).resourceProfileId) {
+      // check whether the task can be scheduled to the executor base on resource profile.
+      if (sc.resourceProfileManager
+        .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
+            val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
@@ -1224,13 +1223,13 @@ private[spark] object TaskSchedulerImpl {
 
   /**
    * Calculate the max available task slots given the `availableCpus` and `availableResources`
-   * from a collection of ResourceProfiles. And only those ResourceProfiles who has the
-   * same id with the `rpId` can be used to calculate the task slots.
+   * from a collection of ResourceProfiles. And only those ResourceProfiles who can be assigned
+   * tasks with the `rpId` can be used to calculate the task slots.
    *
    * @param scheduler the TaskSchedulerImpl instance
    * @param conf SparkConf used to calculate the limiting resource and get the cpu amount per task
-   * @param rpId the target ResourceProfile id. Only those ResourceProfiles who has the same id
-   *             with it can be used to calculate the task slots.
+   * @param rpId the ResourceProfile id for the task set. Only those ResourceProfiles who can be
+   *             assigned with the tasks can be used to calculate the task slots.
    * @param availableRPIds an Array of ids of the available ResourceProfiles from the executors.
    * @param availableCpus an Array of the amount of available cpus from the executors.
    * @param availableResources an Array of the resources map from the executors. In the resource
@@ -1245,7 +1244,6 @@ private[spark] object TaskSchedulerImpl {
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Int]]): Int = {
     val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-    val targetExecutorRpId = resourceProfile.targetExecutorRpId
     val coresKnown = resourceProfile.isCoresLimitKnown
     val (limitingResource, limitedByCpu) = {
       val limiting = resourceProfile.limitingResource(conf)
@@ -1260,7 +1258,7 @@ private[spark] object TaskSchedulerImpl {
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).get
 
     availableCpus.zip(availableResources).zip(availableRPIds)
-      .filter { case (_, id) => id == targetExecutorRpId }
+      .filter { case (_, id) => scheduler.sc.resourceProfileManager.canBeScheduled(rpId, id) }
       .map { case ((cpu, resources), _) =>
         val numTasksPerExecCores = cpu / cpusPerTask
         if (limitedByCpu) {

@@ -97,6 +97,25 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     true
   }
 
+  /**
+   * Check whether a task with specific taskRpId can be scheduled to executors
+   * with executorRpId.
+   *
+   * Here are the rules:
+   * 1. Tasks with [[TaskResourceProfile]] can be scheduled to executors with
+   *    default resource profile.
+   * 2. Other tasks can be scheduled to executors where resource profile exactly matches.
+   */
+  private[spark] def canBeScheduled(taskRpId: Int, executorRpId: Int): Boolean = {
+    assert(resourceProfileIdToResourceProfile.contains(taskRpId) &&
+      resourceProfileIdToResourceProfile.contains(executorRpId),
+      "Tasks and executors must have valid resource profile id")
+    val taskRp = resourceProfileFromId(taskRpId)
+
+    taskRpId == executorRpId || (taskRp.isInstanceOf[TaskResourceProfile] &&
+      executorRpId == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+  }
+
   def addResourceProfile(rp: ResourceProfile): Unit = {
     isSupported(rp)
     var putNewProfile = false

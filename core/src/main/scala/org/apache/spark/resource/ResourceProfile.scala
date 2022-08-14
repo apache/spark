@@ -76,11 +76,6 @@ class ResourceProfile(
     executorResources.asJava
   }
 
-  /**
-   * Target executor's resource profile id, used for schedule.
-   */
-  def targetExecutorRpId: Int = id
-
   // Note that some cluster managers don't set the executor cores explicitly so
   // be sure to check the Option as required
   private[spark] def getExecutorCores: Option[Int] = {
@@ -273,11 +268,6 @@ class TaskResourceProfile(override val taskResources: Map[String, TaskResourceRe
   extends ResourceProfile(
     ResourceProfile.getOrCreateDefaultProfile(SparkEnv.get.conf).executorResources,
     taskResources) {
-
-  /**
-   * Target executor's resource profile id, used for schedule.
-   */
-  override def targetExecutorRpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 }
 
 object ResourceProfile extends Logging {
