@@ -816,7 +816,7 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructType":
         """
-        Constructs :class`StructType` from a schema defined in JSON format.
+        Constructs :class:`StructType` from a schema defined in JSON format.
 
         Below is a JSON schema it must adhere to::
 
