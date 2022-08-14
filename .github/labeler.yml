@@ -103,7 +103,7 @@ SQL:
   - "**/*schema.R"
   - "**/*types.R"
 AVRO:
-  - "external/avro/**/*"
+  - "connector/avro/**/*"
   - "python/pyspark/sql/avro/**/*"
 DSTREAM:
   - "streaming/**/*"
@@ -123,7 +123,7 @@ MLLIB:
   - "python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
   - "**/sql/**/streaming/**/*"
-  - "external/kafka-0-10-sql/**/*"
+  - "connector/kafka-0-10-sql/**/*"
   - "python/pyspark/sql/streaming/**/*"
   - "python/pyspark/sql/tests/test_streaming.py"
   - "**/*streaming.R"

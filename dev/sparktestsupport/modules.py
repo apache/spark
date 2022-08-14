@@ -253,7 +253,7 @@ avro = Module(
     name="avro",
     dependencies=[sql],
     source_file_regexes=[
-        "external/avro",
+        "connector/avro",
     ],
     sbt_test_goals=[
         "avro/test",
@@ -264,7 +264,7 @@ sql_kafka = Module(
     name="sql-kafka-0-10",
     dependencies=[sql],
     source_file_regexes=[
-        "external/kafka-0-10-sql",
+        "connector/kafka-0-10-sql",
     ],
     sbt_test_goals=[
         "sql-kafka-0-10/test",
@@ -309,8 +309,8 @@ streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
     dependencies=[tags, core],
     source_file_regexes=[
-        "external/kinesis-asl/",
-        "external/kinesis-asl-assembly/",
+        "connector/kinesis-asl/",
+        "connector/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -327,9 +327,9 @@ streaming_kafka_0_10 = Module(
     dependencies=[streaming, core],
     source_file_regexes=[
         # The ending "/" is necessary otherwise it will include "sql-kafka" codes
-        "external/kafka-0-10/",
-        "external/kafka-0-10-assembly",
-        "external/kafka-0-10-token-provider",
+        "connector/kafka-0-10/",
+        "connector/kafka-0-10-assembly",
+        "connector/kafka-0-10-token-provider",
     ],
     sbt_test_goals=["streaming-kafka-0-10/test", "token-provider-kafka-0-10/test"],
 )
@@ -761,7 +761,7 @@ spark_ganglia_lgpl = Module(
     dependencies=[],
     build_profile_flags=["-Pspark-ganglia-lgpl"],
     source_file_regexes=[
-        "external/spark-ganglia-lgpl",
+        "connector/spark-ganglia-lgpl",
     ],
 )
 
@@ -769,7 +769,7 @@ docker_integration_tests = Module(
     name="docker-integration-tests",
     dependencies=[sql],
     build_profile_flags=["-Pdocker-integration-tests"],
-    source_file_regexes=["external/docker-integration-tests"],
+    source_file_regexes=["connector/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
     environ=None
     if "GITHUB_ACTIONS" not in os.environ

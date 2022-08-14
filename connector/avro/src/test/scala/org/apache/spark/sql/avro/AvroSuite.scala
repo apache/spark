@@ -1816,7 +1816,7 @@ abstract class AvroSuite
   // It generates input files for the test below:
   // "SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
   ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4/3.2") {
-    val resourceDir = "external/avro/src/test/resources"
+    val resourceDir = "connector/avro/src/test/resources"
     val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     def save(
       in: Seq[String],
