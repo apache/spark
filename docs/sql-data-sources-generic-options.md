@@ -71,9 +71,8 @@ the contents that have been read will still be returned.
 
 ### Path Glob Filter
 
-`pathGlobFilter` is used to only include files with file names matching the pattern.
-The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-It does not change the behavior of partition discovery.
+`pathGlobFilter` is used to only include files with file names matching the pattern. The syntax follows
+<code>org.apache.hadoop.fs.GlobFilter</code>. It does not change the behavior of partition discovery.
 
 To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
 you can use:
