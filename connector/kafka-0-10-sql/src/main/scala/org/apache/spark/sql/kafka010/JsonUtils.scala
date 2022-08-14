@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.lang.{Integer => JInt}
+import java.lang.{Long => JLong}
+
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
@@ -25,13 +28,14 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.util.Utils
+
 /**
  * Utilities for converting Kafka related objects to and from json.
  */
 private object JsonUtils {
 
   private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
-    // .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   /**
    * Read TopicPartitions from json string
@@ -68,14 +72,17 @@ private object JsonUtils {
    */
   def partitionOffsets(str: String): Map[TopicPartition, Long] = {
     try {
-      mapper.readValue(str, new TypeReference[Map[String, Map[Int, Long]]]() {})
-        .flatMap { case (topic, partOffsets) =>
-          partOffsets.map { case (part, offset) =>
-            new TopicPartition(topic, part) -> offset
+      Utils.tryWithResource(mapper.createParser(str)) { parser =>
+        val typeRef = new TypeReference[Map[String, Map[JInt, JLong]]]() {}
+        parser.readValueAs[Map[String, Map[Int, Long]]](typeRef)
+          .flatMap { case (topic, partOffsets) =>
+            partOffsets.map { case (part, offset) =>
+              new TopicPartition(topic, part) -> offset
+            }
           }
-        }
+      }
     } catch {
-      case NonFatal(x) =>
+      case NonFatal(_) =>
         throw new IllegalArgumentException(
           s"""Expected e.g. {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}, got $str""")
     }
@@ -83,12 +90,15 @@ private object JsonUtils {
 
   def partitionTimestamps(str: String): Map[TopicPartition, Long] = {
     try {
-      mapper.readValue(str, new TypeReference[Map[String, Map[Int, Long]]]() {})
-        .flatMap { case (topic, partTimestamps) =>
-          partTimestamps.map { case (part, timestamp) =>
-            new TopicPartition(topic, part) -> timestamp
+      Utils.tryWithResource(mapper.createParser(str)) { parser =>
+        val typeRef = new TypeReference[Map[String, Map[JInt, JLong]]]() {}
+        parser.readValueAs[Map[String, Map[Int, Long]]](typeRef)
+          .flatMap { case (topic, partTimestamps) =>
+            partTimestamps.map { case (part, timestamp) =>
+              new TopicPartition(topic, part) -> timestamp
+            }
           }
-        }
+      }
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
