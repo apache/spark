@@ -199,7 +199,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
-    <tink.version>1.6.1</tink.version>
+    <tink.version>1.7.0</tink.version>
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
@@ -712,12 +712,6 @@
         <groupId>net.sourceforge.htmlunit</groupId>
         <artifactId>htmlunit</artifactId>
         <version>${htmlunit.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>xalan</groupId>
-            <artifactId>xalan</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2921,7 +2915,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
+          <version>3.10.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -3044,7 +3038,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.2</version>
+          <version>3.2.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -3095,7 +3089,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.4.0</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3348,7 +3342,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.43</version>
+            <version>9.3</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3785,7 +3779,7 @@
                       <pluginExecutionFilter>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-jar-plugin</artifactId>
-                        <versionRange>3.1.2</versionRange>
+                        <versionRange>3.2.2</versionRange>
                         <goals>
                           <goal>test-jar</goal>
                         </goals>

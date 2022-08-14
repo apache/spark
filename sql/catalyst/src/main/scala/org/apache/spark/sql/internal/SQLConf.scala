@@ -2934,6 +2934,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE =
+    buildConf("spark.sql.jsonGenerator.writeNullIfWithDefaultValue")
+      .internal()
+      .doc("When true, when writing NULL values to columns of JSON tables with explicit DEFAULT " +
+        "values using INSERT, UPDATE, or MERGE commands, never skip writing the NULL values to " +
+        "storage, overriding spark.sql.jsonGenerator.ignoreNullFields or the ignoreNullFields " +
+        "option. This can be useful to enforce that inserted NULL values are present in " +
+        "storage to differentiate from missing data.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
       "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
@@ -4522,8 +4534,16 @@ class SQLConf extends Serializable with Logging {
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
+<<<<<<< HEAD
   def addMissingValuesForInsertsWithExplicitColumns: Boolean =
     getConf(SQLConf.ADD_MISSING_DEFAULT_COLUMN_VALUES_FOR_INSERTS_WITH_EXPLICIT_COLUMNS)
+=======
+  def jsonWriteNullIfWithDefaultValue: Boolean =
+    getConf(JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE)
+
+  def useNullsForMissingDefaultColumnValues: Boolean =
+    getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
+>>>>>>> master
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 

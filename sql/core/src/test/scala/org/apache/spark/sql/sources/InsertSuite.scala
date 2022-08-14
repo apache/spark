@@ -1642,8 +1642,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         dataSource = "json",
         Seq(
           Config(
-            None,
-            insertNullsToStorage = false),
+            None),
           Config(
             Some(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false")))),
       TestCase(
@@ -1659,8 +1658,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Config(
             None),
           Config(
-            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
-            insertNullsToStorage = false)))
+            Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"))))
     ).foreach { testCase: TestCase =>
       testCase.configs.foreach { config: Config =>
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
@@ -1688,6 +1686,28 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         Seq(("xyz")).toDF.select("value", "default").write.insertInto("t")
       }.getMessage.contains("column or function parameter with name `default` cannot be resolved"))
+    }
+  }
+
+  test("SPARK-40001 JSON DEFAULT columns = JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE off") {
+    val error = "DEFAULT values are not supported for JSON tables"
+    // Check that the JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE config overrides the
+    // JSON_GENERATOR_IGNORE_NULL_FIELDS config.
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
+        sql("create table t (a int default 42) using json")
+        sql("insert into t values (null)")
+        checkAnswer(spark.table("t"), Row(null))
+      }
+    }
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
+        sql("create table t (a int default 42) using json")
+        sql("insert into t values (null)")
+        checkAnswer(spark.table("t"), Row(42))
+      }
     }
   }
 
