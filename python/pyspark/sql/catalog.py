@@ -793,7 +793,7 @@ class Catalog:
         Returns
         -------
         bool
-            If the temporary view was successfully drooped or not.
+            If the temporary view was successfully dropped or not.
 
             .. versionadded:: 2.1.0
                 The return type of this method was ``None`` in Spark 2.0, but changed to ``bool``
@@ -808,7 +808,7 @@ class Catalog:
         >>> spark.catalog.dropTempView("my_table")
         True
 
-        Throw an exception if the temporary view does not exists.s
+        Throw an exception if the temporary view does not exists.
 
         >>> spark.table("my_table")
         Traceback (most recent call last):
@@ -830,7 +830,7 @@ class Catalog:
         Returns
         -------
         bool
-            If the global view was successfully drooped or not.
+            If the global view was successfully dropped or not.
 
         Notes
         -----
@@ -845,7 +845,7 @@ class Catalog:
         >>> spark.catalog.dropGlobalTempView("my_table")
         True
 
-        Throw an exception if the global view does not exists.s
+        Throw an exception if the global view does not exists.
 
         >>> spark.table("global_temp.my_table")
         Traceback (most recent call last):
@@ -929,7 +929,7 @@ class Catalog:
         >>> _ = spark.sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.cacheTable("tbl1")
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.cacheTable("not_existing_table")
         Traceback (most recent call last):
@@ -966,7 +966,7 @@ class Catalog:
         >>> spark.catalog.isCached("tbl1")
         False
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -1013,7 +1013,7 @@ class Catalog:
 
         Examples
         --------
-        The example below caches a table, and then remove the data.
+        The example below caches a table, and then removes the data.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
@@ -1102,7 +1102,7 @@ class Catalog:
 
         Examples
         --------
-        The example below caches a table, and then remove the data.
+        The example below caches a table, and then removes the data.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
