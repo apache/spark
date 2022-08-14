@@ -1160,34 +1160,6 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: set location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
-
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
-    }
-  }
-
-  test("AlterTable: set partition location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(exc.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
-    }
-  }
-
   test("AlterTable: set table property") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
