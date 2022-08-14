@@ -17,12 +17,15 @@
 
 package org.apache.spark.resource
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.mockito.Mockito.when
+import org.scalatestplus.mockito.MockitoSugar
+
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.resource.TestResourceIDs._
 
-class ResourceProfileSuite extends SparkFunSuite {
+class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
 
   override def beforeAll(): Unit = {
     try {
@@ -195,17 +198,18 @@ class ResourceProfileSuite extends SparkFunSuite {
       .set(EXECUTOR_CORES, 2)
       .set("spark.executor.resource.gpu.amount", "2")
       .set("spark.executor.resource.gpu.discoveryScript", "myscript")
-    ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
-    val rp1 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 1).requests)
-    assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
-    assert(rp1.maxTasksPerExecutor(sparkConf) == 2)
-    assert(rp1.isCoresLimitKnown)
+    withMockSparkEnv(sparkConf) {
+      val rp1 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 1).requests)
+      assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
+      assert(rp1.maxTasksPerExecutor(sparkConf) == 2)
+      assert(rp1.isCoresLimitKnown)
 
-    val rp2 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 2).requests)
-    assert(rp2.limitingResource(sparkConf) == "gpu")
-    assert(rp2.maxTasksPerExecutor(sparkConf) == 1)
-    assert(rp2.isCoresLimitKnown)
+      val rp2 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 2).requests)
+      assert(rp2.limitingResource(sparkConf) == "gpu")
+      assert(rp2.maxTasksPerExecutor(sparkConf) == 1)
+      assert(rp2.isCoresLimitKnown)
+    }
   }
 
   test("Create ResourceProfile") {
@@ -275,19 +279,21 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("test TaskResourceProfiles equal") {
-    val rprofBuilder = new ResourceProfileBuilder()
-    val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    rprofBuilder.require(taskReq)
-    val rprof = rprofBuilder.build
+    withMockSparkEnv(new SparkConf()) {
+      val rprofBuilder = new ResourceProfileBuilder()
+      val taskReq = new TaskResourceRequests().resource("gpu", 1)
+      rprofBuilder.require(taskReq)
+      val rprof = rprofBuilder.build
 
-    val taskReq1 = new TaskResourceRequests().resource("gpu", 1)
-    val rprof1 = new TaskResourceProfile(taskReq1.requests)
-    assert(!rprof.resourcesEqual(rprof1),
-      "resource profiles having different types should not equal")
+      val taskReq1 = new TaskResourceRequests().resource("gpu", 1)
+      val rprof1 = new TaskResourceProfile(taskReq1.requests)
+      assert(!rprof.resourcesEqual(rprof1),
+        "resource profiles having different types should not equal")
 
-    val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
-    val rprof2 = new TaskResourceProfile(taskReq2.requests)
-    assert(rprof1.resourcesEqual(rprof2), "task resource profile resourcesEqual not working")
+      val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
+      val rprof2 = new TaskResourceProfile(taskReq2.requests)
+      assert(rprof1.resourcesEqual(rprof2), "task resource profile resourcesEqual not working")
+    }
   }
 
   test("Test ExecutorResourceRequests memory helpers") {
@@ -362,5 +368,16 @@ class ResourceProfileSuite extends SparkFunSuite {
 
     assert(ResourceProfile.getCustomTaskResources(rprof.build).size === 1,
       "Task resources should have 1 custom resource")
+  }
+
+  private def withMockSparkEnv(conf: SparkConf)(f: => Unit): Unit = {
+    val previousEnv = SparkEnv.get
+    val mockEnv = mock[SparkEnv]
+    when(mockEnv.conf).thenReturn(conf)
+    SparkEnv.set(mockEnv)
+
+    try f finally {
+      SparkEnv.set(previousEnv)
+    }
   }
 }

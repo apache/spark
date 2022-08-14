@@ -3423,6 +3423,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("test merge task resource profiles") {
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
+    // Ensure the initialization of SparkEnv
+    sc
+
     val treqs1 = new TaskResourceRequests().cpus(1)
     val rp1 = new TaskResourceProfile(treqs1.requests)
     val treqs2 = new TaskResourceRequests().cpus(1)
