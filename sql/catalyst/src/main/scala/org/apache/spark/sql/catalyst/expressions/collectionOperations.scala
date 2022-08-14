@@ -2160,7 +2160,7 @@ case class ElementAt(
   override def nullable: Boolean = left.dataType match {
     case _: ArrayType =>
       computeNullabilityFromArray(left, right, failOnError, nullability)
-    case _: MapType => if (failOnError) mapValueContainsNull else true
+    case _: MapType => true
   }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
@@ -2261,10 +2261,12 @@ case class ElementAt(
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
-    Some(origin.context)
-  } else {
-    None
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (failOnError && left.dataType.isInstanceOf[ArrayType]) {
+      Some(origin.context)
+    } else {
+      None
+    }
   }
 }
 
