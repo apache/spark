@@ -200,7 +200,7 @@ class Catalog:
         Parameters
         ----------
         dbName : str
-             name of the database to check existence.
+             name of the database to get.
 
         Returns
         -------
@@ -269,7 +269,7 @@ class Catalog:
         Parameters
         ----------
         dbName : str
-            name of the database to check existence
+            name of the database to list the tables.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
@@ -384,7 +384,7 @@ class Catalog:
         Parameters
         ----------
         dbName : str
-            name of the database to check existence
+            name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
 
         Returns
