@@ -355,13 +355,11 @@ private[spark] class ExecutorMonitor(
     val removed = executors.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
-      if (removed.decommissioning) {
-        if (event.reason == ExecutorLossMessage.decommissionFinished ||
-            event.reason == ExecutorDecommission().message) {
-          metrics.gracefullyDecommissioned.inc()
-        } else {
+      if (event.reason == ExecutorLossMessage.decommissionFinished ||
+        event.reason == ExecutorDecommission().message) {
+        metrics.gracefullyDecommissioned.inc()
+      } else if (removed.decommissioning) {
           metrics.decommissionUnfinished.inc()
-        }
       } else if (removed.pendingRemoval) {
         metrics.driverKilled.inc()
       } else {

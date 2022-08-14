@@ -140,3 +140,9 @@ select cast(interval '10.123' second as decimal(4, 2));
 select cast(interval '10.005' second as decimal(4, 2));
 select cast(interval '10.123' second as decimal(5, 2));
 select cast(interval '10.123' second as decimal(1, 0));
+
+-- cast decimals to ANSI intervals
+select cast(10.123456BD as interval day to second);
+select cast(80.654321BD as interval hour to minute);
+select cast(-10.123456BD as interval year to month);
+select cast(10.654321BD as interval month);

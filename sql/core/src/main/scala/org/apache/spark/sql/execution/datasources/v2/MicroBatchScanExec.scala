@@ -48,6 +48,9 @@ case class MicroBatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar, customMetrics)
+    val inputRDD = new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar,
+      customMetrics)
+    postDriverMetrics()
+    inputRDD
   }
 }

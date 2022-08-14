@@ -873,6 +873,41 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics(innerMetric.id) === expectedInnerValue)
   }
 
+  test("SPARK-39635: Report driver metrics from Datasource v2 scan") {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    val schema = new StructType().add("i", "int").add("j", "int")
+    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomDriverMetricScanBuilder(),
+      Seq.empty)
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val expectedMetric = physicalPlan.metrics("custom_driver_metric_partition_count")
+    val expectedValue = "2"
+    assert(metrics.contains(expectedMetric.id))
+    assert(metrics(expectedMetric.id) === expectedValue)
+  }
+
   test("SPARK-36030: Report metrics from Datasource v2 write") {
     withTempDir { dir =>
       val statusStore = spark.sharedState.statusStore
@@ -1037,6 +1072,19 @@ class SimpleCustomMetric extends CustomMetric {
   }
 }
 
+class SimpleCustomDriverMetric extends CustomMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def description(): String = "Simple custom driver metrics - partition count"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    taskMetrics.sum.toString
+  }
+}
+
+class SimpleCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def value(): Long = value
+}
+
 class BytesWrittenCustomMetric extends CustomMetric {
   override def name(): String = "bytesWritten"
   override def description(): String = "bytesWritten metric"
@@ -1094,6 +1142,28 @@ class CustomMetricScanBuilder extends SimpleScanBuilder {
   }
 
   override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+}
+
+class CustomDriverMetricScanBuilder extends SimpleScanBuilder {
+
+  var partitionCount: Long = 0L
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val partitions: Array[InputPartition] = Array(RangeInputPartition(0, 5),
+      RangeInputPartition(5, 10))
+    partitionCount = partitions.length
+    partitions
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+
+  override def supportedCustomMetrics(): Array[CustomMetric] = {
+    Array(new SimpleCustomDriverMetric)
+  }
+
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+    Array(new SimpleCustomDriverTaskMetric(partitionCount))
+  }
 }
 
 class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWriter(fs, file) {
