@@ -200,12 +200,22 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       .set("spark.executor.resource.gpu.discoveryScript", "myscript")
 
     withMockSparkEnv(sparkConf) {
-      val rp1 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 1).requests)
+      val rpBuilder1 = new ResourceProfileBuilder()
+      val rp1 = rpBuilder1
+        .require(new TaskResourceRequests().resource("gpu", 1))
+        .taskOnly()
+        .build()
+      assert(rp1.isInstanceOf[TaskResourceProfile])
       assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
       assert(rp1.maxTasksPerExecutor(sparkConf) == 2)
       assert(rp1.isCoresLimitKnown)
 
-      val rp2 = new TaskResourceProfile(new TaskResourceRequests().resource("gpu", 2).requests)
+      val rpBuilder2 = new ResourceProfileBuilder()
+      val rp2 = rpBuilder2
+        .require(new TaskResourceRequests().resource("gpu", 2))
+        .taskOnly()
+        .build()
+      assert(rp1.isInstanceOf[TaskResourceProfile])
       assert(rp2.limitingResource(sparkConf) == "gpu")
       assert(rp2.maxTasksPerExecutor(sparkConf) == 1)
       assert(rp2.isCoresLimitKnown)
