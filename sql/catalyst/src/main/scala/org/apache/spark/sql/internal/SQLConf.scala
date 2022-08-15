@@ -3961,7 +3961,11 @@ object SQLConf {
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
-        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead."),
+      RemovedConfig("spark.sql.ansi.strictIndexOperator", "3.4.0", "true",
+        "This was an internal configuration. It is not needed anymore since Spark SQL always " +
+          "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
+          "for more details.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
