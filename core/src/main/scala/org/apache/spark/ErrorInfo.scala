@@ -25,6 +25,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.json4s.{JInt, JString}
+import org.json4s.JsonAST.{JArray, JObject}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.util.Utils
 
@@ -134,5 +138,40 @@ private[spark] object SparkThrowableHelper {
 
   def isInternalError(errorClass: String): Boolean = {
     errorClass == "INTERNAL_ERROR"
+  }
+
+  object ErrorMessageFormat extends Enumeration {
+    val PRETTY, MINIMAL, STANDARD = Value
+  }
+
+  def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
+    import ErrorMessageFormat._
+    format match {
+      case PRETTY => e.getMessage
+      case MINIMAL | STANDARD if e.getErrorClass == null =>
+        val jValue = ("errorClass" -> "legacy") ~
+          ("messageParameters" -> JObject(List("message" -> JString(e.getMessage)))) ~
+          ("queryContext" -> JArray(List.empty))
+        compact(render(jValue))
+      case MINIMAL | STANDARD =>
+        val message = if (format == STANDARD) Some(e.getMessage) else None
+        assert(e.getParameterNames.size == e.getMessageParameters.size,
+          "Number of message parameter names and values must be the same")
+        val jValue = ("errorClass" -> e.getErrorClass) ~
+          ("errorSubClass" -> Option(e.getErrorSubClass)) ~
+          ("message" -> message) ~
+          ("sqlState" -> Option(e.getSqlState)) ~
+          ("messageParameters" ->
+            JObject((e.getParameterNames zip e.getMessageParameters.map(JString)).toList)) ~
+          ("queryContext" -> JArray(
+            e.getQueryContext.map(c => JObject(
+              "objectType" -> JString(c.objectType()),
+              "objectName" -> JString(c.objectName()),
+              "startIndex" -> JInt(c.startIndex()),
+              "stopIndex" -> JInt(c.stopIndex()),
+              "fragment" -> JString(c.fragment()))).toList)
+          )
+        compact(render(jValue))
+    }
   }
 }
