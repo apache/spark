@@ -899,7 +899,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // There are two trailing default values referenced implicitly by the INSERT INTO statement.
     withTable("t") {
       sql("create table t(i int, s bigint default 42, x bigint default 43) using parquet")
-      sql("insert into t(i, s, x) values(1)")
+      sql("insert into t(i) values(1)")
       checkAnswer(sql("select s + x from t where i = 1"), Seq(85L).map(i => Row(i)))
     }
     // The table has a partitioning column and a default value is injected.
@@ -1372,17 +1372,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t1(j int) using parquet")
       sql("alter table t1 add column s bigint default 42")
       sql("alter table t1 add column x bigint default 43")
-      sql("insert into t1(j, s, x) values(1)")
-      sql("insert into t1(j, s, x) values(2, default)")
+      sql("insert into t1(j) values(1)")
+      sql("insert into t1(j, s) values(2, default)")
       sql("insert into t1 values(3, default, default)")
-      sql("insert into t1(j, s, x) values(4, 44)")
+      sql("insert into t1(j, s) values(4, 44)")
       sql("insert into t1 values(5, 44, 45)")
       sql("create table t2(j int) using parquet")
       sql("alter table t2 add columns s bigint default 42, x bigint default 43")
-      sql("insert into t2(j, s, x) select j from t1 where j = 1")
-      sql("insert into t2(j, s, x) select j, default from t1 where j = 2")
+      sql("insert into t2(j) select j from t1 where j = 1")
+      sql("insert into t2(j, s) select j, default from t1 where j = 2")
       sql("insert into t2 select j, default, default from t1 where j = 3")
-      sql("insert into t2(j, s, x) select j, s from t1 where j = 4")
+      sql("insert into t2(j, s) select j, s from t1 where j = 4")
       sql("insert into t2 select j, s, default from t1 where j = 5")
       checkAnswer(
         spark.table("t2"),
@@ -2250,7 +2250,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
     withTable("t1") {
       sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
-      sql("INSERT INTO TABLE t1 (c1, c2, c3) select * from jt where a=1")
+      sql("INSERT INTO TABLE t1 (c1, c2) select * from jt where a=1")
       checkAnswer(spark.table("t1"), Row(1, "str1", null))
       sql("INSERT INTO TABLE t1  (c1, c2, c3) select *, 2 from jt where a=2")
       checkAnswer(spark.table("t1"), Seq(Row(1, "str1", null), Row(2, "str2", 2)))
