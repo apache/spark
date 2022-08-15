@@ -80,13 +80,11 @@ class ResourceProfileBuilder() {
   }
 
   /**
-   * Specify target resource profile type.
-   * @param isTaskResourceProfile will create a [[TaskResourceProfile]] if true, otherwise a
-   *                              normal [[ResourceProfile]]
+   * To create a [[TaskResourceProfile]]
    * @return This ResourceProfileBuilder
    */
-  def taskOnly(isTaskResourceProfile: Boolean = true): this.type = {
-    _isTaskResourceProfile = isTaskResourceProfile
+  def taskOnly(): this.type = {
+    _isTaskResourceProfile = true
     this
   }
 
