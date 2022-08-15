@@ -566,7 +566,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedV1Identifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
-        assert(ident.namespace.length == 1)
+        if (ident.namespace().length != 1) {
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident.namespace())
+        }
         Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
       case _ => None
     }
