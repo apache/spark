@@ -1404,10 +1404,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(
           spark.table("t2"),
           Row(1, 42L, 43L) ::
-            Row(2, 42L, 43L) ::
-            Row(3, 42L, 43L) ::
-            Row(4, 44L, 43L) ::
-            Row(5, 44L, 43L) :: Nil)
+          Row(2, 42L, 43L) ::
+          Row(3, 42L, 43L) ::
+          Row(4, 44L, 43L) ::
+          Row(5, 44L, 43L) :: Nil)
       }
     }
   }
@@ -1891,14 +1891,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
                 array(
                   map(false, 'def', true, 'jkl'))))
               using ${config.dataSource}""")
+        def namedStructSql(colA: Integer, colB: Integer, key1: String, key2: String): String = {
+          "named_struct(" +
+            "'x', array(" +
+            s"named_struct('a', $colA, 'b', $colB)), " +
+            "'y', array(" +
+            s"map(false, '$key1', true, '$key2')))"
+        }
         if (config.useDataFrames) {
-          sql("select 1, " +
-            "named_struct(" +
-              "'x', array(" +
-                "named_struct('a', 1, 'b', 2)), " +
-              "'y', array(" +
-                "map(false, 'def', true, 'jkl')))")
-            .write.insertInto("t")
+          sql("select 1, " + namedStructSql(1, 2, "def", "jkl")).write.insertInto("t")
         } else {
           sql("insert into t select 1, default")
         }
@@ -1917,13 +1918,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               array(
                 map(false, 'mno', true, 'pqr')))""")
         if (config.useDataFrames) {
-          sql("select 3, " +
-            "named_struct(" +
-              "'x', array(" +
-                "named_struct('a', 3, 'b', 4)), " +
-              "'y', array(" +
-                "map(false, 'mno', true, 'pqr')))")
-            .write.insertInto("t")
+          sql("select 3, " + namedStructSql(3, 4, "mno", "pqr")).write.insertInto("t")
         } else {
           sql("insert into t select 3, default")
         }
@@ -1935,12 +1930,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             default array(
               map(true, 'xyz'))""")
         if (config.useDataFrames) {
-          sql("select 4, " +
-            "named_struct(" +
-              "'x', array(" +
-                "named_struct('a', 3, 'b', 4)), " +
-              "'y', array(" +
-                "map(false, 'mno', true, 'pqr')))," +
+          sql("select 4, " + namedStructSql(3, 4, "mno", "pqr") + "," +
             "array(" +
               "map(true, 'xyz'))")
             .write.insertInto("t")
