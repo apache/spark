@@ -99,17 +99,17 @@ class SparkContext:
 
     Parameters
     ----------
-    master : str, optional, default None
+    master : str, optional
         Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-    appName : str, optional, default None
+    appName : str, optional
         A name for your job, to display on the cluster web UI.
-    sparkHome : str, optional, default None
+    sparkHome : str, optional
         Location where Spark is installed on cluster nodes.
-    pyFiles : list, optional, default None
+    pyFiles : list, optional
         Collection of .zip or .py files to send to the cluster
         and add to PYTHONPATH.  These can be paths on the local file
         system or HDFS, HTTP, HTTPS, or FTP URLs.
-    environment : dict, optional, default None
+    environment : dict, optional
         A dictionary of environment variables to set on
         worker nodes.
     batchSize : int, optional, default 0
@@ -117,18 +117,18 @@ class SparkContext:
         Java object. Set 1 to disable batching, 0 to automatically choose
         the batch size based on object sizes, or -1 to use an unlimited
         batch size
-    serializer : :class:`pyspark.serializers.Serializer`, optional, default `CPickleSerializer`
+    serializer : :class:`Serializer`, optional, default :class:`CPickleSerializer`
         The serializer for RDDs.
-    conf : :py:class:`pyspark.SparkConf`, optional, default None
+    conf : :class:`SparkConf`, optional
         An object setting Spark properties.
-    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional, default None
+    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional
         Use an existing gateway and JVM, otherwise a new JVM
         will be instantiated. This is only used internally.
-    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional, default None
+    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional
         The JavaSparkContext instance. This is only used internally.
-    profiler_cls : type, optional, default :class:`pyspark.profiler.BasicProfiler`
+    profiler_cls : type, optional, default :class:`BasicProfiler`
         A class of custom Profiler used to do profiling
-    udf_profiler_cls : type, optional, default :class:`pyspark.profiler.UDFBasicProfiler`
+    udf_profiler_cls : type, optional, default :class:`UDFBasicProfiler`
         A class of custom Profiler used to do udf profiling
 
     Notes
@@ -475,23 +475,23 @@ class SparkContext:
     @classmethod
     def getOrCreate(cls, conf: Optional[SparkConf] = None) -> "SparkContext":
         """
-        Get or instantiate a `SparkContext` and register it as a singleton object.
+        Get or instantiate a :class:`SparkContext` and register it as a singleton object.
 
         .. versionadded:: 1.4.0
 
         Parameters
         ----------
-        conf : :py:class:`pyspark.SparkConf`, optional, default None
-            `SparkConf` that will be used for initialisation of the `SparkContext`.
+        conf : :class:`SparkConf`, optional, default None
+            :class:`SparkConf` that will be used for initialization of the :class:`SparkContext`.
 
         Returns
         -------
-        :class:`pyspark.context.SparkContext`
-            current `SparkContext`, or a new one if it wasn't created before the function call.
+        :class:`SparkContext`
+            current :class:`SparkContext`, or a new one if it wasn't created before the function
+            call.
 
         Examples
         --------
-        >>> from pyspark.context import SparkContext
         >>> SparkContext.getOrCreate()
         <SparkContext ...>
         """
@@ -515,7 +515,7 @@ class SparkContext:
 
         Examples
         --------
-        >>> sc.setLogLevel("WARN")
+        >>> sc.setLogLevel("WARN")  # doctest :+SKIP
         """
         self._jsc.setLogLevel(logLevel)
 
@@ -523,9 +523,16 @@ class SparkContext:
     def setSystemProperty(cls, key: str, value: str) -> None:
         """
         Set a Java system property, such as `spark.executor.memory`. This must
-        be invoked before instantiating SparkContext.
+        be invoked before instantiating :class:`SparkContext`.
 
         .. versionadded:: 0.9.0
+        
+        Parameters
+        ----------
+        key : str
+            The key of a new Java system property.
+        value : str
+            The value of a new Java system property.
         """
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
@@ -540,7 +547,7 @@ class SparkContext:
 
         Examples
         --------
-        >>> version = sc.version
+        >>> _ = sc.version
         """
         return self._jsc.version()
 
@@ -564,7 +571,7 @@ class SparkContext:
 
     @property
     def uiWebUrl(self) -> str:
-        """Return the URL of the SparkUI instance started by this `SparkContext`
+        """Return the URL of the SparkUI instance started by this :class:`SparkContext`
 
         .. versionadded:: 2.1.0
         """
@@ -572,13 +579,13 @@ class SparkContext:
 
     @property
     def startTime(self) -> int:
-        """Return the epoch time when the `SparkContext` was started.
+        """Return the epoch time when the :class:`SparkContext` was started.
 
         .. versionadded:: 1.5.0
 
         Examples
         --------
-        >>> start = sc.startTime
+        >>> _ = sc.startTime
         """
         return self._jsc.startTime()
 
@@ -612,7 +619,7 @@ class SparkContext:
 
     def stop(self) -> None:
         """
-        Shut down the `SparkContext`.
+        Shut down the :class:`SparkContext`.
 
         .. versionadded:: 0.7.0
         """
@@ -637,13 +644,13 @@ class SparkContext:
 
     def emptyRDD(self) -> RDD[Any]:
         """
-        Create an `RDD` that has no partitions or elements.
+        Create an :class:`RDD` that has no partitions or elements.
 
         .. versionadded:: 1.5.0
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             An empty RDD
 
         Examples
@@ -670,21 +677,21 @@ class SparkContext:
         ----------
         start : int
             the start value
-        end : int, optional, default None
+        end : int, optional
             the end value (exclusive)
         step : int, optional, default 1
             the incremental step
-        numSlices : int, optional, default None
+        numSlices : int, optional
             the number of partitions of the new RDD
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             An RDD of int
 
         See Also
         --------
-        :meth:`SparkSession.range`
+        :meth:`pyspark.sql.SparkSession.range`
 
         Examples
         --------
@@ -696,12 +703,14 @@ class SparkContext:
         [1, 3, 5]
 
         Generate RDD with a negative step
+
         >>> sc.range(5, 0, -1).collect()
         [5, 4, 3, 2, 1]
         >>> sc.range(0, 5, -1).collect()
         []
 
         Control the number of partitions
+
         >>> sc.range(5, numSlices=1).getNumPartitions()
         1
         >>> sc.range(5, numSlices=10).getNumPartitions()
@@ -722,14 +731,14 @@ class SparkContext:
 
         Parameters
         ----------
-        c : :py:class:`collections.abc.Iterable`
+        c : :class:`collections.abc.Iterable`
             iterable collection to distribute
-        numSlices : int, optional, default None
+        numSlices : int, optional
             the number of partitions of the new RDD
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD representing distributed collection.
 
         Examples
@@ -848,12 +857,12 @@ class SparkContext:
         name : str
             directory to the input data files, the path can be comma separated
             paths as a list of inputs
-        minPartitions : int, optional, default None
+        minPartitions : int, optional
             suggested minimum number of partitions for the resulting RDD
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD representing unpickled data from the file(s).
 
         See Also
@@ -905,17 +914,17 @@ class SparkContext:
         name : str
             directory to the input data files, the path can be comma separated
             paths as a list of inputs
-        minPartitions : int, optional, default None
+        minPartitions : int, optional
             suggested minimum number of partitions for the resulting RDD
         use_unicode : bool, default True
-            If use_unicode is False, the strings will be kept as `str` (encoding
+            If `use_unicode` is False, the strings will be kept as `str` (encoding
             as `utf-8`), which is faster and smaller than unicode.
 
             .. versionadded:: 1.2.0
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD representing text data from the file(s).
 
         See Also
@@ -991,17 +1000,17 @@ class SparkContext:
         path : str
             directory to the input data files, the path can be comma separated
             paths as a list of inputs
-        minPartitions : int, optional, default None
+        minPartitions : int, optional
             suggested minimum number of partitions for the resulting RDD
         use_unicode : bool, default True
-            If use_unicode is False, the strings will be kept as `str` (encoding
+            If `use_unicode` is False, the strings will be kept as `str` (encoding
             as `utf-8`), which is faster and smaller than unicode.
 
             .. versionadded:: 1.2.0
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD representing path-content pairs from the file(s).
 
         Notes
@@ -1027,7 +1036,6 @@ class SparkContext:
         ...         _ = f.write("xyz")
         ...
         ...     collected = sorted(sc.wholeTextFiles(d).collect())
-
         >>> collected
         [('.../1.txt', '123'), ('.../2.txt', 'xyz')]
         """
@@ -1053,12 +1061,12 @@ class SparkContext:
         path : str
             directory to the input data files, the path can be comma separated
             paths as a list of inputs
-        minPartitions : int, optional, default None
+        minPartitions : int, optional
             suggested minimum number of partitions for the resulting RDD
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD representing path-content pairs from the file(s).
 
         Notes
@@ -1111,7 +1119,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of data with values, represented as byte arrays
 
         See Also
@@ -1176,16 +1184,16 @@ class SparkContext:
         ----------
         path : str
             path to sequencefile
-        keyClass: str, optional, default None
+        keyClass: str, optional
             fully qualified classname of key Writable class (e.g. "org.apache.hadoop.io.Text")
-        valueClass : str, optional, default None
+        valueClass : str, optional
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional, default None
+        keyConverter : str, optional
             fully qualified name of a function returning key WritableConverter
-        valueConverter : str, optional, default None
+        valueConverter : str, optional
             fully qualifiedname of a function returning value WritableConverter
-        minSplits : int, optional, default None
+        minSplits : int, optional
             minimum splits in dataset (default min(2, sc.defaultParallelism))
         batchSize : int, optional, default 0
             The number of Python objects represented as a single
@@ -1193,7 +1201,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of tuples of key and corresponding value
 
         See Also
@@ -1273,13 +1281,13 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional, default None
+        keyConverter : str, optional
             fully qualified name of a function returning key WritableConverter
             None by default
-        valueConverter : str, optional, default None
+        valueConverter : str, optional
             fully qualified name of a function returning value WritableConverter
             None by default
-        conf : dict, optional, default None
+        conf : dict, optional
             Hadoop configuration, passed in as a dict
             None by default
         batchSize : int, optional, default 0
@@ -1288,7 +1296,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of tuples of key and corresponding value
 
         See Also
@@ -1367,13 +1375,13 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional, default None
+        keyConverter : str, optional
             fully qualified name of a function returning key WritableConverter
             (None by default)
-        valueConverter : str, optional, default None
+        valueConverter : str, optional
             fully qualified name of a function returning value WritableConverter
             (None by default)
-        conf : dict, optional, default None
+        conf : dict, optional
             Hadoop configuration, passed in as a dict (None by default)
         batchSize : int, optional, default 0
             The number of Python objects represented as a single
@@ -1381,7 +1389,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of tuples of key and corresponding value
 
         See Also
@@ -1475,11 +1483,11 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional, default None
+        keyConverter : str, optional
             fully qualified name of a function returning key WritableConverter
-        valueConverter : str, optional, default None
+        valueConverter : str, optional
             fully qualified name of a function returning value WritableConverter
-        conf : dict, optional, default None
+        conf : dict, optional
             Hadoop configuration, passed in as a dict
         batchSize : int, optional, default 0
             The number of Python objects represented as a single
@@ -1487,7 +1495,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of tuples of key and corresponding value
 
         See Also
@@ -1566,11 +1574,11 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional, default None
+        keyConverter : str, optional
             fully qualified name of a function returning key WritableConverter
-        valueConverter : str, optional, default None
+        valueConverter : str, optional
             fully qualified name of a function returning value WritableConverter
-        conf : dict, optional, default None
+        conf : dict, optional
             Hadoop configuration, passed in as a dict
         batchSize : int, optional, default 0
             The number of Python objects represented as a single
@@ -1578,7 +1586,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.RDD`
+        :class:`RDD`
             RDD of tuples of key and corresponding value
 
         See Also
@@ -1713,8 +1721,8 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.Broadcast`
-            `Broadcast` object, a read-only variable cached on each machine
+        :class:`Broadcast`
+            :class:`Broadcast` object, a read-only variable cached on each machine
 
         Examples
         --------
@@ -1746,12 +1754,12 @@ class SparkContext:
         ----------
         value : T
             initialized value
-        accum_param : :py:class:`pyspark.AccumulatorParam`, optional, default None
+        accum_param : :class:`pyspark.AccumulatorParam`, optional
             helper object to define how to add values
 
         Returns
         -------
-        :py:class:`pyspark.Accumulator`
+        :class:`Accumulator`
             `Accumulator` object, a shared variable that can be accumulated
 
         Examples
@@ -2069,6 +2077,14 @@ class SparkContext:
         running jobs in this group.
 
         .. versionadded:: 1.0.0
+        Parameters
+        ----------
+        groupId : str
+            The group ID to assign.
+        description : str
+            The description to set for the job group.
+        interruptOnCancel : bool, optional, default False
+            whether to interrupt jobs on job cancellation.
 
         Notes
         -----
@@ -2120,6 +2136,12 @@ class SparkContext:
         Spark fair scheduler pool.
 
         .. versionadded:: 1.0.0
+        Parameters
+        ----------
+        key : str
+            The key of the local property to set.
+        value : str
+            The value of the local property to set.
 
         See Also
         --------
@@ -2150,6 +2172,10 @@ class SparkContext:
         Set a human readable description of the current job.
 
         .. versionadded:: 2.3.0
+        Parameters
+        ----------
+        value : str
+            The job description to set.
 
         Notes
         -----
@@ -2172,6 +2198,10 @@ class SparkContext:
         for more information.
 
         .. versionadded:: 1.1.0
+        Parameters
+        ----------
+        groupId : str
+            The group ID to cancel the job.
 
         See Also
         --------
@@ -2218,11 +2248,11 @@ class SparkContext:
 
         Parameters
         ----------
-        rdd : :py:class:`pyspark.RDD`
+        rdd : :class:`RDD`
             target RDD to run tasks on
         partitionFunc : function
             a function to run on each partition of the RDD
-        partitions : list, optional, default None
+        partitions : list, optional
             set of partitions to run on; some jobs may not want to compute on all
             partitions of the target RDD, e.g. for operations like `first`
         allowLocal : bool, default False
@@ -2293,7 +2323,7 @@ class SparkContext:
             )
 
     def getConf(self) -> SparkConf:
-        """Return a copy of this SparkContext's configuration :py:class:`pyspark.SparkConf`.
+        """Return a copy of this SparkContext's configuration :class:`SparkConf`.
 
         .. versionadded:: 2.1.0
         """
@@ -2304,7 +2334,7 @@ class SparkContext:
     @property
     def resources(self) -> Dict[str, ResourceInformation]:
         """
-        Return the resource information of this SparkContext.
+        Return the resource information of this :class:`SparkContext`.
         A resource could be a GPU, FPGA, etc.
 
         .. versionadded:: 3.0.0
