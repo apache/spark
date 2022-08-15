@@ -33,6 +33,9 @@ object JacksonUtils {
     ret
   }
 
+  def writeValuePrettyAsString(o: Any): String =
+    mapper.writerWithDefaultPrettyPrinter().writeValueAsString(o)
+
   def writeValueAsString(o: Any): String = mapper.writeValueAsString(o)
 
   def writeValueAsBytes(o: Any): Array[Byte] = mapper.writeValueAsBytes(o)
