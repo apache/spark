@@ -266,7 +266,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def addMissingDefaultValuesForInsertFromInlineTable(
       node: LogicalPlan,
       insertTableSchemaWithoutPartitionColumns: StructType,
-      numUserSpecifiedFields: Integer): LogicalPlan = {
+      numUserSpecifiedFields: Int): LogicalPlan = {
     val numQueryOutputs: Int = node match {
       case table: UnresolvedInlineTable => table.rows(0).size
       case local: LocalRelation => local.data(0).numFields
