@@ -43,7 +43,7 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RateStreamOffset(JacksonUtils.readValue(json, classOf[Map[Int, ValueRunTimeMsPair]]))
+    RateStreamOffset(JacksonUtils.readValue[Map[Int, ValueRunTimeMsPair]](json))
   }
 
   override def initialOffset: Offset = createInitialOffset(numPartitions, creationTime)

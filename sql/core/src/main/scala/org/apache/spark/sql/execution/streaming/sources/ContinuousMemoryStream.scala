@@ -69,7 +69,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
 
   override def deserializeOffset(json: String): ContinuousMemoryStreamOffset = {
     // need to define TypeRef?
-    ContinuousMemoryStreamOffset(JacksonUtils.readValue(json, classOf[Map[Int, Int]]))
+    ContinuousMemoryStreamOffset(JacksonUtils.readValue[Map[Int, Int]](json))
   }
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): ContinuousMemoryStreamOffset = {

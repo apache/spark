@@ -87,7 +87,7 @@ class TextSocketContinuousStream(
 
   override def deserializeOffset(json: String): Offset = {
     // need to define TypeRef?
-    TextSocketOffset(JacksonUtils.readValue(json, classOf[List[Int]]))
+    TextSocketOffset(JacksonUtils.readValue[List[Int]](json))
   }
 
   override def initialOffset(): Offset = {

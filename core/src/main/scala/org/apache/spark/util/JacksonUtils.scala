@@ -17,15 +17,18 @@
 
 package org.apache.spark.util
 
-import java.io.{OutputStream, Reader, Writer}
+import java.io.{ByteArrayOutputStream, OutputStream, Reader, Writer}
+import java.nio.charset.StandardCharsets
 
+import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.module.scala.JavaTypeable
 
 object JacksonUtils {
 
-  import com.fasterxml.jackson.module.scala.JavaTypeable
 
   private val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
@@ -54,4 +57,24 @@ object JacksonUtils {
   def readValue[T](reader: Reader, valueType: Class[T]): T =
     mapper.readValue(reader: Reader, valueType: Class[T])
 
+  def readTree(content: String): JsonNode = mapper.readTree(content)
+
+  def toJsonString(block: JsonGenerator => Unit): String = {
+    val baos = new ByteArrayOutputStream()
+    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
+    block(generator)
+    generator.close()
+    baos.close()
+    new String(baos.toByteArray, StandardCharsets.UTF_8)
+  }
+
+  def toPrettyJsonString(block: JsonGenerator => Unit): String = {
+    val baos = new ByteArrayOutputStream()
+    val generator = mapper.writerWithDefaultPrettyPrinter()
+      .createGenerator(baos, JsonEncoding.UTF8)
+    block(generator)
+    generator.close()
+    baos.close()
+    new String(baos.toByteArray, StandardCharsets.UTF_8)
+  }
 }
