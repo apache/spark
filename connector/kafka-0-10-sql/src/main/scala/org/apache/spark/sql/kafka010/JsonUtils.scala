@@ -69,12 +69,11 @@ private object JsonUtils {
    */
   def partitionOffsets(str: String): Map[TopicPartition, Long] = {
     try {
-      mapper.readValue[Map[String, Map[Int, Long]]](str)
-        .flatMap { case (topic, partOffsets) =>
-          partOffsets.map { case (part, offset) =>
-            new TopicPartition(topic, part) -> offset
-          }
+      mapper.readValue[Map[String, Map[Int, Long]]](str).flatMap { case (topic, partOffsets) =>
+        partOffsets.map { case (part, offset) =>
+          new TopicPartition(topic, part) -> offset
         }
+      }
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
@@ -84,12 +83,11 @@ private object JsonUtils {
 
   def partitionTimestamps(str: String): Map[TopicPartition, Long] = {
     try {
-      mapper.readValue[Map[String, Map[Int, Long]]](str)
-        .flatMap { case (topic, partTimestamps) =>
-          partTimestamps.map { case (part, timestamp) =>
-            new TopicPartition(topic, part) -> timestamp
-          }
+      mapper.readValue[Map[String, Map[Int, Long]]](str).flatMap { case (topic, partTimestamps) =>
+        partTimestamps.map { case (part, timestamp) =>
+          new TopicPartition(topic, part) -> timestamp
         }
+      }
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
