@@ -273,7 +273,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     }
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
-      getDefaultExpressionsForInsert(numQueryOutputs, schema, numUserSpecifiedFields)
+      getDefaultExpressionsForInsert(numQueryOutputs, schema, numUserSpecifiedFields, node)
     val newNames: Seq[String] = schema.fields.drop(numQueryOutputs).map { _.name }
     node match {
       case _ if newDefaultExpressions.isEmpty => node
@@ -305,7 +305,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val numQueryOutputs: Int = project.projectList.size
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
-      getDefaultExpressionsForInsert(numQueryOutputs, schema, numUserSpecifiedFields)
+      getDefaultExpressionsForInsert(numQueryOutputs, schema, numUserSpecifiedFields, project)
     val newAliases: Seq[NamedExpression] =
       newDefaultExpressions.zip(schema.fields).map {
         case (expr, field) => Alias(expr, field.name)()
@@ -319,7 +319,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def getDefaultExpressionsForInsert(
       numQueryOutputs: Int,
       schema: StructType,
-      numUserSpecifiedFields: Integer): Seq[Expression] = {
+      numUserSpecifiedFields: Integer,
+      treeNode: LogicalPlan): Seq[Expression] = {
+    if (numUserSpecifiedFields > 0 && numUserSpecifiedFields != numQueryOutputs) {
+      throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
+        numUserSpecifiedFields, numQueryOutputs, treeNode)
+    }
     if (numUserSpecifiedFields > 0 && SQLConf.get.addMissingValuesForInsertsWithExplicitColumns) {
       val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
       val numDefaultExpressionsToAdd = remainingFields.size
