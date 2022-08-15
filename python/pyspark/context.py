@@ -2369,7 +2369,7 @@ def _test() -> None:
     from pyspark import SparkConf
 
     globs = globals().copy()
-    conf = SparkConf().set("spark.ui.enabled", True)
+    conf = SparkConf().set("spark.ui.enabled", "True")
     globs["sc"] = SparkContext("local[4]", "context tests", conf=conf)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
