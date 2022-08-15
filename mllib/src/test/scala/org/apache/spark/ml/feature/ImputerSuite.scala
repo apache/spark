@@ -268,6 +268,16 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
         }
         assert(e.getMessage.contains("outputCols contains duplicates"))
       }
+
+      withClue("Imputer should fail if inputCols param is empty.") {
+        val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+          val imputer = new Imputer().setStrategy(strategy)
+            .setInputCols(Array[String]())
+            .setOutputCols(Array[String]())
+          val model = imputer.fit(df)
+        }
+        assert(e.getMessage.contains("inputCols cannot be empty"))
+      }
     }
   }
 
