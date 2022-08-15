@@ -282,7 +282,8 @@ case class GetArrayItem(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
-      val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
+      val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
+      val nullCheck = if (childArrayElementNullable) {
         s"""else if ($eval1.isNullAt($index)) {
                ${ev.isNull} = true;
             }
@@ -333,7 +334,7 @@ trait GetArrayItemUtil {
       ordinal: Expression,
       failOnError: Boolean,
       nullability: (Seq[Expression], Int) => Boolean): Boolean = {
-    val arrayContainsNull = child.dataType.asInstanceOf[ArrayType].containsNull
+    val arrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
@@ -345,7 +346,7 @@ trait GetArrayItemUtil {
           true
       }
     } else {
-      if (failOnError) arrayContainsNull else true
+      if (failOnError) arrayElementNullable else true
     }
   }
 }
