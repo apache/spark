@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
+import org.apache.spark.util.JacksonUtils
 
 
 /**
@@ -84,11 +82,11 @@ case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
     conf: Map[String, String] = Map.empty) {
-  def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+
+  def json: String = JacksonUtils.writeValueAsString(this)
 }
 
 object OffsetSeqMetadata extends Logging {
-  private implicit val format = Serialization.formats(NoTypeHints)
   /**
    * These configs are related to streaming query execution and should not be changed across
    * batches of a streaming query. The values of these configs are persisted into the offset
@@ -122,7 +120,8 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false"
   )
 
-  def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
+  def apply(json: String): OffsetSeqMetadata =
+    JacksonUtils.readValue(json, classOf[OffsetSeqMetadata])
 
   def apply(
       batchWatermarkMs: Long,

@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.JacksonUtils
 
 class RatePerMicroBatchStream(
     rowsPerBatch: Long,
@@ -125,15 +123,14 @@ class RatePerMicroBatchStream(
 
 case class RatePerMicroBatchStreamOffset(offset: Long, timestamp: Long) extends Offset {
   override def json(): String = {
-    Serialization.write(this)(RatePerMicroBatchStreamOffset.formats)
+    JacksonUtils.writeValueAsString(this)
   }
 }
 
 object RatePerMicroBatchStreamOffset {
-  implicit val formats = Serialization.formats(NoTypeHints)
-
-  def apply(json: String): RatePerMicroBatchStreamOffset =
-    Serialization.read[RatePerMicroBatchStreamOffset](json)
+  def apply(json: String): RatePerMicroBatchStreamOffset = {
+    JacksonUtils.readValue(json, classOf[RatePerMicroBatchStreamOffset])
+  }
 }
 
 case class RatePerMicroBatchStreamInputPartition(

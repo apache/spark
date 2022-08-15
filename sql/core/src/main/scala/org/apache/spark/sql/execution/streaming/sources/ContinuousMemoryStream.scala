@@ -22,9 +22,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.{Encoder, SQLContext}
@@ -33,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.RpcUtils
 
 /**
@@ -45,8 +43,6 @@ import org.apache.spark.util.RpcUtils
  */
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
   extends MemoryStreamBase[A](sqlContext) with ContinuousStream {
-
-  private implicit val formats = Serialization.formats(NoTypeHints)
 
   // ContinuousReader implementation
 
@@ -72,7 +68,8 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   }
 
   override def deserializeOffset(json: String): ContinuousMemoryStreamOffset = {
-    ContinuousMemoryStreamOffset(Serialization.read[Map[Int, Int]](json))
+    // need to define TypeRef?
+    ContinuousMemoryStreamOffset(JacksonUtils.readValue(json, classOf[Map[Int, Int]]))
   }
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): ContinuousMemoryStreamOffset = {
@@ -182,6 +179,5 @@ class ContinuousMemoryStreamPartitionReader(
 
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
   extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json(): String = Serialization.write(partitionNums)
+  override def json(): String = JacksonUtils.writeValueAsString(partitionNums)
 }

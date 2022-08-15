@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.json4s.DefaultFormats
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.util.JacksonUtils
 
 case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, ValueRunTimeMsPair])
   extends OffsetV2 {
-  implicit val defaultFormats: DefaultFormats = DefaultFormats
-  override val json = Serialization.write(partitionToValueAndRunTimeMs)
+  override val json = JacksonUtils.writeValueAsString(partitionToValueAndRunTimeMs)
 }
-
 
 case class ValueRunTimeMsPair(value: Long, runTimeMs: Long)

@@ -25,9 +25,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.json4s.{DefaultFormats, NoTypeHints}
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
@@ -39,6 +36,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader,
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.RpcUtils
 
 
@@ -53,8 +51,6 @@ import org.apache.spark.util.RpcUtils
 class TextSocketContinuousStream(
     host: String, port: Int, numPartitions: Int, options: CaseInsensitiveStringMap)
   extends ContinuousStream with Logging {
-
-  implicit val defaultFormats: DefaultFormats = DefaultFormats
 
   private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String],
     ExpressionEncoder[Timestamp])
@@ -90,7 +86,8 @@ class TextSocketContinuousStream(
   }
 
   override def deserializeOffset(json: String): Offset = {
-    TextSocketOffset(Serialization.read[List[Int]](json))
+    // need to define TypeRef?
+    TextSocketOffset(JacksonUtils.readValue(json, classOf[List[Int]]))
   }
 
   override def initialOffset(): Offset = {
@@ -286,6 +283,5 @@ class TextSocketContinuousPartitionReader(
 }
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json: String = Serialization.write(offsets)
+  override def json: String = JacksonUtils.writeValueAsString(offsets)
 }
