@@ -526,7 +526,7 @@ class SparkContext:
         be invoked before instantiating :class:`SparkContext`.
 
         .. versionadded:: 0.9.0
-        
+
         Parameters
         ----------
         key : str
