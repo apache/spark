@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.core.JsonGenerator
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Reports information about the instantaneous status of a streaming query.
@@ -43,10 +41,10 @@ class StreamingQueryStatus protected[sql](
     val isTriggerActive: Boolean) extends Serializable {
 
   /** The compact JSON representation of this status. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.toJsonString(jsonValue)
 
   /** The pretty (i.e. indented) JSON representation of this status. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.toPrettyJsonString(jsonValue)
 
   override def toString: String = prettyJson
 
@@ -60,9 +58,11 @@ class StreamingQueryStatus protected[sql](
       isTriggerActive = isTriggerActive)
   }
 
-  private[sql] def jsonValue: JValue = {
-    ("message" -> JString(message)) ~
-    ("isDataAvailable" -> JBool(isDataAvailable)) ~
-    ("isTriggerActive" -> JBool(isTriggerActive))
+  private[sql] def jsonValue(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("message", message)
+    generator.writeBooleanField("isDataAvailable", isDataAvailable)
+    generator.writeBooleanField("isTriggerActive", isTriggerActive)
+    generator.writeEndObject()
   }
 }

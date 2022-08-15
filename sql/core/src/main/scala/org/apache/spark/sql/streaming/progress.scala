@@ -24,17 +24,17 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.node.TextNode
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, safeMapToJValue}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
@@ -56,10 +56,10 @@ class StateOperatorProgress private[sql](
   ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.toJsonString(jsonValue)
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.toPrettyJsonString(jsonValue)
 
   private[sql] def copy(
       newNumRowsUpdated: Long,
@@ -72,26 +72,26 @@ class StateOperatorProgress private[sql](
       numShufflePartitions = numShufflePartitions, numStateStoreInstances = numStateStoreInstances,
       customMetrics = customMetrics)
 
-  private[sql] def jsonValue: JValue = {
-    ("operatorName" -> JString(operatorName)) ~
-    ("numRowsTotal" -> JInt(numRowsTotal)) ~
-    ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-    ("allUpdatesTimeMs" -> JInt(allUpdatesTimeMs)) ~
-    ("numRowsRemoved" -> JInt(numRowsRemoved)) ~
-    ("allRemovalsTimeMs" -> JInt(allRemovalsTimeMs)) ~
-    ("commitTimeMs" -> JInt(commitTimeMs)) ~
-    ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
-    ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
-    ("numShufflePartitions" -> JInt(numShufflePartitions)) ~
-    ("numStateStoreInstances" -> JInt(numStateStoreInstances)) ~
-    ("customMetrics" -> {
-      if (!customMetrics.isEmpty) {
-        val keys = customMetrics.keySet.asScala.toSeq.sorted
-        keys.map { k => k -> JInt(customMetrics.get(k).toLong) : JObject }.reduce(_ ~ _)
-      } else {
-        JNothing
-      }
-    })
+  private[sql] def jsonValue(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("operatorName", operatorName)
+    generator.writeNumberField("numRowsTotal", numRowsTotal)
+    generator.writeNumberField("numRowsUpdated", numRowsUpdated)
+    generator.writeNumberField("allUpdatesTimeMs", allUpdatesTimeMs)
+    generator.writeNumberField("numRowsRemoved", numRowsRemoved)
+    generator.writeNumberField("allRemovalsTimeMs", allRemovalsTimeMs)
+    generator.writeNumberField("commitTimeMs", commitTimeMs)
+    generator.writeNumberField("memoryUsedBytes", memoryUsedBytes)
+    generator.writeNumberField("numRowsDroppedByWatermark", numRowsDroppedByWatermark)
+    generator.writeNumberField("numShufflePartitions", numShufflePartitions)
+    generator.writeNumberField("numStateStoreInstances", numStateStoreInstances)
+    generator.writeObjectFieldStart("customMetrics")
+    if (!customMetrics.isEmpty) {
+      val keys = customMetrics.keySet.asScala.toSeq.sorted
+      keys.foreach(k => generator.writeNumberField(k, customMetrics.get(k).toLong))
+    }
+    generator.writeEndObject()
+    generator.writeEndObject()
   }
 
   override def toString: String = prettyJson
@@ -150,28 +150,41 @@ class StreamingQueryProgress private[sql](
   def processedRowsPerSecond: Double = sources.map(_.processedRowsPerSecond).sum
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.toJsonString(jsonValue)
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.toPrettyJsonString(jsonValue)
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("id" -> JString(id.toString)) ~
-    ("runId" -> JString(runId.toString)) ~
-    ("name" -> JString(name)) ~
-    ("timestamp" -> JString(timestamp)) ~
-    ("batchId" -> JInt(batchId)) ~
-    ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
-    ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
-    ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
-    ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
-    ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
-    ("sink" -> sink.jsonValue) ~
-    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
+  private[sql] def jsonValue(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("id", id.toString)
+    generator.writeStringField("runId", runId.toString)
+    generator.writeStringField("name", name)
+    generator.writeStringField("timestamp", timestamp)
+    generator.writeNumberField("batchId", batchId)
+    generator.writeNumberField("numInputRows", numInputRows)
+
+    safeDoubleToJValue(generator, "inputRowsPerSecond", inputRowsPerSecond)
+    safeDoubleToJValue(generator, "processedRowsPerSecond", processedRowsPerSecond)
+
+    safeMapToJValue[JLong](generator, durationMs, "durationMs", v => v.toLong)
+    safeMapToJValue[String](generator, eventTime, "eventTime", s => s)
+
+    generator.writeArrayFieldStart("stateOperators")
+    stateOperators.foreach(_.jsonValue(generator))
+    generator.writeEndArray()
+
+    generator.writeArrayFieldStart("sources")
+    sources.foreach(_.jsonValue(generator))
+    generator.writeEndArray()
+
+    sink.jsonValue(generator, "sink")
+
+    safeMapToJValue[Row](generator, observedMetrics, "observedMetrics", row => row.prettyJson)
+
+    generator.writeEndObject()
   }
 }
 
@@ -201,28 +214,30 @@ class SourceProgress protected[sql](
   val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.toJsonString(jsonValue)
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.toPrettyJsonString(jsonValue)
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("description" -> JString(description)) ~
-    ("startOffset" -> tryParse(startOffset)) ~
-    ("endOffset" -> tryParse(endOffset)) ~
-    ("latestOffset" -> tryParse(latestOffset)) ~
-    ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
-    ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
+  private[sql] def jsonValue(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("description", description)
+    generator.writeObjectField("startOffset", tryParse(startOffset))
+    generator.writeObjectField("endOffset", tryParse(endOffset))
+    generator.writeObjectField("latestOffset", tryParse(latestOffset))
+    generator.writeNumberField("numInputRows", numInputRows)
+    safeDoubleToJValue(generator, "inputRowsPerSecond", inputRowsPerSecond)
+    safeDoubleToJValue(generator, "processedRowsPerSecond", processedRowsPerSecond)
+    safeMapToJValue[String](generator, metrics, "metrics", s => s)
+    generator.writeEndObject()
   }
 
-  private def tryParse(json: String) = try {
-    parse(json)
+  private def tryParse(json: String): JsonNode = try {
+    JacksonUtils.readTree(json)
   } catch {
-    case NonFatal(e) => JString(json)
+    case NonFatal(_) => new TextNode(json)
   }
 }
 
@@ -247,17 +262,27 @@ class SinkProgress protected[sql](
   }
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.toJsonString(jsonValue)
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.toPrettyJsonString(jsonValue)
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("description" -> JString(description)) ~
-      ("numOutputRows" -> JInt(numOutputRows)) ~
-      ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
+  private[sql] def jsonValue(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("description", description)
+    generator.writeNumberField("numOutputRows", numOutputRows)
+    safeMapToJValue[String](generator, metrics, "metrics", s => s)
+    generator.writeEndObject()
+  }
+
+  private[sql] def jsonValue(generator: JsonGenerator, name: String): Unit = {
+    generator.writeObjectFieldStart(name)
+    generator.writeStringField("description", description)
+    generator.writeNumberField("numOutputRows", numOutputRows)
+    safeMapToJValue[String](generator, metrics, "metrics", s => s)
+    generator.writeEndObject()
   }
 }
 
@@ -270,14 +295,30 @@ private[sql] object SinkProgress {
 }
 
 private object SafeJsonSerializer {
-  def safeDoubleToJValue(value: Double): JValue = {
-    if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
+
+  def safeDoubleToJValue(generator: JsonGenerator, name: String, value: Double): Unit = {
+    if (!value.isNaN && !value.isInfinity) generator.writeNumberField(name, value)
   }
 
-  /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
-  def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
-    if (map.isEmpty) return JNothing
-    val keys = map.asScala.keySet.toSeq.sorted
-    keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
+  def safeMapToJValue[T](
+      generator: JsonGenerator,
+      map: ju.Map[String, T],
+      name: String,
+      valueToJValue: T => Any): Unit = {
+    if (!map.isEmpty) {
+      generator.writeObjectFieldStart(name)
+      val keys = map.asScala.keySet.toSeq.sorted
+      keys.foreach(k => {
+        import org.json4s.JsonAST.JValue
+        val value = valueToJValue(map.get(k))
+        value match {
+          case s: String => generator.writeStringField(k, s)
+          case l: Long => generator.writeNumberField(k, l)
+          case v: JValue => generator.writeObjectField(k, v)
+          case _ => // do nothing
+        }
+      })
+      generator.writeEndObject()
+    }
   }
 }
