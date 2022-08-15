@@ -481,7 +481,7 @@ class SparkContext:
 
         Parameters
         ----------
-        conf : :class:`SparkConf`, optional, default None
+        conf : :class:`SparkConf`, optional
             :class:`SparkConf` that will be used for initialization of the :class:`SparkContext`.
 
         Returns
@@ -2082,6 +2082,7 @@ class SparkContext:
         running jobs in this group.
 
         .. versionadded:: 1.0.0
+
         Parameters
         ----------
         groupId : str
@@ -2141,6 +2142,7 @@ class SparkContext:
         Spark fair scheduler pool.
 
         .. versionadded:: 1.0.0
+
         Parameters
         ----------
         key : str
@@ -2177,6 +2179,7 @@ class SparkContext:
         Set a human readable description of the current job.
 
         .. versionadded:: 2.3.0
+
         Parameters
         ----------
         value : str
@@ -2203,6 +2206,7 @@ class SparkContext:
         for more information.
 
         .. versionadded:: 1.1.0
+
         Parameters
         ----------
         groupId : str
