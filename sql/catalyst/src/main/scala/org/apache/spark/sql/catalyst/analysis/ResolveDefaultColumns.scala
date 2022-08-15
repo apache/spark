@@ -318,7 +318,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def getDefaultExpressionsForInsert(
       numQueryOutputs: Int,
       schema: StructType,
-      numUserSpecifiedFields: Integer,
+      numUserSpecifiedFields: Int,
       treeNode: LogicalPlan): Seq[Expression] = {
     if (numUserSpecifiedFields > 0 && numUserSpecifiedFields != numQueryOutputs) {
       throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
