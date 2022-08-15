@@ -22,6 +22,9 @@ import java.nio.charset.StandardCharsets;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * Used to identify the version of data stored in local shuffle state DB.
+ */
 public class StoreVersion {
 
     public static final byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);

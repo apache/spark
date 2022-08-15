@@ -21,7 +21,7 @@ import java.io.Closeable;
 
 /**
  * The local KV storage used to persist the shuffle state,
- * the implementations may include leveldb, rocksdb, etc.
+ * the implementations may include LevelDB, RocksDB, etc.
  */
 public interface DB extends Closeable {
     /**
