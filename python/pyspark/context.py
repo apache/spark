@@ -121,10 +121,10 @@ class SparkContext:
         The serializer for RDDs.
     conf : :class:`SparkConf`, optional
         An object setting Spark properties.
-    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional
+    gateway : class:`py4j.java_gateway.JavaGateway`,  optional
         Use an existing gateway and JVM, otherwise a new JVM
         will be instantiated. This is only used internally.
-    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional
+    jsc : class:`py4j.java_gateway.JavaObject`, optional
         The JavaSparkContext instance. This is only used internally.
     profiler_cls : type, optional, default :class:`BasicProfiler`
         A class of custom Profiler used to do profiling
@@ -574,6 +574,11 @@ class SparkContext:
         """Return the URL of the SparkUI instance started by this :class:`SparkContext`
 
         .. versionadded:: 2.1.0
+
+        Examples
+        --------
+        >>> sc.uiWebUrl
+        'http://...'
         """
         return self._jsc.sc().uiWebUrl().get()
 
@@ -813,7 +818,7 @@ class SparkContext:
         --------
         data
             object to be serialized
-        serializer : :py:class:`pyspark.serializers.Serializer`
+        serializer : class:`pyspark.serializers.Serializer`
         reader_func : function
             A function which takes a filename and reads in the data in the jvm and
             returns a JavaRDD. Only used when encryption is disabled.
@@ -1261,7 +1266,7 @@ class SparkContext:
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
-        The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
+        The mechanism is the same as for meth:`SparkContext.sequenceFile`.
 
         A Hadoop configuration can be passed in as a Python dict. This will be converted into a
         Configuration in Java
@@ -1361,7 +1366,7 @@ class SparkContext:
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
         This will be converted into a Configuration in Java.
-        The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
+        The mechanism is the same as for meth:`SparkContext.sequenceFile`.
 
         .. versionadded:: 1.1.0
 
@@ -1464,7 +1469,7 @@ class SparkContext:
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
-        The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
+        The mechanism is the same as for meth:`SparkContext.sequenceFile`.
 
         .. versionadded:: 1.1.0
 
@@ -1560,7 +1565,7 @@ class SparkContext:
         Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
         This will be converted into a Configuration in Java.
-        The mechanism is the same as for :py:meth:`SparkContext.sequenceFile`.
+        The mechanism is the same as for meth:`SparkContext.sequenceFile`.
 
         .. versionadded:: 1.1.0
 
@@ -2361,9 +2366,11 @@ class SparkContext:
 
 def _test() -> None:
     import doctest
+    from pyspark import SparkConf
 
     globs = globals().copy()
-    globs["sc"] = SparkContext("local[4]", "context tests")
+    conf = SparkConf().set("spark.ui.enabled", True)
+    globs["sc"] = SparkContext("local[4]", "context tests", conf=conf)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
