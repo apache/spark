@@ -277,7 +277,6 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val newNames: Seq[String] = schema.fields.drop(numQueryOutputs).map { _.name }
     node match {
       case _ if newDefaultExpressions.isEmpty => node
-      case _ if numUserSpecifiedFields > 0 && numUserSpecifiedFields != numQueryOutputs => node
       case table: UnresolvedInlineTable =>
         table.copy(
           names = table.names ++ newNames,
