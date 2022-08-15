@@ -408,7 +408,7 @@ class Column:
         Parameters
         ----------
         key
-            a literal value, or a :class:`Column` expression (deprecated).
+            a literal value, or a :class:`Column` expression (deprecated since Spark 3.0).
             The result will only be true at a location if item matches in the Column.
 
         Returns
@@ -493,7 +493,8 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column representing whether each element of Column which field added/replaced by fileName.
+            Column representing whether each element of Column
+            which field added/replaced by fileName.
 
         Examples
         --------
@@ -615,7 +616,7 @@ class Column:
     Examples
     --------
     >>> df = spark.createDataFrame(
-    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.contains('o')).collect()
     [Row(age=5, name='Bob')]
     """
@@ -630,7 +631,7 @@ class Column:
     Examples
     --------
     >>> df = spark.createDataFrame(
-    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.startswith('Al')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
@@ -647,7 +648,7 @@ class Column:
     Examples
     --------
     >>> df = spark.createDataFrame(
-    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
     >>> df.filter(df.name.endswith('ice')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
@@ -674,12 +675,13 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column of booleans showing whether each element in the Column is matched by SQL LIKE pattern.
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
 
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.like('Al%')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -699,12 +701,13 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column of booleans showing whether each element in the Column is matched by extended regex expression.
+            Column of booleans showing whether each element
+            in the Column is matched by extended regex expression.
 
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.rlike('ice$')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -730,12 +733,13 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column of booleans showing whether each element in the Column is matched by SQL LIKE pattern.
+            Column of booleans showing whether each element
+            in the Column is matched by SQL LIKE pattern.
 
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.ilike('%Ice')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -771,7 +775,7 @@ class Column:
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
@@ -811,7 +815,7 @@ class Column:
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df[df.name.isin("Bob", "Mike")].collect()
         [Row(age=5, name='Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
@@ -1046,20 +1050,23 @@ class Column:
 
         Parameters
         ----------
-        lowerBound : :class:`Column` or :class:`LiteralType` or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
+        lowerBound : :class:`Column` or :class:`LiteralType`
+        or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
             a boolean expression that boundary start, inclusive..
-        upperBound : :class:`Column` or :class:`LiteralType` or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
+        upperBound : :class:`Column` or :class:`LiteralType`
+        or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
             a boolean expression that boundary end, inclusive..
 
         Returns
         -------
         :class:`Column`
-            Column of booleans showing whether each element of Column is between left and right (inclusive).
+            Column of booleans showing whether each element of Column
+            is between left and right (inclusive).
 
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -1093,7 +1100,7 @@ class Column:
         --------
         >>> from pyspark.sql import functions as F
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
@@ -1133,7 +1140,7 @@ class Column:
         --------
         >>> from pyspark.sql import functions as F
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
         | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
@@ -1172,7 +1179,7 @@ class Column:
         >>> from pyspark.sql.functions import rank, min
         >>> from pyspark.sql.functions import desc
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.withColumn("rank", rank().over(window)) \
                 .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
