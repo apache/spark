@@ -539,13 +539,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Timing data from worker
       val bootTime = stream.readLong()
       val initTime = stream.readLong()
+      val funcInitTime = stream.readLong()
       val finishTime = stream.readLong()
       val boot = bootTime - startTime
       val init = initTime - bootTime
-      val finish = finishTime - initTime
+      val funcInit = funcInitTime - initTime
+      val finish = finishTime - funcInitTime
       val total = finishTime - startTime
-      logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
-        init, finish))
+      logInfo("Times: total = %s, boot = %s, init = %s, func_init = %s, finish = %s"
+        .format(total, boot, init, funcInit, finish))
       val memoryBytesSpilled = stream.readLong()
       val diskBytesSpilled = stream.readLong()
       context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
@@ -782,6 +784,7 @@ private[spark] object SpecialLengths {
   val END_OF_STREAM = -4
   val NULL = -5
   val START_ARROW_STREAM = -6
+  val START_STATE_UPDATE = -7
 }
 
 private[spark] object BarrierTaskContextMessageProtocol {

@@ -56,7 +56,7 @@ trait FlatMapGroupsWithStateExecBase
   protected val batchTimestampMs: Option[Long]
   val eventTimeWatermark: Option[Long]
 
-  private val isTimeoutEnabled = timeoutConf != NoTimeout
+  protected val isTimeoutEnabled = timeoutConf != NoTimeout
   protected val watermarkPresent: Boolean = child.output.exists {
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
     case _ => false

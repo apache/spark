@@ -59,6 +59,7 @@ private[sql] class GroupStateImpl[S] private[sql](
   private var updated: Boolean = false // whether value has been updated (but not removed)
   private var removed: Boolean = false // whether value has been removed
   private var timeoutTimestamp: Long = NO_TIMESTAMP
+  private var timeoutUpdated: Boolean = false
 
   // ========= Public API =========
   override def exists: Boolean = defined
@@ -103,6 +104,7 @@ private[sql] class GroupStateImpl[S] private[sql](
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
     timeoutTimestamp = durationMs + batchProcessingTimeMs
+    timeoutUpdated = true
   }
 
   override def setTimeoutDuration(duration: String): Unit = {
@@ -120,6 +122,7 @@ private[sql] class GroupStateImpl[S] private[sql](
           s"current watermark ($eventTimeWatermarkMs)")
     }
     timeoutTimestamp = timestampMs
+    timeoutUpdated = true
   }
 
   override def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit = {
@@ -158,6 +161,8 @@ private[sql] class GroupStateImpl[S] private[sql](
 
   override def isUpdated: Boolean = updated
 
+  override def isTimeoutUpdated: Boolean = timeoutUpdated
+
   override def getTimeoutTimestampMs: Optional[Long] = {
     if (timeoutTimestamp != NO_TIMESTAMP) {
       Optional.of(timeoutTimestamp)
@@ -194,7 +199,8 @@ private[sql] class GroupStateImpl[S] private[sql](
     "defined" -> JBool(defined) ::
     "updated" -> JBool(updated) ::
     "removed" -> JBool(removed) ::
-    "timeoutTimestamp" -> JLong(timeoutTimestamp) :: Nil
+    "timeoutTimestamp" -> JLong(timeoutTimestamp) ::
+    "timeoutUpdated" -> JBool(timeoutUpdated) :: Nil
   )))
 }
 
@@ -265,6 +271,7 @@ private[sql] object GroupStateImpl {
     newGroupState.removed = hmap("removed").asInstanceOf[Boolean]
     newGroupState.timeoutTimestamp =
       hmap("timeoutTimestamp").asInstanceOf[Number].longValue()
+    newGroupState.timeoutUpdated = hmap("timeoutUpdated").asInstanceOf[Boolean]
 
     newGroupState
   }

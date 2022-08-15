@@ -45,10 +45,14 @@ class GroupStateImpl:
         defined: bool,
         updated: bool,
         removed: bool,
+        timeoutUpdated: bool,
         timeoutTimestamp: int,
         # Python internal state.
+        key: Row,
         keySchema: StructType,
+        valueSchema: StructType,
     ) -> None:
+        self._key = key
         self._value = optionalValue
         self._batch_processing_time_ms = batchProcessingTimeMs
         self._event_time_watermark_ms = eventTimeWatermarkMs
@@ -67,8 +71,10 @@ class GroupStateImpl:
         self._updated = updated
         self._removed = removed
         self._timeout_timestamp = timeoutTimestamp
+        self._timeout_updated = timeoutUpdated
 
         self._key_schema = keySchema
+        self._value_schema = valueSchema
 
     @property
     def exists(self) -> bool:
@@ -120,6 +126,7 @@ class GroupStateImpl:
         if durationMs <= 0:
             raise ValueError("Timeout duration must be positive")
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
+        self._timeout_updated = True
 
     # TODO(SPARK-XXXXX): Implement additionalDuration parameter.
     def setTimeoutTimestamp(self, timestampMs: int) -> None:
@@ -145,6 +152,7 @@ class GroupStateImpl:
             )
 
         self._timeout_timestamp = timestampMs
+        self._timeout_updated = True
 
     def getCurrentWatermarkMs(self) -> int:
         if not self._watermark_present:
@@ -159,7 +167,7 @@ class GroupStateImpl:
 
     def __str__(self) -> str:
         if self.exists:
-            return "GroupState(%s)" % self.get
+            return "GroupState(%s)" % (self.get, )
         else:
             return "GroupState(<undefined>)"
 
@@ -178,5 +186,6 @@ class GroupStateImpl:
                 "updated": self._updated,
                 "removed": self._removed,
                 "timeoutTimestamp": self._timeout_timestamp,
+                "timeoutUpdated": self._timeout_updated,
             }
         )

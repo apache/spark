@@ -18,8 +18,10 @@
 """
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
+import sys
 
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
+from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.sql.types import StringType, StructType, BinaryType, StructField
 
 
 class SpecialLengths:
@@ -29,6 +31,7 @@ class SpecialLengths:
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
+    START_STATE_UPDATE = -7
 
 
 class ArrowCollectSerializer(Serializer):
@@ -371,3 +374,111 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
                 raise ValueError(
                     "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
                 )
+
+
+class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
+
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
+        super(ApplyInPandasWithStateSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name)
+        self.pickleSer = CPickleSerializer()
+        self.utf8_deserializer = UTF8Deserializer()
+
+    def arrow_to_pandas(self, arrow_column):
+        return super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+        import json
+        from pyspark.sql.types import StructType
+        from pyspark.sql.streaming.state import GroupStateImpl
+
+        batches = ArrowStreamPandasUDFSerializer.load_stream(self, stream)
+        for batch in batches:
+            # FIXME: can we leverage schema here? doesn't work well so...
+            state_info_col = batch[-1][0]
+
+            state_info_col_properties = state_info_col['properties']
+            state_info_col_key_schema = state_info_col['keySchema']
+            state_info_col_key_row = state_info_col['keyRow']
+            state_info_col_object_schema = state_info_col['objectSchema']
+            state_info_col_object = state_info_col['object']
+
+            state_properties = json.loads(state_info_col_properties)
+            state_key_schema = StructType.fromJson(json.loads(state_info_col_key_schema))
+            state_key_row = self.pickleSer.loads(state_info_col_key_row)
+            state_object_schema = StructType.fromJson(json.loads(state_info_col_object_schema))
+            if state_info_col_object:
+                state_object = self.pickleSer.loads(state_info_col_object)
+            else:
+                state_object = None
+            state_properties["optionalValue"] = state_object
+
+            state = GroupStateImpl(key=state_key_row, keySchema=state_key_schema,
+                                   valueSchema=state_object_schema, **state_properties)
+
+            state_column_dropped_series = batch[0:-1]
+            first_row_dropped_series = [x.iloc[1:].reset_index(drop=True) for x in state_column_dropped_series]
+            # state info
+            yield (first_row_dropped_series, state, )
+
+    def dump_stream(self, iterator, stream):
+        """
+        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
+        This should be sent after creating the first record batch so in case of an error, it can
+        be sent back to the JVM before the Arrow stream starts.
+        """
+
+        def init_stream_yield_batches():
+            import pandas as pd
+            from pyspark.sql.pandas.types import to_arrow_type
+
+            should_write_start_length = True
+            for data in iterator:
+                packaged_result = data[0]
+
+                pdf = packaged_result[0][0].reset_index(drop=True)
+                state = packaged_result[0][-1]
+                return_schema = packaged_result[1]
+
+                new_empty_row = pd.DataFrame(dict.fromkeys(pdf.columns), index=[0])
+
+                # Concatenate new_row with df
+                pdf_with_empty_row = pd.concat([new_empty_row, pdf[:]], axis=0).reset_index(drop=True)
+
+                state_properties = state.json().encode("utf-8")
+                state_key_schema = state._key_schema.json().encode("utf-8")
+                state_key_row = self.pickleSer.dumps(state._key_schema.toInternal(state._key))
+                state_object_schema = state._value_schema.json().encode("utf-8")
+                state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+
+                state_dict = {
+                    '__state__properties': [state_properties, ] + [None, ] * len(pdf),
+                    '__state__keySchema': [state_key_schema, ] + [None, ] * len(pdf),
+                    '__state__keyRow': [state_key_row, ] + [None, ] * len(pdf),
+                    '__state__objectSchema': [state_object_schema, ] + [None, ] * len(pdf),
+                    '__state__object': [state_object, ] + [None, ] * len(pdf),
+                }
+
+                state_pdf = pd.DataFrame.from_dict(state_dict)
+
+                state_df_type = StructType([
+                    StructField('__state__properties', StringType()),
+                    StructField('__state__keySchema', StringType()),
+                    StructField('__state__keyRow', BinaryType()),
+                    StructField('__state__objectSchema', StringType()),
+                    StructField('__state__object', BinaryType()),
+                ])
+
+                state_pdf_arrow_type = to_arrow_type(state_df_type)
+
+                batch = self._create_batch([
+                    (pdf_with_empty_row, return_schema),
+                    (state_pdf, state_pdf_arrow_type)])
+
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+                yield batch
+
+        return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)

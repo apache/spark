@@ -16,14 +16,16 @@
  */
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, resolveArgOffsets}
+import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.python.PandasGroupUtils.resolveArgOffsets
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExecHelper.StateData
@@ -62,6 +64,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     eventTimeWatermark: Option[Long],
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
+  private val keySchema: StructType = groupingAttributes.toStructType
+
   // TODO(SPARK-XXXXX): Add the support of initial state.
   override protected val initialStateDeserializer: Expression = null
   override protected val initialStateGroupAttrs: Seq[Attribute] = null
@@ -71,6 +75,9 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
     RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+
+  private val keyEncoder: ExpressionEncoder[Row] =
+    RowEncoder(keySchema).resolveAndBind()
 
   override def output: Seq[Attribute] = outAttributes
 
@@ -96,20 +103,53 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
-    private val stateDeserializer =
-      stateEncoder.asInstanceOf[ExpressionEncoder[Row]].createDeserializer()
 
-    def callFunctionAndUpdateState(
-        stateData: StateData,
-        valueRowIter: Iterator[InternalRow],
-        hasTimedOut: Boolean): Iterator[InternalRow] = {
-      val groupedState = GroupStateImpl.createForStreaming(
-        Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
-        batchTimestampMs.getOrElse(NO_TIMESTAMP),
-        eventTimeWatermark.getOrElse(NO_TIMESTAMP),
-        timeoutConf,
-        hasTimedOut = hasTimedOut,
-        watermarkPresent).asInstanceOf[GroupStateImpl[Row]]
+    /**
+     * For every group, get the key, values and corresponding state and call the function,
+     * and return an iterator of rows
+     */
+    override def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
+      val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
+      val processIter = groupedIter.map { case (keyRow, valueRowIter) =>
+        val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
+        val stateData = stateManager.getState(store, keyUnsafeRow)
+        (keyUnsafeRow, stateData, valueRowIter.map(unsafeProj))
+      }
+
+      process(processIter, hasTimedOut = false)
+    }
+
+    /** Find the groups that have timeout set and are timing out right now, and call the function */
+    override def processTimedOutState(): Iterator[InternalRow] = {
+      if (isTimeoutEnabled) {
+        val timeoutThreshold = timeoutConf match {
+          case ProcessingTimeTimeout => batchTimestampMs.get
+          case EventTimeTimeout => eventTimeWatermark.get
+          case _ =>
+            throw new IllegalStateException(
+              s"Cannot filter timed out keys for $timeoutConf")
+        }
+        val timingOutPairs = stateManager.getAllState(store).filter { state =>
+          state.timeoutTimestamp != NO_TIMESTAMP && state.timeoutTimestamp < timeoutThreshold
+        }
+
+        val processIter = timingOutPairs.map { stateData =>
+          val joinedKeyRow = unsafeProj(
+            new JoinedRow(
+              stateData.keyRow,
+              new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
+
+          (stateData.keyRow, stateData, Iterator.single(joinedKeyRow))
+        }
+
+        process(processIter, hasTimedOut = true)
+      } else Iterator.empty
+    }
+
+    private def process(
+       iter: Iterator[(InternalRow, StateData, Iterator[InternalRow])],
+       hasTimedOut: Boolean): Iterator[InternalRow] = {
+      val keyUnsafeProj = UnsafeProjection.create(keySchema)
 
       val runner = new ArrowPythonRunnerWithState(
         chainedFunc,
@@ -118,48 +158,60 @@ case class FlatMapGroupsInPandasWithStateExec(
         StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
         pythonRunnerConf,
-        groupedState,
-        stateDeserializer,
+        keyEncoder,
+        stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
+        groupingAttributes.toStructType,
+        child.output.toStructType,
         stateType)
 
-      val inputIter = if (hasTimedOut) {
-        val joinedKeyRow = unsafeProj(
-          new JoinedRow(
-            stateData.keyRow,
-            new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
-        Iterator.single(Iterator.single(joinedKeyRow))
-      } else {
-        Iterator.single(valueRowIter.map(unsafeProj))
+      val context = TaskContext.get()
+      val processIter = iter.map { case (keyRow, stateData, valueIter) =>
+        val groupedState = GroupStateImpl.createForStreaming(
+          Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
+          batchTimestampMs.getOrElse(NO_TIMESTAMP),
+          eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+          timeoutConf,
+          hasTimedOut = hasTimedOut,
+          watermarkPresent).asInstanceOf[GroupStateImpl[Row]]
+        (keyRow, groupedState, valueIter)
       }
+      runner.compute(processIter, context.partitionId(), context).flatMap {
+        case (keyRow, newGroupState, outputIter) =>
+          val keyUnsafeRow = keyUnsafeProj(keyRow)
 
-      val ret = executePython(inputIter, output, runner).toArray
-      numOutputRows += ret.length
-      val newGroupState: GroupStateImpl[Row] = runner.newGroupState
-      assert(newGroupState != null)
+          // When the iterator is consumed, then write changes to state
+          def onIteratorCompletion: Unit = {
+            if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
+              stateManager.removeState(store, keyUnsafeRow)
+              numRemovedStateRows += 1
+            } else {
+              val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs
+                .orElse(NO_TIMESTAMP)
+              val shouldWriteState = newGroupState.isUpdated || newGroupState.isRemoved ||
+                newGroupState.isTimeoutUpdated
 
-      // When the iterator is consumed, then write changes to state
-      def onIteratorCompletion: Unit = {
-        if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
-          stateManager.removeState(store, stateData.keyRow)
-          numRemovedStateRows += 1
-        } else {
-          val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs.orElse(NO_TIMESTAMP)
-          val hasTimeoutChanged = currentTimeoutTimestamp != stateData.timeoutTimestamp
-          val shouldWriteState = newGroupState.isUpdated || newGroupState.isRemoved ||
-            hasTimeoutChanged
-
-          if (shouldWriteState) {
-            val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
-            stateManager.putState(store, stateData.keyRow, updatedStateObj,
-              currentTimeoutTimestamp)
-            numUpdatedStateRows += 1
+              if (shouldWriteState) {
+                val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
+                stateManager.putState(store, keyUnsafeRow, updatedStateObj,
+                  currentTimeoutTimestamp)
+                numUpdatedStateRows += 1
+              }
+            }
           }
-        }
-      }
 
-      // Return an iterator of rows such that fully consumed, the updated state value will
-      // be saved
-      CompletionIterator[InternalRow, Iterator[InternalRow]](ret.iterator, onIteratorCompletion)
+          CompletionIterator[InternalRow, Iterator[InternalRow]](
+            outputIter, onIteratorCompletion).map { row =>
+            numOutputRows += 1
+            row
+          }
+      }
+    }
+
+    override protected def callFunctionAndUpdateState(
+        stateData: StateData,
+        valueRowIter: Iterator[InternalRow],
+        hasTimedOut: Boolean): Iterator[InternalRow] = {
+      throw new UnsupportedOperationException("Should not reach here!")
     }
   }
 }

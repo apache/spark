@@ -41,6 +41,10 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
 
+  protected def handleStateUpdate(stream: DataInputStream): Unit = {
+    new IllegalStateException("Should not reach here!")
+  }
+
   protected def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
@@ -102,6 +106,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                 vectors = root.getFieldVectors().asScala.map { vector =>
                   new ArrowColumnVector(vector)
                 }.toArray[ColumnVector]
+                read()
+              case SpecialLengths.START_STATE_UPDATE =>
+                handleStateUpdate(stream)
                 read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()
