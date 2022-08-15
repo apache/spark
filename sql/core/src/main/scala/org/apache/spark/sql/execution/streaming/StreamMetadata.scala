@@ -54,10 +54,8 @@ object StreamMetadata extends Logging {
       var input: FSDataInputStream = null
       try {
         input = fileManager.open(metadataFile)
-        val metadata =
-          Utils.tryWithResource(new InputStreamReader(input, StandardCharsets.UTF_8)) { reader =>
-            JacksonUtils.readValue(reader, classOf[StreamMetadata])
-          }
+        val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
+        val metadata = JacksonUtils.readValue(reader, classOf[StreamMetadata])
         Some(metadata)
       } catch {
         case NonFatal(e) =>
