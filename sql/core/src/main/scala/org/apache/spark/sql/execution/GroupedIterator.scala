@@ -199,22 +199,22 @@ class GroupedBatchIterator private(
     new Iterator[InternalRow] {
       var rows = 0
 
-      var currentGroup: Option[Iterator[InternalRow]] = None
+      var currentGroup: Iterator[InternalRow] = null
 
-      override def hasNext: Boolean = {
-        if (currentGroup.exists(_.hasNext)) {
-          true
-        } else if (rows < batchSize && groups.hasNext) {
-          currentGroup = Some(groups.next())
+      def hasNext: Boolean = (currentGroup != null && currentGroup.hasNext) || fetchNextGroup
+
+      override def next(): InternalRow = {
+        rows += 1
+        currentGroup.next()
+      }
+
+      private def fetchNextGroup: Boolean = {
+        if (rows < batchSize && groups.hasNext) {
+          currentGroup = groups.next()
           true
         } else {
           false
         }
-      }
-
-      override def next(): InternalRow = {
-        rows += 1
-        currentGroup.get.next()
       }
     }
   }
