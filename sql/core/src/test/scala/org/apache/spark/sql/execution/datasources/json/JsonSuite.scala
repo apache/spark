@@ -60,7 +60,7 @@ abstract class JsonSuite
   override protected def dataSourceFormat = "json"
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
+    super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {

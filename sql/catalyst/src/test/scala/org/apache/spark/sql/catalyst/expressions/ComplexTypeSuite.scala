@@ -85,19 +85,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33460: GetMapValue NoSuchElementException") {
+  test("SPARK-40066: GetMapValue returns null on invalid map value access") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
-
-        if (ansiEnabled) {
-          checkExceptionInExpression[Exception](
-            GetMapValue(map, Literal(5)),
-            "Key 5 does not exist."
-          )
-        } else {
-          checkEvaluation(GetMapValue(map, Literal(5)), null)
-        }
+        checkEvaluation(GetMapValue(map, Literal(5)), null)
       }
     }
   }

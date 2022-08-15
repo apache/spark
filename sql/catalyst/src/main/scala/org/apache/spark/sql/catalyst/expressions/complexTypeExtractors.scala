@@ -236,7 +236,7 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator) extends BinaryExpression
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryExpression
   with GetArrayItemUtil
   with ExpectsInputTypes
   with ExtractValue
@@ -354,16 +354,14 @@ trait GetArrayItemUtil {
 /**
  * Common trait for [[GetMapValue]] and [[ElementAt]].
  */
-trait GetMapValueUtil
-  extends BinaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
   // todo: current search is O(n), improve it.
   def getValueEval(
       value: Any,
       ordinal: Any,
       keyType: DataType,
-      ordering: Ordering[Any],
-      failOnError: Boolean): Any = {
+      ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
@@ -379,13 +377,7 @@ trait GetMapValueUtil
       }
     }
 
-    if (!found) {
-      if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, getContextOrNull())
-      } else {
-        null
-      }
-    } else if (values.isNullAt(i)) {
+    if (!found || values.isNullAt(i)) {
       null
     } else {
       values.get(i, dataType)
@@ -395,8 +387,7 @@ trait GetMapValueUtil
   def doGetValueGenCode(
       ctx: CodegenContext,
       ev: ExprCode,
-      mapType: MapType,
-      failOnError: Boolean): ExprCode = {
+      mapType: MapType): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
@@ -414,15 +405,8 @@ trait GetMapValueUtil
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = getContextOrNullCode(ctx)
     val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $keyDt, $errorContext);"
-      } else {
-        s"${ev.isNull} = true;"
-      }
-
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
@@ -440,7 +424,7 @@ trait GetMapValueUtil
         }
 
         if (!$found) {
-          $keyNotFoundBranch
+          ${ev.isNull} = true;
         } $nullCheck else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
@@ -454,10 +438,7 @@ trait GetMapValueUtil
  *
  * We need to do type checking here as `key` expression maybe unresolved.
  */
-case class GetMapValue(
-    child: Expression,
-    key: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator)
+case class GetMapValue(child: Expression, key: Expression)
   extends GetMapValueUtil with ExtractValue {
 
   @transient private lazy val ordering: Ordering[Any] =
@@ -494,20 +475,14 @@ case class GetMapValue(
 
   // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    getValueEval(value, ordinal, keyType, ordering, failOnError)
+    getValueEval(value, ordinal, keyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType])
   }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetMapValue =
     copy(child = newLeft, key = newRight)
-
-  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
-    Some(origin.context)
-  } else {
-    None
-  }
 }

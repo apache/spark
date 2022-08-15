@@ -2,25 +2,17 @@
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NULL
 
 
 -- !query
 select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select map(1, 'a', 2, 'b')[5]
-       ^^^^^^^^^^^^^^^^^^^^^^
+NULL
 
 
 -- !query
@@ -87,43 +79,3 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7
-
-
--- !query
-set spark.sql.ansi.strictIndexOperator=false
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.ansi.strictIndexOperator	false
-
-
--- !query
-select map(1, 'a', 2, 'b')[5]
--- !query schema
-struct<map(1, a, 2, b)[5]:string>
--- !query output
-NULL
-
-
--- !query
-select element_at(map(1, 'a', 2, 'b'), 5)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 5 does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map(1, 'a', 2, 'b'), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-
--- !query
-select element_at(map('a', 1, 'b', 2), 'c')
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkNoSuchElementException
-[MAP_KEY_DOES_NOT_EXIST] Key 'c' does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(map('a', 1, 'b', 2), 'c')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
