@@ -46,6 +46,14 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
     }
   }
 
+  private implicit class RichFSDataInputStream(stream: FSDataInputStream) {
+    def readContent(): Int = {
+      val res = stream.readInt()
+      stream.close()
+      res
+    }
+  }
+
   test("mkdirs, list, createAtomic, open, delete, exists") {
     withTempHadoopPath { case basePath =>
       val fm = createManager(basePath)
@@ -73,14 +81,14 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       assert(!fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = false).writeContent(2).close()
       assert(fm.exists(path))
-      assert(fm.open(path).readInt() == 2)
+      assert(fm.open(path).readContent() == 2)
       quietly {
         intercept[IOException] {
           // should throw exception since file exists and overwrite is false
           fm.createAtomic(path, overwriteIfPossible = false).writeContent(3).close()
         }
       }
-      assert(fm.open(path).readInt() == 2)
+      assert(fm.open(path).readContent() == 2)
 
       // Create atomic with overwrite if possible
       path = new Path(s"$dir/file2")
@@ -89,10 +97,10 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       assert(!fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = true).writeContent(5).close()
       assert(fm.exists(path))
-      assert(fm.open(path).readInt() == 5)
+      assert(fm.open(path).readContent() == 5)
       // should not throw exception
       fm.createAtomic(path, overwriteIfPossible = true).writeContent(6).close()
-      assert(fm.open(path).readInt() == 6)
+      assert(fm.open(path).readContent() == 6)
 
       checkLeakingCrcFiles(dir)
       // Open and delete

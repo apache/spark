@@ -20,9 +20,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.statistics.BufferedIOStatisticsOutputStream;
+import org.apache.hadoop.util.Progressable;
 
 public class AbortableFileSystem extends RawLocalFileSystem {
 
@@ -33,13 +36,37 @@ public class AbortableFileSystem extends RawLocalFileSystem {
     return URI.create(ABORTABLE_FS_SCHEME + ":///");
   }
 
+  public FSDataOutputStream create(Path f, FsPermission permission, boolean overwrite,
+    int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
+    FSDataOutputStream out = this.create(f, overwrite, bufferSize, replication, blockSize,
+      progress, permission);
+    return out;
+  }
+
+  private FSDataOutputStream create(Path f, boolean overwrite, int bufferSize, short replication,
+    long blockSize, Progressable progress, FsPermission permission) throws IOException {
+    if (this.exists(f) && !overwrite) {
+      throw new FileAlreadyExistsException("File already exists: " + f);
+    } else {
+      Path parent = f.getParent();
+      if (parent != null && !this.mkdirs(parent)) {
+        throw new IOException("Mkdirs failed to create " + parent.toString());
+      } else {
+        return new FSDataOutputStream(this.createOutputStreamWithMode(f, false, permission), null);
+      }
+    }
+  }
+
   @Override
   protected OutputStream createOutputStreamWithMode(Path f, boolean append,
       FsPermission permission) throws IOException {
     return new AbortableOutputStream(f, append, permission);
   }
 
-  class AbortableOutputStream extends ByteArrayOutputStream implements Abortable {
+  class AbortableOutputStream extends ByteArrayOutputStream
+      implements Abortable, StreamCapabilities {
+
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     private Path f;
 
@@ -53,23 +80,35 @@ public class AbortableFileSystem extends RawLocalFileSystem {
       this.permission = permission;
     }
 
+    @Override
     public void close() throws IOException {
+      if (closed.getAndSet(true)) {
+        return;
+      }
+
       OutputStream output =
         AbortableFileSystem.super.createOutputStreamWithMode(f, append, permission);
       writeTo(output);
       output.close();
     }
 
+    @Override
     public AbortableResult abort() {
+      final boolean isAlreadyClosed = closed.getAndSet(true);
       return new AbortableResult() {
         public boolean alreadyClosed() {
-          return false;
+          return isAlreadyClosed;
         }
 
         public IOException anyCleanupException() {
           return null;
         }
       };
+    }
+
+    @Override
+    public boolean hasCapability(String capability) {
+      return capability == CommonPathCapabilities.ABORTABLE_STREAM;
     }
   }
 }

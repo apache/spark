@@ -53,7 +53,7 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $path", e)
+            logWarning(s"Error cancelling write to $path (stream: $fsDataOutputStream)", e)
       } finally {
         terminated = true
       }
@@ -63,13 +63,14 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
       if (terminated) return
       try {
         if (!overwriteIfPossible && fc.util().exists(path)) {
+          fsDataOutputStream.abort()
           throw new FileAlreadyExistsException(
-            s"Failed to close atomic stream $path as destination already exists")
+            s"Failed to close atomic stream $path (stream: $fsDataOutputStream) as destination already exists")
         }
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error closing $path", e)
+            logWarning(s"Error closing $path (stream: $fsDataOutputStream)", e)
       } finally {
         terminated = true
       }

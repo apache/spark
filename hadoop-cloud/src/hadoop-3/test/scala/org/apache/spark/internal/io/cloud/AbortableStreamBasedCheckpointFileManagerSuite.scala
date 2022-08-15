@@ -22,6 +22,7 @@ import scala.util.Properties
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.permission.FsPermission
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
@@ -50,13 +51,26 @@ class AbortableStreamBasedCheckpointFileManagerSuite
 }
 
 @IntegrationTestSuite
-class AwsAbortableStreamBasedCheckpointFileManagerSuite
+class AwsS3AbortableStreamBasedCheckpointFileManagerSuite
     extends AbortableStreamBasedCheckpointFileManagerSuite with BeforeAndAfter {
 
   val s3aPath = Properties.envOrNone("S3A_PATH")
 
+  val hadoopConf = new Configuration()
+
+  var cleanup: () => Unit = () => {}
+
   override protected def beforeAll(): Unit = {
     assert(s3aPath.isDefined, "S3A_PATH must be defined!")
+    val path = new Path(s3aPath.get)
+    val fc = FileContext.getFileContext(path.toUri, hadoopConf)
+    assert(!fc.util.exists(path), s"S3A_PATH ($path) should not exists!")
+    fc.mkdir(path, FsPermission.getDirDefault, true)
+    cleanup = () => fc.delete(path, true)
+  }
+
+  override protected def afterAll(): Unit = {
+    cleanup()
   }
 
   override def withTempHadoopPath(p: Path => Unit): Unit = {
@@ -64,9 +78,6 @@ class AwsAbortableStreamBasedCheckpointFileManagerSuite
   }
 
   override def createManager(path: Path): CheckpointFileManager = {
-    val conf = new Configuration()
-    conf.set("fs.s3a.aws.credentials.provider",
-      "com.amazonaws.auth.EnvironmentVariableCredentialsProvider")
-    new AbortableStreamBasedCheckpointFileManager(path, conf)
+    new AbortableStreamBasedCheckpointFileManager(path, hadoopConf)
   }
 }
