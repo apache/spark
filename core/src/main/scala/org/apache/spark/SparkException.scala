@@ -75,6 +75,16 @@ class SparkException(
   override def getErrorSubClass: String = errorSubClass.orNull
 }
 
+object SparkException {
+  def internalError(msg: String): SparkException = {
+    new SparkException(errorClass = "INTERNAL_ERROR", messageParameters = Array(msg), cause = null)
+  }
+
+  def internalError(msg: String, cause: Throwable): SparkException = {
+    new SparkException(errorClass = "INTERNAL_ERROR", messageParameters = Array(msg), cause = cause)
+  }
+}
+
 /**
  * Exception thrown when execution of some user code in the driver process fails, e.g.
  * accumulator update fails or failure in takeOrdered (user supplies an Ordering implementation
