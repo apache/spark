@@ -27,6 +27,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import com.fasterxml.jackson.annotation.{JsonSetter, Nulls}
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -34,8 +35,6 @@ import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModul
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -541,7 +540,7 @@ object RocksDBFileManagerMetrics {
  */
 case class RocksDBCheckpointMetadata(
     sstFiles: Seq[RocksDBSstFile],
-    logFiles: Seq[RocksDBLogFile],
+    @JsonSetter(nulls = Nulls.AS_EMPTY)  logFiles: Seq[RocksDBLogFile],
     numKeys: Long) {
   import RocksDBCheckpointMetadata._
 
@@ -551,7 +550,7 @@ case class RocksDBCheckpointMetadata(
     mapper.writeValueAsString(nullified)
   }
 
-  def prettyJson: String = Serialization.writePretty(this)(RocksDBCheckpointMetadata.format)
+  def prettyJson: String = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(this)
 
   def writeToFile(metadataFile: File): Unit = {
     val writer = Files.newBufferedWriter(metadataFile.toPath, UTF_8)
@@ -570,8 +569,6 @@ case class RocksDBCheckpointMetadata(
 object RocksDBCheckpointMetadata {
   val VERSION = 1
 
-  implicit val format = Serialization.formats(NoTypeHints)
-
   /** Used to convert between classes and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
@@ -589,7 +586,7 @@ object RocksDBCheckpointMetadata {
         throw new IllegalStateException(
           s"Cannot read RocksDB checkpoint metadata of version $versionLine")
       }
-      Serialization.read[RocksDBCheckpointMetadata](reader)
+      mapper.readValue(reader, classOf[RocksDBCheckpointMetadata])
     } finally {
       reader.close()
     }
