@@ -1023,10 +1023,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           checkAnswer(
             spark.table("t2"),
             Row(1, 42L, 43L) ::
-              Row(2, 42L, 43L) ::
-              Row(3, 42L, 43L) ::
-              Row(4, 44L, 43L) ::
-              Row(5, 44L, 43L) :: Nil)
+            Row(2, 42L, 43L) ::
+            Row(3, 42L, 43L) ::
+            Row(4, 44L, 43L) ::
+            Row(5, 44L, 43L) :: Nil)
         }
       }
     }
