@@ -99,39 +99,37 @@ class SparkContext:
 
     Parameters
     ----------
-    master : str, optional
+    master : str, optional, default None
         Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-    appName : str, optional
+    appName : str, optional, default None
         A name for your job, to display on the cluster web UI.
-    sparkHome : str, optional
+    sparkHome : str, optional, default None
         Location where Spark is installed on cluster nodes.
-    pyFiles : list, optional
+    pyFiles : list, optional, default None
         Collection of .zip or .py files to send to the cluster
         and add to PYTHONPATH.  These can be paths on the local file
         system or HDFS, HTTP, HTTPS, or FTP URLs.
-    environment : dict, optional
+    environment : dict, optional, default None
         A dictionary of environment variables to set on
         worker nodes.
-    batchSize : int, optional
+    batchSize : int, optional, default 0
         The number of Python objects represented as a single
         Java object. Set 1 to disable batching, 0 to automatically choose
         the batch size based on object sizes, or -1 to use an unlimited
         batch size
-    serializer : :class:`pyspark.serializers.Serializer`, optional
+    serializer : :class:`pyspark.serializers.Serializer`, optional, default `CPickleSerializer`
         The serializer for RDDs.
-    conf : :py:class:`pyspark.SparkConf`, optional
+    conf : :py:class:`pyspark.SparkConf`, optional, default None
         An object setting Spark properties.
-    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional
+    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional, default None
         Use an existing gateway and JVM, otherwise a new JVM
         will be instantiated. This is only used internally.
-    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional
+    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional, default None
         The JavaSparkContext instance. This is only used internally.
-    profiler_cls : type, optional
+    profiler_cls : type, optional, default :class:`pyspark.profiler.BasicProfiler`
         A class of custom Profiler used to do profiling
-        (default is :class:`pyspark.profiler.BasicProfiler`).
-    udf_profiler_cls : type, optional
+    udf_profiler_cls : type, optional, default :class:`pyspark.profiler.UDFBasicProfiler`
         A class of custom Profiler used to do udf profiling
-        (default is :class:`pyspark.profiler.UDFBasicProfiler`).
 
     Notes
     -----
@@ -1189,7 +1187,7 @@ class SparkContext:
             fully qualifiedname of a function returning value WritableConverter
         minSplits : int, optional, default None
             minimum splits in dataset (default min(2, sc.defaultParallelism))
-        batchSize : int, default 0
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1284,7 +1282,7 @@ class SparkContext:
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
             None by default
-        batchSize : int, default 0
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1377,7 +1375,7 @@ class SparkContext:
             (None by default)
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict (None by default)
-        batchSize : int, default 0
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1483,7 +1481,7 @@ class SparkContext:
             fully qualified name of a function returning value WritableConverter
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
-        batchSize : int, default 0
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1574,7 +1572,7 @@ class SparkContext:
             fully qualified name of a function returning value WritableConverter
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
-        batchSize : int, default 0
+        batchSize : int, optional, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
