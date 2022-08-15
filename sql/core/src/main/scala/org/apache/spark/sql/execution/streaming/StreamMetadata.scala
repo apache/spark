@@ -30,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.util.JacksonUtils
-import org.apache.spark.util.Utils
 
 /**
  * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].

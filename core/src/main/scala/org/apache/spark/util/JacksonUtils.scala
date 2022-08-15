@@ -25,6 +25,8 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 object JacksonUtils {
 
+  import com.fasterxml.jackson.module.scala.JavaTypeable
+
   private val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
     ret.registerModule(DefaultScalaModule)
@@ -41,6 +43,8 @@ object JacksonUtils {
 
   def readValue[T](value: String, valueType: Class[T]): T =
     mapper.readValue(value, valueType)
+
+  def readValue[T: JavaTypeable](content: String): T = mapper.readValue[T](content)
 
   def readValue[T](reader: Reader, valueType: Class[T]): T =
     mapper.readValue(reader: Reader, valueType: Class[T])
