@@ -985,10 +985,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Seq((4, 44, 43)).toDF.write.insertInto("t1")
           Seq((5, 44, 45)).toDF.write.insertInto("t1")
         } else {
-          sql("insert into t1(j, s, x) values(1)")
-          sql("insert into t1(j, s, x) values(2, default)")
+          sql("insert into t1(j) values(1)")
+          sql("insert into t1(j, s) values(2, default)")
           sql("insert into t1 values(3, default, default)")
-          sql("insert into t1(j, s, x) values(4, 44)")
+          sql("insert into t1(j, s) values(4, 44)")
           sql("insert into t1 values(5, 44, 45)")
         }
         sql("create table t2(j int, s bigint default 42, x bigint default 43) using parquet")
@@ -1009,10 +1009,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             .withColumn("x", Column(Literal(43)))
             .write.insertInto("t2")
         } else {
-          sql("insert into t2(j, s, x) select j from t1 where j = 1")
-          sql("insert into t2(j, s, x) select j, default from t1 where j = 2")
+          sql("insert into t2(j) select j from t1 where j = 1")
+          sql("insert into t2(j, s) select j, default from t1 where j = 2")
           sql("insert into t2 select j, default, default from t1 where j = 3")
-          sql("insert into t2(j, s, x) select j, s from t1 where j = 4")
+          sql("insert into t2(j, s) select j, s from t1 where j = 4")
           sql("insert into t2 select j, s, default from t1 where j = 5")
         }
         checkAnswer(
