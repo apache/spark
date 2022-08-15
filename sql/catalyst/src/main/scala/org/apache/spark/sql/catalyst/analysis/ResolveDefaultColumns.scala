@@ -300,7 +300,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   private def addMissingDefaultValuesForInsertFromProject(
       project: Project,
       insertTableSchemaWithoutPartitionColumns: StructType,
-      numUserSpecifiedFields: Integer): Project = {
+      numUserSpecifiedFields: Int): Project = {
     val numQueryOutputs: Int = project.projectList.size
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
