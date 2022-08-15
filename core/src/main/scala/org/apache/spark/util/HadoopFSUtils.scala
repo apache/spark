@@ -57,14 +57,14 @@ private[spark] object HadoopFSUtils extends Logging {
    * @return for each input path, the set of discovered files for the path
    */
   def parallelListLeafFiles(
-    sc: SparkContext,
-    paths: Seq[Path],
-    hadoopConf: Configuration,
-    filter: PathFilter,
-    ignoreMissingFiles: Boolean,
-    ignoreLocality: Boolean,
-    parallelismThreshold: Int,
-    parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+      sc: SparkContext,
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
+      parallelismThreshold: Int,
+      parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
     parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
       ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
   }
@@ -187,10 +187,12 @@ private[spark] object HadoopFSUtils extends Logging {
 
   // scalastyle:off argcount
   /**
-   * Lists a single filesystem path recursively. If a `SparkContext` object is specified, this
-   * function may launch Spark jobs to parallelize listing based on `parallelismThreshold`.
+   * Lists a single filesystem path recursively.
    *
-   * If sessionOpt is None, this may be called on executors.
+   * 1. If contextOpt is defined, this function may launch Spark jobs to parallelize listing
+   * based on `parallelismThreshold`.
+   *
+   * 2. If contextOpt is None, this may be called on executors.
    *
    * @return all children of path that match the specified filter.
    */
