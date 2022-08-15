@@ -569,11 +569,6 @@ class SparkContext:
         """Return the URL of the SparkUI instance started by this `SparkContext`
 
         .. versionadded:: 2.1.0
-
-        Examples
-        --------
-        >>> sc.uiWebUrl
-        'http://...'
         """
         return self._jsc.sc().uiWebUrl().get()
 
@@ -862,15 +857,14 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
-        ...     path1 = os.path.join(d.name, "pickled1")
-        ...     path2 = os.path.join(d.name, "pickled2")
-        ...
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary pickled file
+        ...     path1 = os.path.join(d, "pickled1")
         ...     sc.parallelize(range(10)).saveAsPickleFile(path1, 3)
         ...
         ...     # Write another temporary pickled file
+        ...     path2 = os.path.join(d, "pickled2")
         ...     sc.parallelize(range(-10, -5)).saveAsPickleFile(path2, 3)
         ...
         ...     # Load picked file
@@ -921,10 +915,10 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
-        ...     path1 = os.path.join(d.name, "text1")
-        ...     path2 = os.path.join(d.name, "text2")
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path1 = os.path.join(d, "text1")
+        ...     path2 = os.path.join(d, "text2")
         ...
         ...     # Write a temporary text file
         ...     sc.parallelize(["x", "y", "z"]).saveAsTextFile(path1)
@@ -932,11 +926,11 @@ class SparkContext:
         ...     # Write another temporary text file
         ...     sc.parallelize(["aa", "bb", "cc"]).saveAsTextFile(path2)
         ...
-        ...     # Load picked file
+        ...     # Load text file
         ...     collected1 = sorted(sc.textFile(path1, 3).collect())
         ...     collected2 = sorted(sc.textFile(path2, 4).collect())
         ...
-        ...     # Load two picked files together
+        ...     # Load two text files together
         ...     collected3 = sorted(sc.textFile('{},{}'.format(path1, path2), 5).collect())
 
         >>> collected1
@@ -1006,17 +1000,17 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary text file
-        ...     with open(os.path.join(d.name, "1.txt"), "w") as f:
+        ...     with open(os.path.join(d, "1.txt"), "w") as f:
         ...         _ = f.write("123")
         ...
         ...     # Write another temporary text file
-        ...     with open(os.path.join(d.name, "2.txt"), "w") as f:
+        ...     with open(os.path.join(d, "2.txt"), "w") as f:
         ...         _ = f.write("xyz")
         ...
-        ...     collected = sorted(sc.wholeTextFiles(d.name).collect())
+        ...     collected = sorted(sc.wholeTextFiles(d).collect())
 
         >>> collected
         [('.../1.txt', '123'), ('.../2.txt', 'xyz')]
@@ -1058,17 +1052,17 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary binary file
-        ...     with open(os.path.join(d.name, "1.bin"), "wb") as f1:
+        ...     with open(os.path.join(d, "1.bin"), "wb") as f1:
         ...         _ = f1.write(b"binary data I")
         ...
         ...     # Write another temporary binary file
-        ...     with open(os.path.join(d.name, "2.bin"), "wb") as f2:
+        ...     with open(os.path.join(d, "2.bin"), "wb") as f2:
         ...         _ = f2.write(b"binary data II")
         ...
-        ...     collected = sorted(sc.binaryFiles(d.name).collect())
+        ...     collected = sorted(sc.binaryFiles(d).collect())
 
         >>> collected
         [('.../1.bin', b'binary data I'), ('.../2.bin', b'binary data II')]
@@ -1103,19 +1097,19 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a temporary file
-        ...     with open(os.path.join(d.name, "1.bin"), "w") as f:
+        ...     with open(os.path.join(d, "1.bin"), "w") as f:
         ...         for i in range(3):
         ...             _ = f.write("%04d" % i)
         ...
         ...     # Write another file
-        ...     with open(os.path.join(d.name, "2.bin"), "w") as f:
+        ...     with open(os.path.join(d, "2.bin"), "w") as f:
         ...         for i in [-1, -2, -10]:
         ...             _ = f.write("%04d" % i)
         ...
-        ...     collected = sorted(sc.binaryRecords(d.name, 4).collect())
+        ...     collected = sorted(sc.binaryRecords(d, 4).collect())
 
         >>> collected
         [b'-001', b'-002', b'-010', b'0000', b'0001', b'0002']
@@ -1181,14 +1175,14 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
+        >>> import tempfile
 
         Set the class of output format
 
         >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
 
-        >>> with TemporaryDirectory() as d:
-        ...     path = os.path.join(d.name, "hadoop_file")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
         ...     rdd = sc.parallelize([(1, {3.0: "bb"}), (2, {1.0: "aa"}), (3, {2.0: "dd"})])
@@ -1268,7 +1262,7 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
+        >>> import tempfile
 
         Set the related classes
 
@@ -1277,8 +1271,8 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with TemporaryDirectory() as d:
-        ...     path = os.path.join(d.name, "new_hadoop_file")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "new_hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
         ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
@@ -1353,7 +1347,7 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
+        >>> import tempfile
 
         Set the related classes
 
@@ -1362,8 +1356,8 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with TemporaryDirectory() as d:
-        ...     path = os.path.join(d.name, "new_hadoop_file")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "new_hadoop_file")
         ...
         ...     # Create the conf for writing
         ...     write_conf = {
@@ -1452,7 +1446,7 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
+        >>> import tempfile
 
         Set the related classes
 
@@ -1461,17 +1455,18 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with TemporaryDirectory() as d:
-        ...     path = os.path.join(d.name, "old_hadoop_file")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
         ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
         ...     rdd.saveAsHadoopFile(path, output_format_class, key_class, value_class)
         ...
-        ...     collected = sorted(path, input_format_class, key_class, value_class).collect())
+        ...     loaded = sc.hadoopFile(path, input_format_class, key_class, value_class)
+        ...     collected = sorted(loaded.collect())
 
         >>> collected
-        [(0, '1\t'), (0, '1\ta'), (0, '3\tx')]
+        [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -1534,7 +1529,7 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
+        >>> import tempfile
 
         Set the related classes
 
@@ -1543,8 +1538,8 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with TemporaryDirectory() as d:
-        ...     path = os.path.join(d.name, "old_hadoop_file")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Create the conf for writing
         ...     write_conf = {
@@ -1561,11 +1556,11 @@ class SparkContext:
         ...     # Create the conf for reading
         ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
         ...
-        ...     loaded = sc.hadoopRDD(inputFormatClass, keyClass, valueClass, conf=read_conf)
+        ...     loaded = sc.hadoopRDD(input_format_class, key_class, value_class, conf=read_conf)
         ...     collected = sorted(loaded.collect())
 
         >>> collected
-        [(0, '1\t'), (0, '1\ta'), (0, '3\tx')]
+        [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self._dictToJavaMap(conf)
         assert self._jvm is not None
@@ -1598,12 +1593,12 @@ class SparkContext:
         Examples
         --------
         >>> import os
-        >>> from tempfile import TemporaryDirectory
-        >>> with TemporaryDirectory() as d:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
         ...     # generate a text RDD
-        ...     with open(os.path.join(d.name, "union-text.txt"), "w") as f:
+        ...     with open(os.path.join(d, "union-text.txt"), "w") as f:
         ...         _ = f.write("Hello")
-        ...     text_rdd = sc.textFile(d.name)
+        ...     text_rdd = sc.textFile(d)
         ...
         ...     # generate another RDD
         ...     parallelized = sc.parallelize(["World!"])
@@ -1660,38 +1655,10 @@ class SparkContext:
         >>> mapping = {1: 10001, 2: 10002}
         >>> bc = sc.broadcast(mapping)
 
-        Broadcasted object can be used in RDD operations:
-
         >>> rdd = sc.range(5)
         >>> rdd2 = rdd.map(lambda i: bc.value[i] if i in bc.value else -1)
-        >>> sorted(rdd2.collect())
-        [-1, -1, -1, 10001, 10002]
-
-        Broadcasted object can also be used in UDF:
-
-        >>> df = spark.range(5)
-        >>> df.show()
-        +---+
-        | id|
-        +---+
-        |  0|
-        |  1|
-        |  2|
-        |  3|
-        |  4|
-        +---+
-        >>> spark.udf.register("MYUDF", lambda i: bc.value[i] if i in bc.value else -1)
-        <function ...>
-        >>> df.select(col("id"), expr("MYUDF(id)").alias("mapped")).show()
-        +---+------+
-        | id|mapped|
-        +---+------+
-        |  0|    -1|
-        |  1| 10001|
-        |  2| 10002|
-        |  3|    -1|
-        |  4|    -1|
-        +---+------+
+        >>> rdd2.collect()
+        [-1, 10001, 10002, -1, -1]
 
         >>> bc.destroy()
         """
@@ -1788,33 +1755,43 @@ class SparkContext:
         Examples
         --------
         >>> import os
+        >>> import tempfile
         >>> from pyspark import SparkFiles
-        >>> from tempfile import TemporaryDirectory
 
-        >>> d = TemporaryDirectory()
-        >>> path = os.path.join(d.name, "test.txt")
-        >>> with open(path, "w") as f:
-        ...    _ = f.write("100")
-        >>> sc.addFile(path)
-        >>> def func(iterator):
-        ...    with open(SparkFiles.get("test.txt")) as testFile:
-        ...        fileVal = int(testFile.readline())
-        ...        return [x * fileVal for x in iterator]
-        >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path1 = os.path.join(d, "test1.txt")
+        ...     with open(path1, "w") as f:
+        ...         _ = f.write("100")
+        ...
+        ...     path2 = os.path.join(d, "test2.txt")
+        ...     with open(path2, "w") as f:
+        ...         _ = f.write("200")
+        ...
+        ...     sc.addFile(path1)
+        ...     file_list1 = sorted(sc.listFiles)
+        ...
+        ...     sc.addFile(path2)
+        ...     file_list2 = sorted(sc.listFiles)
+        ...
+        ...     # add path2 twice, this addition will be ignored
+        ...     sc.addFile(path2)
+        ...     file_list3 = sorted(sc.listFiles)
+        ...
+        ...     def func(iterator):
+        ...         with open(SparkFiles.get("test1.txt")) as f:
+        ...             mul = int(f.readline())
+        ...             return [x * mul for x in iterator]
+        ...
+        ...     collected = sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+
+        >>> file_list1
+        ['file:/.../test1.txt']
+        >>> file_list2
+        ['file:/.../test1.txt', 'file:/.../test2.txt']
+        >>> file_list3
+        ['file:/.../test1.txt', 'file:/.../test2.txt']
+        >>> collected
         [100, 200, 300, 400]
-        >>> sc.listFiles
-        ['file:/.../test.txt']
-
-        Add another file
-
-        >>> path2 = os.path.join(d.name, "test2.txt")
-        >>> with open(path2, "w") as f:
-        ...    _ = f.write("100")
-        >>> sc.addFile(path2)
-        >>> sorted(sc.listFiles)
-        ['file:/.../test.txt', 'file:/.../test2.txt']
-
-        >>> d.cleanup()
         """
         self._jsc.sc().addFile(path, recursive)
 
@@ -1901,42 +1878,48 @@ class SparkContext:
         Creates a zipped file that contains a text file written '100'.
 
         >>> import os
+        >>> import tempfile
         >>> import zipfile
         >>> from pyspark import SparkFiles
-        >>> from tempfile import TemporaryDirectory
 
-        >>> d = TemporaryDirectory()
-        >>> path = os.path.join(d.name, "test.txt")
-        >>> zip_path = os.path.join(d.name, "test.zip")
-        >>> with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipped:
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "test.txt")
         ...     with open(path, "w") as f:
         ...         _ = f.write("100")
-        ...     zipped.write(path, os.path.basename(path))
-        >>> sc.addArchive(zip_path)
-        >>> sc.listArchives
-        ['file:/.../test.zip']
+        ...
+        ...     zip_path1 = os.path.join(d, "test1.zip")
+        ...     with zipfile.ZipFile(zip_path1, "w", zipfile.ZIP_DEFLATED) as z:
+        ...         z.write(path, os.path.basename(path))
+        ...
+        ...     zip_path2 = os.path.join(d, "test2.zip")
+        ...     with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as z:
+        ...         z.write(path, os.path.basename(path))
+        ...
+        ...     sc.addArchive(zip_path1)
+        ...     arch_list1 = sorted(sc.listArchives)
+        ...
+        ...     sc.addArchive(zip_path2)
+        ...     arch_list2 = sorted(sc.listArchives)
+        ...
+        ...     # add zip_path2 twice, this addition will be ignored
+        ...     sc.addArchive(zip_path2)
+        ...     arch_list3 = sorted(sc.listArchives)
+        ...
+        ...     def func(iterator):
+        ...         with open("%s/test.txt" % SparkFiles.get("test1.zip")) as f:
+        ...             mul = int(f.readline())
+        ...             return [x * mul for x in iterator]
+        ...
+        ...     collected = sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
 
-        Add another zip file.
-
-        >>> zip_path2 = os.path.join(d.name, "test2.zip")
-        >>> with zipfile.ZipFile(zip_path2, "w", zipfile.ZIP_DEFLATED) as zipped:
-        ...     with open(path, "w") as f:
-        ...         _ = f.write("100")
-        ...     zipped.write(path, os.path.basename(path))
-        >>> sc.addArchive(zip_path2)
-        >>> sorted(sc.listArchives)
-        ['file:/.../test.zip', 'file:/.../test2.zip']
-
-        Reads the '100' as an integer in the zipped file, and processes
-        it with the data in the RDD.
-
-        >>> def func(iterator):
-        ...    with open("%s/test.txt" % SparkFiles.get("test.zip")) as f:
-        ...        v = int(f.readline())
-        ...        return [x * int(v) for x in iterator]
-        >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+        >>> arch_list1
+        ['file:/.../test1.zip']
+        >>> arch_list2
+        ['file:/.../test1.zip', 'file:/.../test2.zip']
+        >>> arch_list3
+        ['file:/.../test1.zip', 'file:/.../test2.zip']
+        >>> collected
         [100, 200, 300, 400]
-        >>> d.cleanup()
         """
         self._jsc.sc().addArchive(path)
 
@@ -2245,7 +2228,7 @@ def _test() -> None:
     import doctest
 
     globs = globals().copy()
-    globs["sc"] = SparkContext("local[4]", "PythonTest")
+    globs["sc"] = SparkContext("local[4]", "context tests")
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
