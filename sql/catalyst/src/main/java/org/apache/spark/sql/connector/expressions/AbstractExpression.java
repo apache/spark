@@ -22,9 +22,9 @@ import java.io.Serializable;
 import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 public abstract class AbstractExpression implements Expression, Serializable {
+  private static final ToStringSQLBuilder builder = new ToStringSQLBuilder();
   @Override
   public String toString() {
-    ToStringSQLBuilder builder = new ToStringSQLBuilder();
     return builder.build(this);
   }
 }
