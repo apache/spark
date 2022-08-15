@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -3871,6 +3871,15 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
+    .doc("When PRETTY, the error message consists of textual representation of error class, " +
+      " message and query context. The MINIMAL and STANDARD formats are JSON formats where " +
+      "STANDARD is pretty JSON with additional JSON field `message`.")
+    .version("3.4.0")
+    .stringConf.transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ErrorMessageFormat.values.map(_.toString))
+    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
   /**
    * Holds information about keys that have been deprecated.
