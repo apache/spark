@@ -2929,7 +2929,9 @@ object SQLConf {
       .internal()
       .doc("When true, allow INSERT INTO commands with explicit columns (such as " +
         "INSERT INTO t(a, b)) to specify fewer columns than the target table; the analyzer will " +
-        "assign default values for remaining columns. Otherwise, if false, return an error.")
+        "assign default values for remaining columns (either NULL, or otherwise the explicit " +
+        "DEFAULT value associated with the column from a previous command). Otherwise, if " +
+        "false, return an error.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
