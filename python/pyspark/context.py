@@ -483,7 +483,7 @@ class SparkContext:
 
         Parameters
         ----------
-        conf : :py:class:`pyspark.SparkConf`, optional
+        conf : :py:class:`pyspark.SparkConf`, optional, default None
             `SparkConf` that will be used for initialisation of the `SparkContext`.
 
         Returns
@@ -1178,18 +1178,18 @@ class SparkContext:
         ----------
         path : str
             path to sequencefile
-        keyClass: str, optional
+        keyClass: str, optional, default None
             fully qualified classname of key Writable class (e.g. "org.apache.hadoop.io.Text")
-        valueClass : str, optional
+        valueClass : str, optional, default None
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional
+        keyConverter : str, optional, default None
             fully qualified name of a function returning key WritableConverter
-        valueConverter : str, optional
+        valueConverter : str, optional, default None
             fully qualifiedname of a function returning value WritableConverter
-        minSplits : int, optional
+        minSplits : int, optional, default None
             minimum splits in dataset (default min(2, sc.defaultParallelism))
-        batchSize : int, optional
+        batchSize : int, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1275,16 +1275,16 @@ class SparkContext:
         valueClass : str
             fully qualified classname of value Writable class
             (e.g. "org.apache.hadoop.io.LongWritable")
-        keyConverter : str, optional
+        keyConverter : str, optional, default None
             fully qualified name of a function returning key WritableConverter
             None by default
-        valueConverter : str, optional
+        valueConverter : str, optional, default None
             fully qualified name of a function returning value WritableConverter
             None by default
-        conf : dict, optional
+        conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
             None by default
-        batchSize : int, optional
+        batchSize : int, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1377,7 +1377,7 @@ class SparkContext:
             (None by default)
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict (None by default)
-        batchSize : int, optional, default 0
+        batchSize : int, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1483,7 +1483,7 @@ class SparkContext:
             fully qualified name of a function returning value WritableConverter
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
-        batchSize : int, optional
+        batchSize : int, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1574,7 +1574,7 @@ class SparkContext:
             fully qualified name of a function returning value WritableConverter
         conf : dict, optional, default None
             Hadoop configuration, passed in as a dict
-        batchSize : int, optional
+        batchSize : int, default 0
             The number of Python objects represented as a single
             Java object. (default 0, choose batchSize automatically)
 
@@ -1715,7 +1715,7 @@ class SparkContext:
 
         Returns
         -------
-        :py:class:`pyspark.broadcast.Broadcast`
+        :py:class:`pyspark.Broadcast`
             `Broadcast` object, a read-only variable cached on each machine
 
         Examples
