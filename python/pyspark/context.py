@@ -684,6 +684,10 @@ class SparkContext:
         :py:class:`pyspark.RDD`
             An RDD of int
 
+        See Also
+        --------
+        :meth:`SparkSession.range`
+
         Examples
         --------
         >>> sc.range(5).collect()
@@ -854,6 +858,10 @@ class SparkContext:
         :py:class:`pyspark.RDD`
             RDD representing unpickled data from the file(s).
 
+        See Also
+        --------
+        :meth:`RDD.saveAsPickleFile`
+
         Examples
         --------
         >>> import os
@@ -911,6 +919,11 @@ class SparkContext:
         -------
         :py:class:`pyspark.RDD`
             RDD representing text data from the file(s).
+
+        See Also
+        --------
+        :meth:`RDD.saveAsTextFile`
+        :meth:`SparkContext.wholeTextFiles`
 
         Examples
         --------
@@ -997,6 +1010,11 @@ class SparkContext:
         -----
         Small files are preferred, as each file will be loaded fully in memory.
 
+        See Also
+        --------
+        :meth:`RDD.saveAsTextFile`
+        :meth:`SparkContext.textFile`
+
         Examples
         --------
         >>> import os
@@ -1049,6 +1067,10 @@ class SparkContext:
         -----
         Small files are preferred, large file is also allowable, but may cause bad performance.
 
+        See Also
+        --------
+        :meth:`SparkContext.binaryRecords`
+
         Examples
         --------
         >>> import os
@@ -1093,6 +1115,10 @@ class SparkContext:
         -------
         :py:class:`pyspark.RDD`
             RDD of data with values, represented as byte arrays
+
+        See Also
+        --------
+        :meth:`SparkContext.binaryFiles`
 
         Examples
         --------
@@ -1171,6 +1197,14 @@ class SparkContext:
         -------
         :py:class:`pyspark.RDD`
             RDD of tuples of key and corresponding value
+
+        See Also
+        --------
+        :meth:`RDD.saveAsSequenceFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`SparkContext.newAPIHadoopFile`
+        :meth:`SparkContext.hadoopFile`
 
         Examples
         --------
@@ -1259,6 +1293,14 @@ class SparkContext:
         :py:class:`pyspark.RDD`
             RDD of tuples of key and corresponding value
 
+        See Also
+        --------
+        :meth:`RDD.saveAsSequenceFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`SparkContext.sequenceFile`
+        :meth:`SparkContext.hadoopFile`
+
         Examples
         --------
         >>> import os
@@ -1343,6 +1385,13 @@ class SparkContext:
         -------
         :py:class:`pyspark.RDD`
             RDD of tuples of key and corresponding value
+
+        See Also
+        --------
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`SparkContext.hadoopRDD`
+        :meth:`SparkContext.hadoopFile`
 
         Examples
         --------
@@ -1443,6 +1492,14 @@ class SparkContext:
         :py:class:`pyspark.RDD`
             RDD of tuples of key and corresponding value
 
+        See Also
+        --------
+        :meth:`RDD.saveAsSequenceFile`
+        :meth:`RDD.saveAsNewAPIHadoopFile`
+        :meth:`RDD.saveAsHadoopFile`
+        :meth:`SparkContext.newAPIHadoopFile`
+        :meth:`SparkContext.hadoopRDD`
+
         Examples
         --------
         >>> import os
@@ -1526,6 +1583,13 @@ class SparkContext:
         :py:class:`pyspark.RDD`
             RDD of tuples of key and corresponding value
 
+        See Also
+        --------
+        :meth:`RDD.saveAsNewAPIHadoopDataset`
+        :meth:`RDD.saveAsHadoopDataset`
+        :meth:`SparkContext.newAPIHadoopRDD`
+        :meth:`SparkContext.hadoopFile`
+
         Examples
         --------
         >>> import os
@@ -1589,6 +1653,10 @@ class SparkContext:
         serializer:
 
         .. versionadded:: 0.7.0
+
+        See Also
+        --------
+        :meth:`RDD.union`
 
         Examples
         --------
@@ -1746,6 +1814,7 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.listFiles`
+        :meth:`SparkContext.addPyFile`
         :meth:`SparkFiles.get`
 
         Notes
@@ -1951,6 +2020,10 @@ class SparkContext:
         dirName : str
             path to the directory where checkpoint files will be stored
             (must be HDFS path if running in cluster)
+
+        See Also
+        --------
+        :meth:`SparkContext.getCheckpointDir`
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
@@ -2009,6 +2082,10 @@ class SparkContext:
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
         local inheritance.
 
+        See Also
+        --------
+        :meth:`SparkContext.cancelJobGroup`
+
         Examples
         --------
         >>> import threading
@@ -2046,6 +2123,10 @@ class SparkContext:
 
         .. versionadded:: 1.0.0
 
+        See Also
+        --------
+        :meth:`SparkContext.getLocalProperty`
+
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
@@ -2059,6 +2140,10 @@ class SparkContext:
         :meth:`setLocalProperty`.
 
         .. versionadded:: 1.0.0
+
+        See Also
+        --------
+        :meth:`SparkContext.setLocalProperty`
         """
         return self._jsc.getLocalProperty(key)
 
@@ -2089,6 +2174,11 @@ class SparkContext:
         for more information.
 
         .. versionadded:: 1.1.0
+
+        See Also
+        --------
+        :meth:`SparkContext.setJobGroup`
+        :meth:`SparkContext.cancelJobGroup`
         """
         self._jsc.sc().cancelJobGroup(groupId)
 
@@ -2097,6 +2187,11 @@ class SparkContext:
         Cancel all jobs that have been scheduled or are running.
 
         .. versionadded:: 1.1.0
+
+        See Also
+        --------
+        :meth:`SparkContext.cancelJobGroup`
+        :meth:`SparkContext.runJob`
         """
         self._jsc.sc().cancelAllJobs()
 
@@ -2140,6 +2235,10 @@ class SparkContext:
         list
             results of specified partitions
 
+        See Also
+        --------
+        :meth:`SparkContext.cancelAllJobs`
+
         Examples
         --------
         >>> myRDD = sc.parallelize(range(6), 3)
@@ -2165,6 +2264,10 @@ class SparkContext:
         """Print the profile stats to stdout
 
         .. versionadded:: 1.2.0
+
+        See Also
+        --------
+        :meth:`SparkContext.dump_profiles`
         """
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
@@ -2178,6 +2281,10 @@ class SparkContext:
         """Dump the profile stats into directory `path`
 
         .. versionadded:: 1.2.0
+
+        See Also
+        --------
+        :meth:`SparkContext.show_profiles`
         """
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
@@ -2188,7 +2295,7 @@ class SparkContext:
             )
 
     def getConf(self) -> SparkConf:
-        """Return a copy of this SparkContext's configuration.
+        """Return a copy of this SparkContext's configuration :py:class:`pyspark.SparkConf`.
 
         .. versionadded:: 2.1.0
         """
