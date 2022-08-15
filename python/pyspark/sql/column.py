@@ -35,7 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
-from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
+from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
