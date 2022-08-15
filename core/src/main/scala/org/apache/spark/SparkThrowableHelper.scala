@@ -61,6 +61,10 @@ private[spark] case class ErrorInfo(
   val messageFormat: String = message.mkString("\n")
 }
 
+object ErrorMessageFormat extends Enumeration {
+  val PRETTY, MINIMAL, STANDARD = Value
+}
+
 /**
  * Companion object used by instances of [[SparkThrowable]] to access error class information and
  * construct error messages.
@@ -138,10 +142,6 @@ private[spark] object SparkThrowableHelper {
 
   def isInternalError(errorClass: String): Boolean = {
     errorClass == "INTERNAL_ERROR"
-  }
-
-  object ErrorMessageFormat extends Enumeration {
-    val PRETTY, MINIMAL, STANDARD = Value
   }
 
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
