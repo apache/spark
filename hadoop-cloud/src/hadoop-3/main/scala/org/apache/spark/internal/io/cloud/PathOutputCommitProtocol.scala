@@ -114,9 +114,7 @@ class PathOutputCommitProtocol(
       // compatibility through a StreamCapabilities probe.
       if (dynamicPartitionOverwrite) {
         logDebug(s"Checking dynamic partition overwrite support in committer $committer")
-        if (committer.isInstanceOf[StreamCapabilities]
-            && committer.asInstanceOf[StreamCapabilities]
-            .hasCapability(CAPABILITY_DYNAMIC_PARTITIONING)) {
+        if (supportsDynamicPartitions) {
           logDebug(
             s"Committer $committer has declared compatibility with dynamic partition overwrite")
         } else {
@@ -130,6 +128,17 @@ class PathOutputCommitProtocol(
     committer
   }
 
+
+  /**
+   * Does the instantiated committer support dynamic partitions?
+   * @return true if the committer declares itself compatible.
+   */
+  private def supportsDynamicPartitions = {
+    committer.isInstanceOf[FileOutputCommitter] ||
+      (committer.isInstanceOf[StreamCapabilities] &&
+        committer.asInstanceOf[StreamCapabilities]
+          .hasCapability(CAPABILITY_DYNAMIC_PARTITIONING))
+  }
 
   /**
    * Create a temporary file for a task.
@@ -153,6 +162,28 @@ class PathOutputCommitProtocol(
     file.toString
   }
 
+  /**
+   * Reject any requests for an absolute path file on a committer which
+   * is not compatible with it.
+   *
+   * @param taskContext task context
+   * @param absoluteDir final directory
+   * @param spec output filename
+   * @return a path string
+   * @throws UnsupportedOperationException if incompatible
+   */
+  override def newTaskTempFileAbsPath(
+    taskContext: TaskAttemptContext,
+    absoluteDir: String,
+    spec: FileNameSpec): String =  {
+
+    if (supportsDynamicPartitions) {
+      super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
+    } else {
+      throw new UnsupportedOperationException(s"Absolute output locations not supported" +
+        s" by committer $committer")
+    }
+  }
 }
 
 object PathOutputCommitProtocol {

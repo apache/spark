@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.CAPABILITY_DYNAMIC_PARTITIONING
 
 class CommitterBindingSuite extends SparkFunSuite {
@@ -151,6 +151,12 @@ class CommitterBindingSuite extends SparkFunSuite {
     if (!ioe.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
       throw ioe
     }
+    intercept[UnsupportedOperationException] {
+      committer.newTaskTempFileAbsPath(
+        tContext,
+        "/tmp",
+        FileNameSpec("lotus", ".123"))
+    }
   }
 
   test("permit dynamic partitioning if the committer says it works") {
@@ -162,11 +168,21 @@ class CommitterBindingSuite extends SparkFunSuite {
 
     StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
-    val committer = FileCommitProtocol.instantiate(
+    val committer: PathOutputCommitProtocol = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
-      jobId, path.toUri.toString, true)
+      jobId,
+      path.toUri.toString,
+      true).asInstanceOf[PathOutputCommitProtocol]
     committer.setupJob(tContext)
+    committer.setupTask(tContext)
 
+    val spec = FileNameSpec(".lotus.", ".123")
+    val absPath = committer.newTaskTempFileAbsPath(
+      tContext,
+      "/tmp",
+      spec)
+    assert(absPath.endsWith(".123"), s"wrong suffix in $absPath")
+    assert(absPath.contains("lotus"), s"wrong prefix in $absPath")
   }
 
 }
