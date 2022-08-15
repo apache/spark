@@ -46,6 +46,8 @@ object JacksonUtils {
 
   def readValue[T: JavaTypeable](content: String): T = mapper.readValue[T](content)
 
+  def readValue[T: JavaTypeable](reader: Reader): T = mapper.readValue[T](reader)
+
   def readValue[T](reader: Reader, valueType: Class[T]): T =
     mapper.readValue(reader: Reader, valueType: Class[T])
 
