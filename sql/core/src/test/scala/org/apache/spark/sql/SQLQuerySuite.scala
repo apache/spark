@@ -4437,6 +4437,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
+
+  test("SPARK-40080: Move EliminateSorts before LimitPushDown") {
+    val df = sql(
+      """
+        |SELECT *
+        |FROM   (SELECT *
+        |        FROM   testdata
+        |        ORDER  BY key) t1
+        |       CROSS JOIN (SELECT *
+        |                   FROM   testdata2
+        |                   ORDER  BY a) t2
+        |LIMIT  2
+      """.stripMargin)
+
+    assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Sort]) === false)
+  }
 }
 
 case class Foo(bar: Option[String])
