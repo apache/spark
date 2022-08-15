@@ -405,6 +405,17 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        key
+            a literal value, or a :class:`Column` expression (deprecated).
+            The result will only be true at a location if item matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column as items contained in key.
+
         Examples
         --------
         >>> df = spark.createDataFrame([([1, 2], {"key": "value"})], ["l", "d"])
@@ -429,6 +440,17 @@ class Column:
         An expression that gets a field by name in a :class:`StructType`.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        name
+            a literal value, or a :class:`Column` expression.
+            The result will only be true at a location if field matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column gotten by name.
 
         Examples
         --------
@@ -462,6 +484,17 @@ class Column:
 
         .. versionadded:: 3.1.0
 
+        Parameters
+        ----------
+        fieldName : str
+            a literal value.
+            The result will only be true at a location if any field matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column which field added/replaced by fileName.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -494,6 +527,17 @@ class Column:
         This is a no-op if schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        fieldNames : str or list
+            Literal values.
+            The result will drop at a location if any field matches in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column which field dropped by fileName.
 
         Examples
         --------
@@ -570,6 +614,8 @@ class Column:
 
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
     >>> df.filter(df.name.contains('o')).collect()
     [Row(age=5, name='Bob')]
     """
@@ -583,6 +629,8 @@ class Column:
 
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
     >>> df.filter(df.name.startswith('Al')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
@@ -598,6 +646,8 @@ class Column:
 
     Examples
     --------
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
     >>> df.filter(df.name.endswith('ice')).collect()
     [Row(age=2, name='Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
@@ -621,8 +671,15 @@ class Column:
         --------
         pyspark.sql.Column.rlike
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.filter(df.name.like('Al%')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -639,8 +696,15 @@ class Column:
         other : str
             an extended regex expression
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is matched by extended regex expression.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.filter(df.name.rlike('ice$')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -663,8 +727,15 @@ class Column:
         --------
         pyspark.sql.Column.rlike
 
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is matched by SQL LIKE pattern.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.filter(df.name.ilike('%Ice')).collect()
         [Row(age=2, name='Alice')]
         """
@@ -692,8 +763,15 @@ class Column:
         length : :class:`Column` or int
             length of the substring
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is substr of origin Column.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
         """
@@ -720,8 +798,20 @@ class Column:
 
         .. versionadded:: 1.5.0
 
+        Parameters
+        ----------
+        cols
+            The result will only be true at a location if all the labels match in the Column.
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element in the Column is contained in cols.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df[df.name.isin("Bob", "Mike")].collect()
         [Row(age=5, name='Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
@@ -870,8 +960,15 @@ class Column:
             .. versionchanged:: 2.2.0
                Added optional ``metadata`` argument.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is aliased with new name or names.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
@@ -903,8 +1000,21 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages='2'), Row(ages='5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
@@ -934,8 +1044,22 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        lowerBound : :class:`Column` or :class:`LiteralType` or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
+            a boolean expression that boundary start, inclusive..
+        upperBound : :class:`Column` or :class:`LiteralType` or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
+            a boolean expression that boundary end, inclusive..
+
+        Returns
+        -------
+        :class:`Column`
+            Column of booleans showing whether each element of Column is between left and right (inclusive).
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.name, df.age.between(2, 4)).show()
         +-----+---------------------------+
         | name|((age >= 2) AND (age <= 4))|
@@ -960,9 +1084,16 @@ class Column:
         value
             a literal value, or a :class:`Column` expression.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is in conditions.
+
         Examples
         --------
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
         +-----+------------------------------------------------------------+
         | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
@@ -993,9 +1124,16 @@ class Column:
         value
             a literal value, or a :class:`Column` expression.
 
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is unmatched conditions.
+
         Examples
         --------
         >>> from pyspark.sql import functions as F
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
         +-----+-------------------------------------+
         | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
@@ -1033,6 +1171,8 @@ class Column:
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
         >>> from pyspark.sql.functions import desc
+        >>> df = spark.createDataFrame(
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.withColumn("rank", rank().over(window)) \
                 .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
@@ -1068,11 +1208,7 @@ def _test() -> None:
 
     globs = pyspark.sql.column.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.column tests").getOrCreate()
-    sc = spark.sparkContext
     globs["spark"] = spark
-    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
-        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
-    )
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.column,
