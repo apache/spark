@@ -21,6 +21,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
@@ -125,6 +128,34 @@ public class ExternalShuffleBlockResolverSuite {
     String legacyShuffleJson = "{\"localDirs\": [\"/bippy\", \"/flippy\"], " +
       "\"subDirsPerLocalDir\": 7, \"shuffleManager\": " + "\"" + SORT_MANAGER + "\"}";
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
+  }
+
+  @Test
+  public void testShuffleIndexCacheExpireTime() throws IOException, InterruptedException, ExecutionException {
+    Map<String, String> config = new HashMap<>();
+    config.put("spark.shuffle.service.index.cache.expire.time", "2s");
+    TransportConf transportConf = new TransportConf("shuffle",
+      new MapConfigProvider(config));
+    ExternalShuffleBlockResolver resolver =
+      new ExternalShuffleBlockResolver(transportConf, null);
+    resolver.registerExecutor("appId", "execId1",
+      dataContext.createExecutorInfo(SORT_MANAGER));
+    resolver.getContinuousBlocksData("appId","execId1", 0, 0, 0, 0);
+    assertEquals(resolver.shuffleIndexCache.size(), 1);
+    resolver.getContinuousBlocksData("appId","execId1", 0, 0, 1, 1);
+    Thread.sleep(2500);
+    assertEquals(resolver.shuffleIndexCache.size(), 1);
+  }
+
+  @Test
+  public void testShuffleIndexCacheExpireTimeLowerLimit() {
+    Map<String, String> config = new HashMap<>();
+    config.put("spark.shuffle.service.index.cache.expire.time", "100ms");
+    TransportConf transportConf = new TransportConf("shuffle",
+            new MapConfigProvider(config));
+
+    assertThrows("spark.shuffle.service.index.cache.expire.time should be bigger 1s",
+      AssertionError.class, () -> new ExternalShuffleBlockResolver(transportConf, null));
   }
 
 }

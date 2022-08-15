@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -80,7 +81,8 @@ public class ExternalShuffleBlockResolver {
    *  Caches index file information so that we can avoid open/close the index files
    *  for each block fetch.
    */
-  private final LoadingCache<String, ShuffleIndexInformation> shuffleIndexCache;
+  @VisibleForTesting
+  final LoadingCache<String, ShuffleIndexInformation> shuffleIndexCache;
 
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
@@ -112,6 +114,10 @@ public class ExternalShuffleBlockResolver {
       Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
+    long indexCacheExpireTime = JavaUtils.timeStringAsSec(
+      conf.get("spark.shuffle.service.index.cache.expire.time", "1d"));
+    assert indexCacheExpireTime > 0 :
+      "spark.shuffle.service.index.cache.expire.time should be bigger 1s";
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<String, ShuffleIndexInformation>() {
           @Override
@@ -123,6 +129,7 @@ public class ExternalShuffleBlockResolver {
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
+      .expireAfterAccess(indexCacheExpireTime, TimeUnit.SECONDS)
       .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {

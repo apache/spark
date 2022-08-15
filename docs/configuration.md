@@ -997,6 +997,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.index.cache.expire.time</code></td>
+  <td>1d</td>
+  <td>
+    Cache entries expire time after access, should be bigger than 1s.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.removeShuffle</code></td>
   <td>false</td>
   <td>
