@@ -17,37 +17,34 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.lang.{Integer => JInt}
-import java.lang.{Long => JLong}
-
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.kafka.common.TopicPartition
-
-import org.apache.spark.util.Utils
 
 /**
  * Utilities for converting Kafka related objects to and from json.
  */
 private object JsonUtils {
 
-  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret
+  }
 
   /**
    * Read TopicPartitions from json string
    */
   def partitions(str: String): Array[TopicPartition] = {
     try {
-      mapper.readValue(str, new TypeReference[Map[String, Seq[Int]]]() {})
-        .flatMap { case (topic, parts) =>
-          parts.map { part =>
-            new TopicPartition(topic, part)
-          }
-        }.toArray
+      mapper.readValue[Map[String, Seq[Int]]](str).flatMap { case (topic, parts) =>
+        parts.map { part =>
+          new TopicPartition(topic, part)
+        }
+      }.toArray
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
@@ -72,15 +69,12 @@ private object JsonUtils {
    */
   def partitionOffsets(str: String): Map[TopicPartition, Long] = {
     try {
-      Utils.tryWithResource(mapper.createParser(str)) { parser =>
-        val typeRef = new TypeReference[Map[String, Map[JInt, JLong]]]() {}
-        parser.readValueAs[Map[String, Map[Int, Long]]](typeRef)
-          .flatMap { case (topic, partOffsets) =>
-            partOffsets.map { case (part, offset) =>
-              new TopicPartition(topic, part) -> offset
-            }
+      mapper.readValue[Map[String, Map[Int, Long]]](str)
+        .flatMap { case (topic, partOffsets) =>
+          partOffsets.map { case (part, offset) =>
+            new TopicPartition(topic, part) -> offset
           }
-      }
+        }
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
@@ -90,15 +84,12 @@ private object JsonUtils {
 
   def partitionTimestamps(str: String): Map[TopicPartition, Long] = {
     try {
-      Utils.tryWithResource(mapper.createParser(str)) { parser =>
-        val typeRef = new TypeReference[Map[String, Map[JInt, JLong]]]() {}
-        parser.readValueAs[Map[String, Map[Int, Long]]](typeRef)
-          .flatMap { case (topic, partTimestamps) =>
-            partTimestamps.map { case (part, timestamp) =>
-              new TopicPartition(topic, part) -> timestamp
-            }
+      mapper.readValue[Map[String, Map[Int, Long]]](str)
+        .flatMap { case (topic, partTimestamps) =>
+          partTimestamps.map { case (part, timestamp) =>
+            new TopicPartition(topic, part) -> timestamp
           }
-      }
+        }
     } catch {
       case NonFatal(_) =>
         throw new IllegalArgumentException(
