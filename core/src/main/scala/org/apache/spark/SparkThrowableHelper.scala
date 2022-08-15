@@ -28,7 +28,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.{JInt, JString}
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
 import org.apache.spark.util.Utils
 
@@ -154,10 +154,15 @@ private[spark] object SparkThrowableHelper {
           ("queryContext" -> JArray(List.empty))
         compact(render(jValue))
       case MINIMAL | STANDARD =>
-        val message = if (format == STANDARD) Some(e.getMessage) else None
+        val errorClass = e.getErrorClass
+        val message = if (format == STANDARD) {
+          val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+            throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+          Some(errorInfo.messageFormat)
+        } else None
         assert(e.getParameterNames.size == e.getMessageParameters.size,
           "Number of message parameter names and values must be the same")
-        val jValue = ("errorClass" -> e.getErrorClass) ~
+        val jValue = ("errorClass" -> errorClass) ~
           ("errorSubClass" -> Option(e.getErrorSubClass)) ~
           ("message" -> message) ~
           ("sqlState" -> Option(e.getSqlState)) ~
@@ -171,7 +176,8 @@ private[spark] object SparkThrowableHelper {
               "stopIndex" -> JInt(c.stopIndex()),
               "fragment" -> JString(c.fragment()))).toList)
           )
-        compact(render(jValue))
+        val rendered = render(jValue)
+        if (format == MINIMAL) compact(rendered) else pretty(rendered)
     }
   }
 }
