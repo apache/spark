@@ -442,7 +442,7 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 setGeneric("distinct", function(x) { standardGeneric("distinct") })
 
 #' @rdname drop
-setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+setGeneric("drop", function(x, col, ...) { standardGeneric("drop") })
 
 #' @rdname dropDuplicates
 setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })

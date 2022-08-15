@@ -3577,34 +3577,66 @@ setMethod("str",
 #' This is a no-op if schema doesn't contain column name(s).
 #'
 #' @param x a SparkDataFrame.
-#' @param col a character vector of column names or a Column.
-#' @param ... further arguments to be passed to or from other methods.
-#' @return A SparkDataFrame.
+#' @param col a list of columns or single Column or name.
+#' @param ... additional column(s) if only one column is specified in \code{col}.
+#'            If more than one column is assigned in \code{col}, \code{...}
+#'            should be left empty.
+#' @return A new SparkDataFrame with selected columns.
 #'
 #' @family SparkDataFrame functions
 #' @rdname drop
 #' @name drop
-#' @aliases drop,SparkDataFrame-method
+#' @aliases drop,SparkDataFrame,character-method
+#' @family subsetting functions
 #' @examples
-#'\dontrun{
-#' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' drop(df, "col1")
-#' drop(df, c("col1", "col2"))
-#' drop(df, df$col1)
+#' \dontrun{
+#'   drop(df, "*")
+#'   drop(df, "col1", "col2")
+#'   drop(df, df$name, df$age + 1)
+#'   drop(df, c("col1", "col2"))
+#'   drop(df, list(df$name, df$age + 1))
 #' }
-#' @note drop since 2.0.0
-setMethod("drop",
-          signature(x = "SparkDataFrame"),
-          function(x, col) {
-            stopifnot(class(col) == "character" || class(col) == "Column")
+#' @note drop(SparkDataFrame, character) since 2.0.0
+setMethod("drop", signature(x = "SparkDataFrame", col = "character"),
+          function(x, col, ...) {
+            if (length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To drop multiple columns, use a character vector or list for col")
+              }
 
-            if (class(col) == "Column") {
-              sdf <- callJMethod(x@sdf, "drop", col@jc)
+              drop(x, as.list(col))
             } else {
-              sdf <- callJMethod(x@sdf, "drop", as.list(col))
+              sdf <- callJMethod(x@sdf, "drop", list(col, ...))
+              dataFrame(sdf)
             }
+          })
+
+#' @rdname drop
+#' @aliases drop,SparkDataFrame,Column-method
+#' @note drop(SparkDataFrame, Column) since 2.0.0
+setMethod("drop", signature(x = "SparkDataFrame", col = "Column"),
+          function(x, col, ...) {
+            jcols <- lapply(list(col, ...), function(c) {
+              c@jc
+            })
+            sdf <- callJMethod(x@sdf, "drop", jcols[[1]], jcols[-1])
+            dataFrame(sdf)
+          })
+
+#' @rdname drop
+#' @aliases drop,SparkDataFrame,list-method
+#' @note drop(SparkDataFrame, list) since 3.4.0
+setMethod("drop",
+          signature(x = "SparkDataFrame", col = "list"),
+          function(x, col) {
+            cols <- lapply(col, function(c) {
+              if (class(c) == "Column") {
+                c@jc
+              } else {
+                col(c)@jc
+              }
+            })
+            sdf <- callJMethod(x@sdf, "drop", cols[[1]], cols[-1])
             dataFrame(sdf)
           })
 
