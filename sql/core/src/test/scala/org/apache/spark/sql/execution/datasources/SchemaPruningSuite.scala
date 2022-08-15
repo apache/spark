@@ -59,7 +59,7 @@ abstract class SchemaPruningSuite
     employer: Employer)
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
+    super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   case class Employee(id: Int, name: FullName, employer: Company)
 

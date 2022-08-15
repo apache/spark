@@ -18,10 +18,8 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.filter.AlwaysTrue;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.internal.connector.PredicateUtils;
-import org.apache.spark.sql.sources.AlwaysTrue$;
-import org.apache.spark.sql.sources.Filter;
 
 /**
  * Write builder trait for tables that support overwrite by filter.
@@ -29,10 +27,10 @@ import org.apache.spark.sql.sources.Filter;
  * Overwriting data by filter will delete any data that matches the filter and replace it with data
  * that is committed in the write.
  *
- * @since 3.0.0
+ * @since 3.4.0
  */
 @Evolving
-public interface SupportsOverwrite extends SupportsOverwriteV2 {
+public interface SupportsOverwriteV2 extends WriteBuilder, SupportsTruncate {
 
   /**
    * Checks whether it is possible to overwrite data from a data source table that matches filter
@@ -41,12 +39,12 @@ public interface SupportsOverwrite extends SupportsOverwriteV2 {
    * Rows should be overwritten from the data source iff all of the filter expressions match.
    * That is, the expressions must be interpreted as a set of filters that are ANDed together.
    *
-   * @param filters V2 filter expressions, used to match data to overwrite
+   * @param predicates V2 filter expressions, used to match data to overwrite
    * @return true if the delete operation can be performed
    *
    * @since 3.4.0
    */
-  default boolean canOverwrite(Filter[] filters) {
+  default boolean canOverwrite(Predicate[] predicates) {
     return true;
   }
 
@@ -56,23 +54,13 @@ public interface SupportsOverwrite extends SupportsOverwriteV2 {
    * Rows must be deleted from the data source if and only if all of the filters match. That is,
    * filters must be interpreted as ANDed together.
    *
-   * @param filters filters used to match data to overwrite
+   * @param predicates filters used to match data to overwrite
    * @return this write builder for method chaining
    */
-  WriteBuilder overwrite(Filter[] filters);
-
-  default boolean canOverwrite(Predicate[] predicates) {
-    Filter[] v1Filters = PredicateUtils.toV1(predicates);
-    if (v1Filters.length < predicates.length) return false;
-    return this.canOverwrite(v1Filters);
-  }
-
-  default WriteBuilder overwrite(Predicate[] predicates) {
-    return this.overwrite(PredicateUtils.toV1(predicates));
-  }
+  WriteBuilder overwrite(Predicate[] predicates);
 
   @Override
   default WriteBuilder truncate() {
-    return overwrite(new Filter[] { AlwaysTrue$.MODULE$ });
+    return overwrite(new Predicate[] { new AlwaysTrue() });
   }
 }

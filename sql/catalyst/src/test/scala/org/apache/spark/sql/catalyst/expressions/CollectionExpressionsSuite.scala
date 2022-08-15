@@ -2383,17 +2383,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
   }
 
-  test("SPARK-33460: element_at NoSuchElementException") {
+  test("SPARK-40066: element_at returns null on invalid map value access") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
         val expr: Expression = ElementAt(map, Literal(5))
-        if (ansiEnabled) {
-          val errMsg = "Key 5 does not exist."
-          checkExceptionInExpression[Exception](expr, errMsg)
-        } else {
-          checkEvaluation(expr, null)
-        }
+        checkEvaluation(expr, null)
       }
     }
   }

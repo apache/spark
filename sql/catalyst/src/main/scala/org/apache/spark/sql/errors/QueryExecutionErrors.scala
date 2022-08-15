@@ -241,19 +241,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def mapKeyNotExistError(
-      key: Any,
-      dataType: DataType,
-      context: SQLQueryContext): NoSuchElementException = {
-    new SparkNoSuchElementException(
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(
-        toSQLValue(key, dataType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",

@@ -216,7 +216,7 @@ core/src/main/resources/org/apache/spark/ui/static/bootstrap*
 core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
-external/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
+connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 
 
 Python Software Foundation License
