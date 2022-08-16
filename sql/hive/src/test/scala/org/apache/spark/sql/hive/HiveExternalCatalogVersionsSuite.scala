@@ -255,7 +255,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
-  val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable()
+  val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
