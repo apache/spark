@@ -1060,7 +1060,7 @@ class Column:
         or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
             a boolean expression that boundary start, inclusive..
         upperBound : :class:`Column` or :class:`LiteralType`
-        or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
+            or :class:`DateTimeLiteral` or :class:`DecimalLiteral`
             a boolean expression that boundary end, inclusive..
 
         Returns
