@@ -3640,9 +3640,27 @@ setMethod("drop",
             dataFrame(sdf)
           })
 
-# Expose base::drop
-#' @name drop
-#' @rdname drop
+#' Expose base::drop which deletes the dimensions of an array which have only one level.
+#'
+#' @param x an array (including a matrix).
+#' @return If ‘x’ is an object with a ‘dim’ attribute (e.g., a matrix or
+#'         ‘array’), then ‘drop’ returns an object like ‘x’, but with any
+#'         extents of length one removed.  Any accompanying ‘dimnames’
+#'         attribute is adjusted and returned with ‘x’: if the result is a
+#'         vector the ‘names’ are taken from the ‘dimnames’ (if any).  If the
+#'         result is a length-one vector, the names are taken from the first
+#'         dimension with a dimname.
+#'
+#'         Array subsetting (‘[’) performs this reduction unless used with
+#'         ‘drop = FALSE’, but sometimes it is useful to invoke ‘drop’
+#'         directly.
+#'
+#' @family subsetting functions
+#' @examples
+#' \dontrun{
+#'   dim(drop(array(1:12, dim = c(1,3,1,1,2,1,2))))
+#'   drop(1:3 %*% 2:4)
+#' }
 #' @aliases drop,ANY-method
 setMethod("drop",
           signature(x = "ANY"),
