@@ -485,6 +485,10 @@ class StreamingQueryManager:
         Register streaming query listener
 
         >>> spark.streams.addListener(test_listener)
+
+        Deregister streaming query listener
+
+        >>> spark.streams.removeListener(test_listener)
         """
         from pyspark import SparkContext
         from pyspark.java_gateway import ensure_callback_server_started
