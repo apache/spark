@@ -2073,6 +2073,41 @@ case class ArrayPosition(left: Expression, right: Expression)
 }
 
 /**
+ * Returns the value of index `right` in Array `left`. If the index points outside of the array
+ * boundaries, then this function returns NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (0-based) index. If the index points
+     outside of the array boundaries, then this function returns NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       NULL
+      > SELECT _FUNC_(array(1, 2, 3), -1);
+       NULL
+  """,
+  since = "3.4.0",
+  group = "array_funcs")
+case class Get(
+    left: Expression,
+    right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with NullIntolerant {
+  override def replacement: Expression = GetArrayItem(left, right, failOnError = false)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = {
+    this.copy(left = newLeft, right = newRight)
+  }
+
+  override def prettyName: String = "get"
+}
+
+/**
  * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
  */
 @ExpressionDescription(
