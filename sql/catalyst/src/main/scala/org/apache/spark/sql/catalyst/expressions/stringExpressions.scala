@@ -2469,108 +2469,8 @@ case class Encode(value: Expression, charset: Expression)
     newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
 }
 
-/**
- * Converts the input expression to a binary value based on the supplied format.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
-      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
-      By default, the binary format for conversion is "hex" if `fmt` is omitted.
-      The function returns NULL if at least one of the input parameters is NULL.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_('abc', 'utf-8');
-       abc
-  """,
-  since = "3.3.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
-case class ToBinary(
-    expr: Expression,
-    format: Option[Expression])
-    extends Expression
-    with ImplicitCastInputTypes
-    with NullIntolerant with SupportQueryContext {
-
-  def this(expr: Expression) = this(expr, None)
-
-  def this(expr: Expression, format: Expression) = this(expr, Some(format))
-
-  override def inputTypes: Seq[AbstractDataType] =
-    if (format.isDefined) {
-      Seq(StringType, StringType)
-    } else {
-      Seq(StringType)
-    }
-
-  override def children: Seq[Expression] =
-    if (format.isDefined) {
-      Seq(expr, format.get)
-    } else {
-      Seq(expr)
-    }
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    if (format.isDefined) {
-      copy(expr = newChildren(0), format = Some(newChildren(1)))
-    } else {
-      copy(expr = newChildren(0))
-    }
-
-  override def nullable: Boolean = children.exists(_.nullable)
-
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override def dataType: DataType = BinaryType
-
-  override def prettyName: String = "to_binary"
-
-  override def initQueryContext(): Option[SQLQueryContext] = Option(origin.context)
-
-  override def eval(input: InternalRow): Any = {
-    val srcString = expr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      Literal(null, BinaryType)
-    } else if (format.isDefined) {
-      val formatExpr = format.get
-      assert(formatExpr.foldable && formatExpr.dataType == StringType)
-      doEval(srcString, formatExpr.eval(input).asInstanceOf[UTF8String])
-    } else {
-      doEval(srcString, UTF8String.fromString("hex"))
-    }
-  }
-
-  def doEval(srcString: UTF8String, fmtString: UTF8String): Any = {
-    fmtString.toString.toLowerCase(Locale.ROOT) match {
-      case "hex" => ToBinary.fromHex(srcString, fmtString, getContextOrNull())
-      case "utf-8" | "utf8" => srcString.getBytes
-      case "base64" => ToBinary.fromBase64(srcString, fmtString, getContextOrNull())
-      case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
-        "to_binary", "format", other,
-        Some("The value has to be a case-insensitive string literal of " +
-          "'hex', 'utf-8', 'utf8', or 'base64'."))
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val code: String = format match {
-      case None => ""
-      case Some(expr) =>
-        expr.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-          case "hex" => ""
-          case "base64" => ""
-          case "utf8" | "utf-8" => ""
-        }
-    }
-    ev.copy(code"""$code""".stripMargin)
-  }
-}
-
 object ToBinary {
-  private def isValidBase64(srcString: UTF8String) : Boolean = {
+  def isValidBase64(srcString: UTF8String) : Boolean = {
     // We use RFC4648. The valid base64 string should contain zero or more groups of 4 symbols plus
     // last group consisting of 2-4 valid symbols and optional padding.
     // Last group should contain at least 2 valid symbols and up to 2 padding characters `=`.
@@ -2586,7 +2486,7 @@ object ToBinary {
     //    "abcdAE=="  - Valid, last group includes 2 padding symbols and total number of symbols
     //                  in a group is 4.
     //    "abcdAE="   - Invalid, last group include padding symbols, therefore it should have
-    //                  exactly 4 symbols.
+    //                  exactly 4 symbols but contains only 3.
     //    "ab==tm+1"  - Invalid, nothing should be after padding except whitespace.
     var position = 0
     var padSize = 0
@@ -2600,59 +2500,168 @@ object ToBinary {
             || (c >= 'a' && c <= 'z')
             || c == '/' || c == '+') =>
         position += 1
-        if (padSize != 0) { // Valid character after padding
+        if (padSize != 0) { // Valid character after padding.
           invalid = true
           false
-        } else { // A group should have at least 2 valid symbols
+        } else { // A group should have at least 2 valid symbols.
           position % 4 != 1
         }
       case c if !invalid && c == '=' =>
         padSize += 1
-        if (padSize > 2 || position % 4 < 2) {
+        if (padSize > 2 || position % 4 < 2) { // Too many padding characters.
           invalid = true
           false
         } else {
           padSize + position % 4 == 4
         }
       case c if !invalid && Character.isWhitespace(c) =>
-        if (padSize > 0) {
-          padSize + position % 4 == 4
+        if (padSize > 0) { // No other characters after padding.
+          invalid = true
+          false
         } else {
           position % 4 != 1
         }
       case _ =>
-        invalid = true
+        invalid = true // Invalid symbol.
         false
     }
-    validation.last
+    if (validation.nonEmpty) {
+      validation.last
+    } else {
+      true // Empty string is always valid.
+    }
+  }
+}
+
+/**
+ * Converts the input expression to a binary value based on the supplied format.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
+      By default, the binary format for conversion is "hex" if `fmt` is omitted.
+      The function returns NULL if at least one of the input parameters is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class ToBinary(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ImplicitCastInputTypes with NullIntolerant with SupportQueryContext {
+
+  def this(left: Expression) = this(left, Literal("hex"))
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override def dataType: DataType = BinaryType
+
+  override def nullable: Boolean = true
+
+  override def prettyName: String = "to_binary"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): ToBinary = copy(left = newLeft, right = newRight)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Option(origin.context)
+
+  override protected def nullSafeEval(input: Any, format: Any): Any = {
+    val fmtString = format.asInstanceOf[UTF8String]
+    val srcString = input.asInstanceOf[UTF8String]
+    fmtString.toString.toLowerCase(Locale.ROOT) match {
+      case "hex" =>
+        Hex.unhex(srcString.getBytes) match {
+          case null =>
+            throw QueryExecutionErrors.invalidInputInConversionError(
+              BinaryType,
+              srcString,
+              fmtString,
+              "try_to_binary",
+              getContextOrNull()
+            )
+          case value => value
+        }
+      case "utf-8" | "utf8" => srcString.getBytes
+      case "base64" =>
+        if (!ToBinary.isValidBase64(srcString)) {
+          throw QueryExecutionErrors.invalidInputInConversionError(
+            BinaryType,
+            srcString,
+            fmtString,
+            "try_to_binary",
+            getContextOrNull()
+          )
+        } else {
+          JBase64.getMimeDecoder.decode(srcString.toString)
+        }
+      case _ =>
+        throw QueryExecutionErrors.invalidFormatInConversion(
+          "format",
+          "to_binary",
+          fmtString,
+          hint = "The value has to be a case-insensitive string literal of " +
+            "'hex', 'utf-8', 'utf8', or 'base64'.",
+          getContextOrNull()
+        )
+    }
   }
 
-  def fromBase64(srcString: UTF8String, fmtString: UTF8String, context: SQLQueryContext): Any = {
-    // We use RFC4648. The base64 string should contain only valid symbols (A-Za-z0-9+/), optional
-    // whitespaces (skipped on decoding) and padding character (`=`) at the end of the string.
-    // RFC specification is here: https://www.rfc-editor.org/rfc/rfc4648#section-4
-    if (!isValidBase64(srcString)) {
-      throw QueryExecutionErrors.invalidInputInConversionError(
-        BinaryType,
-        srcString,
-        fmtString,
-        "try_to_binary",
-        context)
-    }
-    // Since the input string is already validate - use MIME decoder here.
-    JBase64.getMimeDecoder.decode(srcString.toString)
-  }
-
-  def fromHex(srcString: UTF8String, fmtString: UTF8String, context: SQLQueryContext): Any = {
-    Hex.unhex(srcString.getBytes) match {
-      case null => throw QueryExecutionErrors.invalidInputInConversionError(
-        BinaryType,
-        srcString,
-        fmtString,
-        "try_to_binary",
-        context)
-      case value => value
-    }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (srcString, fmtString) => {
+        val hex = Hex.getClass.getName.stripSuffix("$")
+        val toBinary = ToBinary.getClass.getName.stripSuffix("$")
+        val errorContext = getContextOrNullCode(ctx)
+        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+        val rootLocale =
+          ctx.addReferenceObj("rootLocale", Locale.ROOT, java.util.Locale.ROOT.getClass.getName)
+        s"""
+         |switch (($fmtString).toString().toLowerCase($rootLocale)) {
+         |  case "hex": {
+         |    ${ev.value} = $hex.unhex($srcString.getBytes());
+         |    if (${ev.value} == null) {
+         |      throw QueryExecutionErrors.invalidInputInConversionError(
+         |              $binaryType,
+         |              $srcString,
+         |              $fmtString,
+         |              "try_to_binary",
+         |              $errorContext);
+         |    }
+         |    break;
+         |  }
+         |  case "utf8":
+         |  case "utf-8": {
+         |    ${ev.value} = $srcString.getBytes();
+         |    break;
+         |  }
+         |  case "base64": {
+         |    if (!$toBinary.isValidBase64($srcString)) {
+         |      throw QueryExecutionErrors.invalidInputInConversionError(
+         |              $binaryType,
+         |              $srcString,
+         |              $fmtString,
+         |              "try_to_binary",
+         |              $errorContext);
+         |    }
+         |    ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder()
+         |      .decode($srcString.toString());
+         |    break;
+         |  }
+         |  default: {
+         |    throw QueryExecutionErrors.invalidFormatInConversion(
+         |            "format",
+         |            "to_binary",
+         |            $fmtString,
+         |            "The value has to be a case-insensitive string literal of " +
+         |              "'hex', 'utf-8', 'utf8', or 'base64'.",
+         |            $errorContext);
+         |  }
+         |}"""
+      })
   }
 }
 

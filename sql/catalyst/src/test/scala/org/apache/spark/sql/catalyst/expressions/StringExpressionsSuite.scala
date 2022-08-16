@@ -452,6 +452,90 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("to_binary") {
+    // Base64 - Positive cases
+    val base64Literal = Literal("base64")
+    Seq(
+      ("", ""),
+      ("  \r\n  \t", ""),
+      ("ag", "ag=="),
+      ("abc", "abc="),
+      ("abcd", "abcd"),
+      ("ab\r\n\t cd", "abcd"),
+      ("ab cd ef", "abcdeQ=="),
+      ("+ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/",
+        "+ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/"),
+      ("b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0\r\n" +
+        "d2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl\r\n" +
+        "biBuaW5ldGVlbiB0d2VudHkgdHdlbnR5LW9uZQ==",
+       "b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0\r\n" +
+        "d2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl\r\n" +
+        "biBuaW5ldGVlbiB0d2VudHkgdHdlbnR5LW9uZQ==")
+    ).foreach {
+      case (input: String, expected: String) =>
+        checkEvaluation(Base64(ToBinary(Literal(input), base64Literal)), expected)
+    }
+    checkEvaluation(ToBinary(Literal.create(null, StringType), base64Literal), null)
+
+    // Base64 - Negative cases
+    Seq(
+      "a", // Too short
+      "abc==", // Invalid padding
+      "abcdef==a", // String should end with padding
+      "myemail@gmail.com" // Invalid character
+    ).foreach { input =>
+      val errMsg = "[CONVERSION_INVALID_INPUT]"
+      checkExceptionInExpression[Exception](ToBinary(Literal(input), base64Literal), errMsg)
+    }
+
+    // UTF-8/UTF8
+    val utf8Literal = Literal("Utf8")
+    val utf_8Literal = Literal("uTf-8")
+    // scalastyle:off
+    Seq(
+      "∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)",
+      "大千世界",
+      ""
+    ).foreach {
+      input =>
+        checkEvaluation(StringDecode(ToBinary(Literal(input), utf8Literal), utf_8Literal), input)
+        checkEvaluation(StringDecode(ToBinary(Literal(input), utf_8Literal), utf_8Literal), input)
+    }
+    // scalastyle:on
+    checkEvaluation(ToBinary(Literal.create(null, StringType), utf8Literal), null)
+    checkEvaluation(ToBinary(Literal.create(null, StringType), utf_8Literal), null)
+
+    // HEX - Positive cases
+    val hexLiteral = Literal("hEx")
+    Seq(
+      ("737472696E67", "737472696E67"),
+      ("", ""),
+      ("F", "0F"),
+      ("ff", "FF"),
+      ("00", "00")
+    ).foreach {
+      case (input, expected) =>
+        checkEvaluation(Hex(ToBinary(Literal(input), hexLiteral)), expected)
+    }
+    checkEvaluation(ToBinary(Literal.create(null, StringType), hexLiteral), null)
+
+    // HEX - Negative cases
+    Seq(
+      "GG",
+      "FF 01"
+    ).foreach { input =>
+      val errMsg = "[CONVERSION_INVALID_INPUT]"
+      checkExceptionInExpression[Exception](ToBinary(Literal(input), hexLiteral), errMsg)
+    }
+
+    // Invalid format
+    val errMsg = "[CONVERSION_INVALID_FORMAT]"
+    checkExceptionInExpression[Exception](
+      ToBinary(Literal("abc"), Literal("invalidFormat")),
+      errMsg
+    )
+  }
+
   test("overlay for string") {
     checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(6, IntegerType)), "Spark_SQL")

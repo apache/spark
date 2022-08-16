@@ -287,11 +287,10 @@ case class TryToBinary(
     replacement: Expression) extends RuntimeReplaceable
   with InheritAnalysisRules {
   def this(expr: Expression) =
-    this(expr, None, TryEval(ToBinary(expr, None)))
+    this(expr, None, TryEval(ToBinary(expr, Literal("hex"))))
 
   def this(expr: Expression, formatExpression: Expression) =
-    this(expr, Some(formatExpression),
-      TryEval(ToBinary(expr, Some(formatExpression))))
+    this(expr, Some(formatExpression), TryEval(ToBinary(expr, formatExpression)))
 
   override def prettyName: String = "try_to_binary"
 
