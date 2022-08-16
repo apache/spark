@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.connector.read;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.internal.connector.PredicateUtils;
-
-import scala.Option;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface if they can
@@ -37,7 +32,7 @@ import scala.Option;
  * @since 3.2.0
  */
 @Experimental
-public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filtering {
+public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    * <p>
@@ -66,16 +61,6 @@ public interface SupportsRuntimeFiltering extends Scan, SupportsRuntimeV2Filteri
   void filter(Filter[] filters);
 
   default void filter(Predicate[] predicates) {
-    List<Filter> filterList = new ArrayList();
-
-    for (int i = 0; i < predicates.length; i++) {
-      Option filter = PredicateUtils.toV1(predicates[i]);
-      if (filter.nonEmpty()) {
-        filterList.add((Filter)filter.get());
-      }
-    }
-
-    Filter[] filters = new Filter[filterList.size()];
-    this.filter(filterList.toArray(filters));
+    this.filter(PredicateUtils.toV1(predicates));
   }
 }

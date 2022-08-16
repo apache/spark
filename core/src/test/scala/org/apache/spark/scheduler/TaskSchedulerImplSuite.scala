@@ -2085,6 +2085,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!taskSetManager.successful(taskDescriptions(0).index))
   }
 
+  Seq(true, false).foreach { hasLaunched =>
+    val testName = if (hasLaunched) {
+      "executor lost could fail task set if task is running"
+    } else {
+      "executor lost should not fail task set if task is launching"
+    }
+    test(s"SPARK-39955: $testName") {
+      val taskCpus = 2
+      val taskScheduler = setupSchedulerWithMaster(
+        s"local[$taskCpus]",
+        config.TASK_MAX_FAILURES.key -> "1")
+      taskScheduler.initialize(new FakeSchedulerBackend)
+      // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+      new DAGScheduler(sc, taskScheduler) {
+        override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+        override def executorAdded(execId: String, host: String): Unit = {}
+      }
+
+      val workerOffer = IndexedSeq(
+        WorkerOffer("executor0", "host0", 1))
+      val taskSet = FakeTask.createTaskSet(1)
+      // submit tasks, offer resources, task gets scheduled
+      taskScheduler.submitTasks(taskSet)
+      var tsm: Option[TaskSetManager] = None
+      eventually(timeout(10.seconds)) {
+        tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId)
+        assert(tsm.isDefined && !tsm.get.isZombie)
+      }
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffer)
+      assert(1 === taskDescriptions.length)
+      assert(taskScheduler.runningTasksByExecutors("executor0") === 1)
+      if (hasLaunched) {
+        taskScheduler.statusUpdate(
+          0,
+          TaskState.RUNNING,
+          ByteBuffer.allocate(0))
+        eventually(timeout(10.seconds)) {
+          assert(!tsm.get.taskInfos(0).launching)
+        }
+      }
+      taskScheduler.executorLost("executor0", ExecutorProcessLost())
+      eventually(timeout(10.seconds)) {
+        assert(tsm.get.isZombie === hasLaunched)
+      }
+    }
+  }
+
   /**
    * Used by tests to simulate a task failure. This calls the failure handler explicitly, to ensure
    * that all the state is updated when this method returns. Otherwise, there's no way to know when

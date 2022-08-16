@@ -639,6 +639,11 @@ class TaskSetManagerSuite
       ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
     assert(manager.resourceOffer("execC", "host2", ANY)._1.isDefined)
+
+    // Driver receives StatusUpdate(RUNNING) from Executors
+    for ((tid, info) <- manager.taskInfos if info.running) {
+      manager.taskInfos(tid).launchSucceeded()
+    }
     sched.removeExecutor("execC")
     manager.executorLost(
       "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
@@ -2202,6 +2207,7 @@ class TaskSetManagerSuite
 
     val (taskId0, index0, exec0) = (task0.taskId, task0.index, task0.executorId)
     val (taskId1, index1, exec1) = (task1.taskId, task1.index, task1.executorId)
+
     // set up two running tasks
     assert(manager.taskInfos(taskId0).running)
     assert(manager.taskInfos(taskId1).running)
@@ -2211,6 +2217,12 @@ class TaskSetManagerSuite
     assert(manager.invokePrivate(numFailures())(index0) === 0)
     assert(manager.invokePrivate(numFailures())(index1) === 0)
 
+    sched.asInstanceOf[TaskSchedulerImpl]
+      .statusUpdate(taskId1, TaskState.RUNNING, ByteBuffer.allocate(0))
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      assert(manager.taskInfos(taskId0).running)
+      assert(manager.taskInfos(taskId1).running && !manager.taskInfos(taskId1).launching)
+    }
     // let exec1 count task failures but exec0 doesn't
     backend.executorsPendingToRemove(exec0) = true
     backend.executorsPendingToRemove(exec1) = false
