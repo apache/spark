@@ -24,7 +24,7 @@ import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.{HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT, Network}
+import org.apache.spark.internal.config.Network
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
@@ -119,9 +119,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * `checkWorkerLastHeartbeat`: A flag to enable two-phase executor timeout.
    * `expiryCandidatesTimeout`: The timeout used for executorExpiryCandidates.
    */
-  private val checkWorkerLastHeartbeat = sc.conf.get(HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+  private val checkWorkerLastHeartbeat = sc.conf
+    .get(config.HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
   private val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
-    case true => sc.conf.get(Network.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
+    case true => sc.conf.get(config.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
     case false => 0
   }
 

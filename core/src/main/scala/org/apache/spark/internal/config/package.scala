@@ -2429,4 +2429,13 @@ package object config {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT =
+    ConfigBuilder("spark.driver.heartbeat.expiryCandidatesTimeout")
+      .doc("This config is a timeout used for heartbeat receiver `executorExpiryCandidates`. Be" +
+        "effective only when HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled. See" +
+        "[SPARK-39984] for more details")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("30s")
 }
