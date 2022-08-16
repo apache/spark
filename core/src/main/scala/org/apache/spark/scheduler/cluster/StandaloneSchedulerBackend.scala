@@ -188,7 +188,7 @@ private[spark] class StandaloneSchedulerBackend(
         ExecutorExited(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR,
           exitCausedByApp = false, message)
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
-      case None => ExecutorProcessLost(message, workerHost)
+      case None => ExecutorProcessLost(message, workerHost, causedByApp = workerHost == None)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
