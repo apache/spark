@@ -286,7 +286,7 @@ private[spark] object TestUtils {
   val minimumPythonSupportedVersion: String = "3.7.0"
 
   def isPythonVersionAvailable: Boolean = {
-    val version = minimumPythonSupportedVersion.split(".").map(_.toInt)
+    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
     assert(version.length == 3)
     isPythonVersionAtLeast(version(0), version(1), version(2))
   }
