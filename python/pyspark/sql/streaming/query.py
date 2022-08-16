@@ -520,6 +520,7 @@ class StreamingQueryManager:
         >>> spark.streams.addListener(test_listener)
 
         Deregister streaming query listener
+
         >>> spark.streams.removeListener(test_listener)
         """
         self._jsqm.removeListener(listener._jlistener)
