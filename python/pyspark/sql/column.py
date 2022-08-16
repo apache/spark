@@ -187,18 +187,26 @@ class Column:
     """
     A column in a DataFrame.
 
+    .. versionadded:: 1.3.0
+
+    Examples
+    --------
     :class:`Column` instances can be created by::
 
-        # 1. Select a column out of a DataFrame
+    >>> df = spark.createDataFrame(
+    ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
-        df.colName
-        df["colName"]
+    1. Select a column out of a DataFrame
+    >>> df.name
+    Column<'name'>
+    >>> df["name"]
+    Column<'name'>
 
-        # 2. Create from an expression
-        df.colName + 1
-        1 / df.colName
-
-    .. versionadded:: 1.3.0
+    2. Create from an expression
+    >>> df.age + 1
+    Column<'(age + 1)'>
+    >>> 1 / df.age
+    Column<'(1 / age)'>
     """
 
     def __init__(self, jc: JavaObject) -> None:
