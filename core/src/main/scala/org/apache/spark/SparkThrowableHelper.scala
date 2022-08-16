@@ -25,11 +25,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.json4s.{JInt, JString}
-import org.json4s.JsonAST.{JArray, JObject}
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
+import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
 
 /**
@@ -149,35 +146,51 @@ private[spark] object SparkThrowableHelper {
     format match {
       case PRETTY => e.getMessage
       case MINIMAL | STANDARD if e.getErrorClass == null =>
-        val jValue = ("errorClass" -> "legacy") ~
-          ("messageParameters" -> JObject(List("message" -> JString(e.getMessage)))) ~
-          ("queryContext" -> JArray(List.empty))
-        compact(render(jValue))
+        toJsonString { g =>
+          g.writeStartObject()
+          g.writeStringField("errorClass", "legacy")
+          g.writeObjectFieldStart("messageParameters")
+          g.writeStringField("message", e.getMessage)
+          g.writeEndObject()
+          g.writeArrayFieldStart("queryContext")
+          g.writeEndArray()
+          g.writeEndObject()
+        }
       case MINIMAL | STANDARD =>
         val errorClass = e.getErrorClass
-        val message = if (format == STANDARD) {
-          val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-            throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
-          Some(errorInfo.messageFormat)
-        } else None
         assert(e.getParameterNames.size == e.getMessageParameters.size,
           "Number of message parameter names and values must be the same")
-        val jValue = ("errorClass" -> errorClass) ~
-          ("errorSubClass" -> Option(e.getErrorSubClass)) ~
-          ("message" -> message) ~
-          ("sqlState" -> Option(e.getSqlState)) ~
-          ("messageParameters" ->
-            JObject((e.getParameterNames zip e.getMessageParameters.map(JString)).toList)) ~
-          ("queryContext" -> JArray(
-            e.getQueryContext.map(c => JObject(
-              "objectType" -> JString(c.objectType()),
-              "objectName" -> JString(c.objectName()),
-              "startIndex" -> JInt(c.startIndex()),
-              "stopIndex" -> JInt(c.stopIndex()),
-              "fragment" -> JString(c.fragment()))).toList)
-          )
-        val rendered = render(jValue)
-        if (format == MINIMAL) compact(rendered) else pretty(rendered)
+        toJsonString { generator =>
+          val g = if (format == STANDARD) generator.useDefaultPrettyPrinter() else generator
+          g.writeStartObject()
+          g.writeStringField("errorClass", errorClass)
+          val errorSubClass = e.getErrorSubClass
+          if (errorSubClass != null) g.writeStringField("errorSubClass", errorSubClass)
+          if (format == STANDARD) {
+            val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+              throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
+            g.writeStringField("message", errorInfo.messageFormat)
+          }
+          val sqlState = e.getSqlState
+          if (sqlState != null) g.writeStringField("sqlState", sqlState)
+          g.writeObjectFieldStart("messageParameters")
+          (e.getParameterNames zip e.getMessageParameters).foreach { case (name, value) =>
+            g.writeStringField(name, value)
+          }
+          g.writeEndObject()
+          g.writeArrayFieldStart("queryContext")
+          e.getQueryContext.map { c =>
+            g.writeStartObject()
+            g.writeStringField("objectType", c.objectType())
+            g.writeStringField("objectName", c.objectName())
+            g.writeNumberField("startIndex", c.startIndex())
+            g.writeNumberField("stopIndex", c.stopIndex())
+            g.writeStringField("fragment", c.fragment())
+            g.writeEndObject()
+          }
+          g.writeEndArray()
+          g.writeEndObject()
+        }
     }
   }
 }
