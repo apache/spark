@@ -1017,6 +1017,7 @@ class Column:
 
         Examples
         --------
+        >>> from pyspark.sql.types import StringType
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
         >>> df.select(df.age.cast("string").alias('ages')).collect()
