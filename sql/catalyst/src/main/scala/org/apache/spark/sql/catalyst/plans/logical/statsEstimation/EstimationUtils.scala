@@ -23,8 +23,21 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
+import org.apache.spark.unsafe.types.UTF8String
 
 object EstimationUtils {
+
+  /** Returns true iff the we support column statistics on column of the given type. */
+  def supportsType(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType => true
+    case BinaryType | StringType => true
+    case _ => false
+  }
 
   /** Check if each plan has rowCount in its statistics. */
   def rowCountsExist(plans: LogicalPlan*): Boolean =
@@ -85,17 +98,25 @@ object EstimationUtils {
       attributeStats: AttributeMap[ColumnStat],
       rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
+      // Match alias with its child's column stat
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
-      case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
-        val value = expr.eval(EmptyRow)
-        val size = expr.dataType.defaultSize
-        val columnStat = if (value == null) {
-          ColumnStat(Some(0), None, None, Some(rowCount), Some(size), Some(size), None, 2)
+      // Create new stats for introduced constant columns
+      case alias @ Alias(expr: Expression, _)
+        if expr.foldable && expr.deterministic && EstimationUtils.supportsType(alias.dataType ) =>
+        val value = Option(expr.eval(EmptyRow))
+        val length = EstimationUtils.getConstantLen(expr)
+        // String and binary data do not get min or max
+        val minMax = if (alias.dataType.isInstanceOf[StringType] ||
+          alias.dataType.isInstanceOf[BinaryType]) {
+          None
         } else {
-          ColumnStat(Some(1), Some(value), Some(value), Some(0), Some(size), Some(size), None, 2)
+          value
         }
-        alias.toAttribute -> columnStat
+        val distinctCount = if (value.isDefined) 1 else 0
+        alias.toAttribute ->
+          ColumnStat(
+            Some(distinctCount), minMax, minMax, Some(rowCount), Some(length), Some(length))
     }
   }
 
@@ -126,6 +147,25 @@ object EstimationUtils {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * getSizePerRow(attributes, attrStats) else 1
+  }
+
+  /**
+   * Get the size in bytes of a value of a constant expression
+   * @param expr
+   * @return the size in bytes
+   */
+  def getConstantLen(expr: Expression): Long = {
+    expr.dataType match {
+      case StringType =>
+        val res = expr.eval().asInstanceOf[UTF8String]
+        val resLength = if (res == null) 1 else res.numBytes()
+        // Only the actual content of the string is counted
+        resLength
+      case BinaryType =>
+        val res = expr.eval().asInstanceOf[Array[Byte]]
+        if (res == null) 1 else res.size
+      case _ => expr.dataType.defaultSize
+    }
   }
 
   /**
