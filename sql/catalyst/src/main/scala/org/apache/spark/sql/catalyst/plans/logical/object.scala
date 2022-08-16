@@ -685,6 +685,39 @@ object CoGroup {
       rightGroup,
       leftAttr,
       rightAttr,
+      None,
+      None,
+      CatalystSerde.generateObjAttr[OUT],
+      left,
+      right)
+    CatalystSerde.serialize[OUT](cogrouped)
+  }
+
+  def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
+      func: (K, Iterator[L], Iterator[R]) => TraversableOnce[OUT],
+      leftGroup: Seq[Attribute],
+      rightGroup: Seq[Attribute],
+      leftAttr: Seq[Attribute],
+      rightAttr: Seq[Attribute],
+      leftOrder: Seq[SortOrder],
+      rightOrder: Seq[SortOrder],
+      left: LogicalPlan,
+      right: LogicalPlan): LogicalPlan = {
+    require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
+
+    val cogrouped = CoGroup(
+      func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
+      // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
+      // resolve the `keyDeserializer` based on either of them, here we pick the left one.
+      UnresolvedDeserializer(encoderFor[K].deserializer, leftGroup),
+      UnresolvedDeserializer(encoderFor[L].deserializer, leftAttr),
+      UnresolvedDeserializer(encoderFor[R].deserializer, rightAttr),
+      leftGroup,
+      rightGroup,
+      leftAttr,
+      rightAttr,
+      Some(leftOrder),
+      Some(rightOrder),
       CatalystSerde.generateObjAttr[OUT],
       left,
       right)
@@ -705,6 +738,8 @@ case class CoGroup(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
+    leftOrder: Option[Seq[SortOrder]],
+    rightOrder: Option[Seq[SortOrder]],
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {

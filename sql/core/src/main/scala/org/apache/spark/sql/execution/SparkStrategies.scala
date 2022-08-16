@@ -823,9 +823,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new UnsupportedOperationException(
           "applyInPandasWithState is unsupported in batch query. Use applyInPandas instead.")
-      case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
+      case logical.CoGroup(
+          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
         execution.CoGroupExec(
-          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,
+          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr,
           planLater(left), planLater(right)) :: Nil
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
