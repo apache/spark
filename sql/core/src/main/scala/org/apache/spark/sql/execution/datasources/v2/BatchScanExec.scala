@@ -39,7 +39,7 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    @transient table: Option[Table] = None) extends DataSourceV2ScanExecBase {
+    @transient table: Table) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -137,6 +137,6 @@ case class BatchScanExec(
   }
 
   override def nodeName: String = {
-    s"BatchScan ${table.map(_.name()).getOrElse("")}".trim
+    s"BatchScan ${table.name()}".trim
   }
 }
