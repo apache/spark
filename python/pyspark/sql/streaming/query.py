@@ -483,6 +483,7 @@ class StreamingQueryManager:
         >>> test_listener = TestListener()
 
         Register streaming query listener
+
         >>> spark.streams.addListener(test_listener)
         """
         from pyspark import SparkContext
