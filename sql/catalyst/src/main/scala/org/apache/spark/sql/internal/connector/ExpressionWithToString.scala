@@ -17,22 +17,9 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
+import org.apache.spark.sql.connector.expressions.Expression
 
-/**
- * The builder to generate `toString` information of V2 expressions.
- */
-class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
-  override protected def visitUserDefinedScalarFunction(
-      funcName: String, canonicalName: String, inputs: Array[String]) =
-    s"""$funcName(${inputs.mkString(", ")})"""
-
-  override protected def visitUserDefinedAggregateFunction(
-      funcName: String,
-      canonicalName: String,
-      isDistinct: Boolean,
-      inputs: Array[String]): String = {
-    val distinct = if (isDistinct) "DISTINCT " else ""
-    s"""$funcName($distinct${inputs.mkString(", ")})"""
-  }
+abstract class ExpressionWithToString extends Expression with Serializable {
+  private val builder = new ToStringSQLBuilder()
+  override def toString(): String = builder.build(this);
 }
