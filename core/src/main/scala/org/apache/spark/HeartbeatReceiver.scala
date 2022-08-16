@@ -318,14 +318,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         }
       }
     } else {
-      for ((executorId, workerLastHeartbeat) <- executorExpiryCandidates) {
-        if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
-          killExecutor(executorId, now - workerLastHeartbeat)
-          executorExpiryCandidates.remove(executorId)
-          executorLastSeen.remove(executorId)
-        }
-      }
-
       val buf = new ArrayBuffer[String]()
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
@@ -338,24 +330,25 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           backend.client.workerLastHeartbeat(sc.applicationId, buf) match {
             case Some(workerLastHeartbeats) =>
               for ((executorId, workerLastHeartbeat) <- buf zip workerLastHeartbeats) {
-                if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
-                  val lastSeenMs = executorLastSeen(executorId)
-                  killExecutor(executorId, now - lastSeenMs)
-                  executorExpiryCandidates.remove(executorId)
-                } else {
-                  executorExpiryCandidates(executorId) = workerLastHeartbeat
-                }
+                executorExpiryCandidates(executorId) = workerLastHeartbeat
                 executorLastSeen.remove(executorId)
               }
             case None =>
               for (executorId <- buf) {
                 val lastSeenMs = executorLastSeen(executorId)
-                killExecutor(executorId, now - lastSeenMs)
+                executorExpiryCandidates(executorId) = lastSeenMs
                 executorLastSeen.remove(executorId)
-                executorExpiryCandidates.remove(executorId)
               }
           }
         case _ =>
+      }
+
+      for ((executorId, workerLastHeartbeat) <- executorExpiryCandidates) {
+        if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
+          killExecutor(executorId, now - workerLastHeartbeat)
+          executorExpiryCandidates.remove(executorId)
+          executorLastSeen.remove(executorId)
+        }
       }
     }
   }
