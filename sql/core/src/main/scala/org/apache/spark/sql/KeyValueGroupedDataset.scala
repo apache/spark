@@ -854,6 +854,62 @@ class KeyValueGroupedDataset[K, V] private[sql](
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 
+  def cogroupSorted[U: Encoder, SV: Encoder, SU: Encoder, R : Encoder](
+      other: KeyValueGroupedDataset[K, U],
+      order: V => SV, direction: SortDirection = Ascending,
+      otherOrder: U => SU, otherDirection: SortDirection = Ascending)(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    val withSortKey = AppendColumns(order, dataAttributes, this.logicalPlan)
+    val withOtherSortKey = AppendColumns(otherOrder, dataAttributes, other.logicalPlan)
+
+    val executed = sparkSession.sessionState.executePlan(withSortKey)
+    val otherExecuted = sparkSession.sessionState.executePlan(withOtherSortKey)
+
+    Dataset[R](
+      sparkSession,
+      CoGroup(
+        f,
+        this.groupingAttributes,
+        other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
+        withSortKey.newColumns.map(SortOrder(_, direction)),
+        withOtherSortKey.newColumns.map(SortOrder(_, otherDirection)),
+        executed.analyzed,
+        otherExecuted.analyzed))
+  }
+
+  def cogroupSorted[U, R : Encoder](
+      other: KeyValueGroupedDataset[K, U])(
+      sortExprs: Column*)(
+      otherSortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    def toSortOrder(col: Column): SortOrder =
+      col.expr match {
+        case expr: SortOrder =>
+          expr
+        case expr: Expression =>
+          SortOrder(expr, Ascending)
+      }
+
+    val sortOrder: Seq[SortOrder] = sortExprs.map(toSortOrder)
+    val otherSortOrder: Seq[SortOrder] = otherSortExprs.map(toSortOrder)
+
+    implicit val uEncoder = other.vExprEnc
+    Dataset[R](
+      sparkSession,
+      CoGroup(
+        f,
+        this.groupingAttributes,
+        other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
+        sortOrder,
+        otherSortOrder,
+        this.logicalPlan,
+        other.logicalPlan))
+  }
+
   override def toString: String = {
     val builder = new StringBuilder
     val kFields = kExprEnc.schema.map {

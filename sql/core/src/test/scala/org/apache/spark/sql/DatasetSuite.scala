@@ -33,7 +33,7 @@ import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.Descending
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -788,6 +788,70 @@ class DatasetSuite extends QueryTest
     checkDatasetUnorderly(
       cogrouped,
       1 -> "a", 2 -> "bc", 3 -> "d")
+  }
+
+  test("cogroup sorted by func") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
+    val groupedLeft = left.groupByKey(_._1)
+    val groupedRight = right.groupByKey(_._1)
+
+    val ascExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#aw", 5 -> "hello#xyz")
+    val descExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzijkabc#wa", 5 -> "hello#zyx")
+
+    def order(v: (Int, String)): String = v._2
+
+    Seq(
+      ("asc", Ascending, ascExpected),
+      ("desc", Descending, descExpected)
+    ).foreach { case (label, direction, expected) =>
+      withClue(s"$label sorted") {
+        val cogrouped = groupedLeft
+          .cogroupSorted(groupedRight, order, direction, order, direction) {
+            case (key, left, right) =>
+              Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+          }
+
+        checkDatasetUnorderly(cogrouped, expected.toList: _*)
+      }
+    }
+  }
+
+  test("cogroup sorted by expr") {
+    val left = Seq(1 -> "a", 3 -> "xyz", 5 -> "hello", 3 -> "abc", 3 -> "ijk").toDS()
+    val right = Seq(2 -> "q", 3 -> "w", 5 -> "x", 5 -> "z", 3 -> "a", 5 -> "y").toDS()
+    val groupedLeft = left.groupByKey(_._1)
+    val groupedRight = right.groupByKey(_._1)
+
+    val neitherSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#wa", 5 -> "hello#xzy")
+    val leftSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#wa", 5 -> "hello#xzy")
+    val rightSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzabcijk#aw", 5 -> "hello#xyz")
+    val bothSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "abcijkxyz#aw", 5 -> "hello#xyz")
+    val bothDescSortedExpected = Seq(1 -> "a#", 2 -> "#q", 3 -> "xyzijkabc#wa", 5 -> "hello#zyx")
+
+    val leftOrder = Seq(left("_2"))
+    val rightOrder = Seq(right("_2"))
+    val leftDescOrder = Seq(left("_2").desc)
+    val rightDescOrder = Seq(right("_2").desc)
+    val none = Seq.empty
+
+    Seq(
+      ("neither", none, none, neitherSortedExpected),
+      ("left", leftOrder, none, leftSortedExpected),
+      ("right", none, rightOrder, rightSortedExpected),
+      ("both", leftOrder, rightOrder, bothSortedExpected),
+      ("both desc", leftDescOrder, rightDescOrder, bothDescSortedExpected)
+    ).foreach { case (label, leftOrder, rightOrder, expected) =>
+      withClue(s"$label sorted") {
+        val cogrouped = groupedLeft
+          .cogroupSorted(groupedRight)(leftOrder: _*)(rightOrder: _*) {
+            case (key, left, right) =>
+              Iterator(key -> (left.map(_._2).mkString + "#" + right.map(_._2).mkString))
+          }
+
+        checkDatasetUnorderly(cogrouped, expected.toList: _*)
+      }
+    }
   }
 
   test("SPARK-34806: observation on datasets") {

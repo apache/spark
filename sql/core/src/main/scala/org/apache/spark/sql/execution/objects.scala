@@ -626,6 +626,8 @@ case class CoGroupExec(
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
+    leftOrder: Option[Seq[SortOrder]],
+    rightOrder: Option[Seq[SortOrder]],
     outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
@@ -634,7 +636,9 @@ case class CoGroupExec(
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+    (leftGroup.map(SortOrder(_, Ascending)) ++ leftOrder.getOrElse(Seq.empty)) ::
+      (rightGroup.map(SortOrder(_, Ascending)) ++ rightOrder.getOrElse(Seq.empty)) ::
+      Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
