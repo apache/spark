@@ -191,18 +191,20 @@ class Column:
 
     Examples
     --------
-    :class:`Column` instances can be created by::
+    Column instances can be created by
 
     >>> df = spark.createDataFrame(
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
-    1. Select a column out of a DataFrame
+    Select a column out of a DataFrame
+
     >>> df.name
     Column<'name'>
     >>> df["name"]
     Column<'name'>
 
-    2. Create from an expression
+    Create from an expression
+
     >>> df.age + 1
     Column<'(age + 1)'>
     >>> 1 / df.age
