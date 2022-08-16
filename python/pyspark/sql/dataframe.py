@@ -159,6 +159,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.3.0
 
+        Returns
+        -------
+        :class:`SparkSession`
+
         Examples
         --------
         >>> df = spark.range(1)
@@ -170,7 +174,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @property  # type: ignore[misc]
     @since(1.3)
     def rdd(self) -> "RDD[Row]":
-        """Returns the content as an :class:`pyspark.RDD` of :class:`Row`."""
+        """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
+
+        .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        :class:`RDD`
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> type(df.rdd)
+        <class 'pyspark.rdd.RDD'>
+        """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
             self._lazy_rdd = RDD(
@@ -181,13 +198,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     @property  # type: ignore[misc]
     @since("1.3.1")
     def na(self) -> "DataFrameNaFunctions":
-        """Returns a :class:`DataFrameNaFunctions` for handling missing values."""
+        """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+
+        .. versionadded:: 1.3.1
+
+        Returns
+        -------
+        :class:`DataFrameNaFunctions`
+
+        Examples
+        --------
+        >>> df = spark.sql("select 1 as c1, int(null) as c2")
+        >>> type(df.na)
+        <class 'pyspark.sql.dataframe.DataFrameNaFunctions'>
+        >>> df.na.fill(2).show()
+        +---+---+
+        | c1| c2|
+        +---+---+
+        |  1|  2|
+        +---+---+
+        """
         return DataFrameNaFunctions(self)
 
     @property  # type: ignore[misc]
     @since(1.4)
     def stat(self) -> "DataFrameStatFunctions":
-        """Returns a :class:`DataFrameStatFunctions` for statistic functions."""
+        """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+
+        .. versionadded:: 1.4.0
+
+        Returns
+        -------
+        :class:`DataFrameStatFunctions`
+
+        Examples
+        --------
+        >>> import pyspark.sql.functions as f
+        >>> df = spark.range(3).withColumn("c", f.expr("id+1"))
+        >>> type(df.stat)
+        <class 'pyspark.sql.dataframe.DataFrameStatFunctions'>
+        >>> df.stat.corr("id", "c")
+        1.0
+        """
         return DataFrameStatFunctions(self)
 
     def toJSON(self, use_unicode: bool = True) -> RDD[str]:
@@ -196,6 +248,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Each row is turned into a JSON document as one element in the returned RDD.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        use_unicode : bool, optional (default: True)
+            Whether to convert to unicode or not.
+
+        Returns
+        -------
+        :class:`RDD`
 
         Examples
         --------
@@ -239,6 +300,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
+
         Examples
         --------
         >>> df.createTempView("people")
@@ -263,6 +333,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
+
         Examples
         --------
         >>> df.createOrReplaceTempView("people")
@@ -286,6 +365,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.1.0
 
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
+
         Examples
         --------
         >>> df.createGlobalTempView("people")
@@ -308,6 +396,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The lifetime of this temporary view is tied to this Spark application.
 
         .. versionadded:: 2.2.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -334,6 +431,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrameWriter`
+
+        Examples
+        --------
+        >>> type(df.write)
+        <class 'pyspark.sql.readwriter.DataFrameWriter'>
+        >>> df.write.saveAsTable("tab2")
         """
         return DataFrameWriter(self)
 
@@ -352,6 +455,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataStreamWriter`
+
+        Examples
+        --------
+        >>> df = spark.readStream.format("rate").load()
+        >>> dsw = df.writeStream
+        >>> dsw.option("checkpointLocation", "/tmp/c").toTable("tab3")  # doctest: +ELLIPSIS
+        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
@@ -360,6 +470,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        :class:`StructType`
 
         Examples
         --------
@@ -380,6 +494,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Prints out the schema in the tree format.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -415,6 +533,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             .. versionchanged:: 3.0.0
                Added optional argument `mode` to specify the expected output format of plans.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -492,6 +614,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.4.0
 
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other :class:`DataFrame` to compare to.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
         Examples
         --------
         >>> df1 = spark.createDataFrame(
@@ -515,6 +646,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def isLocal(self) -> bool:
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).
+
+        Returns
+        -------
+        bool
+
+        Examples
+        --------
+        >>> df = spark.sql("SHOW TABLES")
+        >>> df.isLocal()
+        True
         """
         return self._jdf.isLocal()
 
@@ -532,6 +673,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         This API is evolving.
+
+        Returns
+        -------
+        bool
+            Whether it's streaming DataFrame or not.
+
+        Examples
+        --------
+        >>> df = spark.readStream.format("rate").load()
+        >>> df.isStreaming
+        True
         """
         return self._jdf.isStreaming()
 
@@ -539,6 +691,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns ``True`` if this :class:`DataFrame` is empty.
 
         .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        bool
+            Whether it's empty DataFrame or not.
 
         Examples
         --------
@@ -567,6 +724,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -672,7 +833,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         eager : bool, optional
-            Whether to checkpoint this :class:`DataFrame` immediately
+            Whether to checkpoint this :class:`DataFrame` immediately  (default True)
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
+
+        Examples
+        --------
+        >>> spark.sparkContext.setCheckpointDir("/tmp/bb")
+        >>> df.checkpoint(False)
+        DataFrame[age: int, name: string]
 
         Notes
         -----
@@ -692,7 +864,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         eager : bool, optional
-            Whether to checkpoint this :class:`DataFrame` immediately
+            Whether to checkpoint this :class:`DataFrame` immediately (default True)
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
+
+        Examples
+        --------
+        >>> df.localCheckpoint(False)
+        DataFrame[age: int, name: string]
 
         Notes
         -----
@@ -728,15 +910,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
 
-        Notes
-        -----
-        This API is evolving.
+        Returns
+        -------
+        :class:`DataFrame`
+            Watermarked DataFrame
 
+        Examples
+        --------
         >>> from pyspark.sql.functions import timestamp_seconds
         >>> sdf.select(
         ...    'name',
         ...    timestamp_seconds(sdf.time).alias('time')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
+
+        Notes
+        -----
+        This API is evolving.
         """
         if not eventTime or type(eventTime) is not str:
             raise TypeError("eventTime should be provided as a string")
@@ -762,6 +951,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
+            Hinted DataFrame
 
         Examples
         --------
@@ -795,6 +985,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        int
+            Number of rows.
+
         Examples
         --------
         >>> df.count()
@@ -806,6 +1001,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns all the records as a list of :class:`Row`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        list
+            List of rows.
 
         Examples
         --------
@@ -830,6 +1030,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         prefetchPartitions : bool, optional
             If Spark should pre-fetch the next partition  before it is needed.
 
+        Returns
+        -------
+        Iterator
+            Iterator of rows.
+
         Examples
         --------
         >>> list(df.toLocalIterator())
@@ -843,6 +1048,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Limits the result count to the number specified.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
 
         Examples
         --------
@@ -858,6 +1074,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
 
         Examples
         --------
@@ -875,6 +1102,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.0.0
 
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
+
         Examples
         --------
         >>> df.tail(1)
@@ -891,6 +1129,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        f : function
+            A function that accepts one parameter which will
+            receive each row to process.
+
+        Returns
+        -------
+        None
+
         Examples
         --------
         >>> def f(person):
@@ -905,6 +1153,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This a shorthand for ``df.rdd.foreachPartition()``.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        f : function
+            A function that accepts one parameter which will receive
+            each partition to process.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -923,6 +1181,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Cached DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.cache()
+        DataFrame[id: bigint]
         """
         self.is_cached = True
         self._jdf.cache()
@@ -942,6 +1211,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Parameters
+        ----------
+        storageLevel : :class:`StorageLevel`
+            Storage level to set for persistence. Default is MEMORY_AND_DISK_DESER.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Persisted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.persist()
+        DataFrame[id: bigint]
+        >>> from pyspark.storagelevel import StorageLevel
+        >>> df.persist(StorageLevel.DISK_ONLY)
+        DataFrame[id: bigint]
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -953,6 +1241,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Get the :class:`DataFrame`'s current storage level.
 
         .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        :class:`StorageLevel`
+            Currently defined storage level.
 
         Examples
         --------
@@ -982,6 +1275,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Parameters
+        ----------
+        blocking : bool
+            Whether to block until all blocks are deleted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Unpersisted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.persist()
+        DataFrame[id: bigint]
+        >>> df.unpersist()
+        DataFrame[id: bigint]
+        >>> df = spark.range(1)
+        >>> df.unpersist(True)
+        DataFrame[id: bigint]
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
@@ -1010,6 +1324,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         numPartitions : int
             specify the target number of partitions
+
+        Returns
+        -------
+        :class:`DataFrame`
 
         Examples
         --------
@@ -1047,6 +1365,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             .. versionchanged:: 1.6
                Added optional arguments to specify the partitioning columns. Also made numPartitions
                optional if partitioning columns are specified.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
 
         Examples
         --------
@@ -1128,6 +1451,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols : str or :class:`Column`
             partitioning columns.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
+
         Notes
         -----
         Due to performance reasons this method uses sampling to estimate the ranges.
@@ -1176,6 +1504,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with distinct records.
+
         Examples
         --------
         >>> df.distinct().count()
@@ -1214,6 +1547,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Fraction of rows to generate, range [0.0, 1.0].
         seed : int, optional
             Seed for sampling (default a random seed).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sampled rows from given DataFrame.
 
         Notes
         -----
@@ -1348,6 +1686,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         seed : int, optional
             The seed for sampling.
 
+        Returns
+        -------
+        list
+            List of DataFrames.
+
         Examples
         --------
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
@@ -1372,6 +1715,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        list
+            List of columns as tuple pairs.
+
         Examples
         --------
         >>> df.dtypes
@@ -1384,6 +1732,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns all column names as a list.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        list
+            List of column names.
 
         Examples
         --------
@@ -1403,6 +1756,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         colName : str
             string, column name specified as a regex.
+
+        Returns
+        -------
+        :class:`Column`
 
         Examples
         --------
@@ -1451,6 +1808,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         schema : :class:`StructType`
             Specified schema.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            Reconciled DataFrame.
+
         Examples
         --------
         >>> df = spark.createDataFrame([("a", 1)], ["i", "j"])
@@ -1481,6 +1843,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         alias : str
             an alias name to be set for the :class:`DataFrame`.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            Aliased DataFrame.
+
         Examples
         --------
         >>> from pyspark.sql.functions import *
@@ -1503,6 +1870,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         other : :class:`DataFrame`
             Right side of the cartesian product.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
 
         Examples
         --------
@@ -1542,6 +1914,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
             ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
             ``anti``, ``leftanti`` and ``left_anti``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
 
         Examples
         --------
@@ -1728,6 +2105,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame sorted by partitions.
+
         Examples
         --------
         >>> df.sortWithinPartitions("age", ascending=False).show()
@@ -1759,6 +2141,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sorted DataFrame.
 
         Examples
         --------
@@ -1837,6 +2224,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Use summary for expanded statistics and control over which statistics to compute.
 
+        Parameters
+        ----------
+        cols : str, list, optional
+             Column name or list of column names to describe by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that describes (provides statistics) given DataFrame.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -1893,6 +2290,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         This function is meant for exploratory data analysis, as we make no
         guarantee about the backward compatibility of the schema of the resulting
         :class:`DataFrame`.
+
+        Parameters
+        ----------
+        statistics : str, optional
+             Column names to calculate statistics by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that provides statistics for the given DataFrame.
 
         Examples
         --------
@@ -1979,6 +2386,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        First Row if DataFrame is not empty, otherwise None.
+
         Examples
         --------
         >>> df.first()
@@ -2028,10 +2439,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        name : str
+            Column name to return as :class:`Column`.
+
+        Returns
+        -------
+        :class:`Column`
+            Requested column.
+
         Examples
         --------
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
+        >>> df["age"]
+        Column<'age'>
         """
         if name not in self.columns:
             raise AttributeError(
@@ -2060,6 +2483,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If one of the column names is '*', that column is expanded to include all columns
             in the current :class:`DataFrame`.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with subset (or all) of columns.
+
         Examples
         --------
         >>> df.select('*').collect()
@@ -2087,6 +2515,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with new/old columns transformed by expressions.
+
         Examples
         --------
         >>> df.selectExpr("age * 2", "abs(age)").collect()
@@ -2109,6 +2542,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         condition : :class:`Column` or str
             a :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Filtered DataFrame.
 
         Examples
         --------
@@ -2151,7 +2589,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols : list, str or :class:`Column`
             columns to group by.
-            Each element should be a column name (string) or an expression (:class:`Column`).
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Grouped data by given columns.
 
         Examples
         --------
@@ -2183,6 +2627,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         the specified columns, so we can run aggregation on them.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : list, str or :class:`Column`
+            Columns to roll-up by.
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Rolled-up data by given columns.
 
         Examples
         --------
@@ -2216,6 +2672,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         the specified columns, so we can run aggregations on them.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : list, str or :class:`Column`
+            columns to create cube by.
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Cube of the data by given columns.
 
         Examples
         --------
@@ -2280,7 +2748,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        DataFrame
+        :class:`DataFrame`
             Unpivoted DataFrame.
 
         Examples
@@ -2364,7 +2832,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        DataFrame
+        :class:`DataFrame`
             Unpivoted DataFrame.
 
         See Also
@@ -2378,6 +2846,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         (shorthand for ``df.groupBy().agg()``).
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        exprs : :class:`Column` or dict of key and value strings
+            Columns or expressions to aggreate DataFrame by.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Aggregated DataFrame.
 
         Examples
         --------
@@ -2507,6 +2985,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        .. versionadded:: 2.0
+
+        See Also
+        --------
+        DataFrame.unionAll
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.union(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   4|   5|   6|
+        +----+----+----+
+        >>> df1.union(df1).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   1|   2|   3|
+        +----+----+----+
+
         """
         return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
@@ -2519,6 +3032,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
+
+        .. versionadded:: 1.3.0
+
+        See Also
+        --------
+        DataFrame.union
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame
+
         """
         return self.union(other)
 
@@ -2530,6 +3062,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         union (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
 
         Examples
         --------
@@ -2571,8 +3113,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def intersect(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows only in
         both this :class:`DataFrame` and another :class:`DataFrame`.
+        Note that any duplicates are removed. To preserve duplicates
+        use :func:`intersectAll`.
 
         This is equivalent to `INTERSECT` in SQL.
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+        >>> df1.intersect(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  b|  3|
+        |  a|  1|
+        +---+---+
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sparkSession)
 
@@ -2584,6 +3150,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         resolves columns by position (not by name).
 
         .. versionadded:: 2.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
 
         Examples
         --------
@@ -2598,7 +3174,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  a|  1|
         |  b|  3|
         +---+---+
-
         """
         return DataFrame(self._jdf.intersectAll(other._jdf), self.sparkSession)
 
@@ -2609,6 +3184,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be subtracted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subtracted DataFrame.
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.subtract(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  c|  4|
+        +---+---+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
@@ -2625,6 +3221,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        subset : List of column names, optional
+            List of columns to use for duplicate comparison (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without duplicates.
 
         Examples
         --------
@@ -2680,6 +3286,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             This overwrites the `how` parameter.
         subset : str, tuple or list, optional
             optional list of column names to consider.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
 
         Examples
         --------
@@ -2739,6 +3350,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced null values.
 
         Examples
         --------
@@ -2865,6 +3481,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced values.
 
         Examples
         --------
@@ -3122,6 +3743,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the second column
         method : str, optional
             The correlation method. Currently only supports "pearson"
+
+        Returns
+        -------
+        float
+            Pearson Correlation Coefficient of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 12), (10, 1), (19, 8)], ["c1", "c2"])
+        >>> df.corr("c1", "c2")
+        -0.3592106040535498
+        >>> df = spark.createDataFrame([(11, 12), (10, 11), (9, 10)], ["small", "bigger"])
+        >>> df.corr("small", "bigger")
+        1.0
+
         """
         if not isinstance(col1, str):
             raise TypeError("col1 should be a string.")
@@ -3149,6 +3785,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the first column
         col2 : str
             The name of the second column
+
+        Returns
+        -------
+        float
+            Covariance of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 12), (10, 1), (19, 8)], ["c1", "c2"])
+        >>> df.cov("c1", "c2")
+        -18.0
+        >>> df = spark.createDataFrame([(11, 12), (10, 11), (9, 10)], ["small", "bigger"])
+        >>> df.cov("small", "bigger")
+        1.0
+
         """
         if not isinstance(col1, str):
             raise TypeError("col1 should be a string.")
@@ -3176,6 +3827,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         col2 : str
             The name of the second column. Distinct items will make the column names
             of the :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Frequency matrix of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
+        >>> df.crosstab("c1", "c2").sort("c1_c2").show()
+        +-----+---+---+---+
+        |c1_c2| 10| 11|  8|
+        +-----+---+---+---+
+        |    1|  0|  2|  0|
+        |    3|  1|  0|  0|
+        |    4|  0|  0|  2|
+        +-----+---+---+---+
+
         """
         if not isinstance(col1, str):
             raise TypeError("col1 should be a string.")
@@ -3202,6 +3871,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         support : float, optional
             The frequency with which to consider an item 'frequent'. Default is 1%.
             The support must be greater than 1e-4.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with frequent items.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
+        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        +------------+------------+
+        |c1_freqItems|c2_freqItems|
+        +------------+------------+
+        |   [4, 1, 3]| [8, 11, 10]|
+        +------------+------------+
 
         Notes
         -----
@@ -3234,6 +3918,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         colsMap : dict
             a dict of column name and :class:`Column`. Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
 
         Examples
         --------
@@ -3272,6 +3961,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         col : :class:`Column`
             a :class:`Column` expression for the new column.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+
         Notes
         -----
         This method introduces a projection internally. Therefore, calling it multiple
@@ -3302,6 +3996,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         new : str
             string, new name of the column.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+
         Examples
         --------
         >>> df.withColumnRenamed('age', 'age2').collect()
@@ -3320,6 +4019,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             string, name of the existing column to update the metadata.
         metadata : dict
             dict, new metadata to be assigned to df.schema[columnName].metadata
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with updated metadata column.
 
         Examples
         --------
@@ -3343,7 +4047,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
 
     def drop(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
-        """Returns a new :class:`DataFrame` that drops the specified column.
+        """Returns a new :class:`DataFrame` without specified columns.
         This is a no-op if schema doesn't contain the given column name(s).
 
         .. versionadded:: 1.4.0
@@ -3352,6 +4056,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols: str or :class:`Column`
             a name of the column, or the :class:`Column` to drop
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without given columns.
 
         Examples
         --------
@@ -3393,6 +4102,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols : str
             new column names
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+
         Examples
         --------
         >>> df.toDF('f1', 'f2').collect()
@@ -3418,6 +4132,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Keyword arguments to pass to func.
 
             .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
 
         Examples
         --------
@@ -3469,6 +4188,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This API is a developer API.
 
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other DataFrame to compare against.
+
+        Returns
+        -------
+        bool
+            Whether these two DataFrames are similar.
+
         Examples
         --------
         >>> df1 = spark.range(10)
@@ -3497,6 +4226,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This API is a developer API.
 
+        Returns
+        -------
+        int
+            Hash value.
+
         Examples
         --------
         >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
@@ -3514,6 +4248,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         all input files. Duplicates are removed.
 
         .. versionadded:: 3.1.0
+
+        Returns
+        -------
+        list
+            List of file paths.
 
         Examples
         --------
@@ -3550,6 +4289,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.1.0
 
+        Parameters
+        ----------
+        table : str
+            Target table name to write to.
+
+        Returns
+        -------
+        :class:`DataFrameWriterV2`
+            DataFrameWriterV2 to use further to specify how to save the data
+
         Examples
         --------
         >>> df.writeTo("catalog.db.table").append()  # doctest: +SKIP
@@ -3585,6 +4334,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         index_col: str or list of str, optional, default: None
             Index column of table in Spark.
+
+        Returns
+        -------
+        :class:`PandasOnSparkDataFrame`
 
         See Also
         --------
