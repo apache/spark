@@ -408,8 +408,11 @@ class Column:
         Parameters
         ----------
         key
-            a literal value, or a :class:`Column` expression (deprecated since Spark 3.0).
-            The result will only be true at a location if item matches in the Column.
+            a literal value, or a :class:`Column` expression.
+            The result will only be true at a location if item matches in the column.
+
+             .. deprecated:: 3.0.0
+                 :class:`Column` as a parameter is deprecated.
 
         Returns
         -------
