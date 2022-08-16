@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.NotSerializableException
+import java.io.{IOException, NotSerializableException}
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeoutException, TimeUnit }
 import java.util.concurrent.atomic.AtomicInteger
@@ -2259,37 +2259,51 @@ private[spark] class DAGScheduler(
                     }
 
                     override def onShuffleMergeFailure(e: Throwable): Unit = {
+                      if (e.isInstanceOf[IOException]) {
+                        logInfo(s"Exclude external shuffle service ${shuffleServiceLoc.host}" +
+                          " due to connection creation fails")
+                        taskScheduler.addExcludedNode(shuffleServiceLoc.host)
+                      }
                     }
                   })
             }
           }
         }, 0, TimeUnit.SECONDS)
       } else {
-        stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
-          case (shuffleServiceLoc, index) =>
-            // Sends async request to shuffle service to finalize shuffle merge on that host
-            // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
-            // TODO: during shuffleMergeFinalizeWaitSec
-            shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-              shuffleServiceLoc.port, shuffleId, shuffleMergeId,
-              new MergeFinalizerListener {
-                override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
-                  assert(shuffleId == statuses.shuffleId)
-                  eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
-                    convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
-                  results(index).set(true)
-                }
+        shuffleMergeFinalizeScheduler.schedule(new Runnable {
+          override def run(): Unit = {
+            stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
+              case (shuffleServiceLoc, index) =>
+                // Sends async request to shuffle service to finalize shuffle merge on that host
+                // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
+                // TODO: during shuffleMergeFinalizeWaitSec
+                shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
+                  shuffleServiceLoc.port, shuffleId, shuffleMergeId,
+                  new MergeFinalizerListener {
+                    override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
+                      assert(shuffleId == statuses.shuffleId)
+                      eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
+                        convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
+                      results(index).set(true)
+                    }
 
-                override def onShuffleMergeFailure(e: Throwable): Unit = {
-                  logWarning(s"Exception encountered when trying to finalize shuffle " +
-                    s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
-                  // Do not fail the future as this would cause dag scheduler to prematurely
-                  // give up on waiting for merge results from the remaining shuffle services
-                  // if one fails
-                  results(index).set(false)
-                }
-              })
-        }
+                    override def onShuffleMergeFailure(e: Throwable): Unit = {
+                      if (e.isInstanceOf[IOException]) {
+                        logInfo(s"Exclude external shuffle service ${shuffleServiceLoc.host}" +
+                          " due to connection creation fails")
+                        taskScheduler.addExcludedNode(shuffleServiceLoc.host)
+                      }
+                      logWarning(s"Exception encountered when trying to finalize shuffle " +
+                        s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
+                      // Do not fail the future as this would cause dag scheduler to prematurely
+                      // give up on waiting for merge results from the remaining shuffle services
+                      // if one fails
+                      results(index).set(false)
+                    }
+                  })
+            }
+          }
+        }, 0, TimeUnit.SECONDS)
       }
       // DAGScheduler only waits for a limited amount of time for the merge results.
       // It will attempt to submit the next stage(s) irrespective of whether merge results

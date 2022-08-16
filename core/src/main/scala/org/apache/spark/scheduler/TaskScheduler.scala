@@ -125,4 +125,10 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  /**
+   * Add host to blacklist
+   * @param host
+   */
+  def addExcludedNode(host: String): Unit = {}
+
 }

@@ -167,7 +167,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
 
+  var blackNodes: Set[String] = Set.empty[String]
+
   val taskScheduler = new TaskScheduler() {
+    blackNodes = Set.empty[String]
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
     override def start() = {}
@@ -206,6 +209,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       decommissionInfo: ExecutorDecommissionInfo): Unit = {}
     override def getExecutorDecommissionState(
       executorId: String): Option[ExecutorDecommissionState] = None
+
+    override def addExcludedNode(host: String): Unit = {
+      blackNodes += host
+    }
   }
 
   /**
@@ -4440,6 +4447,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
+  test("SPARK-40096: Add external shuffle service to blacklist if connection fails") {
+    initPushBasedShuffleConfs(conf)
+    conf.set("spark.shuffle.io.connectionCreationTimeout", "5s")
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", "192.168.254.254", 12345)))
+
+    val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
+    scheduler.finalizeShuffleMerge(shuffleStage, true)
+    assert(blackNodes === Set("192.168.254.254"))
+  }
 
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
