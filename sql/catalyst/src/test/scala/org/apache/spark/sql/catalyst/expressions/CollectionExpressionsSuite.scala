@@ -2065,4 +2065,44 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal.create(Seq(Float.NaN, null), ArrayType(FloatType)),
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
+
+  test("SPARK-39184: Avoid ArrayIndexOutOfBoundsException when crossing DST boundary") {
+    DateTimeTestUtils.withDefaultTimeZone(LA) {
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+        Literal(stringToInterval("interval 1 day"))),
+        Seq(
+          Timestamp.valueOf("2016-03-13 00:00:00"),
+          Timestamp.valueOf("2016-03-14 00:00:00")))
+
+      checkEvaluation(new Sequence(
+        Literal(Timestamp.valueOf("2016-03-14 00:00:00")),
+        Literal(Timestamp.valueOf("2016-03-13 00:00:00")),
+        Literal(stringToInterval("interval -1 days"))),
+        Seq(
+          Timestamp.valueOf("2016-03-14 00:00:00"),
+          Timestamp.valueOf("2016-03-13 00:00:00")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2016-03-13")),
+        Literal(Date.valueOf("2016-03-16")),
+        Literal(stringToInterval("interval 1 day 12 hour"))),
+        Seq(
+          Date.valueOf("2016-03-13"),
+          Date.valueOf("2016-03-14"),
+          Date.valueOf("2016-03-16")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2017-04-06")),
+        Literal(Date.valueOf("2017-02-12")),
+        Literal(stringToInterval("interval -13 days -6 hours"))),
+        Seq(
+          Date.valueOf("2017-04-06"),
+          Date.valueOf("2017-03-23"),
+          Date.valueOf("2017-03-10"),
+          Date.valueOf("2017-02-25"),
+          Date.valueOf("2017-02-12")))
+    }
+  }
 }
