@@ -23,7 +23,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
@@ -131,7 +130,7 @@ public class ExternalShuffleBlockResolverSuite {
   }
 
   @Test
-  public void testShuffleIndexCacheExpireTime() throws IOException, InterruptedException, ExecutionException {
+  public void testShuffleIndexCacheExpireTime() throws IOException, InterruptedException {
     Map<String, String> config = new HashMap<>();
     config.put("spark.shuffle.service.index.cache.expire.time", "2s");
     TransportConf transportConf = new TransportConf("shuffle",
