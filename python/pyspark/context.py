@@ -577,7 +577,8 @@ class SparkContext:
 
         Notes
         -----
-        When the web ui is disabled ("spark.ui.enabled=False"), it returns None.
+        When the web ui is disabled, e.g., by ``spark.ui.enabled`` set to ``False``,
+        it returns ``None``.
 
         Examples
         --------
