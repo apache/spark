@@ -913,6 +913,7 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
           logError(s"$task had a not serializable result: ${ef.description}; not retrying")
+          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
           abort(s"$task had a not serializable result: ${ef.description}")
           return
         }
@@ -921,6 +922,7 @@ private[spark] class TaskSetManager(
           // re-execute it.
           logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
             .format(info.id, taskSet.id, tid, ef.description))
+          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
             info.id, taskSet.id, tid, ef.description))
           return
