@@ -274,10 +274,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   private def isStandalone(): Boolean = {
-    sc.schedulerBackend match {
-      case backend: StandaloneSchedulerBackend => true
-      case _ => false
-    }
+    sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
+  }
   }
 
   private def removeExecutorFromExpiryCandidates(executorId: String): Unit = {
