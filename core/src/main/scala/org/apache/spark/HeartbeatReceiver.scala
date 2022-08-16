@@ -276,7 +276,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private def isStandalone(): Boolean = {
     sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
   }
-  }
 
   private def removeExecutorFromExpiryCandidates(executorId: String): Unit = {
     if (checkWorkerLastHeartbeat && isStandalone()) {
