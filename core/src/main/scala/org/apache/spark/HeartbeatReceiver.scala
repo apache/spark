@@ -119,8 +119,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * `checkWorkerLastHeartbeat`: A flag to enable two-phase executor timeout.
    * `expiryCandidatesTimeout`: The timeout used for executorExpiryCandidates.
    */
-  private val checkWorkerLastHeartbeat = sc.conf
-    .get(config.HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+  private val checkWorkerLastHeartbeat = {
+    val isEnabled = sc.conf.get(config.HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+    if (isEnabled) logWarning(s"Keep `expiryCandidatesTimeout` larger than `HEARTBEAT_MILLIS` in" +
+      s"deploy/worker/Worker.scala to know whether master lost any heartbeat from the" +
+      s"worker or not.")
+    isEnabled
+  }
+
   private val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
     case true => sc.conf.get(config.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT)
     case false => 0
@@ -303,9 +309,6 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * rather than expiring it immediately.
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
-    logWarning(s"Keep `expiryCandidatesTimeout` larger than `HEARTBEAT_MILLIS` in" +
-      s"deploy/worker/Worker.scala to know whether master lost any heartbeat from the" +
-      s"worker or not.")
     val now = clock.getTimeMillis()
     if (!checkWorkerLastHeartbeat || !isStandalone()) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
