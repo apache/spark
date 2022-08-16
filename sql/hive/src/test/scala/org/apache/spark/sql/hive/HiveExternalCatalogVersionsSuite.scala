@@ -201,10 +201,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      if (PROCESS_TABLES.isPythonVersionAtLeast37) {
+      if (PROCESS_TABLES.isPythonVersionAvailable) {
         logError("Fail to get the latest Spark versions to test.")
       } else {
-        logError("Python version <  3.7.0, the running environment is unavailable.")
+        logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
+          "the running environment is unavailable.")
       }
     }
 
@@ -237,7 +238,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   test("backward compatibility") {
-    assume(PROCESS_TABLES.isPythonVersionAtLeast37)
+    assume(PROCESS_TABLES.isPythonVersionAvailable)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
@@ -254,11 +255,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
-  val isPythonVersionAtLeast37 = TestUtils.isPythonVersionAtLeast37()
+  val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable()
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
-  val testingVersions: Seq[String] = if (isPythonVersionAtLeast37) {
+  val testingVersions: Seq[String] = if (isPythonVersionAvailable) {
     import scala.io.Source
     val versions: Seq[String] = try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
