@@ -2921,17 +2921,23 @@ object Sequence {
         val startMicros: Long = toMicros(num.toLong(start), scale)
         val stopMicros: Long = toMicros(num.toLong(stop), scale)
 
-        val maxEstimatedArrayLength =
+        val estimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
 
         val stepSign = if (intervalStepInMicros > 0) +1 else -1
         val exclusiveItem = stopMicros + stepSign
-        val arr = new Array[T](maxEstimatedArrayLength)
+        var arr = new Array[T](estimatedArrayLength)
         var t = startMicros
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
           val result = fromMicros(t, scale)
+          // if we've underestimated the size of the array, due to crossing a DST
+          // "spring forward" without a corresponding "fall back", make a copy
+          // that's larger by 1
+          if (i == arr.length) {
+            arr = arr.padTo(estimatedArrayLength + 1, fromLong(0L))
+          }
           arr(i) = fromLong(result)
           i += 1
           t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
@@ -3039,6 +3045,9 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
+         |    if ($i == $arr.length) {
+         |      $arr = java.util.Arrays.copyOf($arr, $i + 1);
+         |    }
          |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
          |    $t = $addIntervalCode(
