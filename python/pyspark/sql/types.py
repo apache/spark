@@ -2256,11 +2256,27 @@ class DayTimeIntervalTypeConverter:
         )
 
 
+class NumpyScalarConverter:
+    def can_convert(self, obj: Any) -> bool:
+        try:
+            import numpy as np
+
+            has_numpy = True
+        except Exception:
+            has_numpy = False
+
+        return has_numpy and isinstance(obj, np.generic)
+
+    def convert(self, obj: "np.generic", gateway_client: GatewayClient):
+        return obj.item()
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 register_input_converter(DayTimeIntervalTypeConverter())
+register_input_converter(NumpyScalarConverter())
 
 
 def _test() -> None:
