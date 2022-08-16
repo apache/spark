@@ -22,6 +22,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.internal.connector.AbstractExpression;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased

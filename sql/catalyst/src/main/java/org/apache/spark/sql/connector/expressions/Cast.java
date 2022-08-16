@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.internal.connector.AbstractExpression;
 import org.apache.spark.sql.types.DataType;
 
 /**

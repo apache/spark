@@ -15,16 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.internal.connector
 
-import java.io.Serializable;
+import org.apache.spark.sql.connector.expressions.Expression
 
-import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
-
-public abstract class AbstractExpression implements Expression, Serializable {
-  private static final ToStringSQLBuilder builder = new ToStringSQLBuilder();
-  @Override
-  public String toString() {
-    return builder.build(this);
-  }
+abstract class AbstractExpression extends Expression with Serializable {
+  private val builder = new ToStringSQLBuilder()
+  override def toString(): String = builder.build(this);
 }

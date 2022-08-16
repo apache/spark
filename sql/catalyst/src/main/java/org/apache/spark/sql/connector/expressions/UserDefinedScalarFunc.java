@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.internal.connector.AbstractExpression;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased

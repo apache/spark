@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.AbstractExpression;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.internal.connector.AbstractExpression;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
