@@ -281,6 +281,8 @@ private[spark] object TestUtils {
     attempt.isSuccess && attempt.get == 0
   }
 
+  // SPARK-40053: This string needs to be updated when the
+  // minimum python supported version changes.
   val minimumPythonSupportedVersion: String = "3.7.0"
 
   def isPythonVersionAvailable: Boolean = {
