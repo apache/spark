@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.io.Serializable;
-
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -28,7 +27,7 @@ import org.apache.spark.sql.types.DataType;
  * @since 3.3.0
  */
 @Evolving
-public class Cast implements Expression, Serializable {
+public class Cast extends ExpressionWithToString {
   private Expression expression;
   private DataType dataType;
 
@@ -42,9 +41,4 @@ public class Cast implements Expression, Serializable {
 
   @Override
   public Expression[] children() { return new Expression[]{ expression() }; }
-
-  @Override
-  public String toString() {
-    return "CAST(" + expression.describe() + " AS " + dataType.typeName() + ")";
-  }
 }

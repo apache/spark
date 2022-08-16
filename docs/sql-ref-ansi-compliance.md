@@ -45,10 +45,13 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 ```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
+== SQL(line 1, position 8) ==
+SELECT 2147483647 + 1
+       ^^^^^^^^^^^^^^
 
 SELECT abs(-2147483648);
-java.lang.ArithmeticException: integer overflow
+org.apache.spark.SparkArithmeticException: [ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
@@ -117,7 +120,7 @@ SELECT CAST('a' AS INT)
 SELECT CAST(2147483648L AS INT);
 org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW] The value 2147483648L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
 
-SELECT CAST(DATE'2020-01-01' AS INT)
+SELECT CAST(DATE'2020-01-01' AS INT);
 org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
 To convert values from date to int, you can use function UNIX_DATE instead.
 
@@ -189,7 +192,7 @@ During table insertion, Spark will throw exception on numeric value overflow.
 CREATE TABLE test(i INT);
 
 INSERT INTO test VALUES (2147483648L);
-java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW_IN_TABLE_INSERT] Fail to insert a value of "BIGINT" type into the "INT" type column `i` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 ```
 
 ### Type coercion
@@ -299,7 +302,6 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `size`: This function returns null for null input.
   - `element_at`:
     - This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
-    - This function throws `NoSuchElementException` if key does not exist in map.
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
   - `to_date`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
@@ -315,7 +317,6 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
-  - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
 
 ### Useful Functions for ANSI Mode
 
@@ -327,7 +328,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_sum`: identical to the function `sum`, except that it returns `NULL` result instead of throwing an exception on integral/decimal/interval value overflow.
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
-  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
+  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.
   - `try_to_timestamp`: identical to the function `to_timestamp`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
 
 ### SQL Keywords (optional, disabled by default)

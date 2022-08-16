@@ -182,14 +182,14 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // Respect SparkConf and replace file:/
       assert(isIncluded(df.queryExecution, replacement))
-      assert(isIncluded(df.queryExecution, "BatchScan orc"))
+      assert(isIncluded(df.queryExecution, s"BatchScan orc"))
       assert(!isIncluded(df.queryExecution, "file:/"))
 
-      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)BatchScan orc") {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> s"(?i)BatchScan orc file:$basePath") {
         // Respect SQLConf and replace FileScan
         assert(isIncluded(df.queryExecution, replacement))
 
-        assert(!isIncluded(df.queryExecution, "BatchScan orc"))
+        assert(!isIncluded(df.queryExecution, s"BatchScan orc file:$basePath"))
         assert(isIncluded(df.queryExecution, "file:/"))
       }
     }
@@ -201,8 +201,8 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
         val dir = path.getCanonicalPath
         spark.range(0, 10).write.format(format).save(dir)
         val df = spark.read.format(format).load(dir)
-
         withClue(s"Source '$format':") {
+          logError(s"${df.queryExecution}")
           assert(isIncluded(df.queryExecution, "ReadSchema"))
           assert(isIncluded(df.queryExecution, s"BatchScan $format"))
           if (Seq("orc", "parquet").contains(format)) {

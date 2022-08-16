@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -425,7 +424,7 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  * @since 3.3.0
  */
 @Evolving
-public class GeneralScalarExpression implements Expression, Serializable {
+public class GeneralScalarExpression extends ExpressionWithToString {
   private String name;
   private Expression[] children;
 
@@ -449,11 +448,5 @@ public class GeneralScalarExpression implements Expression, Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(name, children);
-  }
-
-  @Override
-  public String toString() {
-    ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    return builder.build(this);
   }
 }
