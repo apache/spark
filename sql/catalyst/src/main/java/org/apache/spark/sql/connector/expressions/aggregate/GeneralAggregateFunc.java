@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
@@ -44,7 +44,7 @@ import org.apache.spark.sql.internal.connector.AbstractExpression;
  * @since 3.3.0
  */
 @Evolving
-public final class GeneralAggregateFunc extends AbstractExpression implements AggregateFunc {
+public final class GeneralAggregateFunc extends ExpressionWithToString implements AggregateFunc {
   private final String name;
   private final boolean isDistinct;
   private final Expression[] children;

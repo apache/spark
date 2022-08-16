@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * Represent an extract function, which extracts and returns the value of a
@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.connector.AbstractExpression;
  */
 
 @Evolving
-public class Extract extends AbstractExpression {
+public class Extract extends ExpressionWithToString {
 
   private String field;
   private Expression source;

@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.connector.expressions.Expression
 
-abstract class AbstractExpression extends Expression with Serializable {
+abstract class ExpressionWithToString extends Expression with Serializable {
   private val builder = new ToStringSQLBuilder()
   override def toString(): String = builder.build(this);
 }

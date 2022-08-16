@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.DataType;
  * @since 3.3.0
  */
 @Evolving
-public class Cast extends AbstractExpression {
+public class Cast extends ExpressionWithToString {
   private Expression expression;
   private DataType dataType;
 

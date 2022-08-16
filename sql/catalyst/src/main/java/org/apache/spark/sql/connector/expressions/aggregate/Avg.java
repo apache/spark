@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * An aggregate function that returns the mean of all the values in a group.
@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.connector.AbstractExpression;
  * @since 3.3.0
  */
 @Evolving
-public final class Avg extends AbstractExpression implements AggregateFunc {
+public final class Avg extends ExpressionWithToString implements AggregateFunc {
   private final Expression input;
   private final boolean isDistinct;
 

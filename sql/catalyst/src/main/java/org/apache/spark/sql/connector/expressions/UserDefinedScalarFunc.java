@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased
@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.connector.AbstractExpression;
  * @since 3.4.0
  */
 @Evolving
-public class UserDefinedScalarFunc extends AbstractExpression {
+public class UserDefinedScalarFunc extends ExpressionWithToString {
   private String name;
   private String canonicalName;
   private Expression[] children;

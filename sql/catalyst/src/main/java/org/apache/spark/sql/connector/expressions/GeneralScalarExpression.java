@@ -22,7 +22,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
-import org.apache.spark.sql.internal.connector.AbstractExpression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -424,7 +424,7 @@ import org.apache.spark.sql.internal.connector.AbstractExpression;
  * @since 3.3.0
  */
 @Evolving
-public class GeneralScalarExpression extends AbstractExpression {
+public class GeneralScalarExpression extends ExpressionWithToString {
   private String name;
   private Expression[] children;
 
