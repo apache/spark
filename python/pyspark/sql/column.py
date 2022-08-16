@@ -972,7 +972,7 @@ class Column:
         Examples
         --------
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
         >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
@@ -1019,7 +1019,7 @@ class Column:
         --------
         >>> from pyspark.sql.types import StringType
         >>> df = spark.createDataFrame(
-        ...      [(2, "Alice"), (5, "Bob")], ["age", "id"])
+        ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages='2'), Row(ages='5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
