@@ -450,6 +450,8 @@ class Column:
             a literal value, or a :class:`Column` expression.
             The result will only be true at a location if field matches in the Column.
 
+             .. deprecated:: 3.0.0
+                 :class:`Column` as a parameter is deprecated.
         Returns
         -------
         :class:`Column`
