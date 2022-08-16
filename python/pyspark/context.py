@@ -570,17 +570,22 @@ class SparkContext:
         return self._jsc.sc().applicationId()
 
     @property
-    def uiWebUrl(self) -> str:
+    def uiWebUrl(self) -> Optional[str]:
         """Return the URL of the SparkUI instance started by this :class:`SparkContext`
 
         .. versionadded:: 2.1.0
+
+        Notes
+        -----
+        When the web ui is disabled ("spark.ui.enabled=False"), it returns None.
 
         Examples
         --------
         >>> sc.uiWebUrl
         'http://...'
         """
-        return self._jsc.sc().uiWebUrl().get()
+        jurl = self._jsc.sc().uiWebUrl()
+        return jurl.get() if jurl.nonEmpty() else None
 
     @property
     def startTime(self) -> int:
