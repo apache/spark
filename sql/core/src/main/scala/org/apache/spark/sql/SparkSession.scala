@@ -821,7 +821,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    @deprecated("use conf", "3.3.1")
+    @deprecated("use conf", "3.4.0")
     def config(key: String, value: String): Builder = synchronized {
       options += key -> value
       this
@@ -833,7 +833,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    @deprecated("use conf", "3.3.1")
+    @deprecated("use conf", "3.4.0")
     def config(key: String, value: Long): Builder = synchronized {
       options += key -> value.toString
       this
@@ -845,7 +845,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    @deprecated("use conf", "3.3.1")
+    @deprecated("use conf", "3.4.0")
     def config(key: String, value: Double): Builder = synchronized {
       options += key -> value.toString
       this
@@ -857,7 +857,7 @@ object SparkSession extends Logging {
      *
      * @since 2.0.0
      */
-    @deprecated("use conf", "3.3.1")
+    @deprecated("use conf", "3.4.0")
     def config(key: String, value: Boolean): Builder = synchronized {
       options += key -> value.toString
       this
