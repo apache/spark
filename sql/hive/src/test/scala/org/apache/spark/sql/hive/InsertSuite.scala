@@ -906,15 +906,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         }
       }
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-      testDefaultColumn
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
-      testDefaultColumn
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false",
+      SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       testDefaultColumn
     }
   }
