@@ -336,7 +336,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             case Some(workerLastHeartbeats) =>
               for ((executorId, workerLastHeartbeat) <- buf zip workerLastHeartbeats) {
                 if (now - workerLastHeartbeat > expiryCandidatesTimeout) {
-                  val lastSeenMs = executorLastSeen.get(executorId).get
+                  val lastSeenMs = executorLastSeen(executorId)
                   killExecutor(executorId, now - lastSeenMs)
                   executorExpiryCandidates.remove(executorId)
                 } else {
@@ -346,7 +346,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
               }
             case None =>
               for (executorId <- buf) {
-                val lastSeenMs = executorLastSeen.get(executorId).get
+                val lastSeenMs = executorLastSeen(executorId)
                 killExecutor(executorId, now - lastSeenMs)
                 executorLastSeen.remove(executorId)
                 executorExpiryCandidates.remove(executorId)
