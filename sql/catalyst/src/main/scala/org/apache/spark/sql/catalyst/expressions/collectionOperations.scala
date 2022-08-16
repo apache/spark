@@ -2094,17 +2094,18 @@ case class ArrayPosition(left: Expression, right: Expression)
   group = "array_funcs")
 case class Get(
     left: Expression,
-    right: Expression)
-  extends BinaryExpression with RuntimeReplaceable with NullIntolerant {
-  override def replacement: Expression = GetArrayItem(left, right, failOnError = false)
+    right: Expression,
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = {
-    this.copy(left = newLeft, right = newRight)
-  }
+  def this(left: Expression, right: Expression) =
+    this(left, right, GetArrayItem(left, right, failOnError = false))
 
   override def prettyName: String = "get"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }
 
 /**

@@ -316,11 +316,9 @@ NULL
 -- !query
 select get(array(1, 2, 3), null)
 -- !query schema
-struct<>
+struct<get(array(1, 2, 3), NULL):int>
 -- !query output
-java.lang.IllegalStateException
-Illegal RuntimeReplaceable: get(array(1, 2, 3), null)
-Replacement is unresolved: array(1, 2, 3)[null]
+NULL
 
 
 -- !query
