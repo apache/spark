@@ -3083,7 +3083,7 @@ object Sequence {
           // "spring forward" without a corresponding "fall back", make a copy
           // that's larger by 1
           if (i == arr.length) {
-            arr = arr.padTo(estimatedArrayLength + 1, fromLong(0L))
+            arr = arr.padTo(i + 1, fromLong(0L))
           }
           arr(i) = fromLong(result)
           i += 1
