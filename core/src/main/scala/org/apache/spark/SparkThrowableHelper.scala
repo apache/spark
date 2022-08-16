@@ -157,7 +157,7 @@ private[spark] object SparkThrowableHelper {
         val errorClass = e.getErrorClass
         val message = if (format == STANDARD) {
           val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-            throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+            throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
           Some(errorInfo.messageFormat)
         } else None
         assert(e.getParameterNames.size == e.getMessageParameters.size,
