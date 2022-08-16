@@ -863,7 +863,7 @@ object SparkSession extends Logging {
      * Sets a config option. Options set using this method are automatically propagated to
      * both `SparkConf` and SparkSession's own configuration.
      *
-     * @since 3.3.1
+     * @since 3.4.0
      */
     def conf(key: String, value: Any): Builder = synchronized {
       options += key -> value.toString
