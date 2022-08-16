@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -226,7 +228,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
         metadataColumns.map(_.name).flatMap {
           case FileFormat.ROW_INDEX =>
-            if ((readDataColumns ++ partitionColumns).map(_.name)
+            if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
                 .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
               throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
                 " is a reserved column name that cannot be read in combination with " +
@@ -236,7 +238,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           case _ => None
         }
 
-      val outputSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns).toStructType
+      val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
+        .toStructType
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and
@@ -253,7 +256,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         FileSourceScanExec(
           fsRelation,
           outputAttributes,
-          outputSchema,
+          outputDataSchema,
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
@@ -268,8 +271,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
               col
             case FileFormat.ROW_INDEX =>
               fileFormatReaderGeneratedMetadataColumns
-                .filter(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
-                .head.withName(FileFormat.ROW_INDEX)
+                .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
+                .get.withName(FileFormat.ROW_INDEX)
           }
         }
         val metadataAlias =
