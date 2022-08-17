@@ -196,7 +196,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
-          case GetMapValue(map, key: Attribute, _) if isMapWithStringKey(map) && !key.resolved =>
+          case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 

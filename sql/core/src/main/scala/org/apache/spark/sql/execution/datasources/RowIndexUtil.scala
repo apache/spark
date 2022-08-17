@@ -14,27 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources
 
-package org.apache.parquet.io;
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
-/**
- * This is a workaround since methods below are not public in {@link ColumnIO}.
- *
- * TODO(SPARK-36511): we should remove this once PARQUET-2050 and PARQUET-2083 are released with
- *   Parquet 1.13.
- */
-public class ColumnIOUtil {
-  private ColumnIOUtil() {}
 
-  public static int getDefinitionLevel(ColumnIO column) {
-    return column.getDefinitionLevel();
+object RowIndexUtil {
+  def findRowIndexColumnIndexInSchema(sparkSchema: StructType): Int = {
+    sparkSchema.fields.zipWithIndex.find { case (field: StructField, _: Int) =>
+      field.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+    } match {
+      case Some((field: StructField, idx: Int)) =>
+        if (field.dataType != LongType) {
+          throw new RuntimeException(s"${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} must be of " +
+            "LongType")
+        }
+        idx
+      case _ => -1
+    }
   }
 
-  public static int getRepetitionLevel(ColumnIO column) {
-    return column.getRepetitionLevel();
-  }
-
-  public static String[] getFieldPath(ColumnIO column) {
-    return column.getFieldPath();
+  def isNeededForSchema(sparkSchema: StructType): Boolean = {
+    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
   }
 }

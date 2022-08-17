@@ -1374,6 +1374,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [DATE1 IS NOT NULL, ((EXTRACT(DAY_OF_WEEK FROM DATE1) % 7) + 1) = 4]"
     checkPushedInfo(df8, expectedPlanFragment8)
     checkAnswer(df8, Seq(Row("alex")))
+
+    val df9 = sql("SELECT name FROM h2.test.datetime WHERE " +
+      "dayofyear(date1) > 100 order by dayofyear(date1) limit 1")
+    checkFiltersRemoved(df9)
+    val expectedPlanFragment9 =
+      "PushedFilters: [DATE1 IS NOT NULL, EXTRACT(DAY_OF_YEAR FROM DATE1) > 100], " +
+      "PushedTopN: ORDER BY [EXTRACT(DAY_OF_YEAR FROM DATE1) ASC NULLS FIRST] LIMIT 1,"
+    checkPushedInfo(df9, expectedPlanFragment9)
+    checkAnswer(df9, Seq(Row("alex")))
   }
 
   test("scan with filter push-down with misc functions") {

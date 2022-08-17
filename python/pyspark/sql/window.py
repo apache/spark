@@ -74,6 +74,11 @@ class Window:
     def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._jvm is not None
@@ -85,6 +90,11 @@ class Window:
     def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._jvm is not None

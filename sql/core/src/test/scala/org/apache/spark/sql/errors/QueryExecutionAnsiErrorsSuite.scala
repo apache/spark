@@ -114,21 +114,6 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         stop = 41))
   }
 
-  test("MAP_KEY_DOES_NOT_EXIST: key does not exist in element_at") {
-    checkError(
-      exception = intercept[SparkNoSuchElementException] {
-        sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
-      },
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      parameters = Map(
-        "keyValue" -> "3",
-        "config" -> ansiConf),
-      context = ExpectedContext(
-        fragment = "element_at(map(1, 'a', 2, 'b'), 3",
-        start = 7,
-        stop = 40))
-  }
-
   test("CAST_INVALID_INPUT: cast string to double") {
     checkError(
       exception = intercept[SparkNumberFormatException] {

@@ -91,8 +91,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
-    case Cast(child, dataType, _, ansiEnabled)
-        if ansiEnabled || Cast.canUpCast(child.dataType, dataType) =>
+    case Cast(child, dataType, _, evalMode)
+        if evalMode == EvalMode.ANSI || Cast.canUpCast(child.dataType, dataType) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
     case AggregateExpression(aggregateFunction, Complete, isDistinct, None, _) =>
       generateAggregateFunc(aggregateFunction, isDistinct)

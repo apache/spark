@@ -821,3 +821,35 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 [CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(compact, 10, 18, 6) cannot be represented as Decimal(1, 0). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+
+
+-- !query
+select cast(10.123456BD as interval day to second)
+-- !query schema
+struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+0 00:00:10.123456000
+
+
+-- !query
+select cast(80.654321BD as interval hour to minute)
+-- !query schema
+struct<CAST(80.654321 AS INTERVAL HOUR TO MINUTE):interval hour to minute>
+-- !query output
+0 01:20:00.000000000
+
+
+-- !query
+select cast(-10.123456BD as interval year to month)
+-- !query schema
+struct<CAST(-10.123456 AS INTERVAL YEAR TO MONTH):interval year to month>
+-- !query output
+-0-10
+
+
+-- !query
+select cast(10.654321BD as interval month)
+-- !query schema
+struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
+-- !query output
+0-11

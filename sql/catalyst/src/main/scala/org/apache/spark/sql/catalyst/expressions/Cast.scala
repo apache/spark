@@ -112,7 +112,7 @@ object Cast {
     case (StringType, _: AnsiIntervalType) => true
 
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
-    case (_: IntegralType, _: AnsiIntervalType) => true
+    case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
@@ -144,6 +144,33 @@ object Cast {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     case _ => false
+  }
+
+  // If the target data type is a complex type which can't have Null values, we should guarantee
+  // that the casting between the element types won't produce Null results.
+  def canTryCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case _ =>
+      Cast.canAnsiCast(from, to)
   }
 
   /**
@@ -197,7 +224,7 @@ object Cast {
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
-    case (_: IntegralType, _: AnsiIntervalType) => true
+    case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -426,6 +453,19 @@ object Cast {
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
     }
+
+  def apply(
+      child: Expression,
+      dataType: DataType,
+      ansiEnabled: Boolean): Cast =
+    Cast(child, dataType, None, EvalMode.fromBoolean(ansiEnabled))
+
+  def apply(
+      child: Expression,
+      dataType: DataType,
+      timeZoneId: Option[String],
+      ansiEnabled: Boolean): Cast =
+    Cast(child, dataType, timeZoneId, EvalMode.fromBoolean(ansiEnabled))
 }
 
 /**
@@ -447,11 +487,11 @@ case class Cast(
     child: Expression,
     dataType: DataType,
     timeZoneId: Option[String] = None,
-    ansiEnabled: Boolean = SQLConf.get.ansiEnabled) extends UnaryExpression
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends UnaryExpression
   with TimeZoneAwareExpression with NullIntolerant with SupportQueryContext {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
-    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
+    this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -460,29 +500,57 @@ case class Cast(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
-  private def typeCheckFailureMessage: String = if (ansiEnabled) {
-    if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString))
-    } else {
-      Cast.typeCheckFailureMessage(child.dataType, dataType,
-        Some(SQLConf.ANSI_ENABLED.key -> "false"))
-    }
-  } else {
-    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+  def ansiEnabled: Boolean = {
+    evalMode == EvalMode.ANSI || evalMode == EvalMode.TRY
+  }
+
+  // Whether this expression is used for `try_cast()`.
+  def isTryCast: Boolean = {
+    evalMode == EvalMode.TRY
+  }
+
+  private def typeCheckFailureMessage: String = evalMode match {
+    case EvalMode.ANSI =>
+      if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
+        Cast.typeCheckFailureMessage(child.dataType, dataType,
+          Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
+            SQLConf.StoreAssignmentPolicy.LEGACY.toString))
+      } else {
+        Cast.typeCheckFailureMessage(child.dataType, dataType,
+          Some(SQLConf.ANSI_ENABLED.key -> "false"))
+      }
+    case EvalMode.TRY =>
+      Cast.typeCheckFailureMessage(child.dataType, dataType, None)
+    case _ =>
+      s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (ansiEnabled && Cast.canAnsiCast(child.dataType, dataType)) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (!ansiEnabled && Cast.canCast(child.dataType, dataType)) {
+    val canCast = evalMode match {
+      case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
+      case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
+      case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
+      case other => throw new IllegalArgumentException(s"Unknown EvalMode value: $other")
+    }
+    if (canCast) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
     }
   }
 
-  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
+  override def nullable: Boolean = if (!isTryCast) {
+    child.nullable || Cast.forceNullable(child.dataType, dataType)
+  } else {
+    (child.dataType, dataType) match {
+      case (StringType, BinaryType) => child.nullable
+      // TODO: Implement a more accurate method for checking whether a decimal value can be cast
+      //       as integral types without overflow. Currently, the cast can overflow even if
+      //       "Cast.canUpCast" method returns true.
+      case (_: DecimalType, _: IntegralType) => true
+      case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
+    }
+  }
 
   override def initQueryContext(): Option[SQLQueryContext] = if (ansiEnabled) {
     Some(origin.context)
@@ -790,11 +858,14 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
       }
+    case DecimalType.Fixed(p, s) =>
+      buildCast[Decimal](_, d =>
+        IntervalUtils.decimalToDayTimeInterval(d, p, s, it.startField, it.endField))
   }
 
   private[this] def castToYearMonthInterval(
@@ -807,11 +878,14 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
       }
+    case DecimalType.Fixed(p, s) =>
+      buildCast[Decimal](_, d =>
+        IntervalUtils.decimalToYearMonthInterval(d, p, s, it.startField, it.endField))
   }
 
   // LongConverter
@@ -1140,7 +1214,7 @@ case class Cast(
     })
   }
 
-  protected[this] def cast(from: DataType, to: DataType): Any => Any = {
+  private def castInternal(from: DataType, to: DataType): Any => Any = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
@@ -1179,6 +1253,20 @@ case class Cast(
         case _: UserDefinedType[_] =>
           throw QueryExecutionErrors.cannotCastError(from, to)
       }
+    }
+  }
+
+  private def cast(from: DataType, to: DataType): Any => Any = {
+    if (!isTryCast) {
+      castInternal(from, to)
+    } else {
+      (input: Any) =>
+        try {
+          castInternal(from, to)(input)
+        } catch {
+          case _: Exception =>
+            null
+        }
     }
   }
 
@@ -1247,11 +1335,22 @@ case class Cast(
   protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
+    val castCodeWithTryCatchIfNeeded = if (!isTryCast) {
+      s"${cast(input, result, resultIsNull)}"
+    } else {
+      s"""
+         |try {
+         |  ${cast(input, result, resultIsNull)}
+         |} catch (Exception e) {
+         |  $resultIsNull = true;
+         |}
+         |""".stripMargin
+    }
     code"""
       boolean $resultIsNull = $inputIsNull;
       $javaType $result = ${CodeGenerator.defaultValue(resultType)};
       if (!$inputIsNull) {
-        ${cast(input, result, resultIsNull)}
+        $castCodeWithTryCatchIfNeeded
       }
     """
   }
@@ -1803,18 +1902,25 @@ case class Cast(
           $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
         """
     case x: IntegralType =>
-      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       if (x == LongType) {
         (c, evPrim, _) =>
           code"""
-            $evPrim = $util.longToDayTimeInterval($c, (byte)${it.endField});
+            $evPrim = $iu.longToDayTimeInterval($c, (byte)${it.startField}, (byte)${it.endField});
           """
       } else {
         (c, evPrim, _) =>
           code"""
-            $evPrim = $util.intToDayTimeInterval($c, (byte)${it.endField});
+            $evPrim = $iu.intToDayTimeInterval($c, (byte)${it.startField}, (byte)${it.endField});
           """
       }
+    case DecimalType.Fixed(p, s) =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $iu.decimalToDayTimeInterval(
+            $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
+        """
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -1833,18 +1939,25 @@ case class Cast(
           $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
         """
     case x: IntegralType =>
-      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       if (x == LongType) {
         (c, evPrim, _) =>
           code"""
-            $evPrim = $util.longToYearMonthInterval($c, (byte)${it.endField});
+            $evPrim = $iu.longToYearMonthInterval($c, (byte)${it.startField}, (byte)${it.endField});
           """
       } else {
         (c, evPrim, _) =>
           code"""
-            $evPrim = $util.intToYearMonthInterval($c, (byte)${it.endField});
+            $evPrim = $iu.intToYearMonthInterval($c, (byte)${it.startField}, (byte)${it.endField});
           """
       }
+    case DecimalType.Fixed(p, s) =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $iu.decimalToYearMonthInterval(
+            $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
+        """
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -2325,14 +2438,22 @@ case class Cast(
       """
   }
 
-  override def toString: String = s"cast($child as ${dataType.simpleString})"
+  override def prettyName: String = if (!isTryCast) {
+    "cast"
+  } else {
+    "try_cast"
+  }
+
+  override def toString: String = {
+    s"$prettyName($child as ${dataType.simpleString})"
+  }
 
   override def sql: String = dataType match {
     // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
     // type of casting can only be introduced by the analyzer, and can be omitted when converting
     // back to SQL query string.
     case _: ArrayType | _: MapType | _: StructType => child.sql
-    case _ => s"CAST(${child.sql} AS ${dataType.sql})"
+    case _ => s"${prettyName.toUpperCase(Locale.ROOT)}(${child.sql} AS ${dataType.sql})"
   }
 }
 
