@@ -90,6 +90,11 @@ public class DataTypes {
   public static final DataType LongType = LongType$.MODULE$;
 
   /**
+   * Gets the Int128Type object.
+   */
+  public static final DataType Int128Type = Int128Type$.MODULE$;
+
+  /**
    * Gets the ShortType object.
    */
   public static final DataType ShortType = ShortType$.MODULE$;
