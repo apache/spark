@@ -22,6 +22,11 @@ import org.apache.spark.sql.types.Int128;
 public final class Int128Math {
   private Int128Math() {}
 
+  public static boolean inLongRange(long high, long low)
+  {
+    return high == (low >> 63);
+  }
+
   public static int compareUnsigned(long aHigh, long aLow, long bHigh, long bLow) {
     int result = Long.compareUnsigned(aHigh, bHigh);
 
@@ -66,12 +71,35 @@ public final class Int128Math {
     return aHigh + bHigh + MoreMath.unsignedCarry(aLow, bLow);
   }
 
+  public static long addHighExact(long aHigh, long aLow, long bHigh, long bLow) {
+    long result = addHigh(aHigh, aLow, bHigh, bLow);
+
+    // HD 2-13 Overflow iff both arguments have the opposite sign of the result
+    if (((result ^ aHigh) & (result ^ bHigh)) < 0) {
+      throw new ArithmeticException("Integer overflow");
+    }
+
+    return result;
+  }
+
   public static long addLow(long aLow, long bLow) {
     return aLow + bLow;
   }
 
   public static long subtractHigh(long aHigh, long aLow, long bHigh, long bLow) {
     return aHigh - bHigh - MoreMath.unsignedBorrow(aLow, bLow);
+  }
+
+  public static long subtractHighExact(long aHigh, long aLow, long bHigh, long bLow) {
+    long result = subtractHigh(aHigh, aLow, bHigh, bLow);
+
+    // HD 2-13 Overflow iff the arguments have different signs and
+    // the sign of the result is different from the sign of x
+    if (((aHigh ^ bHigh) & (aHigh ^ result)) < 0) {
+      throw new ArithmeticException("Integer overflow");
+    }
+
+    return result;
   }
 
   public static long subtractLow(long aLow, long bLow) {
