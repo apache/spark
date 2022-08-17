@@ -171,7 +171,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.MINIMAL}")
       val e2 = intercept[HiveSQLException](exec(sql))
       assert(e2.getMessage ===
-        """Error running query: {"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":11,"fragment":"1 / "}]}""")
+        """Error running query: {"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012","messageParameters":{"config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":8,"stopIndex":12,"fragment":"1 / "}]}""")
 
       exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.STANDARD}")
       val e3 = intercept[HiveSQLException](exec(sql))
@@ -186,8 +186,8 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           |  "queryContext" : [ {
           |    "objectType" : "",
           |    "objectName" : "",
-          |    "startIndex" : 7,
-          |    "stopIndex" : 11,
+          |    "startIndex" : 8,
+          |    "stopIndex" : 12,
           |    "fragment" : "1 / "
           |  } ]
           |}""".stripMargin)

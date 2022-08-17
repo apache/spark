@@ -183,8 +183,10 @@ private[spark] object SparkThrowableHelper {
             g.writeStartObject()
             g.writeStringField("objectType", c.objectType())
             g.writeStringField("objectName", c.objectName())
-            g.writeNumberField("startIndex", c.startIndex())
-            g.writeNumberField("stopIndex", c.stopIndex())
+            val startIndex = c.startIndex() + 1
+            if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
+            val stopIndex = c.stopIndex() + 1
+            if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
             g.writeStringField("fragment", c.fragment())
             g.writeEndObject()
           }

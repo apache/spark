@@ -228,8 +228,8 @@ class SparkThrowableSuite extends SparkFunSuite {
     class TestQueryContext extends QueryContext {
       override val objectName = "v1"
       override val objectType = "VIEW"
-      override val startIndex = 1
-      override val stopIndex = 5
+      override val startIndex = 2
+      override val stopIndex = -1
       override val fragment = "1 / 0"
     }
     val e = new SparkArithmeticException(
@@ -246,7 +246,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
       """{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012",""" +
       """"messageParameters":{"config":"CONFIG"},"queryContext":[{"objectType":"VIEW",""" +
-      """"objectName":"v1","startIndex":1,"stopIndex":5,"fragment":"1 / 0"}]}""")
+      """"objectName":"v1","startIndex":3,"fragment":"1 / 0"}]}""")
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
       // scalastyle:off line.size.limit
       """{
@@ -259,8 +259,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |  "queryContext" : [ {
         |    "objectType" : "VIEW",
         |    "objectName" : "v1",
-        |    "startIndex" : 1,
-        |    "stopIndex" : 5,
+        |    "startIndex" : 3,
         |    "fragment" : "1 / 0"
         |  } ]
         |}""".stripMargin)
