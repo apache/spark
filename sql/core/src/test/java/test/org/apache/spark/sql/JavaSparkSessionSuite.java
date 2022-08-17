@@ -21,17 +21,16 @@ import org.apache.spark.sql.*;
 import org.junit.Test;
 
 public class JavaSparkSessionSuite {
-
   @Test
   public void conf() {
     SparkSession session = SparkSession.builder()
-      .master("local")
+      .master("local[*]")
+      .appName("testing")
       .conf("string", "")
       .conf("boolean", true)
       .conf("double", 0.0)
       .conf("long", 0L)
       .getOrCreate();
-
 
     assert(session.conf().get("string").equals(""));
     assert(session.conf().get("boolean").equals("true"));
