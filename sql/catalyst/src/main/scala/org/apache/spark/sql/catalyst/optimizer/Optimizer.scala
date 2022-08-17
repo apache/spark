@@ -86,7 +86,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
-        EliminateSorts,
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
@@ -1529,8 +1528,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
       applyLocally.lift(child).getOrElse(child)
     case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
-      j.copy(left = recursiveRemoveSort(originLeft, true),
-        right = recursiveRemoveSort(originRight, true))
+      j.copy(left = recursiveRemoveSort(originLeft, true, canEliminateThroughLocalLimit = true),
+        right = recursiveRemoveSort(originRight, true, canEliminateThroughLocalLimit = true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild, true))
   }
@@ -1541,7 +1540,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
    */
   private def recursiveRemoveSort(
       plan: LogicalPlan,
-      canRemoveGlobalSort: Boolean): LogicalPlan = {
+      canRemoveGlobalSort: Boolean,
+      canEliminateThroughLocalLimit: Boolean = false): LogicalPlan = {
     if (!plan.containsPattern(SORT)) {
       return plan
     }
@@ -1554,7 +1554,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
         // We should use `None` as the optNumPartitions so AQE can coalesce shuffle partitions.
         // This behavior is same with original global sort.
         RepartitionByExpression(sortOrder, recursiveRemoveSort(child, true), None)
-      case other if canEliminateSort(other) =>
+      case other if canEliminateSort(other, canEliminateThroughLocalLimit) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))
       case other if canEliminateGlobalSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, true)))
@@ -1562,9 +1562,11 @@ object EliminateSorts extends Rule[LogicalPlan] {
     }
   }
 
-  private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
+  private def canEliminateSort(
+      plan: LogicalPlan, canEliminateThroughLocalLimit: Boolean): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
+    case _: LocalLimit => canEliminateThroughLocalLimit
     case _ => false
   }
 

@@ -363,7 +363,7 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("should not remove orderBy in left join clause if there is an outer limit") {
+  test("Remove orderBy in left join clause if there is an outer limit") {
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)
     val projectPlanB = testRelationB.select($"d")
@@ -371,7 +371,9 @@ class EliminateSortsSuite extends AnalysisTest {
       .join(projectPlanB, LeftOuter)
       .limit(10)
     val optimized = Optimize.execute(joinPlan.analyze)
-    val correctAnswer = PushDownOptimizer.execute(joinPlan.analyze)
+    val correctAnswer = LocalLimit(10, projectPlan)
+      .join(projectPlanB, LeftOuter)
+      .limit(10).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -448,5 +450,41 @@ class EliminateSortsSuite extends AnalysisTest {
   test("SPARK-39867: Global limit should not inherit OrderPreservingUnaryNode") {
     val plan = testRelation.sortBy($"a".asc).limit(2).sortBy($"a".asc).analyze
     comparePlans(Optimize.execute(plan), plan)
+  }
+
+  test("SPARK-40050: Remove Sort if there is a LocalLimit between Join and Sort") {
+    val projectPlanA = testRelation.select($"a", $"b")
+    val unnecessaryOrderByPlanA = projectPlanA.orderBy($"a".asc)
+    val localLimitPlanA = LocalLimit(Literal(2), unnecessaryOrderByPlanA)
+
+    val projectPlanB = testRelationB.select($"d")
+    val unnecessaryOrderByPlanB = projectPlanB.orderBy($"d".asc)
+    val localLimitPlanB = LocalLimit(Literal(2), unnecessaryOrderByPlanB)
+
+    Seq(LeftOuter, RightOuter, Inner, Cross).foreach { joinType =>
+      val joinPlan = localLimitPlanA.join(localLimitPlanB, joinType).select($"a", $"d")
+      val correctAnswer =
+        LocalLimit(Literal(2), projectPlanA).join(LocalLimit(Literal(2), projectPlanB), joinType)
+          .select($"a", $"d")
+      comparePlans(Optimize.execute(joinPlan.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-40050: Should not remove Sort if there is a LocalLimit between Sort and Sort") {
+    val projectPlan = testRelation.select($"a", $"b")
+    val orderByAPlan = projectPlan.orderBy($"a".asc)
+    val localLimitPlan = LocalLimit(Literal(2), orderByAPlan)
+    val orderByBPlan = localLimitPlan.orderBy($"b".asc)
+
+    comparePlans(Optimize.execute(orderByBPlan.analyze), orderByBPlan.analyze)
+  }
+
+  test("SPARK-40050: Should not remove Sort if there is a LocalLimit between Aggregate and Sort") {
+    val projectPlan = testRelation.select($"a", $"b")
+    val orderByAPlan = projectPlan.orderBy($"a".asc)
+    val localLimitPlan = LocalLimit(Literal(2), orderByAPlan)
+    val aggPlan = localLimitPlan.groupBy($"a")(min($"b"))
+
+    comparePlans(Optimize.execute(aggPlan.analyze), aggPlan.analyze)
   }
 }
