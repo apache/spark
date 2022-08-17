@@ -316,6 +316,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(ShortType, 2)
   checkDefaultSize(IntegerType, 4)
   checkDefaultSize(LongType, 8)
+  checkDefaultSize(Int128Type, 16)
   checkDefaultSize(FloatType, 4)
   checkDefaultSize(DoubleType, 8)
   checkDefaultSize(DecimalType(10, 5), 8)
