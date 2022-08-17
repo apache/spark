@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
@@ -107,6 +106,6 @@ object EventLogTestHelper {
   }
 
   def convertEvent(event: SparkListenerEvent): String = {
-    compact(render(JsonProtocol.sparkEventToJson(event)))
+    JsonProtocol.sparkEventToJsonString(event)
   }
 }

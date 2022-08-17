@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, Cast, Expression, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
@@ -56,7 +57,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,1024]")
+      .master("local-cluster[2,1,512]")
+      .config(EXECUTOR_MEMORY.key, "512m")
       .appName("testing")
       .getOrCreate()
   }
@@ -68,6 +70,11 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     } finally {
       super.afterAll()
     }
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
   }
 
   /**

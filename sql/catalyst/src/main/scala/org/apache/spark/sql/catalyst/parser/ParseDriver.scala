@@ -144,7 +144,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
         throw new ParseException(Option(command), e.message, position, position,
-          e.errorClass, e.messageParameters)
+          e.errorClass, None, e.messageParameters)
     }
   }
 }
@@ -237,6 +237,7 @@ class ParseException(
     val start: Origin,
     val stop: Origin,
     errorClass: Option[String] = None,
+    errorSubClass: Option[String] = None,
     messageParameters: Array[String] = Array.empty)
   extends AnalysisException(
     message,
@@ -245,6 +246,7 @@ class ParseException(
     None,
     None,
     errorClass,
+    errorSubClass,
     messageParameters) {
 
   def this(message: String, ctx: ParserRuleContext) = {
@@ -256,10 +258,23 @@ class ParseException(
 
   def this(errorClass: String, messageParameters: Array[String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
-      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
       Some(errorClass),
+      None,
+      messageParameters)
+
+  def this(errorClass: String,
+           errorSubClass: String,
+           messageParameters: Array[String],
+           ctx: ParserRuleContext) =
+    this(Option(ParserUtils.command(ctx)),
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
+      ParserUtils.position(ctx.getStart),
+      ParserUtils.position(ctx.getStop),
+      Some(errorClass),
+      Some(errorSubClass),
       messageParameters)
 
   /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
@@ -271,10 +286,11 @@ class ParseException(
       messageParameters: Array[String]) =
     this(
       command,
-      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       start,
       stop,
       Some(errorClass),
+      None,
       messageParameters)
 
   override def getMessage: String = {
@@ -303,7 +319,7 @@ class ParseException(
     if (cmd.trim().isEmpty && errorClass.isDefined && errorClass.get == "PARSE_SYNTAX_ERROR") {
       new ParseException(Option(cmd), start, stop, "PARSE_EMPTY_STATEMENT", Array[String]())
     } else {
-      new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
+      new ParseException(Option(cmd), message, start, stop, errorClass, None, messageParameters)
     }
   }
 }

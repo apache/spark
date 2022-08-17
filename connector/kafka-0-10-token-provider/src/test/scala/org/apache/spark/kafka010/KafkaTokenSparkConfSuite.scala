@@ -18,11 +18,10 @@
 package org.apache.spark.kafka010
 
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_SSL, SSL}
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
+class KafkaTokenSparkConfSuite extends SparkFunSuite {
   private val identifier1 = "cluster1"
   private val identifier2 = "cluster2"
   private val authBootStrapServers = "127.0.0.1:0"

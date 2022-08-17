@@ -58,7 +58,7 @@ jobs:
 
                   // Iterator GitHub Checks in the PR
                   for await (const cr of checkRuns.data.check_runs) {
-                    if (cr.name == 'Build and test' && cr.conclusion != "action_required") {
+                    if (cr.name == 'Build' && cr.conclusion != "action_required") {
                       // text contains parameters to make request in JSON.
                       const params = JSON.parse(cr.output.text)
 

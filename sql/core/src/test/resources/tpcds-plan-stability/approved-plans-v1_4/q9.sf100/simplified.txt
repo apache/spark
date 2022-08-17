@@ -12,7 +12,7 @@ WholeStageCodegen (1)
                       Filter [ss_quantity]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
     ReusedSubquery [mergedValue] #1
     ReusedSubquery [mergedValue] #1
     Subquery #2
@@ -27,7 +27,7 @@ WholeStageCodegen (1)
                       Filter [ss_quantity]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
     ReusedSubquery [mergedValue] #2
     ReusedSubquery [mergedValue] #2
     Subquery #3
@@ -42,7 +42,7 @@ WholeStageCodegen (1)
                       Filter [ss_quantity]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
     ReusedSubquery [mergedValue] #3
     ReusedSubquery [mergedValue] #3
     Subquery #4
@@ -57,7 +57,7 @@ WholeStageCodegen (1)
                       Filter [ss_quantity]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
     ReusedSubquery [mergedValue] #4
     ReusedSubquery [mergedValue] #4
     Subquery #5
@@ -72,10 +72,10 @@ WholeStageCodegen (1)
                       Filter [ss_quantity]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_ext_discount_amt,ss_net_paid,ss_sold_date_sk]
     ReusedSubquery [mergedValue] #5
     ReusedSubquery [mergedValue] #5
     Filter [r_reason_sk]
       ColumnarToRow
         InputAdapter
-          Scan parquet default.reason [r_reason_sk]
+          Scan parquet spark_catalog.default.reason [r_reason_sk]

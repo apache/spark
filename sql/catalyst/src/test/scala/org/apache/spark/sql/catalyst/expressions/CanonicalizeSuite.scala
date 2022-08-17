@@ -171,13 +171,6 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-35742: Expression.semanticEquals should be symmetrical") {
-    val attr = AttributeReference("col", IntegerType)()
-    val expr = PromotePrecision(attr)
-    assert(expr.semanticEquals(attr))
-    assert(attr.semanticEquals(expr))
-  }
-
   test("SPARK-38030: Canonicalization should not remove nullability of AttributeReference" +
     " dataType") {
     val structType = StructType(Seq(StructField("name", StringType, nullable = false)))

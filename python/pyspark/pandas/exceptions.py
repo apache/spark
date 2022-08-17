@@ -69,10 +69,13 @@ class PandasNotImplementedError(NotImplementedError):
         method_name: Optional[str] = None,
         arg_name: Optional[str] = None,
         property_name: Optional[str] = None,
+        scalar_name: Optional[str] = None,
         deprecated: bool = False,
         reason: str = "",
     ):
-        assert (method_name is None) != (property_name is None)
+        assert [method_name is not None, property_name is not None, scalar_name is not None].count(
+            True
+        ) == 1
         self.class_name = class_name
         self.method_name = method_name
         self.arg_name = arg_name
@@ -95,6 +98,11 @@ class PandasNotImplementedError(NotImplementedError):
                     msg = "The method `{0}.{1}()` is not implemented{2}".format(
                         class_name, method_name, reason
                     )
+        elif scalar_name is not None:
+            msg = (
+                "The scalar `{0}.{1}` is not reimplemented in pyspark.pandas;"
+                " use `pd.{1}`.".format(class_name, scalar_name)
+            )
         else:
             if deprecated:
                 msg = (

@@ -83,11 +83,16 @@ trait AliasHelper {
     }
   }
 
-  protected def trimAliases(e: Expression): Expression = {
-    e.transformDown {
-      case Alias(child, _) => child
-      case MultiAlias(child, _) => child
+  protected def trimAliases(e: Expression): Expression = e match {
+    // The children of `CreateNamedStruct` may use `Alias` to carry metadata and we should not
+    // trim them.
+    case c: CreateNamedStruct => c.mapChildren {
+      case a: Alias if a.metadata != Metadata.empty => a
+      case other => trimAliases(other)
     }
+    case a @ Alias(child, _) => trimAliases(child)
+    case MultiAlias(child, _) => trimAliases(child)
+    case other => other.mapChildren(trimAliases)
   }
 
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {

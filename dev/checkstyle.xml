@@ -174,6 +174,12 @@
             <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
             <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.createTempDir\("/>
+            <property name="message"
+              value="Avoid using com.google.common.io.Files.createTempDir() due to CVE-2020-8908.
+                Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
+        </module>
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
         </module>

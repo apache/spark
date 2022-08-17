@@ -11,4 +11,4 @@ WholeStageCodegen (3)
                     HashAggregate [ss_sold_date_sk,ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk] [count(1),count(ss_sold_date_sk),max(ss_sold_date_sk),max(ss_sold_time_sk),max(ss_item_sk),max(ss_customer_sk),max(ss_cdemo_sk),max(ss_hdemo_sk),max(ss_addr_sk),max(ss_store_sk),max(ss_promo_sk),count,count,max,max,max,max,max,max,max,max,max,count,count,max,max,max,max,max,max,max,max,max]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_sold_date_sk]
+                          Scan parquet spark_catalog.default.store_sales [ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_sold_date_sk]

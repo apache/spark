@@ -608,7 +608,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
             .stop()
           assert(checkpointPath.listFiles().isEmpty,
             "SQLConf path is used even if user specified checkpointLoc: " +
-              s"${checkpointPath.listFiles()} is not empty")
+              s"${checkpointPath.listFiles().mkString("Locations(", ", ", ")")} is not empty")
           assert(userCheckpointPath.exists(),
             s"The user specified checkpointLoc (userCheckpointPath) is not created")
         }

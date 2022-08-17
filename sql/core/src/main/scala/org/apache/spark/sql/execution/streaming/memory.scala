@@ -257,7 +257,8 @@ case class MemoryStream[A : Encoder](
     val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
     if (offsetDiff < 0) {
-      sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      throw new IllegalStateException(
+        s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
     batches.trimStart(offsetDiff)

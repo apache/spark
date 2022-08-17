@@ -249,7 +249,7 @@ def build_spark_sbt(extra_profiles):
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = [
-        "test:package",  # Build test jars as some tests depend on them
+        "Test/package",  # Build test jars as some tests depend on them
         "streaming-kinesis-asl-assembly/assembly",
     ]
     profiles_and_goals = build_profiles + sbt_goals

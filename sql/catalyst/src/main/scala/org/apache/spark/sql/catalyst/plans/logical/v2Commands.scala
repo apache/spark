@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.{sources, AnalysisException}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, Unevaluable}
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
@@ -275,13 +276,12 @@ case class CreateTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def child: LogicalPlan = name
 
   override def tableName: Identifier = {
     assert(child.resolved)
-    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+    child.asInstanceOf[ResolvedIdentifier].identifier
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
@@ -302,7 +302,6 @@ case class CreateTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean) extends BinaryCommand with V2CreateTablePlan {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
@@ -310,7 +309,7 @@ case class CreateTableAsSelect(
 
   override def tableName: Identifier = {
     assert(left.resolved)
-    left.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+    left.asInstanceOf[ResolvedIdentifier].identifier
   }
 
   override lazy val resolved: Boolean = childrenResolved && {
@@ -345,13 +344,12 @@ case class ReplaceTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def child: LogicalPlan = name
 
   override def tableName: Identifier = {
     assert(child.resolved)
-    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+    child.asInstanceOf[ResolvedIdentifier].identifier
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
@@ -375,7 +373,6 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean) extends BinaryCommand with V2CreateTablePlan {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def tableSchema: StructType = query.schema
   override def left: LogicalPlan = name
@@ -390,7 +387,7 @@ case class ReplaceTableAsSelect(
 
   override def tableName: Identifier = {
     assert(name.resolved)
-    name.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+    name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
   override protected def withNewChildrenInternal(
@@ -541,7 +538,7 @@ case class DeleteFromTable(
  */
 case class DeleteFromTableWithFilters(
     table: LogicalPlan,
-    condition: Seq[sources.Filter]) extends LeafCommand
+    condition: Seq[Predicate]) extends LeafCommand
 
 /**
  * The logical plan of the UPDATE TABLE command.

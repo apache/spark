@@ -208,7 +208,7 @@ private[spark] object ExecutorMetricType {
     var numberOfMetrics = 0
     val definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
     metricGetters.foreach { m =>
-      (0 until m.names.length).foreach { idx =>
+      m.names.indices.foreach { idx =>
         definedMetricsAndOffset += (m.names(idx) -> (idx + numberOfMetrics))
       }
       numberOfMetrics += m.names.length

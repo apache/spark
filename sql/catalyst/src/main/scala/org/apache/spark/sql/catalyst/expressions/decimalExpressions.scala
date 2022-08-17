@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -104,23 +106,6 @@ object MakeDecimal {
 }
 
 /**
- * An expression used to wrap the children when promote the precision of DecimalType to avoid
- * promote multiple times.
- */
-case class PromotePrecision(child: Expression) extends UnaryExpression {
-  override def dataType: DataType = child.dataType
-  override def eval(input: InternalRow): Any = child.eval(input)
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    child.genCode(ctx)
-  override def prettyName: String = "promote_precision"
-  override def sql: String = child.sql
-  override lazy val preCanonicalized: Expression = child.preCanonicalized
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
-}
-
-/**
  * Rounds the decimal to given scale and check whether the decimal can fit in provided precision
  * or not. If not, if `nullOnOverflow` is `true`, it returns `null`; otherwise an
  * `ArithmeticException` is thrown.
@@ -128,7 +113,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 case class CheckOverflow(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -138,14 +123,10 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      origin.context)
+      getContextOrNull())
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      ctx.addReferenceObj("errCtx", origin.context)
-    } else {
-      "\"\""
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
@@ -163,13 +144,20 @@ case class CheckOverflow(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
 case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
-    nullOnOverflow: Boolean) extends UnaryExpression {
+    nullOnOverflow: Boolean,
+    context: SQLQueryContext) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -177,24 +165,20 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(origin.context)
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context)
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        origin.context)
+        context)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val errorContextCode = if (nullOnOverflow) {
-      ctx.addReferenceObj("errCtx", origin.context)
-    } else {
-      "\"\""
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -224,4 +208,109 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
+}
+
+/**
+ * An add expression for decimal values which is only used internally by Sum/Avg.
+ *
+ * Nota that, this expression does not check overflow which is different with `Add`. When
+ * aggregating values, Spark writes the aggregation buffer values to `UnsafeRow` via
+ * `UnsafeRowWriter`, which already checks decimal overflow, so we don't need to do it again in the
+ * add expression used by Sum/Avg.
+ */
+case class DecimalAddNoOverflowCheck(
+    left: Expression,
+    right: Expression,
+    override val dataType: DataType) extends BinaryOperator {
+  require(dataType.isInstanceOf[DecimalType])
+
+  override def inputType: AbstractDataType = DecimalType
+  override def symbol: String = "+"
+  private def decimalMethod: String = "$plus"
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any =
+    numeric.plus(input1, input2)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DecimalAddNoOverflowCheck =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * A divide expression for decimal values which is only used internally by Avg.
+ *
+ * It will fail when nullOnOverflow is false follows:
+ *   - left (sum in avg) is null due to over the max precision 38,
+ *     the right (count in avg) should never be null
+ *   - the result of divide is overflow
+ */
+case class DecimalDivideWithOverflowCheck(
+    left: Expression,
+    right: Expression,
+    override val dataType: DecimalType,
+    context: SQLQueryContext,
+    nullOnOverflow: Boolean)
+  extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
+  override def nullable: Boolean = nullOnOverflow
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
+  def decimalMethod: String = "$div"
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      if (nullOnOverflow)  {
+        null
+      } else {
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull())
+      }
+    } else {
+      val value2 = right.eval(input)
+      dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
+        .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
+          getContextOrNull())
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+    val nullHandling = if (nullOnOverflow) {
+      ""
+    } else {
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode);"
+    }
+
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+
+    // scalastyle:off line.size.limit
+    val code =
+      code"""
+         |${eval1.code}
+         |${eval2.code}
+         |boolean ${ev.isNull} = ${eval1.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (${eval1.isNull}) {
+         |  $nullHandling
+         |} else {
+         |  ${ev.value} = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+         |      ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+         |  ${ev.isNull} = ${ev.value} == null;
+         |}
+      """.stripMargin
+    // scalastyle:on line.size.limit
+    ev.copy(code = code)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }

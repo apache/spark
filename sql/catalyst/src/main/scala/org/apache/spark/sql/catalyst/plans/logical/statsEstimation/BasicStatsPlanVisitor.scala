@@ -102,9 +102,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitWindow(p: Window): Statistics = fallback(p)
 
-  override def visitSort(p: Sort): Statistics = {
-    BasicStatsPlanVisitor.visit(p.child)
-  }
+  override def visitSort(p: Sort): Statistics = fallback(p)
 
   override def visitTail(p: Tail): Statistics = {
     fallback(p)

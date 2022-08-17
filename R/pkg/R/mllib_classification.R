@@ -322,7 +322,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             }
 
             if (!is.null(lowerBoundsOnCoefficients)) {
-              if (class(lowerBoundsOnCoefficients) != "matrix") {
+              if (!is.matrix(lowerBoundsOnCoefficients)) {
                 stop("lowerBoundsOnCoefficients must be a matrix.")
               }
               row <- nrow(lowerBoundsOnCoefficients)
@@ -331,7 +331,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             }
 
             if (!is.null(upperBoundsOnCoefficients)) {
-              if (class(upperBoundsOnCoefficients) != "matrix") {
+              if (!is.matrix(upperBoundsOnCoefficients)) {
                 stop("upperBoundsOnCoefficients must be a matrix.")
               }
 

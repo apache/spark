@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
 
 /**
@@ -40,7 +41,7 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
         Seq(Row("p1", "v1"), Row("p2", "v2")))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p1')"), Row("p1", "v1"))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p3')"),
-        Row("p3", s"Table default.$v does not have property: p3"))
+        Row("p3", s"Table $SESSION_CATALOG_NAME.default.$v does not have property: p3"))
     }
   }
 

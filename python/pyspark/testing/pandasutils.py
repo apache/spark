@@ -18,7 +18,6 @@
 import functools
 import shutil
 import tempfile
-import unittest
 import warnings
 from contextlib import contextmanager
 from distutils.version import LooseVersion
@@ -32,9 +31,8 @@ from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.sqlutils import SQLTestUtils
-
+from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 tabulate_requirement_message = None
 try:
@@ -61,18 +59,11 @@ except ImportError as e:
 have_plotly = plotly_requirement_message is None
 
 
-class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
+class PandasOnSparkTestCase(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.spark = default_session()
+        super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
-
-    @classmethod
-    def tearDownClass(cls):
-        # We don't stop Spark session to reuse across all tests.
-        # The Spark session will be started and stopped at PyTest session level.
-        # Please see pyspark/pandas/conftest.py.
-        pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):

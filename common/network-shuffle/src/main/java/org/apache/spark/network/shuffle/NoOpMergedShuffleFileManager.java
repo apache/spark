@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -38,7 +39,7 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
   // This constructor is needed because we use this constructor to instantiate an implementation
   // of MergedShuffleFileManager using reflection.
   // See YarnShuffleService#newMergedShuffleFileManagerInstance.
-  public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
+  public NoOpMergedShuffleFileManager(TransportConf transportConf, File recoveryFile) {}
 
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {

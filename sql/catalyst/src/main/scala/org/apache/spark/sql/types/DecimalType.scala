@@ -126,7 +126,8 @@ object DecimalType extends AbstractDataType {
 
   val MAX_PRECISION = 38
   val MAX_SCALE = 38
-  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
+  val DEFAULT_SCALE = 18
+  val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, DEFAULT_SCALE)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
   val MINIMUM_ADJUSTED_SCALE = 6
 

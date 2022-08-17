@@ -166,52 +166,57 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage.contains("Cannot resolve column name c4"))
+      assert(e1.getMessage.contains(
+        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
+          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
     }
   }
 
   test("insert with column list - mismatched column list size") {
     val msgs = Seq("Cannot write to table due to mismatched user specified column size",
       "expected 3 columns but found")
-    def test: Unit = {
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false",
+      SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       withTable("t1") {
         val cols = Seq("c1", "c2", "c3")
         createTable("t1", cols, Seq("int", "long", "string"))
-        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
-        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
-        val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
-        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
+        Seq(
+          "INSERT INTO t1 (c1, c2) values(1, 2, 3)",
+          "INSERT INTO t1 (c1, c2) select 1, 2, 3",
+          "INSERT INTO t1 (c1, c2, c3) values(1, 2)",
+          "INSERT INTO t1 (c1, c2, c3) select 1, 2"
+        ).foreach { query =>
+          val e = intercept[AnalysisException](sql(query))
+          assert(e.getMessage.contains(msgs(0)) || e.getMessage.contains(msgs(1)))
+        }
       }
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-      test
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
-      test
     }
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "expected 2 columns but found"
+    val v2Msg = "Cannot write to table due to mismatched user specified column size"
     val cols = Seq("c1", "c2", "c3", "c4")
 
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
-        e1.getMessage.contains("expected 4 columns but found 1") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
+    withSQLConf(
+      SQLConf.ADD_MISSING_DEFAULT_COLUMN_VALUES_FOR_INSERTS_WITH_EXPLICIT_COLUMNS.key -> "false") {
+      withTable("t1") {
+        createTable("t1", cols, Seq.fill(4)("int"))
+        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
+        assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+          e1.getMessage.contains("expected 4 columns but found 1") ||
+          e1.getMessage.contains("not enough data columns") ||
+          e1.getMessage.contains(v2Msg))
       }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
+
+      withTable("t1") {
+        createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
+        val e1 = intercept[AnalysisException] {
+          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
+        }
+        assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+          e1.getMessage.contains("not enough data columns") ||
+          e1.getMessage.contains(v2Msg))
+      }
     }
   }
 
@@ -314,7 +319,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
             }.getMessage
-            assert(errorMsg.contains("""Invalid input syntax for type "INT": 'ansi'"""))
+            assert(errorMsg.contains(
+              """The value 'ansi' of the type "STRING" cannot be cast to "INT""""))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)

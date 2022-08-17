@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -142,15 +142,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("select (select 's' as s limit 0) as b"),
       Array(Row(null))
-    )
-  }
-
-  test("runtime error when the number of rows is greater than 1") {
-    val error2 = intercept[RuntimeException] {
-      sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
-    }
-    assert(error2.getMessage.contains(
-      "more than one row returned by a subquery used as an expression")
     )
   }
 
@@ -896,8 +887,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.getErrorClass == "MISSING_COLUMN")
-      assert(e.messageParameters.sameElements(Array("a", "t.i, t.j")))
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.sameElements(Array("`a`", "`t`.`i`, `t`.`j`")))
     }
   }
 
@@ -2183,6 +2174,106 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
+    }
+  }
+
+  test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |     SELECT date_add('2022-06-01', 0)
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+    checkAnswer(
+      sql("""
+            |SELECT *
+            |FROM (
+            |    SELECT '2022-06-01' AS c1
+            |) a
+            |WHERE c1 IN (
+            |    SELECT date_add(a.c1.k1, 0)
+            |    FROM (
+            |        SELECT named_struct('k1', '2022-06-01') AS c1
+            |    ) a
+            |)
+            |""".stripMargin),
+      Row("2022-06-01"))
+  }
+
+  test("SPARK-39511: Push limit 1 to right side if join type is Left Semi/Anti") {
+    withTable("t1", "t2") {
+      withTempView("v1") {
+        spark.sql("CREATE TABLE t1(id int) using parquet")
+        spark.sql("CREATE TABLE t2(id int, type string) using parquet")
+        spark.sql("CREATE TEMP VIEW v1 AS SELECT id, 't' AS type FROM t1")
+        val df = spark.sql("SELECT * FROM v1 WHERE type IN (SELECT type FROM t2)")
+        val join =
+          df.queryExecution.sparkPlan.collectFirst { case b: BroadcastNestedLoopJoinExec => b }
+        assert(join.nonEmpty)
+        assert(join.head.right.isInstanceOf[LocalLimitExec])
+        assert(join.head.right.asInstanceOf[LocalLimitExec].limit === 1)
+      }
+    }
+  }
+
+  test("SPARK-39672: Fix removing project before filter with correlated subquery") {
+    withTempView("v1", "v2") {
+      Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").createTempView("v1")
+      Seq((1, 3, 5), (4, 5, 6)).toDF("a", "b", "c").createTempView("v2")
+
+      def findProject(df: DataFrame): Seq[Project] = {
+        df.queryExecution.optimizedPlan.collect {
+          case p: Project => p
+        }
+      }
+
+      // project before filter cannot be removed since subquery has conflicting attributes
+      // with outer reference
+      val df1 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.a,
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.a=v2.a) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.a=v2.a and t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+      checkAnswer(df1, Row(1, 2, 5))
+      assert(findProject(df1).size == 4)
+
+      // project before filter can be removed when there are no conflicting attributes
+      val df2 = sql(
+        """
+         |select * from
+         |(
+         |select
+         |v1.b,
+         |v2.c
+         |from v1
+         |inner join v2
+         |on v1.b=v2.c) t3
+         |where not exists (
+         |  select 1
+         |  from v2
+         |  where t3.b=v2.b and t3.c=v2.c
+         |)
+         |""".stripMargin)
+
+      checkAnswer(df2, Row(5, 5))
+      assert(findProject(df2).size == 3)
     }
   }
 }

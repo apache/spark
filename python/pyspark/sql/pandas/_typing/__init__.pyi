@@ -32,9 +32,11 @@ from types import FunctionType
 from pyspark.sql._typing import LiteralType
 from pandas.core.frame import DataFrame as PandasDataFrame
 from pandas.core.series import Series as PandasSeries
+from numpy import ndarray as NDArray
 
 import pyarrow
 
+ArrayLike = NDArray
 DataFrameLike = PandasDataFrame
 SeriesLike = PandasSeries
 DataFrameOrSeriesLike = Union[DataFrameLike, SeriesLike]

@@ -28,7 +28,7 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
  * information. There's no state kept in this class, so it's ok to have multiple instances
  * of it in an application.
  */
-class DiagnosticStore(store: KVStore) {
+private[spark] class DiagnosticStore(store: KVStore) {
 
   def diagnosticsList(offset: Int, length: Int): Seq[ExecutionDiagnosticData] = {
     KVUtils.viewToSeq(store.view(classOf[ExecutionDiagnosticData]).skip(offset).max(length))
@@ -51,7 +51,7 @@ class DiagnosticStore(store: KVStore) {
 }
 
 /* Represents the diagnostic data of a SQL execution */
-class ExecutionDiagnosticData(
+private[spark] class ExecutionDiagnosticData(
     @KVIndexParam val executionId: Long,
     val physicalPlan: String,
     val submissionTime: Long,
@@ -59,7 +59,7 @@ class ExecutionDiagnosticData(
     val errorMessage: Option[String])
 
 /* Represents the plan change of an adaptive execution */
-class AdaptiveExecutionUpdate(
+private[spark] class AdaptiveExecutionUpdate(
     @KVIndexParam("id")
     val executionId: Long,
     @KVIndexParam(value = "updateTime", parent = "id")

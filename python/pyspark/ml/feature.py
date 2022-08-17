@@ -968,7 +968,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
 
     def __init__(self, *args: Any):
         super(_CountVectorizerParams, self).__init__(*args)
-        self._setDefault(minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False)
+        self._setDefault(minTF=1.0, minDF=1.0, maxDF=2**63 - 1, vocabSize=1 << 18, binary=False)
 
     @since("1.6.0")
     def getMinTF(self) -> float:
@@ -1077,7 +1077,7 @@ class CountVectorizer(
         *,
         minTF: float = 1.0,
         minDF: float = 1.0,
-        maxDF: float = 2 ** 63 - 1,
+        maxDF: float = 2**63 - 1,
         vocabSize: int = 1 << 18,
         binary: bool = False,
         inputCol: Optional[str] = None,
@@ -1099,7 +1099,7 @@ class CountVectorizer(
         *,
         minTF: float = 1.0,
         minDF: float = 1.0,
-        maxDF: float = 2 ** 63 - 1,
+        maxDF: float = 2**63 - 1,
         vocabSize: int = 1 << 18,
         binary: bool = False,
         inputCol: Optional[str] = None,

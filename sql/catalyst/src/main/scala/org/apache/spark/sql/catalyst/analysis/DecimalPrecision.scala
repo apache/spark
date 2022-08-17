@@ -34,16 +34,7 @@ import org.apache.spark.sql.types._
  *
  *   Operation    Result Precision                        Result Scale
  *   ------------------------------------------------------------------------
- *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
- *   e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
- *   e1 * e2      p1 + p2 + 1                             s1 + s2
- *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
- *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
  *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
- *
- * When `spark.sql.decimalOperations.allowPrecisionLoss` is set to true, if the precision / scale
- * needed are out of the range of available values, the scale is reduced up to 6, in order to
- * prevent the truncation of the integer part of the decimals.
  *
  * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
  * precision, do the math on unlimited-precision numbers, then introduce casts back to the
@@ -60,7 +51,7 @@ import org.apache.spark.sql.types._
  */
 // scalastyle:on
 object DecimalPrecision extends TypeCoercionRule {
-  import scala.math.{max, min}
+  import scala.math.max
 
   private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
@@ -75,131 +66,16 @@ object DecimalPrecision extends TypeCoercionRule {
     DecimalType.bounded(range + scale, scale)
   }
 
-  private def promotePrecision(e: Expression, dataType: DataType): Expression = {
-    PromotePrecision(Cast(e, dataType))
-  }
-
   override def transform: PartialFunction[Expression, Expression] = {
     decimalAndDecimal()
       .orElse(integralAndDecimalLiteral)
       .orElse(nondecimalAndDecimal(conf.literalPickMinimumPrecision))
   }
 
-  private[catalyst] def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
-    decimalAndDecimal(conf.decimalOperationsAllowPrecisionLoss, !conf.ansiEnabled)
-  }
-
-  /** Decimal precision promotion for +, -, *, /, %, pmod, and binary comparison. */
-  private[catalyst] def decimalAndDecimal(allowPrecisionLoss: Boolean, nullOnOverflow: Boolean)
-    : PartialFunction[Expression, Expression] = {
+  /** Decimal precision promotion for  binary comparison. */
+  private def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
-
-    // Skip nodes who is already promoted
-    case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
-
-    case a @ Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultScale = max(s1, s2)
-      val resultType = if (allowPrecisionLoss) {
-        DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
-          resultScale)
-      } else {
-        DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
-      }
-      CheckOverflow(
-        a.copy(left = promotePrecision(e1, resultType), right = promotePrecision(e2, resultType)),
-        resultType, nullOnOverflow)
-
-    case s @ Subtract(e1 @ DecimalType.Expression(p1, s1),
-        e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultScale = max(s1, s2)
-      val resultType = if (allowPrecisionLoss) {
-        DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
-          resultScale)
-      } else {
-        DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
-      }
-      CheckOverflow(
-        s.copy(left = promotePrecision(e1, resultType), right = promotePrecision(e2, resultType)),
-        resultType, nullOnOverflow)
-
-    case m @ Multiply(
-        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (allowPrecisionLoss) {
-        DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
-      } else {
-        DecimalType.bounded(p1 + p2 + 1, s1 + s2)
-      }
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(
-        m.copy(left = promotePrecision(e1, widerType), right = promotePrecision(e2, widerType)),
-        resultType, nullOnOverflow)
-
-    case d @ Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (allowPrecisionLoss) {
-        // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
-        // Scale: max(6, s1 + p2 + 1)
-        val intDig = p1 - s1 + s2
-        val scale = max(DecimalType.MINIMUM_ADJUSTED_SCALE, s1 + p2 + 1)
-        val prec = intDig + scale
-        DecimalType.adjustPrecisionScale(prec, scale)
-      } else {
-        var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
-        var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
-        val diff = (intDig + decDig) - DecimalType.MAX_SCALE
-        if (diff > 0) {
-          decDig -= diff / 2 + 1
-          intDig = DecimalType.MAX_SCALE - decDig
-        }
-        DecimalType.bounded(intDig + decDig, decDig)
-      }
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(
-        d.copy(left = promotePrecision(e1, widerType), right = promotePrecision(e2, widerType)),
-        resultType, nullOnOverflow)
-
-    case r @ Remainder(
-        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (allowPrecisionLoss) {
-        DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-      } else {
-        DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-      }
-      // resultType may have lower precision, so we cast them into wider type first.
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(
-        r.copy(left = promotePrecision(e1, widerType), right = promotePrecision(e2, widerType)),
-        resultType, nullOnOverflow)
-
-    case p @ Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (allowPrecisionLoss) {
-        DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-      } else {
-        DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-      }
-      // resultType may have lower precision, so we cast them into wider type first.
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(
-        p.copy(left = promotePrecision(e1, widerType), right = promotePrecision(e2, widerType)),
-        resultType, nullOnOverflow)
-
-    case expr @ IntegralDivide(
-        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      val promotedExpr = expr.copy(
-        left = promotePrecision(e1, widerType),
-        right = promotePrecision(e2, widerType))
-      if (expr.dataType.isInstanceOf[DecimalType]) {
-        // This follows division rule
-        val intDig = p1 - s1 + s2
-        // No precision loss can happen as the result scale is 0.
-        // Overflow can happen only in the promote precision of the operands, but if none of them
-        // overflows in that phase, no overflow can happen, but CheckOverflow is needed in order
-        // to return a decimal with the proper scale and precision
-        CheckOverflow(promotedExpr, DecimalType.bounded(intDig, 0), nullOnOverflow)
-      } else {
-        promotedExpr
-      }
 
     case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
     e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>

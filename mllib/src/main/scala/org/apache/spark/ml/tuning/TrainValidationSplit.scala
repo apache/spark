@@ -372,7 +372,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
           "To save the sub-models, try rerunning fitting with collectSubModels set to true.")
         val subModelsPath = new Path(path, "subModels")
-        for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
+        for (paramIndex <- instance.getEstimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
         }
@@ -399,7 +399,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.ofDim[Model[_]](estimatorParamMaps.length)
-        for (paramIndex <- 0 until estimatorParamMaps.length) {
+        for (paramIndex <- estimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =
             DefaultParamsReader.loadParamsInstance(modelPath, sc)

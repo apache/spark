@@ -278,10 +278,8 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
             """
             parts = clazz.split(".")
             module = ".".join(parts[:-1])
-            m = __import__(module)
-            for comp in parts[1:]:
-                m = getattr(m, comp)
-            return m
+            m = __import__(module, fromlist=[parts[-1]])
+            return getattr(m, parts[-1])
 
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.

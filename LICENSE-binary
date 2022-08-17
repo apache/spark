@@ -546,6 +546,7 @@ jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/
 jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
+com.github.jnr:jnr-posix
 
 
 Public Domain

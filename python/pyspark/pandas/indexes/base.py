@@ -1163,11 +1163,11 @@ class Index(IndexOpsMixin):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df
+        >>> df  # doctest: +SKIP
                max_speed  shield
         cobra          1       2
         viper          4       5
-        NaN            7       8
+        None           7       8
 
         >>> df.index.dropna()
         Index(['cobra', 'viper'], dtype='object')

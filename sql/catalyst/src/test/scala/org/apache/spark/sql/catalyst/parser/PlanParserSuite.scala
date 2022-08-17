@@ -1296,10 +1296,15 @@ class PlanParserSuite extends AnalysisTest {
         Some(UnresolvedFunction(Seq("current_date"), Nil, isDistinct = false)),
         None)))
 
+    testTimestamp("(SELECT current_date())", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(ScalarSubquery(Project(UnresolvedAlias(UnresolvedFunction(
+          Seq("current_date"), Nil, isDistinct = false)) :: Nil, OneRowRelation()))),
+        None)))
+
     intercept("SELECT * FROM a.b.c TIMESTAMP AS OF col",
       "timestamp expression cannot refer to any columns")
-    intercept("SELECT * FROM a.b.c TIMESTAMP AS OF (select 1)",
-      "timestamp expression cannot contain subqueries")
   }
 
   test("PERCENTILE_CONT & PERCENTILE_DISC") {
@@ -1323,6 +1328,12 @@ class PlanParserSuite extends AnalysisTest {
     )
 
     assertPercentilePlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
+      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
+    )
+
+    assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
       PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
@@ -1330,8 +1341,14 @@ class PlanParserSuite extends AnalysisTest {
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      new PercentileDisc(UnresolvedAttribute("col"),
+      PercentileDisc(UnresolvedAttribute("col"),
         Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col) FILTER (WHERE id > 10)",
+      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression(false, Some(GreaterThan(UnresolvedAttribute("id"), Literal(10))))
     )
   }
 }

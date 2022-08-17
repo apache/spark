@@ -42,62 +42,55 @@ import org.apache.spark.unsafe.types.UTF8String;
  * These utilities are mostly used to convert ColumnVectors into other formats.
  */
 public class ColumnVectorUtils {
+
   /**
-   * Populates the entire `col` with `row[fieldIdx]`
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
    */
-  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
-    int capacity = col.capacity;
+  public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
     DataType t = col.dataType();
 
     if (row.isNullAt(fieldIdx)) {
-      col.putNulls(0, capacity);
+      col.setNull();
     } else {
       if (t == DataTypes.BooleanType) {
-        col.putBooleans(0, capacity, row.getBoolean(fieldIdx));
+        col.setBoolean(row.getBoolean(fieldIdx));
       } else if (t == DataTypes.BinaryType) {
-        col.putByteArray(0, row.getBinary(fieldIdx));
+        col.setBinary(row.getBinary(fieldIdx));
       } else if (t == DataTypes.ByteType) {
-        col.putBytes(0, capacity, row.getByte(fieldIdx));
+        col.setByte(row.getByte(fieldIdx));
       } else if (t == DataTypes.ShortType) {
-        col.putShorts(0, capacity, row.getShort(fieldIdx));
+        col.setShort(row.getShort(fieldIdx));
       } else if (t == DataTypes.IntegerType) {
-        col.putInts(0, capacity, row.getInt(fieldIdx));
+        col.setInt(row.getInt(fieldIdx));
       } else if (t == DataTypes.LongType) {
-        col.putLongs(0, capacity, row.getLong(fieldIdx));
+        col.setLong(row.getLong(fieldIdx));
       } else if (t == DataTypes.FloatType) {
-        col.putFloats(0, capacity, row.getFloat(fieldIdx));
+        col.setFloat(row.getFloat(fieldIdx));
       } else if (t == DataTypes.DoubleType) {
-        col.putDoubles(0, capacity, row.getDouble(fieldIdx));
+        col.setDouble(row.getDouble(fieldIdx));
       } else if (t == DataTypes.StringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
-        byte[] bytes = v.getBytes();
-        for (int i = 0; i < capacity; i++) {
-          col.putByteArray(i, bytes);
-        }
+        col.setUtf8String(v);
       } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType)t;
+        DecimalType dt = (DecimalType) t;
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
-          col.putInts(0, capacity, (int)d.toUnscaledLong());
+          col.setInt((int)d.toUnscaledLong());
         } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
-          col.putLongs(0, capacity, d.toUnscaledLong());
+          col.setLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
           byte[] bytes = integer.toByteArray();
-          for (int i = 0; i < capacity; i++) {
-            col.putByteArray(i, bytes, 0, bytes.length);
-          }
+          col.setBinary(bytes);
         }
       } else if (t instanceof CalendarIntervalType) {
-        CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
-        col.getChild(0).putInts(0, capacity, c.months);
-        col.getChild(1).putInts(0, capacity, c.days);
-        col.getChild(2).putLongs(0, capacity, c.microseconds);
+        // The value of `numRows` is irrelevant.
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
-        col.putInts(0, capacity, row.getInt(fieldIdx));
+        col.setInt(row.getInt(fieldIdx));
       } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
         t instanceof DayTimeIntervalType) {
-        col.putLongs(0, capacity, row.getLong(fieldIdx));
+        col.setLong(row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));

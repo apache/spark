@@ -103,8 +103,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      "MISSING_COLUMN",
-      Array("tBl.a", "TbL.a"))
+      "UNRESOLVED_COLUMN",
+      Array("`tBl`.`a`", "`TbL`.`a`"))
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -711,8 +711,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      "MISSING_COLUMN",
-      Array("y", "t.x"))
+      "UNRESOLVED_COLUMN",
+      Array("`y`", "`t`.`x`"))
   }
 
   test("CTE with non-matching column alias") {
@@ -1149,8 +1149,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),
-      "MISSING_COLUMN",
-      Array("c.y", "x"))
+      "UNRESOLVED_COLUMN",
+      Array("`c`.`y`", "`x`"))
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
@@ -1170,10 +1170,60 @@ class AnalysisSuite extends AnalysisTest with Matchers {
            |WITH t as (SELECT true c, false d)
            |SELECT (t.c AND t.d) c
            |FROM t
-           |GROUP BY t.c
+           |GROUP BY t.c, t.d
            |HAVING ${func}(c) > 0d""".stripMargin),
         Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
         false)
     }
+  }
+
+  test("SPARK-39354: should be `Table or view not found`") {
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
+         |SELECT *
+         |FROM t1
+         |JOIN t2 ON t1.user_id = t2.user_id
+         |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
+      Seq(s"Table or view not found: t2"),
+      false)
+  }
+
+  test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
+    val innerRelation = SubqueryAlias("src1", testRelation)
+    val outerRelation = SubqueryAlias("src2", testRelation)
+    val ref1 = testRelation.output.head
+
+    val subPlan = getAnalyzer.execute(
+      Project(
+        Seq(UnresolvedStar(None)),
+        Filter.apply(
+          Exists(
+            Filter.apply(
+              EqualTo(
+                OuterReference(ref1),
+                ref1),
+              innerRelation
+            )
+          ),
+          outerRelation
+        )))
+
+    val finalPlan = {
+      Union.apply(
+        Project(
+          Seq(UnresolvedStar(None)),
+          subPlan
+        ),
+        Filter.apply(
+          Exists(
+            subPlan
+          ),
+          subPlan
+        )
+      )
+    }
+
+    assertAnalysisSuccess(finalPlan)
   }
 }

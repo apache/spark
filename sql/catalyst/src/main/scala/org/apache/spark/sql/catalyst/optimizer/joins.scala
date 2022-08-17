@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -139,6 +139,17 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *   SELECT t1.c1, max(t1.c2) FROM t1 GROUP BY t1.c1
  * }}}
  *
+ * 3. Remove outer join if:
+ *   - For a left outer join with only left-side columns being selected and the right side join
+ *     keys are unique.
+ *   - For a right outer join with only right-side columns being selected and the left side join
+ *     keys are unique.
+ *
+ * {{{
+ *   SELECT t1.* FROM t1 LEFT JOIN (SELECT DISTINCT c1 as c1 FROM t) t2 ON t1.c1 = t2.c1  ==>
+ *   SELECT t1.* FROM t1
+ * }}}
+ *
  * This rule should be executed before pushing down the Filter
  */
 object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -211,6 +222,15 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
         if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
           allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = right))
+
+    case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
+        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+          p.references.subsetOf(left.outputSet) =>
+      p.copy(child = left)
+    case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
+        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+          p.references.subsetOf(right.outputSet) =>
+      p.copy(child = right)
   }
 }
 

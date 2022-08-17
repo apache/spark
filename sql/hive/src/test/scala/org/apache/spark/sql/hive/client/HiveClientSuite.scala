@@ -62,7 +62,6 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     System.gc() // Hack to avoid SEGV on some JVM versions.
     val hadoopConf = new Configuration()
     hadoopConf.set("test", "success")
-    hadoopConf.set("hive.stats.autogather", "true")
     client = buildClient(hadoopConf)
     if (versionSpark != null) versionSpark.reset()
     versionSpark = TestHiveVersion(client)
@@ -896,7 +895,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.0/spec.html#Logical+Types
+    // https://avro.apache.org/docs/1.11.1/spec.html#Logical+Types
     val avroSchema =
     """{
       |  "name": "test_record",

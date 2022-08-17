@@ -24,10 +24,13 @@ from pyspark.serializers import read_int
 
 class DaemonTests(unittest.TestCase):
     def connect(self, port):
-        from socket import socket, AF_INET, SOCK_STREAM
+        from socket import socket, AF_INET, AF_INET6, SOCK_STREAM
 
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.connect(("127.0.0.1", port))
+        family, host = AF_INET, "127.0.0.1"
+        if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+            family, host = AF_INET6, "::1"
+        sock = socket(family, SOCK_STREAM)
+        sock.connect((host, port))
         # send a split index of -1 to shutdown the worker
         sock.send(b"\xFF\xFF\xFF\xFF")
         sock.close()

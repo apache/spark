@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -63,6 +64,9 @@ public class ConstantColumnVector extends ColumnVector {
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childData = new ConstantColumnVector[3];
+      this.childData[0] = new ConstantColumnVector(1, DataTypes.IntegerType);
+      this.childData[1] = new ConstantColumnVector(1, DataTypes.IntegerType);
+      this.childData[2] = new ConstantColumnVector(1, DataTypes.LongType);
     } else {
       this.childData = null;
     }
@@ -293,5 +297,14 @@ public class ConstantColumnVector extends ColumnVector {
    */
   public void setChild(int ordinal, ConstantColumnVector value) {
     childData[ordinal] = value;
+  }
+
+  /**
+   * Sets the CalendarInterval `value` for all rows
+   */
+  public void setCalendarInterval(CalendarInterval value) {
+    this.childData[0].setInt(value.months);
+    this.childData[1].setInt(value.days);
+    this.childData[2].setLong(value.microseconds);
   }
 }

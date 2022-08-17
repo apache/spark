@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import sun.util.calendar.ZoneInfo
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -158,11 +159,19 @@ object DateTimeUtils {
    * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
    * @return A `java.sql.Timestamp` from number of micros since epoch.
    */
-  def toJavaTimestamp(micros: Long): Timestamp = {
-    val rebasedMicros = rebaseGregorianToJulianMicros(micros)
-    val seconds = Math.floorDiv(rebasedMicros, MICROS_PER_SECOND)
+  def toJavaTimestamp(micros: Long): Timestamp =
+    toJavaTimestampNoRebase(rebaseGregorianToJulianMicros(micros))
+
+  /**
+   * Converts microseconds since the epoch to an instance of `java.sql.Timestamp`.
+   *
+   * @param micros The number of microseconds since 1970-01-01T00:00:00.000000Z.
+   * @return A `java.sql.Timestamp` from number of micros since epoch.
+   */
+  def toJavaTimestampNoRebase(micros: Long): Timestamp = {
+    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
     val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
-    val nanos = (rebasedMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
     ts.setNanos(nanos.toInt)
     ts
   }
@@ -186,10 +195,18 @@ object DateTimeUtils {
    *          Gregorian calendars.
    * @return The number of micros since epoch from `java.sql.Timestamp`.
    */
-  def fromJavaTimestamp(t: Timestamp): Long = {
-    val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-    rebaseJulianToGregorianMicros(micros)
-  }
+  def fromJavaTimestamp(t: Timestamp): Long =
+    rebaseJulianToGregorianMicros(fromJavaTimestampNoRebase(t))
+
+  /**
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z.
+   *
+   * @param t an instance of `java.sql.Timestamp`.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
+   */
+  def fromJavaTimestampNoRebase(t: Timestamp): Long =
+    millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
 
   /**
    * Converts an Java object to microseconds.
@@ -448,17 +465,20 @@ object DateTimeUtils {
     }
   }
 
-  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId, errorContext: String = ""): Long = {
+  def stringToTimestampAnsi(
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      context: SQLQueryContext = null): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
-      throw QueryExecutionErrors.cannotCastToDateTimeError(
-        s, StringType, TimestampType, errorContext)
+      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
+        s, StringType, TimestampType, context)
     }
   }
 
-  def doubleToTimestampAnsi(d: Double, errorContext: String): Long = {
+  def doubleToTimestampAnsi(d: Double, context: SQLQueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
-      throw QueryExecutionErrors.cannotCastToDateTimeError(
-        d, DoubleType, TimestampType, errorContext)
+      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
+        d, DoubleType, TimestampType, context)
     } else {
       DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
@@ -505,10 +525,12 @@ object DateTimeUtils {
     stringToTimestampWithoutTimeZone(s, true)
   }
 
-  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String, errorContext: String): Long = {
+  def stringToTimestampWithoutTimeZoneAnsi(
+      s: UTF8String,
+      context: SQLQueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
-      throw QueryExecutionErrors.cannotCastToDateTimeError(
-        s, StringType, TimestampNTZType, errorContext)
+      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
+        s, StringType, TimestampNTZType, context)
     }
   }
 
@@ -547,7 +569,7 @@ object DateTimeUtils {
   /**
    * Converts the local date to the number of days since 1970-01-01.
    */
-  def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
+  def localDateToDays(localDate: LocalDate): Int = MathUtils.toIntExact(localDate.toEpochDay)
 
   /**
    * Obtains an instance of `java.time.LocalDate` from the epoch day count.
@@ -624,10 +646,12 @@ object DateTimeUtils {
     }
   }
 
-  def stringToDateAnsi(s: UTF8String, errorContext: String = ""): Int = {
+  def stringToDateAnsi(
+      s: UTF8String,
+      context: SQLQueryContext = null): Int = {
     stringToDate(s).getOrElse {
-      throw QueryExecutionErrors.cannotCastToDateTimeError(
-        s, StringType, DateType, errorContext)
+      throw QueryExecutionErrors.invalidInputInCastToDatetimeError(
+        s, StringType, DateType, context)
     }
   }
 

@@ -114,9 +114,13 @@ case class ShowCreateTableExec(
   }
 
   private def showTableLocation(table: Table, builder: StringBuilder): Unit = {
-    Option(table.properties.get(TableCatalog.PROP_LOCATION))
-      .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
+    val isManagedOption = Option(table.properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
+    // Only generate LOCATION clause if it's not managed.
+    if (isManagedOption.forall(_.equalsIgnoreCase("false"))) {
+      Option(table.properties.get(TableCatalog.PROP_LOCATION))
+        .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
+        .foreach(builder.append)
+    }
   }
 
   private def showTableProperties(
@@ -129,7 +133,7 @@ case class ShowCreateTableExec(
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
         && !tableOptions.contains(key))
     if (showProps.nonEmpty) {
-      val props = showProps.toSeq.sortBy(_._1).map {
+      val props = conf.redactOptions(showProps.toMap).toSeq.sortBy(_._1).map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }

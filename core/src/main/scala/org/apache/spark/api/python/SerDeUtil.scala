@@ -48,7 +48,7 @@ private[spark] object SerDeUtil extends Logging {
   // This should be called before trying to unpickle array.array from Python
   // In cluster mode, this should be put in closure
   def initialize(): Unit = {
-    synchronized{
+    synchronized {
       if (!initialized) {
         Unpickler.registerConstructor("__builtin__", "bytearray", new ByteArrayConstructor())
         Unpickler.registerConstructor("builtins", "bytearray", new ByteArrayConstructor())

@@ -22,13 +22,13 @@ WholeStageCodegen (4)
                                           Filter [c_acctbal,c_phone]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.customer [c_phone,c_acctbal]
+                                                Scan parquet spark_catalog.default.customer [c_phone,c_acctbal]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.customer [c_custkey,c_phone,c_acctbal]
+                              Scan parquet spark_catalog.default.customer [c_custkey,c_phone,c_acctbal]
                         InputAdapter
                           BroadcastExchange #4
                             WholeStageCodegen (1)
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.orders [o_custkey]
+                                  Scan parquet spark_catalog.default.orders [o_custkey]

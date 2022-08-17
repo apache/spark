@@ -85,7 +85,7 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
 
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery(Symbol("tableAlias"))),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery("tableAlias")),
       ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
@@ -99,7 +99,7 @@ class ResolveHintsSuite extends AnalysisTest {
   test("do not traverse past subquery alias") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("table"), table("table").where($"a" > 1)
-        .subquery(Symbol("tableAlias"))),
+        .subquery("tableAlias")),
       testRelation.where($"a" > 1).analyze,
       caseSensitive = false)
   }

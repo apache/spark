@@ -17,23 +17,20 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.util.Locale
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.datasources.{V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -76,7 +73,14 @@ case class InsertIntoHiveTable(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]
+  ) extends SaveAsHiveFile with V1WriteCommand with V1WritesHiveUtils {
+
+  override def requiredOrdering: Seq[SortOrder] = {
+    val partitionColumns = getDynamicPartitionColumns(table, partition, query)
+    val options = getOptionsWithHiveBucketWrite(table.bucketSpec)
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+  }
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
@@ -133,53 +137,8 @@ case class InsertIntoHiveTable(
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
-    val numStaticPartitions = partition.values.count(_.nonEmpty)
-    val partitionSpec = partition.map {
-      case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-      case (key, Some(value)) => key -> value
-      case (key, None) => key -> ""
-    }
-
-    // All partition column names in the format of "<column name 1>/<column name 2>/..."
-    val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
-    val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
-
-    // By this time, the partition map must match the table's partition columns
-    if (partitionColumnNames.toSet != partition.keySet) {
-      throw QueryExecutionErrors.requestedPartitionsMismatchTablePartitionsError(table, partition)
-    }
-
-    // Validate partition spec if there exist any dynamic partitions
-    if (numDynamicPartitions > 0) {
-      // Report error if dynamic partitioning is not enabled
-      if (!hadoopConf.get("hive.exec.dynamic.partition", "true").toBoolean) {
-        throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_DISABLED.getMsg)
-      }
-
-      // Report error if dynamic partition strict mode is on but no static partition is found
-      if (numStaticPartitions == 0 &&
-        hadoopConf.get("hive.exec.dynamic.partition.mode", "strict").equalsIgnoreCase("strict")) {
-        throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
-      }
-
-      // Report error if any static partition appears after a dynamic partition
-      val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
-      if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
-        throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
-      }
-    }
-
-    val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
-      val attr = query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
-        throw QueryCompilationErrors.cannotResolveAttributeError(
-          name, query.output.map(_.name).mkString(", "))
-      }.asInstanceOf[Attribute]
-      // SPARK-28054: Hive metastore is not case preserving and keeps partition columns
-      // with lower cased names. Hive will validate the column names in the partition directories
-      // during `loadDynamicPartitions`. Spark needs to write partition directories with lower-cased
-      // column names in order to make `loadDynamicPartitions` work.
-      attr.withName(name.toLowerCase(Locale.ROOT))
-    }
+    val partitionSpec = getPartitionSpec(partition)
+    val partitionAttributes = getDynamicPartitionColumns(table, partition, query)
 
     val writtenParts = saveAsHiveFile(
       sparkSession = sparkSession,

@@ -7,7 +7,7 @@ DROP TABLE tbl;
 
 -- options
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-OPTIONS ('a' 1);
+OPTIONS ('a' 1, 'password' = 'password');
 
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
@@ -55,7 +55,7 @@ DROP TABLE tbl;
 
 -- tblproperties
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-TBLPROPERTIES ('a' = '1');
+TBLPROPERTIES ('a' = '1', 'password' = 'password');
 
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;

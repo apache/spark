@@ -84,7 +84,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [Join relation](sql-ref-syntax-qry-select-join.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
-     * Subquery
+     * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
 * **PIVOT**
@@ -192,3 +192,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
 * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
+* [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)

@@ -20,7 +20,7 @@ WholeStageCodegen (11)
                                       Filter [inv_item_sk,inv_warehouse_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                            Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
                                                 BroadcastExchange #3
                                                   WholeStageCodegen (1)
@@ -28,21 +28,21 @@ WholeStageCodegen (11)
                                                       Filter [d_year,d_moy,d_date_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (1)
                                             Filter [i_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.item [i_item_sk]
+                                                  Scan parquet spark_catalog.default.item [i_item_sk]
                                   InputAdapter
                                     BroadcastExchange #5
                                       WholeStageCodegen (2)
                                         Filter [w_warehouse_sk]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                              Scan parquet spark_catalog.default.warehouse [w_warehouse_sk,w_warehouse_name]
                               InputAdapter
                                 ReusedExchange [d_date_sk,d_moy] #3
             InputAdapter
@@ -64,7 +64,7 @@ WholeStageCodegen (11)
                                             Filter [inv_item_sk,inv_warehouse_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                                  Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                                     SubqueryBroadcast [d_date_sk] #2
                                                       BroadcastExchange #8
                                                         WholeStageCodegen (1)
@@ -72,7 +72,7 @@ WholeStageCodegen (11)
                                                             Filter [d_year,d_moy,d_date_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
-                                                                  Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                             InputAdapter
                                               ReusedExchange [i_item_sk] #4
                                         InputAdapter

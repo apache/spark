@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  * 1. without sbt:
  *    bin/spark-submit --class <this class>
  *      --jars <spark core test jar> <spark mllib test jar>
- * 2. build/sbt "mllib/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
+ * 2. build/sbt "mllib/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/Test/runMain <this class>"
  *    Results will be written to "benchmarks/UDTSerializationBenchmark-results.txt".
  * }}}
  */

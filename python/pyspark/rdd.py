@@ -692,7 +692,7 @@ class RDD(Generic[T_co]):
         for w in weights:
             cweights.append(cweights[-1] + w / s)
         if seed is None:
-            seed = random.randint(0, 2 ** 32 - 1)
+            seed = random.randint(0, 2**32 - 1)
         return [
             self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
             for lb, ub in zip(cweights, cweights[1:])

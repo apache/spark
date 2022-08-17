@@ -129,6 +129,12 @@ private[spark] object UI {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
 
+  val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
+    .doc("Whether to display event timeline data on UI pages.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_TIMELINE_TASKS_MAXIMUM = ConfigBuilder("spark.ui.timeline.tasks.maximum")
     .version("1.4.0")
     .intConf

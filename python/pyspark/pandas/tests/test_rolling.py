@@ -37,7 +37,7 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             Rolling(1, 2)
 
     def _test_rolling_func(self, f):
-        pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")
+        pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(getattr(psser.rolling(2), f)(), getattr(pser.rolling(2), f)())
         self.assert_eq(getattr(psser.rolling(2), f)().sum(), getattr(pser.rolling(2), f)().sum())
@@ -84,6 +84,12 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_rolling_var(self):
         self._test_rolling_func("var")
+
+    def test_rolling_skew(self):
+        self._test_rolling_func("skew")
+
+    def test_rolling_kurt(self):
+        self._test_rolling_func("kurt")
 
     def _test_groupby_rolling_func(self, f):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
@@ -205,6 +211,12 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_rolling_var(self):
         self._test_groupby_rolling_func("var")
+
+    def test_groupby_rolling_skew(self):
+        self._test_groupby_rolling_func("skew")
+
+    def test_groupby_rolling_kurt(self):
+        self._test_groupby_rolling_func("kurt")
 
 
 if __name__ == "__main__":

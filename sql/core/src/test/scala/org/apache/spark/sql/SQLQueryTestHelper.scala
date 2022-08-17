@@ -35,6 +35,7 @@ trait SQLQueryTestHelper {
 
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
+      .replaceAll("plan_id=\\d+", "plan_id=x")
       .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")

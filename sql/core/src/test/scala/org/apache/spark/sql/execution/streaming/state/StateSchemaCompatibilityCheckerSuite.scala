@@ -231,6 +231,16 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
   }
 
+  test("SPARK-39650: ignore value schema on compatibility check") {
+    val typeChangedValueSchema = StructType(valueSchema.map(_.copy(dataType = TimestampType)))
+    verifySuccess(keySchema, valueSchema, keySchema, typeChangedValueSchema,
+      ignoreValueSchema = true)
+
+    val typeChangedKeySchema = StructType(keySchema.map(_.copy(dataType = TimestampType)))
+    verifyException(keySchema, valueSchema, typeChangedKeySchema, valueSchema,
+      ignoreValueSchema = true)
+  }
+
   private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {
     applyNewSchemaToNestedField(keySchema, newNestedSchema, "key3")
   }
@@ -257,44 +267,57 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       dir: String,
       queryId: UUID,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean): Unit = {
     // in fact, Spark doesn't support online state schema change, so need to check
     // schema only once for each running of JVM
     val providerId = StateStoreProviderId(
       StateStoreId(dir, opId, partitionId), queryId)
 
     new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-      .check(newKeySchema, newValueSchema)
+      .check(newKeySchema, newValueSchema, ignoreValueSchema = ignoreValueSchema)
   }
 
   private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
     val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema)
+    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
 
     val e = intercept[StateSchemaNotCompatible] {
-      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema)
+      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
+        ignoreValueSchema = ignoreValueSchema)
     }
 
-    e.getMessage.contains("Provided schema doesn't match to the schema for existing state!")
-    e.getMessage.contains(newKeySchema.json)
-    e.getMessage.contains(newValueSchema.json)
-    e.getMessage.contains(oldKeySchema.json)
-    e.getMessage.contains(oldValueSchema.json)
+    assert(e.getMessage.contains("Provided schema doesn't match to the schema for existing state!"))
+    assert(e.getMessage.contains(newKeySchema.toString()))
+    assert(e.getMessage.contains(oldKeySchema.toString()))
+
+    if (ignoreValueSchema) {
+      assert(!e.getMessage.contains(newValueSchema.toString()))
+      assert(!e.getMessage.contains(oldValueSchema.toString()))
+    } else {
+      assert(e.getMessage.contains(newValueSchema.toString()))
+      assert(e.getMessage.contains(oldValueSchema.toString()))
+    }
   }
 
   private def verifySuccess(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
     val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema)
-    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema)
+    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
+    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
   }
 }

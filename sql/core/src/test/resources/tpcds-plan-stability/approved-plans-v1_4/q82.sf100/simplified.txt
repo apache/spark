@@ -24,12 +24,12 @@ TakeOrderedAndProject [i_item_id,i_item_desc,i_current_price]
                                               Filter [i_current_price,i_manufact_id,i_item_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.item [i_item_sk,i_item_id,i_item_desc,i_current_price,i_manufact_id]
+                                                    Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_item_desc,i_current_price,i_manufact_id]
                                       Project [inv_item_sk,inv_date_sk]
                                         Filter [inv_quantity_on_hand,inv_item_sk]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.inventory [inv_item_sk,inv_quantity_on_hand,inv_date_sk]
+                                              Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_quantity_on_hand,inv_date_sk]
                                                 SubqueryBroadcast [d_date_sk] #1
                                                   BroadcastExchange #4
                                                     WholeStageCodegen (1)
@@ -37,7 +37,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,i_current_price]
                                                         Filter [d_date,d_date_sk]
                                                           ColumnarToRow
                                                             InputAdapter
-                                                              Scan parquet default.date_dim [d_date_sk,d_date]
+                                                              Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
                                   InputAdapter
                                     ReusedExchange [d_date_sk] #4
                   InputAdapter
@@ -50,4 +50,4 @@ TakeOrderedAndProject [i_item_id,i_item_desc,i_current_price]
                                 Filter [ss_item_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.store_sales [ss_item_sk,ss_sold_date_sk]
+                                      Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_sold_date_sk]

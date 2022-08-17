@@ -50,7 +50,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(DateType)
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
-    val tsExMsg = intercept[org.apache.spark.SparkIllegalStateException] {
+    val tsExMsg = intercept[IllegalStateException] {
       roundtrip(TimestampType)
     }
     assert(tsExMsg.getMessage.contains("timezoneId"))

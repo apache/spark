@@ -363,7 +363,7 @@ private object RowToColumnConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
       cv.appendStruct(false)
       val data = row.getStruct(column, childConverters.length)
-      for (i <- 0 until childConverters.length) {
+      for (i <- childConverters.indices) {
         childConverters(i).append(data, i, cv.getChild(i))
       }
     }

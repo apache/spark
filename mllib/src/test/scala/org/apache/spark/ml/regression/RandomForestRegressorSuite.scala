@@ -33,7 +33,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 /**
  * Test suite for [[RandomForestRegressor]].
  */
-class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
+class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import RandomForestRegressorSuite.compareAPIs
   import testImplicits._

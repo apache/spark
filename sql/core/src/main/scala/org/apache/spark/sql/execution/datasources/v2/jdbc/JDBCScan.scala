@@ -33,7 +33,8 @@ case class JDBCScan(
     groupByColumns: Option[Array[String]],
     tableSample: Option[TableSampleInfo],
     pushedLimit: Int,
-    sortOrders: Array[String]) extends V1Scan {
+    sortOrders: Array[String],
+    pushedOffset: Int) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -49,7 +50,7 @@ case class JDBCScan(
           pushedAggregateColumn
         }
         relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
-          pushedLimit, sortOrders)
+          pushedLimit, sortOrders, pushedOffset)
       }
     }.asInstanceOf[T]
   }

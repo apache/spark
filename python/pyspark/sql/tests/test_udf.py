@@ -45,7 +45,7 @@ from pyspark.testing.utils import QuietTest
 
 class UDFTests(ReusedSQLTestCase):
     def test_udf_with_callable(self):
-        d = [Row(number=i, squared=i ** 2) for i in range(10)]
+        d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 
@@ -60,7 +60,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(res.agg({"plus_four": "sum"}).collect()[0][0], 85)
 
     def test_udf_with_partial_function(self):
-        d = [Row(number=i, squared=i ** 2) for i in range(10)]
+        d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 

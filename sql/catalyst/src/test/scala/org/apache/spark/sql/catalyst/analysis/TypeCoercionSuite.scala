@@ -47,13 +47,13 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     // Check default value
     val castDefault = implicitCast(default(from), to)
     assert(DataType.equalsIgnoreCompatibleNullability(
-      castDefault.map(_.dataType).getOrElse(null), expected),
+      castDefault.map(_.dataType).orNull, expected),
       s"Failed to cast $from to $to")
 
     // Check null value
     val castNull = implicitCast(createNull(from), to)
     assert(DataType.equalsIgnoreCaseAndNullability(
-      castNull.map(_.dataType).getOrElse(null), expected),
+      castNull.map(_.dataType).orNull, expected),
       s"Failed to cast $from to $to")
   }
 

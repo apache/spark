@@ -65,6 +65,42 @@ class ResourceProfileSuite extends SparkFunSuite {
       "Task resources should have 1 cpu")
   }
 
+  test("Executor cores should be None by default for standalone cluster") {
+    val sparkConf = new SparkConf()
+      .setMaster("spark://ut.cluster")
+      .remove(EXECUTOR_CORES.key)
+    val rprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(!rprof.executorResources.contains(ResourceProfile.CORES),
+      "Executor cores should be None by default for standalone cluster")
+    assert(rprof.getExecutorCores.isEmpty,
+      "Executor cores should be None by default for standalone cluster")
+  }
+
+  test("Get resource for standalone cluster") {
+    val sparkConf = new SparkConf()
+      .setMaster("spark://ut.cluster")
+      .remove(EXECUTOR_CORES.key)
+    val defaultExecutorResource = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
+    assert(defaultExecutorResource.cores.isEmpty)
+    assert(defaultExecutorResource.executorMemoryMiB === 1024L)
+    assert(defaultExecutorResource.memoryOffHeapMiB === 0L)
+    assert(defaultExecutorResource.memoryOverheadMiB.isEmpty)
+    assert(defaultExecutorResource.pysparkMemoryMiB.isEmpty)
+    assert(defaultExecutorResource.customResources.isEmpty)
+
+    val rpBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("cpu", 2)
+    val execReq =
+      new ExecutorResourceRequests().cores(4)
+    val rp = rpBuilder.require(taskReq).require(execReq).build()
+    val executorResourceForRp = ResourceProfile.getResourcesForClusterManager(
+      rp.id, rp.executorResources, 0.0, sparkConf, false, Map.empty)
+    // Standalone cluster only take cores and executor memory as built-in resources.
+    assert(executorResourceForRp.cores.get === 4)
+    assert(executorResourceForRp.executorMemoryMiB === 1024L)
+  }
+
   test("Default ResourceProfile with app level resources specified") {
     val conf = new SparkConf
     conf.set(PYSPARK_EXECUTOR_MEMORY.key, "2g")

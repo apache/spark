@@ -42,7 +42,6 @@ class _MissingPandasLikeDataFrame:
     infer_objects = _unsupported_function("infer_objects")
     mode = _unsupported_function("mode")
     reorder_levels = _unsupported_function("reorder_levels")
-    resample = _unsupported_function("resample")
     set_axis = _unsupported_function("set_axis")
     to_feather = _unsupported_function("to_feather")
     to_gbq = _unsupported_function("to_gbq")
