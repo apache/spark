@@ -2041,6 +2041,8 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.getCheckpointDir`
+        :meth:`RDD.checkpoint`
+        :meth:`RDD.getCheckpointFile`
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
@@ -2054,6 +2056,8 @@ class SparkContext:
         See Also
         --------
         :meth:`SparkContext.setCheckpointDir`
+        :meth:`RDD.checkpoint`
+        :meth:`RDD.getCheckpointFile`
         """
         if not self._jsc.sc().getCheckpointDir().isEmpty():
             return self._jsc.sc().getCheckpointDir().get()
