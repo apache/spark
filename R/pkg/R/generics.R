@@ -603,6 +603,9 @@ setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {
 #' @rdname write.text
 setGeneric("write.text", function(x, path, ...) { standardGeneric("write.text") })
 
+#' @rdname write.spark.csv
+setGeneric("write.spark.csv", function(x, path, ...) { standardGeneric("write.spark.csv") })
+
 #' @rdname schema
 setGeneric("schema", function(x) { standardGeneric("schema") })
 

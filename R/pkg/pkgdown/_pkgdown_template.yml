@@ -128,12 +128,14 @@ reference:
   - read.orc
   - read.parquet
   - read.text
+  - read.spark.csv
   - write.df
   - write.jdbc
   - write.json
   - write.orc
   - write.parquet
   - write.text
+  - write.spark.csv
 
 - title: "Column functions"
 - contents:

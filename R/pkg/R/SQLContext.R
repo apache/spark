@@ -492,6 +492,37 @@ read.text <- function(path, ...) {
   dataFrame(sdf)
 }
 
+#' Create a SparkDataFrame from a csv file.
+#'
+#' Loads a Parquet file, returning the result as a SparkDataFrame.
+#'
+#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
+#'            You can find the csv-specific options for reading csv files in
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
+#' @return SparkDataFrame
+#' @rdname read.spark.csv
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.csv"
+#' df <- read.spark.csv(path)
+#' }
+#' @name read.spark.csv
+#' @note read.spark.csv since 3.3.0
+read.spark.csv <- function(path, ...) {
+  sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
+  # Allow the user to have a more flexible definition of the text file path
+  paths <- as.list(suppressWarnings(normalizePath(path)))
+  read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "options", options)
+  sdf <- handledCallJMethod(read, "csv", paths)
+  dataFrame(sdf)
+}
+
 #' SQL Query
 #'
 #' Executes a SQL query using Spark, returning the result as a SparkDataFrame.

@@ -194,6 +194,7 @@ exportMethods("arrange",
               "write.parquet",
               "write.stream",
               "write.text",
+              "write.spark.csv",
               "write.ml")
 
 exportClasses("Column")
@@ -496,6 +497,7 @@ export("as.DataFrame",
        "read.parquet",
        "read.stream",
        "read.text",
+       "read.spark.csv",
        "recoverPartitions",
        "refreshByPath",
        "refreshTable",
