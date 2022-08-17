@@ -2411,6 +2411,9 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
+   *
+   * @param groupId the groupId ID to cancel
+   * @param reason reason for cancellation
    */
   def cancelJobGroup(groupId: String, reason: String): Unit = {
     assertNotStopped()
@@ -2420,6 +2423,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
+   *
+   * @param groupId the groupId ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
