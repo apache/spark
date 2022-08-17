@@ -37,7 +37,7 @@ import org.apache.spark.util.SizeEstimator
 object FileStatusCache {
   private var sharedCache: SharedInMemoryCache = _
 
-  private[spark] val sessionToCache = new mutable.HashMap[String, FileStatusCache]
+  private[spark] val sessionToCache = new mutable.HashMap[String, Seq[FileStatusCache]]
 
   /**
    * @return a new FileStatusCache based on session configuration. Cache memory quota is
@@ -53,7 +53,10 @@ object FileStatusCache {
         )
       }
       val fileStatusCache = sharedCache.createForNewClient()
-      sessionToCache.put(session.sessionUUID, fileStatusCache)
+
+      sessionToCache.put(session.sessionUUID,
+        sessionToCache.getOrElse(session.sessionUUID, Seq.empty[FileStatusCache])
+          ++ Seq(fileStatusCache))
       fileStatusCache
     } else {
       NoopCache
