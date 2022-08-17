@@ -1148,7 +1148,7 @@ private[spark] class DAGScheduler(
     }
     val jobIds = activeInGroup.map(_.jobId)
     val reasonForException = reason match {
-      case Some(value) => s"with reason \"$value\""
+      case Some(value) => s"due to reason: $value"
       case None => ""
     }
     jobIds.foreach(handleJobCancellation(_,
