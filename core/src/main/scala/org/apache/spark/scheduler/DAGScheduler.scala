@@ -1049,9 +1049,9 @@ private[spark] class DAGScheduler(
   /**
    * Cancel all jobs in the given job group ID.
    */
-  def cancelJobGroup(groupId: String): Unit = {
+  def cancelJobGroup(groupId: String, reason: Option[String]): Unit = {
     logInfo("Asked to cancel job group " + groupId)
-    eventProcessLoop.post(JobGroupCancelled(groupId))
+    eventProcessLoop.post(JobGroupCancelled(groupId, reason))
   }
 
   /**
@@ -1138,7 +1138,7 @@ private[spark] class DAGScheduler(
     jobsThatUseStage.find(jobIdToActiveJob.contains)
   }
 
-  private[scheduler] def handleJobGroupCancelled(groupId: String): Unit = {
+  private[scheduler] def handleJobGroupCancelled(groupId: String, reason: Option[String]): Unit = {
     // Cancel all jobs belonging to this job group.
     // First finds all active jobs with this group id, and then kill stages for them.
     val activeInGroup = activeJobs.filter { activeJob =>
@@ -1147,8 +1147,12 @@ private[spark] class DAGScheduler(
       }
     }
     val jobIds = activeInGroup.map(_.jobId)
+    val reasonForException = reason match {
+      case Some(value) => s"with reason \"$value\""
+      case None => ""
+    }
     jobIds.foreach(handleJobCancellation(_,
-        Option("part of cancelled job group %s".format(groupId))))
+        Option("part of cancelled job group %s %s".format(groupId, reasonForException))))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
@@ -2852,8 +2856,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobCancelled(jobId, reason) =>
       dagScheduler.handleJobCancellation(jobId, reason)
 
-    case JobGroupCancelled(groupId) =>
-      dagScheduler.handleJobGroupCancelled(groupId)
+    case JobGroupCancelled(groupId, reason) =>
+      dagScheduler.handleJobGroupCancelled(groupId, reason)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()

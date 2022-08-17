@@ -209,9 +209,10 @@ case class BroadcastExchangeExec(
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
-        logError(s"Could not execute broadcast in $timeout secs.", ex)
+        val broadcastTimeoutMessage = s"Could not execute broadcast in $timeout secs."
+        logError(broadcastTimeoutMessage, ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobGroup(runId.toString)
+          sparkContext.cancelJobGroup(runId.toString, broadcastTimeoutMessage)
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

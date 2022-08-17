@@ -2412,9 +2412,18 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
    */
+  def cancelJobGroup(groupId: String, reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, Option(reason))
+  }
+
+  /**
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
+   * for more information.
+   */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId)
+    dagScheduler.cancelJobGroup(groupId, None)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */

@@ -61,7 +61,10 @@ private[scheduler] case class JobCancelled(
     reason: Option[String])
   extends DAGSchedulerEvent
 
-private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
+private[scheduler] case class JobGroupCancelled(
+    groupId: String,
+    reason: Option[String])
+  extends DAGSchedulerEvent
 
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
