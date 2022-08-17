@@ -3586,7 +3586,7 @@ setMethod("str",
 #' @family SparkDataFrame functions
 #' @rdname drop
 #' @name drop
-#' @aliases drop,SparkDataFrame
+#' @aliases drop,SparkDataFrame,characterOrColumn-method
 #' @examples
 #' \dontrun{
 #' sparkR.session()
