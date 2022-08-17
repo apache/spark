@@ -233,10 +233,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     val sortOrder: Seq[SortOrder] = (Seq(sortExpr) ++ sortExprs).map { col =>
       col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
+        case expr: SortOrder => expr
+        case expr: Expression => SortOrder(expr, Ascending)
       }
     }
 
@@ -854,45 +852,26 @@ class KeyValueGroupedDataset[K, V] private[sql](
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 
-  def cogroupSorted[U: Encoder, SV: Encoder, SU: Encoder, R : Encoder](
-      other: KeyValueGroupedDataset[K, U],
-      order: V => SV, direction: SortDirection = Ascending,
-      otherOrder: U => SU, otherDirection: SortDirection = Ascending)(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    val withSortKey = AppendColumns(order, dataAttributes, this.logicalPlan)
-    val withOtherSortKey = AppendColumns(otherOrder, dataAttributes, other.logicalPlan)
-
-    val executed = sparkSession.sessionState.executePlan(withSortKey)
-    val otherExecuted = sparkSession.sessionState.executePlan(withOtherSortKey)
-
-    Dataset[R](
-      sparkSession,
-      CoGroup(
-        f,
-        this.groupingAttributes,
-        other.groupingAttributes,
-        this.dataAttributes,
-        other.dataAttributes,
-        withSortKey.newColumns.map(SortOrder(_, direction)),
-        withOtherSortKey.newColumns.map(SortOrder(_, otherDirection)),
-        executed.analyzed,
-        otherExecuted.analyzed))
-  }
-
+  /**
+   * (Scala-specific)
+   * Applies the given function to each sorted cogrouped data.  For each unique group, the function
+   * will be passed the grouping key and 2 sorted iterators containing all elements in the group
+   * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
+   * of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * @since 3.4.0
+   */
   def cogroupSorted[U, R : Encoder](
       other: KeyValueGroupedDataset[K, U])(
-      sortExprs: Column*)(
+      thisSortExprs: Column*)(
       otherSortExprs: Column*)(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    def toSortOrder(col: Column): SortOrder =
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
+    def toSortOrder(col: Column): SortOrder = col.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    }
 
-    val sortOrder: Seq[SortOrder] = sortExprs.map(toSortOrder)
+    val thisSortOrder: Seq[SortOrder] = thisSortExprs.map(toSortOrder)
     val otherSortOrder: Seq[SortOrder] = otherSortExprs.map(toSortOrder)
 
     implicit val uEncoder = other.vExprEnc
@@ -904,10 +883,29 @@ class KeyValueGroupedDataset[K, V] private[sql](
         other.groupingAttributes,
         this.dataAttributes,
         other.dataAttributes,
-        sortOrder,
+        thisSortOrder,
         otherSortOrder,
         this.logicalPlan,
         other.logicalPlan))
+  }
+
+  /**
+   * (Java-specific)
+   * Applies the given function to each sorted cogrouped data.  For each unique group, the function
+   * will be passed the grouping key and 2 sorted iterators containing all elements in the group
+   * from [[Dataset]] `this` and `other`.  The function can return an iterator containing elements
+   * of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * @since 3.4.0
+   */
+  def cogroupSorted[U, R](
+      other: KeyValueGroupedDataset[K, U],
+      thisSortExprs: Array[Column],
+      otherSortExprs: Array[Column],
+      f: CoGroupFunction[K, V, U, R],
+      encoder: Encoder[R]): Dataset[R] = {
+    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
+      (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 
   override def toString: String = {
