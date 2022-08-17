@@ -865,9 +865,23 @@ object SparkSession extends Logging {
      *
      * @since 3.4.0
      */
-    def conf(key: String, value: Any): Builder = synchronized {
-      options += key -> value.toString
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach {
+        kv: (String, Any) => {
+          options += kv._1 -> kv._2.toString
+        }
+      }
       this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
     }
 
     /**

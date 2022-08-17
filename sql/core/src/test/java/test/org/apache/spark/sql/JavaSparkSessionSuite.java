@@ -21,6 +21,9 @@ import org.apache.spark.sql.*;
 import org.junit.After;
 import org.junit.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class JavaSparkSessionSuite {
   private SparkSession spark;
 
@@ -32,18 +35,21 @@ public class JavaSparkSessionSuite {
 
   @Test
   public void conf() {
+    Map<String, Object> map = new HashMap<String, Object>() {{
+      put("string", "");
+      put("boolean", true);
+      put("double", 0.0);
+      put("long", 0L);
+    }};
+
     spark = SparkSession.builder()
       .master("local[*]")
       .appName("testing")
-      .conf("string", "")
-      .conf("boolean", true)
-      .conf("double", 0.0)
-      .conf("long", 0L)
+      .config(map)
       .getOrCreate();
 
-    assert(spark.conf().get("string").equals(""));
-    assert(spark.conf().get("boolean").equals("true"));
-    assert(spark.conf().get("double").equals("0.0"));
-    assert(spark.conf().get("long").equals("0"));
+    for (Map.Entry<String, Object> e : map.entrySet()) {
+      assert(spark.conf().get(e.getKey()).equals(e.getValue().toString()));
+    }
   }
 }

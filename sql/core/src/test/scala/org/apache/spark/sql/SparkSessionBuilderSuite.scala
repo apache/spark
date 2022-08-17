@@ -571,17 +571,20 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("SparkSession.conf(String, Any)") {
+    val map: Map[String, Any] = Map(
+      "string" -> "",
+      "boolean" -> true,
+      "double" -> 0.0,
+      "long" -> 0L
+    )
+
     val session = SparkSession.builder()
       .master("local")
-      .conf("string", "")
-      .conf("boolean", true)
-      .conf("double", 0.0)
-      .conf("long", 0L)
+      .config(map)
       .getOrCreate()
 
-    assert(session.conf.get("string") == "")
-    assert(session.conf.get("boolean") == "true")
-    assert(session.conf.get("double") == "0.0")
-    assert(session.conf.get("long") == "0")
+    for (e <- map) {
+      assert(session.conf.get(e._1) == e._2.toString)
+    }
   }
 }
