@@ -281,7 +281,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
     val e2 = new LegacyException
     assert(SparkThrowableHelper.getMessage(e2, MINIMAL) ===
-      """{"errorClass":"legacy","messageParameters":{"message":"Test message"},""" +
+      """{"errorClass":"LEGACY","messageParameters":{"message":"Test message"},""" +
       """"queryContext":[]}""")
   }
 }

@@ -148,7 +148,7 @@ private[spark] object SparkThrowableHelper {
       case MINIMAL | STANDARD if e.getErrorClass == null =>
         toJsonString { g =>
           g.writeStartObject()
-          g.writeStringField("errorClass", "legacy")
+          g.writeStringField("errorClass", "LEGACY")
           g.writeObjectFieldStart("messageParameters")
           g.writeStringField("message", e.getMessage)
           g.writeEndObject()
