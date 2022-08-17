@@ -3586,51 +3586,46 @@ setMethod("str",
 #' @family SparkDataFrame functions
 #' @rdname drop
 #' @name drop
-#' @aliases drop,SparkDataFrame,characterOrColumn-method
-#' @family subsetting functions
+#' @aliases drop,SparkDataFrame
 #' @examples
 #' \dontrun{
-#'   drop(df, "*")
-#'   drop(df, "col1", "col2")
-#'   drop(df, df$name, df$age + 1)
-#'   drop(df, c("col1", "col2"))
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' drop(df, "col1")
+#' drop(df, c("col1", "col2"))
+#' drop(df, df$col1)
+#' drop(df, "col1", "col2")
+#' drop(df, df$name, df$age)
 #' }
-#' @note drop(SparkDataFrame, character) since 3.4.0
+#' @note drop(SparkDataFrame, characterOrColumn, ...) since 3.4.0
 setMethod("drop",
           signature(x = "SparkDataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
-            cols <- lapply(list(col, ...), function(c) {
+            if (class(col) == "character" && length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To drop multiple columns, use a character vector or ... for character/Column")
+              }
+              cols <- as.list(col)
+            } else {
+              cols <- list(col, ...)
+            }
+
+            cols <- lapply(cols, function(c) {
               if (class(c) == "Column") {
                 c@jc
               } else {
                 col(c)@jc
               }
             })
+
             sdf <- callJMethod(x@sdf, "drop", cols[[1]], cols[-1])
             dataFrame(sdf)
           })
 
-#' Expose base::drop which deletes the dimensions of an array which have only one level.
-#'
-#' @param x an array (including a matrix).
-#' @return If ‘x’ is an object with a ‘dim’ attribute (e.g., a matrix or
-#'         ‘array’), then ‘drop’ returns an object like ‘x’, but with any
-#'         extents of length one removed.  Any accompanying ‘dimnames’
-#'         attribute is adjusted and returned with ‘x’: if the result is a
-#'         vector the ‘names’ are taken from the ‘dimnames’ (if any).  If the
-#'         result is a length-one vector, the names are taken from the first
-#'         dimension with a dimname.
-#'
-#'         Array subsetting (‘[’) performs this reduction unless used with
-#'         ‘drop = FALSE’, but sometimes it is useful to invoke ‘drop’
-#'         directly.
-#'
-#' @family subsetting functions
-#' @examples
-#' \dontrun{
-#'   dim(drop(array(1:12, dim = c(1,3,1,1,2,1,2))))
-#'   drop(1:3 %*% 2:4)
-#' }
+# Expose base::drop
+#' @name drop
+#' @rdname drop
 #' @aliases drop,ANY-method
 setMethod("drop",
           signature(x = "ANY"),

@@ -1297,9 +1297,6 @@ test_that("drop column", {
   df1 <- drop(df, df$age, column("random"))
   expect_equal(columns(df1), c("name", "age2"))
 
-  df1 <- drop(df, df$age, df$name)
-  expect_equal(columns(df1), c("age2"))
-
   df1 <- drop(df, df$age, "random")
   expect_equal(columns(df1), c("name", "age2"))
 
