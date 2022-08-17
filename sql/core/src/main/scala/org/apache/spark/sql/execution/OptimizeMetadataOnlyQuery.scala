@@ -160,7 +160,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
    * A pattern that finds the partitioned table relation node inside the given plan, and returns a
    * pair of the partition attributes and the table relation node.
    */
-  object PartitionedRelation extends PredicateHelper {
+  object PartitionedRelation {
 
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = {
       plan match {

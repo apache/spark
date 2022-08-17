@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.BooleanType
 
-class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
+class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =

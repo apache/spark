@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
 
 import java.io.Serializable;
 
@@ -59,4 +60,10 @@ public class Extract implements Expression, Serializable {
 
   @Override
   public Expression[] children() { return new Expression[]{ source() }; }
+
+  @Override
+  public String toString() {
+    ToStringSQLBuilder builder = new ToStringSQLBuilder();
+    return builder.build(this);
+  }
 }
