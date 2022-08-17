@@ -161,7 +161,7 @@ private[spark] object SparkThrowableHelper {
         assert(e.getParameterNames.size == e.getMessageParameters.size,
           "Number of message parameter names and values must be the same")
         toJsonString { generator =>
-          val g = if (format == STANDARD) generator.useDefaultPrettyPrinter() else generator
+          val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
           g.writeStringField("errorClass", errorClass)
           val errorSubClass = e.getErrorSubClass

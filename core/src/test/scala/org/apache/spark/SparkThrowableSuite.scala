@@ -243,12 +243,22 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 " +
       "and return NULL instead. If necessary set CONFIG to \"false\" to bypass this error." +
       "\nQuery summary")
+    // scalastyle:off line.size.limit
     assert(SparkThrowableHelper.getMessage(e, MINIMAL) ===
-      """{"errorClass":"DIVIDE_BY_ZERO","sqlState":"22012",""" +
-      """"messageParameters":{"config":"CONFIG"},"queryContext":[{"objectType":"VIEW",""" +
-      """"objectName":"v1","startIndex":3,"fragment":"1 / 0"}]}""")
+      """{
+        |  "errorClass" : "DIVIDE_BY_ZERO",
+        |  "sqlState" : "22012",
+        |  "messageParameters" : {
+        |    "config" : "CONFIG"
+        |  },
+        |  "queryContext" : [ {
+        |    "objectType" : "VIEW",
+        |    "objectName" : "v1",
+        |    "startIndex" : 3,
+        |    "fragment" : "1 / 0"
+        |  } ]
+        |}""".stripMargin)
     assert(SparkThrowableHelper.getMessage(e, STANDARD) ===
-      // scalastyle:off line.size.limit
       """{
         |  "errorClass" : "DIVIDE_BY_ZERO",
         |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
