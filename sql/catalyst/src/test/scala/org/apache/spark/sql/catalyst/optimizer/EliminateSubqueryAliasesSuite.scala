@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 
-class EliminateSubqueryAliasesSuite extends PlanTest with PredicateHelper {
+class EliminateSubqueryAliasesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("EliminateSubqueryAliases", Once, EliminateSubqueryAliases) :: Nil

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
-trait OperationHelper extends AliasHelper with PredicateHelper {
+trait OperationHelper extends PredicateHelper {
   import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
 
   type ReturnType =
@@ -116,7 +116,7 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
  * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
  * necessary.
  */
-object PhysicalOperation extends OperationHelper with PredicateHelper {
+object PhysicalOperation extends OperationHelper {
   override protected def legacyMode: Boolean = true
 }
 
@@ -125,7 +125,7 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
  * operations even if they are non-deterministic, as long as they satisfy the
  * requirement of CollapseProject and CombineFilters.
  */
-object ScanOperation extends OperationHelper with PredicateHelper {
+object ScanOperation extends OperationHelper {
   override protected def legacyMode: Boolean = false
 }
 

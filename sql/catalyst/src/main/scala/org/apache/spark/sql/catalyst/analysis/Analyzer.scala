@@ -2369,7 +2369,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    *
    * Note: CTEs are handled in CTESubstitution.
    */
-  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  object ResolveSubquery extends Rule[LogicalPlan] {
     /**
      * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
      * plan. All resolved outer references are wrapped in an [[OuterReference]]
@@ -2538,7 +2538,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * those in a HAVING clause or ORDER BY clause.  These expressions are pushed down to the
    * underlying aggregate operator and then projected away after the original operator.
    */
-  object ResolveAggregateFunctions extends Rule[LogicalPlan] with AliasHelper {
+  object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(AGGREGATE), ruleId) {
       // Resolve aggregate with having clause to Filter(..., Aggregate()). Note, to avoid wrongly

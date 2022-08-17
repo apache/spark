@@ -41,8 +41,8 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -700,59 +700,6 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  protected[sql] def translateAggregate(agg: AggregateExpression): Option[AggregateFunc] = {
-    if (agg.filter.isEmpty) {
-      agg.aggregateFunction match {
-        case aggregate.Min(PushableExpression(expr)) => Some(new Min(expr))
-        case aggregate.Max(PushableExpression(expr)) => Some(new Max(expr))
-        case count: aggregate.Count if count.children.length == 1 =>
-          count.children.head match {
-            // COUNT(any literal) is the same as COUNT(*)
-            case Literal(_, _) => Some(new CountStar())
-            case PushableExpression(expr) => Some(new Count(expr, agg.isDistinct))
-            case _ => None
-          }
-        case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, agg.isDistinct))
-        case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, agg.isDistinct))
-        case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "VAR_POP", agg.isDistinct, Array(FieldReference(name))))
-        case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "VAR_SAMP", agg.isDistinct, Array(FieldReference(name))))
-        case aggregate.StddevPop(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "STDDEV_POP", agg.isDistinct, Array(FieldReference(name))))
-        case aggregate.StddevSamp(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc(
-            "STDDEV_SAMP", agg.isDistinct, Array(FieldReference(name))))
-        case aggregate.CovPopulation(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_POP", agg.isDistinct,
-            Array(FieldReference(left), FieldReference(right))))
-        case aggregate.CovSample(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("COVAR_SAMP", agg.isDistinct,
-            Array(FieldReference(left), FieldReference(right))))
-        case aggregate.Corr(PushableColumnWithoutNestedColumn(left),
-        PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
-            Array(FieldReference(left), FieldReference(right))))
-        case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
-          val translatedExprs = children.flatMap(PushableExpression.unapply(_))
-          if (translatedExprs.length == children.length) {
-            Some(new UserDefinedAggregateFunc(aggrFunc.name(),
-              aggrFunc.canonicalName(), agg.isDistinct, translatedExprs.toArray[V2Expression]))
-          } else {
-            None
-          }
-        case _ => None
-      }
-    } else {
-      None
-    }
-  }
-
   /**
    * Translate aggregate expressions and group by expressions.
    *
@@ -761,13 +708,13 @@ object DataSourceStrategy
   protected[sql] def translateAggregation(
       aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
 
-    def translateGroupBy(e: Expression): Option[V2Expression] = e match {
+    def translate(e: Expression): Option[V2Expression] = e match {
       case PushableExpression(expr) => Some(expr)
       case _ => None
     }
 
-    val translatedAggregates = aggregates.flatMap(translateAggregate)
-    val translatedGroupBys = groupBy.flatMap(translateGroupBy)
+    val translatedAggregates = aggregates.flatMap(translate).asInstanceOf[Seq[AggregateFunc]]
+    val translatedGroupBys = groupBy.flatMap(translate)
 
     if (translatedAggregates.length != aggregates.length ||
       translatedGroupBys.length != groupBy.length) {
