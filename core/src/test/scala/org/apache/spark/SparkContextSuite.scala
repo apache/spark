@@ -1356,7 +1356,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
   }
 
-  test("ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
+  test("SPARK-39557: ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
     // This test is used to prove that driver will receive executorExitCode before onDisconnected
     // removes the executor. If the executor is removed by onDisconnected, the executor loss will be
     // considered as a task failure. Spark will throw a SparkException because TASK_MAX_FAILURES is
