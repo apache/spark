@@ -1213,10 +1213,6 @@ private[spark] class TaskSchedulerImpl(
       manager
     }
   }
-
-  override def addExcludedNode(host: String): Unit = {
-    healthTrackerOpt.map(_.updateExcludedForFetchFailure(host, ""))
-  }
 }
 
 

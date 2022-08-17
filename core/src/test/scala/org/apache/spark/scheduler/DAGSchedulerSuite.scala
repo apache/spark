@@ -167,10 +167,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
 
-  var blackNodes: Set[String] = Set.empty[String]
-
   val taskScheduler = new TaskScheduler() {
-    blackNodes = Set.empty[String]
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
     override def start() = {}
@@ -209,10 +206,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       decommissionInfo: ExecutorDecommissionInfo): Unit = {}
     override def getExecutorDecommissionState(
       executorId: String): Option[ExecutorDecommissionState] = None
-
-    override def addExcludedNode(host: String): Unit = {
-      blackNodes += host
-    }
   }
 
   /**
@@ -4447,16 +4440,38 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
-  test("SPARK-40096: Add external shuffle service to blacklist if connection fails") {
+  test("SPARK-40096: Add external shuffle service to blacklist if connection creation fails") {
     initPushBasedShuffleConfs(conf)
+    // connectionCreationTimeout < shuffleMergeResultsTimeoutSec 10s by default
     conf.set("spark.shuffle.io.connectionCreationTimeout", "5s")
+    val unreachableHost = "192.168.254.254"
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", "192.168.254.254", 12345)))
+    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", unreachableHost, 12345)))
 
     val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
-    scheduler.finalizeShuffleMerge(shuffleStage, true)
-    assert(blackNodes === Set("192.168.254.254"))
+    Seq(true, false) foreach { registerMergeStatuses =>
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeStatuses)
+      verify(blockManagerMaster, times(1))
+        .removeShufflePushMergerLocation(unreachableHost)
+    }
+  }
+
+  test("SPARK-40096: Do not add external shuffle service to blacklist for InterruptedException") {
+    initPushBasedShuffleConfs(conf)
+    // connectionCreationTimeout > shuffleMergeResultsTimeoutSec 10s by default
+    conf.set("spark.shuffle.io.connectionCreationTimeout", "12s")
+    val unreachableHost = "192.168.254.254"
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", unreachableHost, 12345)))
+
+    val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
+    Seq(true, false) foreach { registerMergeStatuses =>
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeStatuses)
+      verify(blockManagerMaster, times(0))
+        .removeShufflePushMergerLocation(unreachableHost)
+    }
   }
 
   /**
