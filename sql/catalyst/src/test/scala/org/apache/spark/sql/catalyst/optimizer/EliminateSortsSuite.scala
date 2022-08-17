@@ -470,6 +470,16 @@ class EliminateSortsSuite extends AnalysisTest {
     }
   }
 
+  test("SPARK-40050: emove Sort if there is a LocalLimit between Aggregate and Sort") {
+    val projectPlan = testRelation.select($"a", $"b")
+    val orderByAPlan = projectPlan.orderBy($"a".asc)
+    val localLimitPlan = LocalLimit(Literal(2), orderByAPlan)
+    val aggPlan = localLimitPlan.groupBy($"a")(min($"b"))
+    val correctAnswer = LocalLimit(Literal(2), projectPlan).groupBy($"a")(min($"b"))
+
+    comparePlans(Optimize.execute(aggPlan.analyze), correctAnswer.analyze)
+  }
+
   test("SPARK-40050: Should not remove Sort if there is a LocalLimit between Sort and Sort") {
     val projectPlan = testRelation.select($"a", $"b")
     val orderByAPlan = projectPlan.orderBy($"a".asc)
@@ -477,14 +487,5 @@ class EliminateSortsSuite extends AnalysisTest {
     val orderByBPlan = localLimitPlan.orderBy($"b".asc)
 
     comparePlans(Optimize.execute(orderByBPlan.analyze), orderByBPlan.analyze)
-  }
-
-  test("SPARK-40050: Should not remove Sort if there is a LocalLimit between Aggregate and Sort") {
-    val projectPlan = testRelation.select($"a", $"b")
-    val orderByAPlan = projectPlan.orderBy($"a".asc)
-    val localLimitPlan = LocalLimit(Literal(2), orderByAPlan)
-    val aggPlan = localLimitPlan.groupBy($"a")(min($"b"))
-
-    comparePlans(Optimize.execute(aggPlan.analyze), aggPlan.analyze)
   }
 }

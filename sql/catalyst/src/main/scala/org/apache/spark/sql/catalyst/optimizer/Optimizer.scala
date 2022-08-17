@@ -1531,7 +1531,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
       j.copy(left = recursiveRemoveSort(originLeft, true, canEliminateThroughLocalLimit = true),
         right = recursiveRemoveSort(originRight, true, canEliminateThroughLocalLimit = true))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
-      g.copy(child = recursiveRemoveSort(originChild, true))
+      g.copy(child = recursiveRemoveSort(originChild, true, canEliminateThroughLocalLimit = true))
   }
 
   /**
