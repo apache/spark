@@ -2487,11 +2487,10 @@ object ToBinary {
     //                  in a group is 4.
     //    "abcdAE="   - Invalid, last group include padding symbols, therefore it should have
     //                  exactly 4 symbols but contains only 3.
-    //    "ab==tm+1"  - Invalid, nothing should be after padding except whitespace.
+    //    "ab==tm+1"  - Invalid, nothing should be after padding.
     var position = 0
     var padSize = 0
-    var invalid = false // Encountered invalid character or early padding
-    // followed by valid characters and so on.
+    var invalid = false // The string is detected to be invalid.
     val validation = srcString.toString.map {
       case c
         if !invalid &&
