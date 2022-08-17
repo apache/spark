@@ -559,7 +559,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
-      case _: Union =>
+      case u: Union =>
         var first = true
         plan.mapChildren { child =>
           if (first) {
@@ -570,7 +570,8 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
             // output attributes could return incorrect result.
             removeRedundantAliases(child, excluded ++ child.outputSet)
           } else {
-            removeRedundantAliases(child, excluded)
+            // We don't need to exclude those attributes that `Union` inherits from its first child.
+            removeRedundantAliases(child, excluded -- u.children.head.outputSet)
           }
         }
 
