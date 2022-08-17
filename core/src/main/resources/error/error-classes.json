@@ -120,28 +120,37 @@
     "sqlState" : "22023"
   },
   "INVALID_FUNCTION_ARGUMENTS" : {
-    "message" : [ "The function arguments invalid: " ],
+    "message" : [ "Arguments of the <funcName> function are invalid: " ],
     "subClass" : {
       "APPROX_COUNT_DISTINCT" : {
-        "message" : [ "The second argument in <functionName> should be a double literal" ]
+        "message" : [ "The second argument should be a double literal" ]
       },
       "CAST_ALIAS" : {
-        "message" : [ "Function <functionName> accepts only one argument" ]
+        "message" : [ "Function accepts only one argument" ]
       },
       "EMPTY_NUMBER_OF_ARGUMENTS" : {
-        "message" : [ "Invalid number of arguments for function <functionName>" ]
+        "message" : [ "Empty number of arguments" ]
       },
       "FIRST_LAST" : {
-        "message" : [ "The second argument in <functionName> should be a boolean literal" ]
+        "message" : [ "The second argument should be a boolean literal" ]
+      },
+      "INVALID_ARGUMENT_INDEX" : {
+        "message" : [ "The value of parameter(s) '<parameter>' has invalid index, expects <expected>, but got <found>." ]
+      },
+      "INVALID_ARGUMENT_LENGTH" : {
+        "message" : [ "The value of parameter(s) '<parameter>' has invalid length, expects <expected>, but got <found>." ]
+      },
+      "INVALID_ARGUMENT_VALUE" : {
+        "message" : [ "The value of parameter(s) '<parameter>' is invalid, <message>" ]
       },
       "INVALID_NUMBER_OF_ARGUMENTS" : {
-        "message" : [ "Invalid number of arguments for function <functionName>. Expected: <expected>; Found: <found>" ]
+        "message" : [ "Invalid number of arguments. Expected: <expected>; Found: <found>" ]
       },
       "INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION" : {
-        "message" : [ "There are <expected> arguments in V2Function <functionName>, but <found> parameters returned from 'inputTypes()'" ]
+        "message" : [ "There are <expected> arguments in V2Function, but <found> parameters returned from 'inputTypes()'" ]
       },
       "INVALID_OPERATION_FOR_V2FUNCTION" : {
-        "message" : [ "V2Function <functionName> cannot process input: (<type>): <message>" ]
+        "message" : [ "V2Function cannot process input: (<type>): <message>" ]
       }
     },
     "sqlState" : "22023"
@@ -151,10 +160,6 @@
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [ "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions." ]
-  },
-  "INVALID_PARAMETER_VALUE" : {
-    "message" : [ "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>" ],
-    "sqlState" : "22023"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: <inputString>" ],

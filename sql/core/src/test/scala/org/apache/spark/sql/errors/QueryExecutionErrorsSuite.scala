@@ -64,16 +64,18 @@ class QueryExecutionErrorsSuite
     (df1, df2)
   }
 
-  test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
+  test("INVALID_FUNCTION_ARGUMENTS: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
       checkErrorClass(
         exception = intercept[SparkException] {
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
-        msg = "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
-          "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes.",
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        errorSubClass = Some("INVALID_ARGUMENT_LENGTH"),
+        msg = "Arguments of the `aes_encrypt`\\/`aes_decrypt` function are invalid: " +
+          "The value of parameter\\(s\\) 'key' has invalid length, " +
+          "expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes.",
         sqlState = Some("22023"),
         matchMsg = true)
     }
@@ -106,10 +108,12 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE",
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        errorSubClass = Some("INVALID_ARGUMENT_VALUE"),
         msg =
-          "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
-          "is invalid: Detail message: " +
+          "Arguments of the `aes_encrypt`/`aes_decrypt` function are invalid: " +
+          "The value of parameter(s) 'expr, key' is invalid, " +
+          "Detail message: " +
           "Given final block not properly padded. " +
           "Such issues can arise if a bad key is used during decryption.",
         sqlState = Some("22023"))

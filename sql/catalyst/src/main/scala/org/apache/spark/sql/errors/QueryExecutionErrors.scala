@@ -1902,11 +1902,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
       messageParameters = Array(
+        "INVALID_ARGUMENT_LENGTH",
+        s"$aesFuncName",
         "key",
-        s"the $aesFuncName function",
-        s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
+        "a binary value with 16, 24 or 32 bytes",
+        s"${actualLength.toString} bytes"))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
@@ -1917,10 +1919,11 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
       messageParameters = Array(
+        "INVALID_ARGUMENT_VALUE",
+        aesFuncName,
         "expr, key",
-        s"the $aesFuncName function",
         s"Detail message: $detailMessage"))
   }
 

@@ -103,7 +103,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
+    assert(e.getMessage.contains("Invalid number of arguments. Expected:"))
   }
 
   test("error reporting for incorrect number of arguments - udf") {
@@ -112,7 +112,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("foo", (_: String).length)
       df.selectExpr("foo(2, 3, 4)")
     }
-    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
+    assert(e.getMessage.contains("Invalid number of arguments. Expected:"))
   }
 
   test("error reporting for undefined functions") {
@@ -618,7 +618,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       spark.sql("SELECT CAST(1)")
     }
-    assert(e.getMessage.contains("Invalid number of arguments for function cast"))
+    assert(e.getMessage.contains("Empty number of arguments"))
   }
 
   test("only one case class parameter") {

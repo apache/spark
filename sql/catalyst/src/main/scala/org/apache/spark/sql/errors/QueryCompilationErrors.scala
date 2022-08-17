@@ -68,9 +68,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array(
-        "strfmt", toSQLId("format_string"), "expects %1$, %2$ and so on, but got %0$."))
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array("INVALID_ARGUMENT_INDEX",
+        toSQLId("format_string"), "strfmt", "%1$, %2$ and so on", "%0$"))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -1502,7 +1502,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       messageParameters = Array("INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION",
-        s"${args.length}", bound.name(),
+        bound.name(), s"${args.length}",
         s"${bound.inputTypes().length}")
     )
   }

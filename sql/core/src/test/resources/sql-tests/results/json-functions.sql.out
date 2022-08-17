@@ -90,7 +90,7 @@ select to_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] The function arguments invalid: Invalid number of arguments for function to_json. Expected: one of 1 and 2; Found: 0; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the to_json function are invalid: Invalid number of arguments. Expected: one of 1 and 2; Found: 0; line 1 pos 7
 
 
 -- !query
@@ -164,7 +164,7 @@ select from_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] The function arguments invalid: Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the from_json function are invalid: Invalid number of arguments. Expected: one of 2 and 3; Found: 0; line 1 pos 7
 
 
 -- !query
@@ -437,7 +437,7 @@ select json_array_length()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] The function arguments invalid: Invalid number of arguments for function json_array_length. Expected: 1; Found: 0; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the json_array_length function are invalid: Invalid number of arguments. Expected: 1; Found: 0; line 1 pos 7
 
 
 -- !query
@@ -510,7 +510,7 @@ select json_object_keys()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] The function arguments invalid: Invalid number of arguments for function json_object_keys. Expected: 1; Found: 0; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the json_object_keys function are invalid: Invalid number of arguments. Expected: 1; Found: 0; line 1 pos 7
 
 
 -- !query

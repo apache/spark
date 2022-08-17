@@ -34,7 +34,7 @@ SELECT default.myDoubleAvg(udf(int_col1), udf(3)) as my_avg from t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] The function arguments invalid: Invalid number of arguments for function default.myDoubleAvg. Expected: 1; Found: 2; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the default.myDoubleAvg function are invalid: Invalid number of arguments. Expected: 1; Found: 2; line 1 pos 7
 
 
 -- !query

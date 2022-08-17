@@ -108,16 +108,20 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
+  test("INVALID_FUNCTION_ARGUMENTS: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
       checkErrorClass(
         exception = e,
-        errorClass = "INVALID_PARAMETER_VALUE",
-        msg = "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
-          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7")
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        errorSubClass = Some("INVALID_ARGUMENT_INDEX"),
+        msg = "Arguments of the `format_string` function are invalid: " +
+          "The value of parameter(s) 'strfmt' has invalid index, " +
+          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7",
+        sqlState = Some("22023")
+      )
     }
   }
 
@@ -556,8 +560,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS"),
-      msg = "The function arguments invalid: " +
-        "Invalid number of arguments for function testFunc. Expected: 1; Found: 2; line 1 pos 7",
+      msg = "Arguments of the testFunc function are invalid: " +
+        "Invalid number of arguments. Expected: 1; Found: 2; line 1 pos 7",
       sqlState = Some("22023")
     )
   }
@@ -569,8 +573,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("EMPTY_NUMBER_OF_ARGUMENTS"),
-      msg = "The function arguments invalid: " +
-        "Invalid number of arguments for function cast; line 1 pos 7",
+      msg = "Arguments of the cast function are invalid: " +
+        "Empty number of arguments; line 1 pos 7",
       sqlState = Some("22023")
     )
   }
@@ -582,8 +586,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS"),
-      msg = "The function arguments invalid: " +
-        "Invalid number of arguments for function to_timestamp_ntz. " +
+      msg = "Arguments of the to_timestamp_ntz function are invalid: " +
+        "Invalid number of arguments. " +
         "Expected: one of 1 and 2; Found: 0; line 1 pos 7",
       sqlState = Some("22023")
     )
@@ -596,8 +600,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("CAST_ALIAS"),
-      msg = "The function arguments invalid: " +
-        "Function int accepts only one argument; line 1 pos 7",
+      msg = "Arguments of the int function are invalid: " +
+        "Function accepts only one argument; line 1 pos 7",
       sqlState = Some("22023")
     )
   }
@@ -609,8 +613,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("APPROX_COUNT_DISTINCT"),
-      msg = "The function arguments invalid: " +
-        "The second argument in approx_count_distinct should be a double literal; line 1 pos 7",
+      msg = "Arguments of the approx_count_distinct function are invalid: " +
+        "The second argument should be a double literal; line 1 pos 7",
       sqlState = Some("22023")
     )
   }
@@ -627,8 +631,8 @@ class QueryCompilationErrorsSuite
         ),
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = Some("INVALID_OPERATION_FOR_V2FUNCTION"),
-        msg = "The function arguments invalid: " +
-          "V2Function strlen cannot process input: (\"MAP<STRING, STRING>\"): Expect StringType, " +
+        msg = "Arguments of the strlen function are invalid: " +
+          "V2Function cannot process input: (\"MAP<STRING, STRING>\"): Expect StringType, " +
           "but found MapType(StringType,StringType,false); line 1 pos 7",
         sqlState = Some("22023")
       )
@@ -648,8 +652,8 @@ class QueryCompilationErrorsSuite
         ),
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION"),
-        msg = "The function arguments invalid: " +
-          "There are 2 arguments in V2Function strlen, " +
+        msg = "Arguments of the strlen function are invalid: " +
+          "There are 2 arguments in V2Function, " +
           "but 1 parameters returned from 'inputTypes()'; line 1 pos 7",
         sqlState = Some("22023")
       )
@@ -664,8 +668,8 @@ class QueryCompilationErrorsSuite
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("FIRST_LAST"),
-      msg = "The function arguments invalid: " +
-        "The second argument in first should be a boolean literal; line 1 pos 7",
+      msg = "Arguments of the first function are invalid: " +
+        "The second argument should be a boolean literal; line 1 pos 7",
       sqlState = Some("22023")
     )
   }

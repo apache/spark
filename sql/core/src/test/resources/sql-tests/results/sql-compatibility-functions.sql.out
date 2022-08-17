@@ -96,7 +96,7 @@ SELECT string(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.CAST_ALIAS] The function arguments invalid: Function string accepts only one argument; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS.CAST_ALIAS] Arguments of the string function are invalid: Function accepts only one argument; line 1 pos 7
 
 
 -- !query
