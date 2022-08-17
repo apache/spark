@@ -329,6 +329,8 @@ public class VectorizedColumnReader {
         return new VectorizedPlainValuesReader();
       case DELTA_BYTE_ARRAY:
         return new VectorizedDeltaByteArrayReader();
+      case DELTA_LENGTH_BYTE_ARRAY:
+        return new VectorizedDeltaLengthByteArrayReader();
       case DELTA_BINARY_PACKED:
         return new VectorizedDeltaBinaryPackedReader();
       case RLE:
