@@ -18,12 +18,21 @@
 package test.org.apache.spark.sql;
 
 import org.apache.spark.sql.*;
+import org.junit.After;
 import org.junit.Test;
 
 public class JavaSparkSessionSuite {
+  private SparkSession spark;
+
+  @After
+  public void tearDown() {
+    spark.stop();
+    spark = null;
+  }
+
   @Test
   public void conf() {
-    SparkSession session = SparkSession.builder()
+    spark = SparkSession.builder()
       .master("local[*]")
       .appName("testing")
       .conf("string", "")
@@ -32,9 +41,9 @@ public class JavaSparkSessionSuite {
       .conf("long", 0L)
       .getOrCreate();
 
-    assert(session.conf().get("string").equals(""));
-    assert(session.conf().get("boolean").equals("true"));
-    assert(session.conf().get("double").equals("0.0"));
-    assert(session.conf().get("long").equals("0"));
+    assert(spark.conf().get("string").equals(""));
+    assert(spark.conf().get("boolean").equals("true"));
+    assert(spark.conf().get("double").equals("0.0"));
+    assert(spark.conf().get("long").equals("0"));
   }
 }
