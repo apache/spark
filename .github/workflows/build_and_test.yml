@@ -300,7 +300,7 @@ jobs:
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - name: Build and push (Infra)
+      - name: Build and push (main)
         id: docker_build
         uses: docker/build-push-action@v2
         with:
@@ -310,7 +310,7 @@ jobs:
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
-      - name: Build and push (Lint)
+      - name: Build and push (lint)
         id: lint_docker_build
         uses: docker/build-push-action@v2
         with:
