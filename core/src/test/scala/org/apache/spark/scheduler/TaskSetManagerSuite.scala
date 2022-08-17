@@ -36,11 +36,12 @@ import org.apache.spark.{FakeSchedulerBackend => _, _}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING
+import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
@@ -2561,6 +2562,67 @@ class TaskSetManagerSuite
     val failedReason = ExceptionFailure("a", "b", Array(), "c", None)
     manager.handleFailedTask(originalTask.taskId, TaskState.FAILED, failedReason)
     assert(!manager.isZombie)
+  }
+
+  test("SPARK-40094: Send TaskEnd if task failed with " +
+    "NotSerializableException or TaskOutputFileAlreadyExistException") {
+    try {
+      sys.props += ("spark.test.home" -> ".")
+      val sparkConf = new SparkConf()
+        .setMaster("local-cluster[1,1,1024]")
+        .setAppName("SPARK-40094")
+        .set(config.DYN_ALLOCATION_TESTING, true)
+        .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
+        .set(config.DYN_ALLOCATION_ENABLED, true)
+        .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, 1L)
+
+      // setup spark context and init ExecutorAllocationManager
+      sc = new SparkContext(sparkConf)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+      // replace dagScheduler to let handleFailedTask send TaskEnd
+      sched.dagScheduler = sc.dagScheduler
+
+      val taskSet = FakeTask.createTaskSet(1)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+      assert(sched.taskSetsFailed.isEmpty)
+
+      val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(offerResult.isDefined,
+        "Expect resource offer on iteration 0 to return a task")
+      assert(offerResult.get.index === 0)
+
+      val executorMonitor = sc.executorAllocationManager.get.executorMonitor
+
+      // reflection to mock ExecutorMonitor.onTaskStart
+      val ensureExecutorIsTracked = classOf[ExecutorMonitor]
+        .getDeclaredMethod("ensureExecutorIsTracked",
+          classOf[String], classOf[Int])
+      ensureExecutorIsTracked.setAccessible(true)
+      val executorTracker = ensureExecutorIsTracked.invoke(executorMonitor,
+        "exec1".asInstanceOf[AnyRef],
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID.asInstanceOf[AnyRef])
+      executorTracker.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
+
+      // assert exec1 is not idle
+      val method = classOf[ExecutorMonitor].getDeclaredMethod("isExecutorIdle",
+        classOf[String])
+      method.setAccessible(true)
+      assert(!method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
+
+      // handle failed task and send TaskEnd
+      val reason = new ExceptionFailure(
+        new TaskOutputFileAlreadyExistException(
+          new FileAlreadyExistsException("file already exists")),
+        Seq.empty[AccumulableInfo])
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
+
+      Thread.sleep(1200)
+
+      // executor is idle because task has removed by TaskEnd
+      assert(method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
+    } finally {
+      sys.props -= "spark.test.home"
+    }
   }
 
 }
