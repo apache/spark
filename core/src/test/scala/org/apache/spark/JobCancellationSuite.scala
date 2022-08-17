@@ -148,7 +148,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     sc.cancelJobGroup("jobA", "dummy")
     val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, Duration.Inf) }.getCause
     assert(e.getMessage contains "cancel")
-    assert(e.getMessage contains "with reason \"dummmy\"")
+    assert(e.getMessage contains "due to reason: dummy")
 
     // Once A is cancelled, job B should finish fairly quickly.
     assert(jobB.get() === 100)
