@@ -3626,7 +3626,7 @@ setMethod("drop",
 # Expose base::drop
 #' @name drop
 #' @rdname drop
-#' @aliases drop,ANY-method
+#' @aliases drop,ANY,ANY-method
 setMethod("drop",
           signature(x = "ANY"),
           function(x) {
