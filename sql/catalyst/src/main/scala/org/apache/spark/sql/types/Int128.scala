@@ -18,9 +18,12 @@
 package org.apache.spark.sql.types
 
 import java.lang.{Long => JLong}
+import java.math.BigInteger
+
+import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.util.{Int128Holder, Int128Math}
+import org.apache.spark.sql.util.{Int128Holder, Int128Math, MoreMath}
 
 /**
  * A mutable implementation of Int128 that hold two Long values to represent the high and low bits
@@ -45,6 +48,16 @@ final class Int128 extends Ordered[Int128] with Serializable {
     this
   }
 
+  def set(bigInteger: BigInteger): Int128 = {
+    _low = bigInteger.longValue()
+    _high = bigInteger.shiftRight(64).longValueExact()
+    this
+  }
+
+  def isPositive(): Boolean = _high > 0 || (_high == 0 && _low != 0)
+
+  def isNegative(): Boolean = _high < 0
+
   def isZero(): Boolean = (_high | _low) == 0
 
   def toDouble: Double = toLong.doubleValue
@@ -55,22 +68,41 @@ final class Int128 extends Ordered[Int128] with Serializable {
 
   def toInt: Int = toLong.toInt
 
+  def scaleUpTen(n: Int): Int128 = {
+    this * Int128(n >> 63, n)
+  }
+
   def + (that: Int128): Int128 = {
-    val newHigh = Int128Math.addHigh(_high, _low, that.high, that.low)
-    val newLow = Int128Math.addLow(_low, that.low)
+    val newHigh = Int128Math.addHighExact(_high, _low, that.high, that._low)
+    val newLow = Int128Math.addLow(_low, that._low)
     new Int128().set(newHigh, newLow)
   }
 
   def - (that: Int128): Int128 = {
-    val newHigh = Int128Math.subtractHigh(_high, _low, that.high, that.low)
-    val newLow = Int128Math.subtractLow(_low, that.low)
+    val newHigh = Int128Math.subtractHighExact(_high, _low, that.high, that._low)
+    val newLow = Int128Math.subtractLow(_low, that._low)
     new Int128().set(newHigh, newLow)
   }
 
   def * (that: Int128): Int128 = {
-    val newHigh = Int128Math.multiplyHigh(_high, _low, that.high, that.low)
-    val newLow = Int128Math.multiplyLow(_low, that.low)
-    new Int128().set(newHigh, newLow)
+    val z1High = MoreMath.unsignedMultiplyHigh(_low, that._low)
+    val z1Low = _low * that._low
+
+    val z2High = MoreMath.unsignedMultiplyHigh(that._high, this._low)
+    val z2Low = this._low * that._high
+
+    val z3High = MoreMath.unsignedMultiplyHigh(this._high, that._low)
+    val z3Low = this._high * that._low
+
+    val resultLow = z1Low
+    val resultHigh = z1High + z2Low + z3Low
+
+    if (MoreMath.productOverflows(this._high, this._low, that._high, that._low,
+      z1High, z2High, z2Low, z3High, z3Low, resultHigh)) {
+      throw new ArithmeticException("overflow");
+    }
+
+    Int128(resultHigh, resultLow)
   }
 
   def / (that: Int128): Int128 = if (that.isZero) {
@@ -100,9 +132,9 @@ final class Int128 extends Ordered[Int128] with Serializable {
   }
 
   override def compare(other: Int128): Int = {
-    val result = _high.compare(other._high)
+    val result = _high.compare(other.high)
     if (result == 0) {
-      return JLong.compareUnsigned(low, other._low)
+      return JLong.compareUnsigned(_low, other.low)
     }
     result
   }
@@ -119,7 +151,12 @@ final class Int128 extends Ordered[Int128] with Serializable {
 
 @Unstable
 object Int128 {
+
   def apply(high: Long, low: Long): Int128 = new Int128().set(high, low)
+
+  def apply(bigInteger: BigInteger): Int128 = new Int128().set(bigInteger)
+
+  def apply(value: String): Int128 = new Int128().set(new BigInteger(value))
 
   val ZERO = Int128(0, 0)
   val ONE = Int128(0, 1)
@@ -141,6 +178,8 @@ object Int128 {
     override def toLong(x: Int128): Long = x.toLong
     override def fromInt(x: Int): Int128 = new Int128().set(0, x)
     override def compare(x: Int128, y: Int128): Int = x.compare(y)
+
+    def parseString(str: String): Option[Int128] = Try(Int128(str)).toOption
   }
 
   /** A [[scala.math.Integral]] evidence parameter for Int128s. */
