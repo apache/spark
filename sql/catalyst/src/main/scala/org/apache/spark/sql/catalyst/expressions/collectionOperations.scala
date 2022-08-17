@@ -2272,7 +2272,7 @@ case class ElementAt(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
   override def initQueryContext(): Option[SQLQueryContext] = {
-    if (failOnError && left.dataType.isInstanceOf[ArrayType]) {
+    if (failOnError && left.resolved && left.dataType.isInstanceOf[ArrayType]) {
       Some(origin.context)
     } else {
       None
