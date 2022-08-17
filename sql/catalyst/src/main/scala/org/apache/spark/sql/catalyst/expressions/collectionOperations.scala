@@ -2680,6 +2680,22 @@ object Sequence {
     // in order to make sure the estimated array length is long enough
     private val microsPerMonth = 28 * microsPerDay
 
+    private def toMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        daysToMicros(value.toInt, zoneId)
+      } else {
+        value * scale
+      }
+    }
+
+    private def fromMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        microsToDays(value, zoneId).toLong
+      } else {
+        value / scale
+      }
+    }
+
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
@@ -2706,8 +2722,10 @@ object Sequence {
         // about a month length in days and a day length in microseconds
         val intervalStepInMicros =
           stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
-        val startMicros: Long = num.toLong(start) * scale
-        val stopMicros: Long = num.toLong(stop) * scale
+
+        val startMicros: Long = toMicros(num.toLong(start), scale)
+        val stopMicros: Long = toMicros(num.toLong(stop), scale)
+
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
 
@@ -2718,7 +2736,8 @@ object Sequence {
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
-          arr(i) = fromLong(t / scale)
+          val result = fromMicros(t, scale)
+          arr(i) = fromLong(result)
           i += 1
           t = timestampAddInterval(
             startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
@@ -2728,6 +2747,11 @@ object Sequence {
         if (arr.length == i) arr else arr.slice(0, i)
       }
     }
+
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    private val daysToMicrosCode = s"$dtu.daysToMicros"
+    private val microsToDaysCode = s"$dtu.microsToDays"
 
     override def genCode(
         ctx: CodegenContext,
@@ -2768,6 +2792,24 @@ object Sequence {
           ""
         }
 
+      val toMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"""
+           |  final long $startMicros = $daysToMicrosCode((int) $start, $zid);
+           |  final long $stopMicros = $daysToMicrosCode((int) $stop, $zid);
+           |""".stripMargin
+      } else {
+        s"""
+           |  final long $startMicros = $start * ${scale}L;
+           |  final long $stopMicros = $stop * ${scale}L;
+           |""".stripMargin
+      }
+
+      val fromMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"($elemType) $microsToDaysCode($t, $zid)"
+      } else {
+        s"($elemType) ($t / ${scale}L)"
+      }
+
       s"""
          |final int $stepMonths = $step.months;
          |final int $stepDays = $step.days;
@@ -2781,8 +2823,7 @@ object Sequence {
          |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
-         |  final long $startMicros = $start * ${scale}L;
-         |  final long $stopMicros = $stop * ${scale}L;
+         |  $toMicrosCode
          |
          |  $sequenceLengthCode
          |
@@ -2794,9 +2835,9 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
-         |    $arr[$i] = ($elemType) ($t / ${scale}L);
+         |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
-         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |    $t = $dtu.timestampAddInterval(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
          |  }
          |
