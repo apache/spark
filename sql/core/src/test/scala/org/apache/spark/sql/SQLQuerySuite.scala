@@ -4438,7 +4438,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
 
-  test("SPARK-40080: Move EliminateSorts before LimitPushDown") {
+  test("SPARK-40080: Add additional EliminateSorts before LimitPushDown") {
     val df = sql(
       """
         |SELECT *
