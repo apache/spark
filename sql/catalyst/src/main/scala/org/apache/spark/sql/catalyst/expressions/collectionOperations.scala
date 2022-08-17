@@ -2083,8 +2083,8 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1, 2, 3), 2);
-       2
+      > SELECT _FUNC_(array(1, 2, 3), 0);
+       1
       > SELECT _FUNC_(array(1, 2, 3), 3);
        NULL
       > SELECT _FUNC_(array(1, 2, 3), -1);
