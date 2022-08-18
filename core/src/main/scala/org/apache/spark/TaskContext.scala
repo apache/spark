@@ -143,8 +143,11 @@ abstract class TaskContext extends Serializable {
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
-   * will result in that listener being called immediately.
+   * Adds a listener to be executed on task failure (which includes completion listener failure, if
+   * the task body did not already fail). Adding a listener to an already failed task will result in
+   * that listener being called immediately.
+   *
+   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
     addTaskFailureListener(new TaskFailureListener {
