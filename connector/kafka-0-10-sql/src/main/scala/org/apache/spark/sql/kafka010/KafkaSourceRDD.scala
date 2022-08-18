@@ -110,9 +110,7 @@ private[kafka010] class KafkaSourceRDD(
         }
       }
       // Release consumer, either by removing it or indicating we're no longer using it
-      context.addTaskCompletionListener[Unit] { _ =>
-        underlying.closeIfNeeded()
-      }
+      context.addTaskCompletionListener(_ => underlying.closeIfNeeded())
       underlying
     }
   }

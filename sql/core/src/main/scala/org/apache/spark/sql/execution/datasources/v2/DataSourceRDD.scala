@@ -86,7 +86,7 @@ class DataSourceRDD(
               new PartitionIterator[InternalRow](rowReader, customMetrics))
             (iter, rowReader)
           }
-          context.addTaskCompletionListener[Unit] { _ =>
+          context.addTaskCompletionListener { _ =>
             // In case of early stopping before consuming the entire iterator,
             // we need to do one more metric update at the end of the task.
             CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)

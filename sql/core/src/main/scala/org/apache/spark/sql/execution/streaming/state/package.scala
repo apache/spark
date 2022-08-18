@@ -62,9 +62,9 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       val wrappedF = (store: StateStore, iter: Iterator[T]) => {
         // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener[Unit](_ => {
+        TaskContext.get().addTaskCompletionListener { _ =>
           if (!store.hasCommitted) store.abort()
-        })
+        }
         cleanedF(store, iter)
       }
 
@@ -98,9 +98,7 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
       val wrappedF = (store: ReadStateStore, iter: Iterator[T]) => {
         // Clean up the state store.
-        TaskContext.get().addTaskCompletionListener[Unit](_ => {
-          store.abort()
-        })
+        TaskContext.get().addTaskCompletionListener(_ => store.abort())
         cleanedF(store, iter)
       }
       new ReadStateStoreRDD(

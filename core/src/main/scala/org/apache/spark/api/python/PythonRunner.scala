@@ -170,7 +170,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
 
-    context.addTaskCompletionListener[Unit] { _ =>
+    context.addTaskCompletionListener { _ =>
       writerThread.shutdownOnTaskCompletion()
       if (!reuseWorker || releasedOrClosed.compareAndSet(false, true)) {
         try {
@@ -334,7 +334,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
         // Close ServerSocket on task completion.
         serverSocket.foreach { server =>
-          context.addTaskCompletionListener[Unit](_ => server.close())
+          context.addTaskCompletionListener(_ => server.close())
         }
         val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
         if (boundPort == -1) {

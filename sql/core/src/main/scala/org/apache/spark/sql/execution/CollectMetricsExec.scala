@@ -70,7 +70,7 @@ case class CollectMetricsExec(
       // - Correctness issues due to partially completed/visible updates.
       // - Performance issues due to excessive serialization.
       val updater = collector.copyAndReset()
-      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+      TaskContext.get().addTaskCompletionListener { _ =>
         if (collector.isZero) {
           collector.setState(updater)
         } else {

@@ -471,9 +471,7 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
           }
           private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 
-          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-            cb.close()
-          }
+          TaskContext.get().addTaskCompletionListener(_ => cb.close())
 
           override def hasNext: Boolean = {
             rowIterator.hasNext

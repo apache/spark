@@ -91,7 +91,7 @@ private[sql] object ArrowConverters extends Logging {
     val unloader = new VectorUnloader(root)
     val arrowWriter = ArrowWriter.create(root)
 
-    context.addTaskCompletionListener[Unit] { _ =>
+    context.addTaskCompletionListener { _ =>
       root.close()
       allocator.close()
     }
@@ -145,10 +145,10 @@ private[sql] object ArrowConverters extends Logging {
     new Iterator[InternalRow] {
       private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
 
-      if (context != null) context.addTaskCompletionListener[Unit] { _ =>
+      Option(context).foreach(_.addTaskCompletionListener { _ =>
         root.close()
         allocator.close()
-      }
+      })
 
       override def hasNext: Boolean = rowIter.hasNext || {
         if (arrowBatchIter.hasNext) {

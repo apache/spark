@@ -847,11 +847,9 @@ private[storage] class PartiallySerializedBlock[T](
   // completion listener here in order to ensure that `unrolled.dispose()` is called at least once.
   // The dispose() method is idempotent, so it's safe to call it unconditionally.
   Option(TaskContext.get()).foreach { taskContext =>
-    taskContext.addTaskCompletionListener[Unit] { _ =>
-      // When a task completes, its unroll memory will automatically be freed. Thus we do not call
-      // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
-      unrolledBuffer.dispose()
-    }
+    // When a task completes, its unroll memory will automatically be freed. Thus we do not call
+    // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
+    taskContext.addTaskCompletionListener(_ => unrolledBuffer.dispose())
   }
 
   // Exposed for testing

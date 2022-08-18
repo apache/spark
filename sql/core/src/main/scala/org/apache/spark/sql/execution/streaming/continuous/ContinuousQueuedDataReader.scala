@@ -74,9 +74,7 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  context.addTaskCompletionListener[Unit](_ => {
-    this.close()
-  })
+  context.addTaskCompletionListener(_ => this.close())
 
   private def shouldStop() = {
     context.isInterrupted() || context.isCompleted()

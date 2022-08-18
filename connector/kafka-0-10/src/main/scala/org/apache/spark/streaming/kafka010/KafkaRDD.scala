@@ -233,7 +233,7 @@ private class KafkaRDDIterator[K, V](
   cacheLoadFactor: Float
 ) extends Iterator[ConsumerRecord[K, V]] {
 
-  context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
+  context.addTaskCompletionListener(_ => closeIfNeeded())
 
   val consumer = {
     KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)

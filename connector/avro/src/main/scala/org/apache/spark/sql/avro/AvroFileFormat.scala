@@ -115,11 +115,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
         // Ensure that the reader is closed even if the task fails or doesn't consume the entire
         // iterator of records.
-        Option(TaskContext.get()).foreach { taskContext =>
-          taskContext.addTaskCompletionListener[Unit] { _ =>
-            reader.close()
-          }
-        }
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
 
         reader.sync(file.start)
 

@@ -82,10 +82,10 @@ class ObjectAggregationIterator(
    */
   processInputs()
 
-  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+  TaskContext.get().addTaskCompletionListener { _ =>
     // At the end of the task, update the task's spill size.
     spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
-  })
+  }
 
   override final def hasNext: Boolean = {
     aggBufferIterator.hasNext

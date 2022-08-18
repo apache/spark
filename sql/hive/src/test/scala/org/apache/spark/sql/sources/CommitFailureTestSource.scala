@@ -45,7 +45,7 @@ class CommitFailureTestSource extends SimpleTextSource {
           context: TaskAttemptContext): OutputWriter = {
         new SimpleTextOutputWriter(path, dataSchema, context) {
           var failed = false
-          TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+          TaskContext.get().addTaskFailureListener { (_, _) =>
             failed = true
             SimpleTextRelation.callbackCalled = true
           }

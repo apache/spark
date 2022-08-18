@@ -501,9 +501,7 @@ case class CloseableColumnBatchIterator(itr: Iterator[ColumnarBatch],
     }
   }
 
-  TaskContext.get().addTaskCompletionListener[Unit]((tc: TaskContext) => {
-    closeCurrentBatch()
-  })
+  TaskContext.get().addTaskCompletionListener(_ => closeCurrentBatch())
 
   override def hasNext: Boolean = {
     closeCurrentBatch()

@@ -1284,9 +1284,7 @@ private[joins] class SortMergeJoinScanner(
     new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 
   // At the end of the task, update the task's spill size for buffered side.
-  TaskContext.get().addTaskCompletionListener[Unit](_ => {
-    spillSize += bufferedMatches.spillSize
-  })
+  TaskContext.get().addTaskCompletionListener(_ => spillSize += bufferedMatches.spillSize)
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()

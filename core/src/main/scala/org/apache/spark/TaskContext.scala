@@ -116,24 +116,6 @@ abstract class TaskContext extends Serializable {
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
   /**
-   * Adds a listener in the form of a Scala closure to be executed on task completion.
-   * This will be called in all situations - success, failure, or cancellation. Adding a listener
-   * to an already completed task will result in that listener being called immediately.
-   *
-   * An example use is for HadoopRDD to register a callback to close the input stream.
-   *
-   * Exceptions thrown by the listener will result in failure of the task.
-   */
-  def addTaskCompletionListener[U](f: (TaskContext) => U): TaskContext = {
-    // Note that due to this scala bug: https://github.com/scala/bug/issues/11016, we need to make
-    // this function polymorphic for every scala version >= 2.12, otherwise an overloaded method
-    // resolution error occurs at compile time.
-    addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = f(context)
-    })
-  }
-
-  /**
    * Adds a listener to be executed on task failure (which includes completion listener failure, if
    * the task body did not already fail). Adding a listener to an already failed task will result in
    * that listener being called immediately.
@@ -141,19 +123,6 @@ abstract class TaskContext extends Serializable {
    * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
-
-  /**
-   * Adds a listener to be executed on task failure (which includes completion listener failure, if
-   * the task body did not already fail). Adding a listener to an already failed task will result in
-   * that listener being called immediately.
-   *
-   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
-   */
-  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
-    addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
-    })
-  }
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
   private[spark] def runTaskWithListeners[T](task: Task[T]): T = {

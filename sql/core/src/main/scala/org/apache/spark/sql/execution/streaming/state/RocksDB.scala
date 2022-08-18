@@ -191,9 +191,7 @@ class RocksDB(
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
     // This is a hack because it assumes that the RocksDB is running inside a task.
-    Option(TaskContext.get()).foreach { tc =>
-      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
-    }
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
     new NextIterator[ByteArrayPair] {
       override protected def getNext(): ByteArrayPair = {
@@ -440,7 +438,7 @@ class RocksDB(
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
+      Option(TaskContext.get).foreach(_.addTaskCompletionListener(_ => this.release()))
       logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
     }
   }

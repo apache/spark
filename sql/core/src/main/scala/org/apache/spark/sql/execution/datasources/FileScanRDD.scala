@@ -302,7 +302,7 @@ class FileScanRDD(
     }
 
     // Register an on-task-completion callback to close the input stream.
-    context.addTaskCompletionListener[Unit](_ => iterator.close())
+    context.addTaskCompletionListener(_ => iterator.close())
 
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }

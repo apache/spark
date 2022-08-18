@@ -941,9 +941,7 @@ class FakeWriterWithCallback extends FakeWriter {
 
   override def write(p1: Integer, p2: Integer): Unit = {
     FakeWriterWithCallback.calledBy += "write,"
-    TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
-      FakeWriterWithCallback.onFailure(t, e)
-    }
+    TaskContext.get().addTaskFailureListener(FakeWriterWithCallback.onFailure)
     throw new IOException("failed to write")
   }
 }
@@ -964,9 +962,7 @@ class NewFakeWriterWithCallback extends NewFakeWriter {
 
   override def write(p1: Integer, p2: Integer): Unit = {
     FakeWriterWithCallback.calledBy += "write,"
-    TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
-      FakeWriterWithCallback.onFailure(t, e)
-    }
+    TaskContext.get().addTaskFailureListener(FakeWriterWithCallback.onFailure)
     throw new IOException("failed to write")
   }
 }

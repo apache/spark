@@ -59,10 +59,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val rdd = new RDD[String](sc, List()) {
       override def getPartitions = Array[Partition](StubPartition(0))
       override def compute(split: Partition, context: TaskContext) = {
-        context.addTaskCompletionListener(new TaskCompletionListener {
-          override def onTaskCompletion(context: TaskContext): Unit =
-            TaskContextSuite.completed = true
-        })
+        context.addTaskCompletionListener(_ => TaskContextSuite.completed = true)
         sys.error("failed")
       }
     }
@@ -103,13 +100,9 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("all TaskCompletionListeners should be called even if some fail") {
     val context = TaskContext.empty()
     val listener = mock(classOf[TaskCompletionListener])
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("blah")
-    })
+    context.addTaskCompletionListener(_ => throw new Exception("blah"))
     context.addTaskCompletionListener(listener)
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("blah")
-    })
+    context.addTaskCompletionListener(_ => throw new Exception("blah"))
 
     intercept[TaskCompletionListenerException] {
       context.markTaskCompleted(None)
@@ -121,15 +114,9 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("all TaskFailureListeners should be called even if some fail") {
     val context = TaskContext.empty()
     val listener = mock(classOf[TaskFailureListener])
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
-        throw new Exception("exception in listener1")
-    })
+    context.addTaskFailureListener((_, _) => throw new Exception("exception in listener1"))
     context.addTaskFailureListener(listener)
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
-        throw new Exception("exception in listener3")
-    })
+    context.addTaskFailureListener((_, _) => throw new Exception("exception in listener3"))
 
     val e = intercept[TaskCompletionListenerException] {
       context.markTaskFailed(new Exception("exception in task"))
@@ -147,17 +134,11 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("FailureListener throws after task body fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "bad failure"
-        throw new Exception("bad failure listener")
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "completion listener"
-      }
-    })
+    context.addTaskFailureListener { (_, _) =>
+      listenerCalls += "bad failure"
+      throw new Exception("bad failure listener")
+    }
+    context.addTaskCompletionListener(_ => listenerCalls += "completion listener")
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -173,22 +154,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("CompletionListener throws after task body fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "failure listener"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "other completion"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "bad completion"
-        throw new Exception("bad completion listener")
-      }
-    })
+    context.addTaskFailureListener((_, _) => listenerCalls += "failure listener")
+    context.addTaskCompletionListener(_ => listenerCalls += "other completion")
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "bad completion"
+      throw new Exception("bad completion listener")
+    }
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -204,22 +175,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("CompletionListener throws after task body succeeds") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "failure listener"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "other completion"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "bad completion"
-        throw new Exception("bad completion listener")
-      }
-    })
+    context.addTaskFailureListener((_, _) => listenerCalls += "failure listener")
+    context.addTaskCompletionListener(_ => listenerCalls += "other completion")
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "bad completion"
+      throw new Exception("bad completion listener")
+    }
 
     val e = intercept[TaskCompletionListenerException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -233,23 +194,15 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("FailureListener throws after task body succeeds and CompletionListener fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "failure listener"
-        throw new Exception("bad failure listener")
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "other completion"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "bad completion"
-        throw new Exception("bad completion listener")
-      }
-    })
+    context.addTaskFailureListener { (_, _) =>
+      listenerCalls += "failure listener"
+      throw new Exception("bad failure listener")
+    }
+    context.addTaskCompletionListener(_ => listenerCalls += "other completion")
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "bad completion"
+      throw new Exception("bad completion listener")
+    }
 
     val e = intercept[TaskCompletionListenerException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -265,23 +218,15 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("CompletionListener throws after task body succeeds and CompletionListener fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "failure listener"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "other completion"
-        throw new Exception("second bad completion listener")
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "bad completion"
-        throw new Exception("first bad completion listener")
-      }
-    })
+    context.addTaskFailureListener((_, _) => listenerCalls += "failure listener")
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "other completion"
+      throw new Exception("second bad completion listener")
+    }
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "bad completion"
+      throw new Exception("first bad completion listener")
+    }
 
     val e = intercept[TaskCompletionListenerException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -297,23 +242,15 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("CompletionListener throws after task body fails and FailureListener fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        listenerCalls += "bad failure"
-        throw new Exception("bad failure listener")
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "other completion"
-      }
-    })
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        listenerCalls += "bad completion"
-        throw new Exception("bad completion listener")
-      }
-    })
+    context.addTaskFailureListener { (_, _) =>
+      listenerCalls += "bad failure"
+      throw new Exception("bad failure listener")
+    }
+    context.addTaskCompletionListener(_ => listenerCalls += "other completion")
+    context.addTaskCompletionListener { _ =>
+      listenerCalls += "bad completion"
+      throw new Exception("bad completion listener")
+    }
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
       context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
@@ -480,10 +417,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     var invocations = 0
     val context = TaskContext.empty()
     context.markTaskCompleted(None)
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit =
-        invocations += 1
-    })
+    context.addTaskCompletionListener(_ => invocations += 1)
     assert(invocations == 1)
     context.markTaskCompleted(None)
     assert(invocations == 1)
@@ -495,12 +429,10 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val error = new RuntimeException
     val context = TaskContext.empty()
     context.markTaskFailed(error)
-    context.addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, e: Throwable): Unit = {
-        lastError = e
-        invocations += 1
-      }
-    })
+    context.addTaskFailureListener { (taskContext, error) =>
+      lastError = error
+      invocations += 1
+    }
     assert(lastError == error)
     assert(invocations == 1)
     context.markTaskFailed(error)
@@ -520,15 +452,9 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("all TaskCompletionListeners should be called even if some fail or a task") {
     val context = TaskContext.empty()
     val listener = mock(classOf[TaskCompletionListener])
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit =
-        throw new Exception("exception in listener1")
-    })
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener1"))
     context.addTaskCompletionListener(listener)
-    context.addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit =
-        throw new Exception("exception in listener3")
-    })
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener3"))
 
     val e = intercept[TaskCompletionListenerException] {
       context.markTaskCompleted(Some(new Exception("exception in task")))
@@ -605,14 +531,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // Create a listener that will throw if more than one instance is running at the same time.
     val registerExclusiveListener = new Runnable {
       override def run(): Unit = {
-        context.addTaskCompletionListener(new TaskCompletionListener {
-          override def onTaskCompletion(context: TaskContext): Unit = {
-            if (numRunningListeners.getAndIncrement() != 0) throw new Exception()
-            Thread.sleep(100)
-            if (numRunningListeners.decrementAndGet() != 0) throw new Exception()
-            invocations.getAndIncrement()
-          }
-        })
+        context.addTaskCompletionListener { _ =>
+          if (numRunningListeners.getAndIncrement() != 0) throw new Exception()
+          Thread.sleep(100)
+          if (numRunningListeners.decrementAndGet() != 0) throw new Exception()
+          invocations.getAndIncrement()
+        }
       }
     }
 

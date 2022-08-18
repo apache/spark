@@ -376,7 +376,7 @@ class TungstenAggregationIterator(
     }
   }
 
-  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+  TaskContext.get().addTaskCompletionListener { _ =>
     // At the end of the task, update the task's peak memory usage. Since we destroy
     // the map to create the sorter, their memory usages should not overlap, so it is safe
     // to just use the max of the two.
@@ -390,7 +390,7 @@ class TungstenAggregationIterator(
 
     // Updating average hashmap probe
     avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
-  })
+  }
 
   ///////////////////////////////////////////////////////////////////////////
   // Part 7: Iterator's public methods.

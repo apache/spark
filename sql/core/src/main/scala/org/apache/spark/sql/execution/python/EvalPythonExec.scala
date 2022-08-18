@@ -95,9 +95,7 @@ trait EvalPythonExec extends UnaryExecNode {
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      context.addTaskCompletionListener[Unit] { ctx =>
-        queue.close()
-      }
+      context.addTaskCompletionListener(_ => queue.close())
 
       val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 

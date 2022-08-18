@@ -270,7 +270,7 @@ private[jdbc] class JDBCRDD(
       closed = true
     }
 
-    context.addTaskCompletionListener[Unit]{ context => close() }
+    context.addTaskCompletionListener(_ => close())
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]

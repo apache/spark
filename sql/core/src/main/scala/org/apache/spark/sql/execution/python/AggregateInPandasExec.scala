@@ -147,9 +147,7 @@ case class AggregateInPandasExec(
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
-      context.addTaskCompletionListener[Unit] { _ =>
-        queue.close()
-      }
+      context.addTaskCompletionListener(_ => queue.close())
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = grouped.map { case (groupingKey, rows) =>

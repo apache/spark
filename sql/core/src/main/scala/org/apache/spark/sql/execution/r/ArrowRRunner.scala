@@ -128,10 +128,8 @@ class ArrowRRunner(
       private var root: VectorSchemaRoot = _
       private var vectors: Array[ColumnVector] = _
 
-      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-        if (reader != null) {
-          reader.close(false)
-        }
+      TaskContext.get().addTaskCompletionListener { _ =>
+        Option(reader).foreach(_.close(false))
         allocator.close()
       }
 

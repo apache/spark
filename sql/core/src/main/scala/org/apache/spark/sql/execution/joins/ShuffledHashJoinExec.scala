@@ -89,7 +89,7 @@ case class ShuffledHashJoinExec(
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
-    context.addTaskCompletionListener[Unit](_ => relation.close())
+    context.addTaskCompletionListener(_ => relation.close())
     relation
   }
 
@@ -228,14 +228,14 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
-    TaskContext.get().addTaskCompletionListener[Unit](_ => {
+    TaskContext.get().addTaskCompletionListener { _ =>
       // At the end of the task, update the task's memory usage for this
       // [[OpenHashSet]] to track matched rows, which has two parts:
       // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
       val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
       val dataEstimatedSize = matchedRows.capacity * 8
       longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
-    })
+    }
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex

@@ -561,7 +561,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    context.addTaskCompletionListener[Unit](context => cleanup())
+    context.addTaskCompletionListener(_ => cleanup())
   }
 
   private class SpillableIterator(var upstream: Iterator[(K, C)])

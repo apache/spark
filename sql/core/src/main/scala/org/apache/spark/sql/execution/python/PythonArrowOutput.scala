@@ -60,10 +60,8 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
       private var schema: StructType = _
       private var vectors: Array[ColumnVector] = _
 
-      context.addTaskCompletionListener[Unit] { _ =>
-        if (reader != null) {
-          reader.close(false)
-        }
+      context.addTaskCompletionListener { _ =>
+        Option(reader).foreach(_.close(false))
         allocator.close()
       }
 
