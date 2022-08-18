@@ -266,7 +266,7 @@ SELECT regexp_extract_all('abc', col0, 1) FROM VALUES('], [') AS t(col0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract_all` is invalid: ], [
+[INVALID_FUNCTION_ARGUMENTS.INVALID_ARGUMENT_VALUE] Arguments of the `regexp_extract_all` function are invalid: The value of parameter(s) 'regexp' is invalid: ], [
 
 
 -- !query
@@ -565,4 +565,4 @@ SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_instr` is invalid: ) ?
+[INVALID_FUNCTION_ARGUMENTS.INVALID_ARGUMENT_VALUE] Arguments of the `regexp_instr` function are invalid: The value of parameter(s) 'regexp' is invalid: ) ?
