@@ -39,18 +39,7 @@ public class MoreMath {
     // HD 2-13
     return ((~a & b) | (~(a ^ b) & (a - b))) >>> 63;
   }
-
-  /**
-   * Branchless form of
-   * <pre>
-   * if (test < 0) {
-   *   return value;
-   * }
-   * else {
-   *   return 0;
-   * }
-   * </pre>
-   */
+  
   public static long ifNegative(long test, long value)
     {
         return value & (test >> 63);
