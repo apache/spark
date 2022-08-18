@@ -72,7 +72,6 @@ class GroupStateImpl:
         self._timeout_timestamp = timeoutTimestamp
         self._timeout_updated = timeoutUpdated
 
-        self._key_schema = keySchema
         self._value_schema = valueSchema
 
     @property

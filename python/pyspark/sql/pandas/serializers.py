@@ -400,7 +400,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         import pyarrow as pa
         import json
-        from pyspark.sql.types import StructType
         from pyspark.sql.streaming.state import GroupStateImpl
 
         batches = ArrowStreamPandasUDFSerializer.load_stream(self, stream)
@@ -410,7 +409,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             state_info_col_properties = state_info_col['properties']
             state_info_col_key_row = state_info_col['keyRowAsUnsafe']
-            state_info_col_object_schema = state_info_col['objectSchema']
             state_info_col_object = state_info_col['object']
 
             state_properties = json.loads(state_info_col_properties)
