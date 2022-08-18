@@ -2271,10 +2271,7 @@ class NumpyScalarConverter:
         return self._has_np
 
     def can_convert(self, obj: Any) -> bool:
-        if self._has_numpy:
-            return isinstance(obj, np.generic)
-        else:
-            return False
+        return self._has_numpy and isinstance(obj, np.generic)
 
     def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
         return obj.item()
