@@ -2261,7 +2261,7 @@ class NumpyScalarConverter:
     def _has_numpy(self):
         if not hasattr(self, "_has_np"):
             try:
-                global np
+                global np  # Cache the import of NumPy
                 import numpy as np
 
                 has_np = True
