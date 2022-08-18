@@ -15,17 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.shuffledb;
 
-public class Constants {
+import java.io.Closeable;
+import java.util.Iterator;
+import java.util.Map;
 
-  public static final String SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
-    "spark.shuffle.service.fetch.rdd.enabled";
+public interface DBIterator extends Iterator<Map.Entry<byte[], byte[]>>, Closeable {
 
-  /**
-   * The Spark config defined by the core module cannot be obtained in the current module,
-   * hard coding is performed here to define `SHUFFLE_SERVICE_DB_BACKEND`.
-   */
-  public static final String SHUFFLE_SERVICE_DB_BACKEND =
-    "spark.shuffle.service.db.backend";
+    /**
+     * Position at the first entry in the source whose `key` is at target.
+     */
+    void seek(byte[] key);
+
+    default void remove() {
+        throw new UnsupportedOperationException();
+    }
+
 }
