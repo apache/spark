@@ -244,22 +244,21 @@ class LimitPushdownSuite extends PlanTest {
     // Push down when it is group only and limit 1.
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
-      LocalLimit(1, x).select("x.a".attr).limit(1).analyze)
+      Limit(1, x.select("x.a".attr)).analyze)
 
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(1).analyze),
-      LocalLimit(1, x).select("x.a".attr).select("x.a".attr).limit(1).analyze)
+      Limit(1, x.select("x.a".attr).select("x.a".attr)).analyze)
 
     comparePlans(
       Optimize.execute(x.union(y).groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
-      LocalLimit(1, LocalLimit(1, x).union(LocalLimit(1, y))).select("x.a".attr).limit(1).analyze)
+      LocalLimit(1, x).union(LocalLimit(1, y)).select("x.a".attr).limit(1).analyze)
 
     comparePlans(
       Optimize.execute(
         x.groupBy("x.a".attr)("x.a".attr)
           .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze),
-      LocalLimit(1, x).select("x.a".attr)
-        .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze)
+      x.select("x.a".attr).select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze)
 
     // No push down
     comparePlans(

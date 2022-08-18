@@ -1995,6 +1995,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
 
+    case Project(projectList, Limit(l, child)) =>
+      Limit(l, Project(projectList, child))
     case Project(projectList, GlobalLimit(l, child)) =>
       GlobalLimit(l, Project(projectList, child));
     case Project(projectList, LocalLimit(l, child)) =>
