@@ -251,7 +251,7 @@ private[spark] class TaskContextImpl(
     }
     if (listenerExceptions.nonEmpty) {
       val exception = new TaskCompletionListenerException(
-        listenerExceptions.map(_.getMessage), error)
+        listenerExceptions.map(_.getMessage).toSeq, error)
       listenerExceptions.foreach(exception.addSuppressed)
       throw exception
     }
