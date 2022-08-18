@@ -48,11 +48,10 @@ class GroupStateImpl:
         timeoutUpdated: bool,
         timeoutTimestamp: int,
         # Python internal state.
-        key: Row,
-        keySchema: StructType,
+        keyAsUnsafe: bytes,
         valueSchema: StructType,
     ) -> None:
-        self._key = key
+        self._keyAsUnsafe = keyAsUnsafe
         self._value = optionalValue
         self._batch_processing_time_ms = batchProcessingTimeMs
         self._event_time_watermark_ms = eventTimeWatermarkMs

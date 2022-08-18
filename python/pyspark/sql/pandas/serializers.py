@@ -378,20 +378,21 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
+    def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema):
         super(ApplyInPandasWithStateSerializer, self).__init__(
             timezone, safecheck, assign_cols_by_name)
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
+        self.state_object_schema = state_object_schema
 
         # FIXME: result_state_df_type?
-        self.state_df_type = StructType([
+        self.result_state_df_type = StructType([
             StructField('properties', StringType()),
-            StructField('keyRow', BinaryType()),
+            StructField('keyRowAsUnsafe', BinaryType()),
             StructField('object', BinaryType()),
         ])
 
-        self.state_pdf_arrow_type = to_arrow_type(self.state_df_type)
+        self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
 
     def arrow_to_pandas(self, arrow_column):
         return super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
@@ -408,25 +409,19 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             state_info_col = batch[-1][0]
 
             state_info_col_properties = state_info_col['properties']
-            state_info_col_key_schema = state_info_col['keySchema']
-            state_info_col_key_row = state_info_col['keyRow']
+            state_info_col_key_row = state_info_col['keyRowAsUnsafe']
             state_info_col_object_schema = state_info_col['objectSchema']
             state_info_col_object = state_info_col['object']
 
-            # FIXME: schemas can be retrieved as metadata since they are applied for all data
-            state_key_schema = StructType.fromJson(json.loads(state_info_col_key_schema))
-            state_object_schema = StructType.fromJson(json.loads(state_info_col_object_schema))
-
             state_properties = json.loads(state_info_col_properties)
-            state_key_row = self.pickleSer.loads(state_info_col_key_row)
             if state_info_col_object:
                 state_object = self.pickleSer.loads(state_info_col_object)
             else:
                 state_object = None
             state_properties["optionalValue"] = state_object
 
-            state = GroupStateImpl(key=state_key_row, keySchema=state_key_schema,
-                                   valueSchema=state_object_schema, **state_properties)
+            state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
+                                   valueSchema=self.state_object_schema, **state_properties)
 
             state_column_dropped_series = batch[0:-1]
             first_row_dropped_series = [x.iloc[1:].reset_index(drop=True) for x in state_column_dropped_series]
@@ -457,14 +452,14 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 pdf_with_empty_row = pd.concat([new_empty_row, pdf[:]], axis=0).reset_index(drop=True)
 
                 state_properties = state.json().encode("utf-8")
-                state_key_row = self.pickleSer.dumps(state._key_schema.toInternal(state._key))
+                state_key_row_as_binary = state._keyAsUnsafe
                 state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
 
                 len_pdf = len(pdf)
                 none_array = [None, ] * len_pdf
                 state_dict = {
                     'properties': [state_properties, ] + none_array,
-                    'keyRow': [state_key_row, ] + none_array,
+                    'keyRowAsUnsafe': [state_key_row_as_binary, ] + none_array,
                     'object': [state_object, ] + none_array,
                 }
 
@@ -472,7 +467,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 batch = self._create_batch([
                     (pdf_with_empty_row, return_schema),
-                    (state_pdf, self.state_pdf_arrow_type)])
+                    (state_pdf, self.result_state_pdf_arrow_type)])
 
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)

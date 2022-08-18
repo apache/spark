@@ -27,14 +27,14 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{SparkEnv, TaskContext}
+
 import org.apache.spark.api.python._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
@@ -54,14 +54,13 @@ class ArrowPythonRunnerWithState(
     inputSchema: StructType,
     timeZoneId: String,
     workerConf: Map[String, String],
-    keyEncoder: ExpressionEncoder[Row],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     valueSchema: StructType,
     stateSchema: StructType)
   extends BasePythonRunner[
-    (InternalRow, GroupStateImpl[Row], Iterator[InternalRow]),
-    (InternalRow, GroupStateImpl[Row], Iterator[InternalRow])](
+    (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]),
+    (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -76,18 +75,12 @@ class ArrowPythonRunnerWithState(
     StructType(
       Array(
         StructField("properties", StringType),
-        // FIXME: don't need to send the key row in state separately if there is any data
-        // FIXME: same: don't need to send the key schema as we know the schema
-        StructField("keySchema", StringType),
-        StructField("keyRow", BinaryType),
-        StructField("objectSchema", StringType),
+        StructField("keyRowAsUnsafe", BinaryType),
         StructField("object", BinaryType)
       )
     )
   )
 
-  val keyRowSerializer = keyEncoder.createSerializer()
-  val keyRowDeserializer = keyEncoder.createDeserializer()
   val stateRowSerializer = stateEncoder.createSerializer()
   val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -98,12 +91,13 @@ class ArrowPythonRunnerWithState(
       PythonRDD.writeUTF(k, stream)
       PythonRDD.writeUTF(v, stream)
     }
+    PythonRDD.writeUTF(stateSchema.json, stream)
   }
 
   protected override def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[(InternalRow, GroupStateImpl[Row], Iterator[InternalRow])],
+      inputIterator: Iterator[(UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow])],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
@@ -114,15 +108,12 @@ class ArrowPythonRunnerWithState(
       }
 
       private def buildStateInfoRow(
-          keyRow: InternalRow,
+          keyRow: UnsafeRow,
           groupState: GroupStateImpl[Row]): InternalRow = {
-        val keyRowAsPublicRow = keyRowDeserializer.apply(keyRow)
         val stateUnderlyingRow = new GenericInternalRow(
           Array[Any](
             UTF8String.fromString(groupState.json()),
-            UTF8String.fromString(keySchema.json),
-            PythonSQLUtils.toPyRow(keyRowAsPublicRow),
-            UTF8String.fromString(stateSchema.json),
+            keyRow.getBytes,
             groupState.getOption.map(PythonSQLUtils.toPyRow).orNull
           )
         )
@@ -193,7 +184,7 @@ class ArrowPythonRunnerWithState(
       worker: Socket,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[(InternalRow, GroupStateImpl[Row], Iterator[InternalRow])] = {
+      context: TaskContext): Iterator[(UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow])] = {
 
     new ReaderIterator(
       stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
@@ -216,7 +207,7 @@ class ArrowPythonRunnerWithState(
 
       private var batchLoaded = true
 
-      protected override def read(): (InternalRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
+      protected override def read(): (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
         if (writerThread.exception.isDefined) {
           throw writerThread.exception.get
         }
@@ -263,7 +254,7 @@ class ArrowPythonRunnerWithState(
       }
 
       private def deserializeColumnarBatch(
-          batch: ColumnarBatch): (InternalRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
+          batch: ColumnarBatch): (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
         // this should at least have one row for state
         assert(batch.numRows() > 0)
         assert(schema.length == 2)
@@ -294,19 +285,16 @@ class ArrowPythonRunnerWithState(
         /*
         Array(
           StructField("properties", StringType),
-          StructField("keyRow", BinaryType),
+          StructField("keyRowAsUnsafe", BinaryType),
           StructField("object", BinaryType)
         )
         */
         implicit val formats = org.json4s.DefaultFormats
 
         val propertiesAsJson = parse(rowForStateInfo.getUTF8String(0).toString)
-        val pickledKeyRow = rowForStateInfo.getBinary(1)
-        // FIXME: we convert key as byte array -> generic Row -> internal Row -> unsafe Row
-        //   is there any util to skip a part of conversion?
-        val keyRowAsGenericRow = PythonSQLUtils.toJVMRow(pickledKeyRow, keySchema,
-          keyRowDeserializer)
-        val keyRowAsInternalRow = keyRowSerializer.apply(keyRowAsGenericRow)
+        val keyRowAsUnsafeAsBinary = rowForStateInfo.getBinary(1)
+        val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
+        keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
         val maybeObjectRow = if (rowForStateInfo.isNullAt(2)) {
           None
         } else {
@@ -316,7 +304,7 @@ class ArrowPythonRunnerWithState(
 
         val newGroupState = GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson)
 
-        (keyRowAsInternalRow, newGroupState, rowIterator.map(unsafeProjForData))
+        (keyRowAsUnsafe, newGroupState, rowIterator.map(unsafeProjForData))
       }
     }
   }

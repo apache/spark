@@ -382,6 +382,10 @@ def read_udfs(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
 
+        state_object_schema = None
+        if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+            state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
+
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
         safecheck = (
@@ -401,7 +405,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-            ser = ApplyInPandasWithStateSerializer(timezone, safecheck, assign_cols_by_name)
+            ser = ApplyInPandasWithStateSerializer(timezone, safecheck, assign_cols_by_name, state_object_schema)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -646,6 +650,7 @@ def main(infile, outfile):
                 )
 
         # initialize global state
+        state_schema = None
         taskContext = None
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()

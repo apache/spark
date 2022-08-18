@@ -76,9 +76,6 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected val stateEncoder: ExpressionEncoder[Any] =
     RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
-  private val keyEncoder: ExpressionEncoder[Row] =
-    RowEncoder(keySchema).resolveAndBind()
-
   override def output: Seq[Attribute] = outAttributes
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
@@ -103,8 +100,6 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
-
-    private val keyUnsafeProj = UnsafeProjection.create(keySchema)
 
     /**
      * For every group, get the key, values and corresponding state and call the function,
@@ -149,7 +144,7 @@ case class FlatMapGroupsInPandasWithStateExec(
     }
 
     private def process(
-        iter: Iterator[(InternalRow, StateData, Iterator[InternalRow])],
+        iter: Iterator[(UnsafeRow, StateData, Iterator[InternalRow])],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
       val runner = new ArrowPythonRunnerWithState(
         chainedFunc,
@@ -158,7 +153,6 @@ case class FlatMapGroupsInPandasWithStateExec(
         StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
         pythonRunnerConf,
-        keyEncoder,
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         child.output.toStructType,
@@ -177,12 +171,10 @@ case class FlatMapGroupsInPandasWithStateExec(
       }
       runner.compute(processIter, context.partitionId(), context).flatMap {
         case (keyRow, newGroupState, outputIter) =>
-          val keyUnsafeRow = keyUnsafeProj(keyRow)
-
           // When the iterator is consumed, then write changes to state
           def onIteratorCompletion: Unit = {
             if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
-              stateManager.removeState(store, keyUnsafeRow)
+              stateManager.removeState(store, keyRow)
               numRemovedStateRows += 1
             } else {
               val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs
@@ -192,7 +184,7 @@ case class FlatMapGroupsInPandasWithStateExec(
 
               if (shouldWriteState) {
                 val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
-                stateManager.putState(store, keyUnsafeRow, updatedStateObj,
+                stateManager.putState(store, keyRow, updatedStateObj,
                   currentTimeoutTimestamp)
                 numUpdatedStateRows += 1
               }
