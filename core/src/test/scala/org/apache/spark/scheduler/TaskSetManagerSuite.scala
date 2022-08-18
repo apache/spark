@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.{Properties, Random}
 
@@ -2576,18 +2577,26 @@ class TaskSetManagerSuite
 
     // setup spark context and init ExecutorAllocationManager
     sc = new SparkContext(sparkConf)
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     // replace dagScheduler to let handleFailedTask send TaskEnd
     sched.dagScheduler = sc.dagScheduler
 
-    val taskSet = FakeTask.createTaskSet(1)
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val taskSet1 = FakeTask.createTaskSet(1)
+    val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES)
+    val taskSet2 = FakeTask.createTaskSet(1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES)
     assert(sched.taskSetsFailed.isEmpty)
 
-    val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
-    assert(offerResult.isDefined,
+
+    val offerResult1 = manager1.resourceOffer("exec1", "host1", ANY)._1
+    assert(offerResult1.isDefined,
       "Expect resource offer on iteration 0 to return a task")
-    assert(offerResult.get.index === 0)
+    assert(offerResult1.get.index === 0)
+
+    val offerResult2 = manager2.resourceOffer("exec2", "host2", ANY)._1
+    assert(offerResult2.isDefined,
+      "Expect resource offer on iteration 0 to return a task")
+    assert(offerResult2.get.index === 0)
 
     val executorMonitor = sc.executorAllocationManager.get.executorMonitor
 
@@ -2596,28 +2605,39 @@ class TaskSetManagerSuite
       .getDeclaredMethod("ensureExecutorIsTracked",
         classOf[String], classOf[Int])
     ensureExecutorIsTracked.setAccessible(true)
-    val executorTracker = ensureExecutorIsTracked.invoke(executorMonitor,
+
+    val executorTracker1 = ensureExecutorIsTracked.invoke(executorMonitor,
       "exec1".asInstanceOf[AnyRef],
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID.asInstanceOf[AnyRef])
-    executorTracker.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
+    executorTracker1.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
+    val executorTracker2 = ensureExecutorIsTracked.invoke(executorMonitor,
+      "exec2".asInstanceOf[AnyRef],
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID.asInstanceOf[AnyRef])
+    executorTracker2.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
 
-    // assert exec1 is not idle
+    // assert exec1 and exec2 is not idle
     val method = classOf[ExecutorMonitor].getDeclaredMethod("isExecutorIdle",
       classOf[String])
     method.setAccessible(true)
     assert(!method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
+    assert(!method.invoke(executorMonitor, "exec2").asInstanceOf[Boolean])
 
     // handle failed task and send TaskEnd
-    val reason = new ExceptionFailure(
+    val reason1 = new ExceptionFailure(
       new TaskOutputFileAlreadyExistException(
         new FileAlreadyExistsException("file already exists")),
       Seq.empty[AccumulableInfo])
-    manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
+    manager1.handleFailedTask(offerResult1.get.taskId, TaskState.FAILED, reason1)
+    val reason2 = new ExceptionFailure(
+      new NotSerializableException("test NotSerializableException"),
+      Seq.empty[AccumulableInfo])
+    manager2.handleFailedTask(offerResult2.get.taskId, TaskState.FAILED, reason2)
 
     Thread.sleep(1200)
 
     // executor is idle because task has removed by TaskEnd
     assert(method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
+    assert(method.invoke(executorMonitor, "exec2").asInstanceOf[Boolean])
   }
 
 }
