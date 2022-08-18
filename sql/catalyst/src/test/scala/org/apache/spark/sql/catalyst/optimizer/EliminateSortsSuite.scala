@@ -476,6 +476,6 @@ class EliminateSortsSuite extends AnalysisTest {
     val originalPlan = LocalLimit(Literal(2), testRelation.orderBy($"a".asc)).orderBy($"b".asc)
     val correctAnswer = LocalLimit(Literal(2), testRelation).orderBy($"b".asc)
 
-    comparePlans(Optimize.execute(originalPlan.analyze), originalPlan.analyze)
+    comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
   }
 }
