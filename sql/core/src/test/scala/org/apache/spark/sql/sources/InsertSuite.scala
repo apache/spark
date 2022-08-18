@@ -869,6 +869,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("SELECT a, b FROM jsonTable"),
         (1 to 10).map(i => Row(i, null))
       )
+
       sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
       checkAnswer(
         sql("SELECT a, b FROM jsonTable"),
@@ -881,6 +882,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         (1 to 10).map(i => Row(null, s"str$i"))
       )
     }
+
     val message = intercept[AnalysisException] {
       sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
     }.getMessage
@@ -1611,11 +1613,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "a3 bigint default 43," +
           "a4 smallint default cast(5 as smallint)," +
           "a5 tinyint default cast(6 as tinyint))")
-        if (config.useDataFrames) {
-          insertIntoT()
-        } else {
-          sql("insert into t (a, i) values('xyz', 42)")
-        }
+        insertIntoT()
         // Manually inspect the result row values rather than using the 'checkAnswer' helper method
         // in order to ensure the values' correctness while avoiding minor type incompatibilities.
         val result: Array[Row] =
