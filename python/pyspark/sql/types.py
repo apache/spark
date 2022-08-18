@@ -2267,7 +2267,7 @@ class NumpyScalarConverter:
 
         return has_numpy and isinstance(obj, np.generic)
 
-    def convert(self, obj: "np.generic", gateway_client: GatewayClient):
+    def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
         return obj.item()
 
 

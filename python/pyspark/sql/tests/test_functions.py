@@ -21,6 +21,8 @@ from itertools import chain
 import re
 import math
 
+import numpy as np
+
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
@@ -973,6 +975,25 @@ class FunctionsTests(ReusedSQLTestCase):
                 ).first()
             )
         )
+
+    def test_np_scalars(self):
+        from pyspark.sql.functions import array_contains, array_position
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],)], ["data"])
+        for dtype in [np.int8, np.int16, np.int32, np.int64]:
+            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1", "int")])
+            res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
+            self.assertEqual([Row(b=True), Row(b=False)], res)
+            res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
+            self.assertEqual([Row(c=1), Row(c=0)], res)
+
+        df = self.spark.createDataFrame([([1.0, 2.0, 3.0],), ([],)], ["data"])
+        for dtype in [np.float32, np.float64]:
+            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1.0", "double")])
+            res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
+            self.assertEqual([Row(b=True), Row(b=False)], res)
+            res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
+            self.assertEqual([Row(c=1), Row(c=0)], res)
 
 
 if __name__ == "__main__":
