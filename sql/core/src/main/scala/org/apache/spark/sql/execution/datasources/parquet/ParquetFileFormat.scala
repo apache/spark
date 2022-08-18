@@ -228,11 +228,9 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     // See PARQUET-2170.
-    // Disable column index optimisation when required schema is empty so we get the correct
-    // row count from parquet-mr.
-    if (requiredSchema.isEmpty) {
-      hadoopConf.setBoolean(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED, false)
-    }
+    // Disable column index optimisation when required schema does not have columns that appear in
+    // pushed filters to avoid getting incorrect results.
+    hadoopConf.setBooleanIfUnset(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED, false)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
