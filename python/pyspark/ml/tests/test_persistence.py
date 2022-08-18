@@ -32,7 +32,7 @@ from pyspark.ml.classification import (
     OneVsRestModel,
 )
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.feature import Binarizer, HashingTF, PCA
+from pyspark.ml.feature import Binarizer, Bucketizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel
@@ -517,6 +517,24 @@ class PersistenceTest(SparkSessionTestCase):
             metadataStr,
         )
         reader.getAndSetParams(lr, loadedMetadata)
+
+    # Test for SPARK-35542 fix.
+    def test_save_and_load_on_nested_list_params(self):
+        temp_path = tempfile.mkdtemp()
+        df = self.spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+        splitsArray = [
+            [-float("inf"), 0.5, 1.4, float("inf")],
+            [-float("inf"), 0.1, 1.2, float("inf")],
+        ]
+        bucketizer = Bucketizer(
+            splitsArray=splitsArray,
+            inputCols=["values", "values"],
+            outputCols=["b1", "b2"]
+        )
+        savePath = temp_path + "/bk_model"
+        bucketizer.write().overwrite().save(savePath)
+        loadedBucketizer = Bucketizer.load(savePath)
+        assert loadedBucketizer.getSplitsArray() == splitsArray
 
 
 if __name__ == "__main__":
