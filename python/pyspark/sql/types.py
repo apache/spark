@@ -2258,7 +2258,7 @@ class DayTimeIntervalTypeConverter:
 
 class NumpyScalarConverter:
     @property
-    def _has_numpy(self):
+    def _has_numpy(self) -> bool:
         if not hasattr(self, "_has_np"):
             try:
                 global np  # Cache the import of NumPy
