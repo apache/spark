@@ -49,7 +49,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "DIVIDE_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
-      context = ExpectedContext(fragment = "6/", start = 7, stop = 9))
+      context = ExpectedContext(fragment = "6/0", start = 7, stop = 9))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
@@ -60,7 +60,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
       sqlState = "22012",
       parameters = Map.empty[String, String],
-      context = ExpectedContext(fragment = "interval 1 day / ", start = 7, stop = 24))
+      context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
@@ -86,7 +86,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "scale" -> "1",
         "config" -> ansiConf),
       context = ExpectedContext(
-        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1)",
+        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1))",
         start = 7,
         stop = 49))
   }
@@ -98,7 +98,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_ARRAY_INDEX",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
-      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8", start = 7, stop = 29))
+      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
@@ -109,7 +109,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
       context = ExpectedContext(
-        fragment = "element_at(array(1, 2, 3, 4, 5), 8",
+        fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
         stop = 41))
   }
@@ -126,7 +126,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         "targetType" -> "\"DOUBLE\"",
         "ansiConfig" -> ansiConf),
       context = ExpectedContext(
-        fragment = "CAST('111111111111xe23' AS DOUBLE",
+        fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
         stop = 40))
   }

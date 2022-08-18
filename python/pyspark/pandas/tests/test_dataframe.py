@@ -290,7 +290,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf["a"] = psdf["a"] + 10
 
         self.assert_eq(psdf, pdf)
-        self.assert_eq(psser, pser)
+        # SPARK-38946: Since Spark 3.4, df.__setitem__ generate a new dataframe to follow
+        # pandas 1.4 behaviors
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4.0"):
+            self.assert_eq(psser, pser)
+        else:
+            # Follow pandas latest behavior
+            with self.assertRaisesRegex(AssertionError, "Series are different"):
+                self.assert_eq(psser, pser)
 
     def test_assign_list(self):
         pdf, psdf = self.df_pair
@@ -1493,6 +1500,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf.fillna({"x": -1, "y": -2, "z": -5}, inplace=True)
         psdf.fillna({"x": -1, "y": -2, "z": -5}, inplace=True)
         self.assert_eq(psdf, pdf)
+        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47188
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psser, pser)
+
+        pser = pdf.z
+        psser = psdf.z
+        pdf.fillna(0, inplace=True)
+        psdf.fillna(0, inplace=True)
+        self.assert_eq(psdf, pdf)
         self.assert_eq(psser, pser)
 
         s_nan = pd.Series([-1, -2, -5], index=["x", "y", "z"], dtype=int)
@@ -1536,14 +1552,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
         self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
 
-        self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
-
-        self.assert_eq(
-            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-        )
-        self.assert_eq(
-            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-        )
+        # See also: https://github.com/pandas-dev/pandas/issues/47649
+        if LooseVersion("1.4.3") != LooseVersion(pd.__version__):
+            self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
+            self.assert_eq(
+                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+            )
+            self.assert_eq(
+                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+            )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])
@@ -2972,7 +2989,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         left_pdf.update(right_pdf)
         left_psdf.update(right_psdf)
         self.assert_eq(left_pdf.sort_values(by=["A", "B"]), left_psdf.sort_values(by=["A", "B"]))
-        self.assert_eq(psser.sort_index(), pser.sort_index())
+        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47188
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psser.sort_index(), pser.sort_index())
 
         left_psdf, left_pdf, right_psdf, right_pdf = get_data()
         left_pdf.update(right_pdf, overwrite=False)
@@ -5243,7 +5262,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf.eval("A = B + C", inplace=True)
         psdf.eval("A = B + C", inplace=True)
         self.assert_eq(pdf, psdf)
-        self.assert_eq(pser, psser)
+        # Skip due to pandas bug: https://github.com/pandas-dev/pandas/issues/47449
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.3")):
+            self.assert_eq(pser, psser)
 
         # doesn't support for multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("y", "b"), ("z", "c")])

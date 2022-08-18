@@ -129,6 +129,7 @@
 | org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf("Hello World %d %s", 100, "days") | struct<printf(Hello World %d %s, 100, days):string> |
 | org.apache.spark.sql.catalyst.expressions.FromUTCTimestamp | from_utc_timestamp | SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul') | struct<from_utc_timestamp(2016-08-31, Asia/Seoul):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.FromUnixTime | from_unixtime | SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss') | struct<from_unixtime(0, yyyy-MM-dd HH:mm:ss):string> |
+| org.apache.spark.sql.catalyst.expressions.Get | get | SELECT get(array(1, 2, 3), 0) | struct<get(array(1, 2, 3), 0):int> |
 | org.apache.spark.sql.catalyst.expressions.GetJsonObject | get_json_object | SELECT get_json_object('{"a":"b"}', '$.a') | struct<get_json_object({"a":"b"}, $.a):string> |
 | org.apache.spark.sql.catalyst.expressions.GreaterThan | > | SELECT 2 > 1 | struct<(2 > 1):boolean> |
 | org.apache.spark.sql.catalyst.expressions.GreaterThanOrEqual | >= | SELECT 2 >= 1 | struct<(2 >= 1):boolean> |
