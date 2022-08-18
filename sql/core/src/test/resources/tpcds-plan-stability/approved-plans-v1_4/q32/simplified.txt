@@ -1,5 +1,5 @@
 WholeStageCodegen (7)
-  HashAggregate [sum] [sum(UnscaledValue(cs_ext_discount_amt)),excess discount amount ,sum]
+  HashAggregate [sum] [sum(UnscaledValue(cs_ext_discount_amt)),excess discount amount,sum]
     InputAdapter
       Exchange #1
         WholeStageCodegen (6)

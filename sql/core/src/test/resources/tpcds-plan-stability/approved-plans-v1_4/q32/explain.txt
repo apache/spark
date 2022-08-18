@@ -170,7 +170,7 @@ Input [1]: [sum#19]
 Keys: []
 Functions [1]: [sum(UnscaledValue(cs_ext_discount_amt#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cs_ext_discount_amt#2))#20]
-Results [1]: [MakeDecimal(sum(UnscaledValue(cs_ext_discount_amt#2))#20,17,2) AS excess discount amount #21]
+Results [1]: [MakeDecimal(sum(UnscaledValue(cs_ext_discount_amt#2))#20,17,2) AS excess discount amount#21]
 
 ===== Subqueries =====
 
