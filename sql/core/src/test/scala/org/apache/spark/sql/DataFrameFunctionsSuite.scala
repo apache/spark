@@ -3675,7 +3675,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex2 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
     }
-    assert(ex2.getMessage.contains("Invalid number of arguments for function zip_with"))
+    assert(ex2.getMessage.contains("Invalid number of arguments"))
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("zip_with(i, a2, (acc, x) -> x)")
     }

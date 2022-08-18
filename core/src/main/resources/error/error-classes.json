@@ -256,37 +256,59 @@
     "sqlState" : "22023"
   },
   "INVALID_FUNCTION_ARGUMENTS" : {
-    "message" : [ "Arguments of the <funcName> function are invalid:" ],
+    "message" : [
+      "Arguments of the <funcName> function are invalid:"
+    ],
     "subClass" : {
       "APPROX_COUNT_DISTINCT" : {
-        "message" : [ "The second argument should be a double literal" ]
+        "message" : [
+          "The second argument should be a double literal"
+        ]
       },
       "CAST_ALIAS" : {
-        "message" : [ "Function accepts only one argument" ]
+        "message" : [
+          "Function accepts only one argument"
+        ]
       },
       "EMPTY_NUMBER_OF_ARGUMENTS" : {
-        "message" : [ "Empty number of arguments" ]
+        "message" : [
+          "Empty number of arguments"
+        ]
       },
       "FIRST_LAST" : {
-        "message" : [ "The second argument should be a boolean literal" ]
+        "message" : [
+          "The second argument should be a boolean literal"
+        ]
       },
       "INVALID_ARGUMENT_INDEX" : {
-        "message" : [ "The value of parameter(s) '<parameter>' has invalid index, expects <expected>, but got <found>." ]
+        "message" : [
+          "The value of parameter(s) '<parameter>' has invalid index, expects <expected>, but got <found>."
+        ]
       },
       "INVALID_ARGUMENT_LENGTH" : {
-        "message" : [ "The value of parameter(s) '<parameter>' has invalid length, expects <expected>, but got <found>." ]
+        "message" : [
+          "The value of parameter(s) '<parameter>' has invalid length, expects <expected>, but got <found>."
+        ]
       },
       "INVALID_ARGUMENT_VALUE" : {
-        "message" : [ "The value of parameter(s) '<parameter>' is invalid: <message>" ]
+        "message" : [
+          "The value of parameter(s) '<parameter>' is invalid: <message>"
+        ]
       },
       "INVALID_NUMBER_OF_ARGUMENTS" : {
-        "message" : [ "Invalid number of arguments. Expected: <expected>; Found: <found>" ]
+        "message" : [
+          "Invalid number of arguments. Expected: <expected>; Found: <found>"
+        ]
       },
       "INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION" : {
-        "message" : [ "There are <expected> arguments in V2Function, but <found> parameters returned from 'inputTypes()'" ]
+        "message" : [
+          "There are <expected> arguments in V2Function, but <found> parameters returned from 'inputTypes()'"
+        ]
       },
       "INVALID_OPERATION_FOR_V2FUNCTION" : {
-        "message" : [ "V2Function cannot process input: (<type>): <message>" ]
+        "message" : [
+          "V2Function cannot process input: (<type>): <message>"
+        ]
       }
     },
     "sqlState" : "22023"

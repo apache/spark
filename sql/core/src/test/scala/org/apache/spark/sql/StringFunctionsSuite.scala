@@ -582,7 +582,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val m = intercept[AnalysisException] {
       df.selectExpr("sentences()")
     }.getMessage
-    assert(m.contains("Invalid number of arguments for function sentences"))
+    assert(m.contains("Invalid number of arguments"))
   }
 
   test("str_to_map function") {

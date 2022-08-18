@@ -174,7 +174,7 @@ class HiveUDAFSuite extends QueryTest
         sql(s"SELECT $functionName(100)")
       }.getMessage
       assert(e.contains(
-        s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;"))
+        s"Invalid number of arguments. Expected: 2; Found: 1;"))
     }
   }
 }
