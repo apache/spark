@@ -2261,7 +2261,8 @@ class NumpyScalarConverter:
     def _has_numpy(self):
         if not hasattr(self, "_has_np"):
             try:
-                import numpy
+                global np
+                import numpy as np
 
                 has_np = True
             except Exception:
@@ -2271,8 +2272,6 @@ class NumpyScalarConverter:
 
     def can_convert(self, obj: Any) -> bool:
         if self._has_numpy:
-            import numpy as np
-
             return isinstance(obj, np.generic)
         else:
             return False
