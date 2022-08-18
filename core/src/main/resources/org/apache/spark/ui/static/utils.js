@@ -152,15 +152,15 @@ function createTemplateURI(appId, templateName) {
   var ind = words.indexOf("proxy");
   var baseURI;
   if (ind > 0) {
-    baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/' + templateName + '-template.html';
+    baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/' + templateName + '-template.mustache';
     return baseURI;
   }
   ind = words.indexOf("history");
   if(ind > 0) {
-    baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
+    baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.mustache';
     return baseURI;
   }
-  return uiRoot + "/static/" + templateName + "-template.html";
+  return uiRoot + "/static/" + templateName + "-template.mustache";
 }
 
 function setDataTableDefaults() {
