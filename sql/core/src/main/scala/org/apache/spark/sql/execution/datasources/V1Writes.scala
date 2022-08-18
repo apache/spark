@@ -54,7 +54,8 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
           val newQuery = prepareQuery(write, write.query)
           val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
           val newWrite = write.withNewChildren(newQuery :: Nil).transformExpressions {
-            case a: Attribute => attrMap.getOrElse(a, a)
+            case a: Attribute if attrMap.contains(a) =>
+              a.withExprId(attrMap(a).exprId)
           }
           newWrite
       }
