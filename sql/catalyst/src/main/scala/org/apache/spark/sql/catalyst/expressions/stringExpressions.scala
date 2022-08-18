@@ -2490,44 +2490,33 @@ object ToBinary {
     //    "ab==tm+1"  - Invalid, nothing should be after padding.
     var position = 0
     var padSize = 0
-    var invalid = false // The string is detected to be invalid.
-    val validation = srcString.toString.map {
-      case c
-        if !invalid &&
-          ((c >= '0' && c <= '9')
-            || (c >= 'A' && c <= 'Z')
-            || (c >= 'a' && c <= 'z')
-            || c == '/' || c == '+') =>
-        position += 1
-        if (padSize != 0) { // Valid character after padding.
-          invalid = true
-          false
-        } else { // A group should have at least 2 valid symbols.
-          position % 4 != 1
-        }
-      case c if !invalid && c == '=' =>
-        padSize += 1
-        if (padSize > 2 || position % 4 < 2) { // Too many padding characters.
-          invalid = true
-          false
-        } else {
-          padSize + position % 4 == 4
-        }
-      case c if !invalid && Character.isWhitespace(c) =>
-        if (padSize > 0) { // No other characters after padding.
-          invalid = true
-          false
-        } else {
-          position % 4 != 1
-        }
-      case _ =>
-        invalid = true // Invalid symbol.
-        false
+    for (c: Char <- srcString.toString) {
+      c match {
+        case a
+            if (a >= '0' && a <= '9')
+            || (a >= 'A' && a <= 'Z')
+            || (a >= 'a' && a <= 'z')
+            || a == '/' || a == '+' =>
+          if (padSize != 0) return false // Padding symbols should conclude the string.
+          position += 1
+        case pad if pad == '=' =>
+          padSize += 1
+          // Last group preceding padding should have 2 or more symbols. Padding size should be 1 or
+          // less.
+          if (padSize > 2 || position % 4 < 2) {
+            return false
+          }
+        case ws if Character.isWhitespace(ws) =>
+          if (padSize != 0) { // Padding symbols should conclude the string.
+            return false
+          }
+        case _ => return false
+      }
     }
-    if (validation.nonEmpty) {
-      validation.last
-    } else {
-      true // Empty string is always valid.
+    if (padSize > 0) { // When padding is present last group should have exactly 4 symbols.
+      (position + padSize) % 4 == 0
+    } else { // When padding is absent last group should include 2 or more symbols.
+      position % 4 != 1
     }
   }
 }
