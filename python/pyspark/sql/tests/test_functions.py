@@ -20,8 +20,7 @@ from inspect import getmembers, isfunction
 from itertools import chain
 import re
 import math
-
-import numpy as np
+import unittest
 
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window, types
@@ -57,6 +56,7 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import have_numpy
 
 
 class FunctionsTests(ReusedSQLTestCase):
@@ -972,11 +972,13 @@ class FunctionsTests(ReusedSQLTestCase):
                 df.select(
                     regexp_replace("str", r"(\d+)", "--") == "-----",
                     regexp_replace("str", col("pattern"), col("replacement")) == "-----",
-                ).first()
+                    ).first()
             )
         )
 
-    def test_np_scalars(self):
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_np_scalar_input(self):
+        import numpy as np
         from pyspark.sql.functions import array_contains, array_position
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],)], ["data"])
