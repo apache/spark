@@ -24,7 +24,7 @@ import datetime
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import udf, assert_true, lit
+from pyspark.sql.functions import udf, assert_true, lit, rand
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import (
     StringType,
@@ -796,6 +796,12 @@ class UDFTests(ReusedSQLTestCase):
                     )
         finally:
             shutil.rmtree(path)
+
+    def test_udf_with_rand(self):
+        # SPARK-40121: rand() with Python UDF.
+        self.assertEqual(
+            len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
+        )
 
 
 class UDFInitializationTests(unittest.TestCase):

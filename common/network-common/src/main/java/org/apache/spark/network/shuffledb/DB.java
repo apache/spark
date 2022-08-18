@@ -15,17 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.shuffledb;
 
-public class Constants {
+import java.io.Closeable;
 
-  public static final String SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
-    "spark.shuffle.service.fetch.rdd.enabled";
+/**
+ * The local KV storage used to persist the shuffle state,
+ * the implementations may include LevelDB, RocksDB, etc.
+ */
+public interface DB extends Closeable {
+    /**
+     * Set the DB entry for "key" to "value".
+     */
+    void put(byte[] key, byte[] value);
 
-  /**
-   * The Spark config defined by the core module cannot be obtained in the current module,
-   * hard coding is performed here to define `SHUFFLE_SERVICE_DB_BACKEND`.
-   */
-  public static final String SHUFFLE_SERVICE_DB_BACKEND =
-    "spark.shuffle.service.db.backend";
+    /**
+     * Get which returns a new byte array storing the value associated
+     * with the specified input key if any.
+     */
+    byte[] get(byte[] key);
+
+    /**
+     * Delete the DB entry (if any) for "key".
+     */
+    void delete(byte[] key);
+
+    /**
+     * Return an iterator over the contents of the DB.
+     */
+    DBIterator iterator();
 }

@@ -15,17 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.shuffledb;
 
-public class Constants {
+import java.io.IOException;
 
-  public static final String SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
-    "spark.shuffle.service.fetch.rdd.enabled";
+public class LevelDB implements DB {
+    private final org.iq80.leveldb.DB db;
 
-  /**
-   * The Spark config defined by the core module cannot be obtained in the current module,
-   * hard coding is performed here to define `SHUFFLE_SERVICE_DB_BACKEND`.
-   */
-  public static final String SHUFFLE_SERVICE_DB_BACKEND =
-    "spark.shuffle.service.db.backend";
+    public LevelDB(org.iq80.leveldb.DB db) {
+        this.db = db;
+    }
+
+    @Override
+    public void put(byte[] key, byte[] value) {
+        db.put(key, value);
+    }
+
+    @Override
+    public byte[] get(byte[] key) {
+       return db.get(key);
+    }
+
+    @Override
+    public void delete(byte[] key) {
+        db.delete(key);
+    }
+
+    @Override
+    public void close() throws IOException {
+        db.close();
+    }
+
+    @Override
+    public DBIterator iterator() {
+        return new LevelDBIterator(db.iterator());
+    }
 }

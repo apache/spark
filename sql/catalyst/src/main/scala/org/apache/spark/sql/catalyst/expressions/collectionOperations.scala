@@ -2073,6 +2073,42 @@ case class ArrayPosition(left: Expression, right: Expression)
 }
 
 /**
+ * Returns the value of index `right` in Array `left`. If the index points outside of the array
+ * boundaries, then this function returns NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (0-based) index. If the index points
+     outside of the array boundaries, then this function returns NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 0);
+       1
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       NULL
+      > SELECT _FUNC_(array(1, 2, 3), -1);
+       NULL
+  """,
+  since = "3.4.0",
+  group = "array_funcs")
+case class Get(
+    left: Expression,
+    right: Expression,
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, GetArrayItem(left, right, failOnError = false))
+
+  override def prettyName: String = "get"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
+
+/**
  * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
  */
 @ExpressionDescription(
@@ -2272,7 +2308,7 @@ case class ElementAt(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 
   override def initQueryContext(): Option[SQLQueryContext] = {
-    if (failOnError && left.dataType.isInstanceOf[ArrayType]) {
+    if (failOnError && left.resolved && left.dataType.isInstanceOf[ArrayType]) {
       Some(origin.context)
     } else {
       None
