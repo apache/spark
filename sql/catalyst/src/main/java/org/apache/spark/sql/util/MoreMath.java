@@ -39,16 +39,18 @@ public class MoreMath {
     // HD 2-13
     return ((~a & b) | (~(a ^ b) & (a - b))) >>> 63;
   }
-  
-  public static long ifNegative(long test, long value)
-    {
-        return value & (test >> 63);
-    }
+
+  public static long ifNegative(long test, long value) {
+    return value & (test >> 63);
+  }
 
   // TODO: replace with JDK 18's Math.unsignedMultiplyHigh
   public static long unsignedMultiplyHigh(long x, long y) {
-    // HD 8-3: High-Order Product Signed from/to Unsigned
-    return multiplyHigh(x, y) + ifNegative(x, y) + ifNegative(y, x);
+    // From Hacker's Delight 2nd Ed. 8-3: High-Order Product Signed from/to Unsigned
+    long result = multiplyHigh(x, y);
+    result += (y & (x >> 63)); // equivalent to: if (x < 0) result += y;
+    result += (x & (y >> 63)); // equivalent to: if (y < 0) result += x;
+    return result;
   }
 
   /**
@@ -119,12 +121,16 @@ public class MoreMath {
     long wHigh;
     long wLow;
     if (!aInLongRange) {
-      // correct z3 due to effects of computing the product of values in 2's complement representation
-      wHigh = z3High - ifNegative(aHigh, bLow) - ifNegative(bLow, aHigh + unsignedBorrow(z3Low, aLow));
+      // correct z3 due to effects of computing the product of values
+      // in 2's complement representation
+      wHigh =
+        z3High - ifNegative(aHigh, bLow) - ifNegative(bLow, aHigh + unsignedBorrow(z3Low, aLow));
       wLow = z3Low - ifNegative(bLow, aLow);
     } else { // !bInLongRange
-      // correct z2 due to effects of computing the product of values in 2's complement representation
-      wHigh = z2High - ifNegative(bHigh, aLow) - ifNegative(aLow, bHigh + unsignedBorrow(z2Low, bLow));
+      // correct z2 due to effects of computing the product of values
+      // in 2's complement representation
+      wHigh =
+        z2High - ifNegative(bHigh, aLow) - ifNegative(aLow, bHigh + unsignedBorrow(z2Low, bLow));
       wLow = z2Low - ifNegative(aLow, bLow);
     }
 

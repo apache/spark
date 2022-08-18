@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import java.lang.{Long => JLong}
 import java.math.BigInteger
+import java.nio.{ByteBuffer, ByteOrder}
 
 import scala.util.Try
 
@@ -50,7 +51,13 @@ final class Int128 extends Ordered[Int128] with Serializable {
 
   def set(bigInteger: BigInteger): Int128 = {
     _low = bigInteger.longValue()
-    _high = bigInteger.shiftRight(64).longValueExact()
+    try {
+      _high = bigInteger.shiftRight(64).longValueExact()
+    } catch {
+      case _: ArithmeticException =>
+        throw new ArithmeticException("BigInteger out of Int128 range")
+    }
+
     this
   }
 
@@ -59,6 +66,20 @@ final class Int128 extends Ordered[Int128] with Serializable {
   def isNegative(): Boolean = _high < 0
 
   def isZero(): Boolean = (_high | _low) == 0
+
+  def toBigInteger: BigInteger = new BigInteger(toBigEndianBytes())
+
+  def toBigEndianBytes(): Array[Byte] = {
+    val bytes = new Array[Byte](16)
+    toBigEndianBytes(bytes, 0)
+    bytes
+  }
+
+  def toBigEndianBytes(bytes: Array[Byte], offset: Int): Unit = {
+    val byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+    byteBuffer.putLong(offset, high)
+    byteBuffer.putLong(offset + JLong.BYTES, low)
+  }
 
   def toDouble: Double = toLong.doubleValue
 
@@ -73,7 +94,7 @@ final class Int128 extends Ordered[Int128] with Serializable {
   }
 
   def + (that: Int128): Int128 = {
-    val newHigh = Int128Math.addHighExact(_high, _low, that.high, that._low)
+    val newHigh = Int128Math.addHighExact(_high, _low, that._high, that._low)
     val newLow = Int128Math.addLow(_low, that._low)
     new Int128().set(newHigh, newLow)
   }
@@ -134,11 +155,7 @@ final class Int128 extends Ordered[Int128] with Serializable {
   }
 
   override def compare(other: Int128): Int = {
-    val result = _high.compare(other.high)
-    if (result == 0) {
-      return JLong.compareUnsigned(_low, other.low)
-    }
-    result
+    compareLongLong(this.high, this.low, other.high, other.low)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -148,7 +165,15 @@ final class Int128 extends Ordered[Int128] with Serializable {
       false
   }
 
-  override def hashCode(): Int = _high.hashCode ^ _low.hashCode
+  override def hashCode(): Int = {
+    // FNV-1a style hash
+    var hash = 0x9E3779B185EBCA87L
+    hash = (hash ^ high) * 0xC2B2AE3D27D4EB4FL
+    hash = (hash ^ low) * 0xC2B2AE3D27D4EB4FL
+    JLong.hashCode(hash)
+  }
+
+  override def toString: String = toBigInteger.toString
 }
 
 @Unstable
@@ -156,16 +181,36 @@ object Int128 {
 
   def apply(high: Long, low: Long): Int128 = new Int128().set(high, low)
 
+  def apply(value: Long): Int128 = new Int128().set(value >> 63, value)
+
   def apply(bigInteger: BigInteger): Int128 = new Int128().set(bigInteger)
 
   def apply(value: String): Int128 = new Int128().set(new BigInteger(value))
 
   val ZERO = Int128(0, 0)
   val ONE = Int128(0, 1)
+  val MAX_VALUE = Int128(0x7FFFFFFFFFFFFFFFL, 0xFFFFFFFFFFFFFFFFL)
+  val MIN_VALUE = Int128(0x8000000000000000L, 0x0000000000000000L)
+  val MAX_UNSCALED_DECIMAL = Int128("99999999999999999999999999999999999999")
+  val MIN_UNSCALED_DECIMAL = Int128("-99999999999999999999999999999999999999")
+
+  def compareLongLong(leftHigh: Long, leftLow: Long, rightHigh: Long, rightLow: Long): Int = {
+    var comparison = JLong.compare(leftHigh, rightHigh)
+    if (comparison == 0) {
+      comparison = JLong.compareUnsigned(leftLow, rightLow)
+    }
+
+    comparison
+  }
 
   def divide(
       dividend: Int128, divisor: Int128, quotient: Int128Holder, remainder: Int128Holder): Unit = {
     Int128Math.divide(dividend.high, dividend.low, divisor.high, divisor.low, quotient, remainder)
+  }
+
+  def overflows(high: Long, low: Long): Boolean = {
+    compareLongLong(high, low, MAX_UNSCALED_DECIMAL.high, MAX_UNSCALED_DECIMAL.low) > 0 ||
+      compareLongLong(high, low, MIN_UNSCALED_DECIMAL.high, MIN_UNSCALED_DECIMAL.low) < 0
   }
 
   /** Common methods for Int128 evidence parameters */

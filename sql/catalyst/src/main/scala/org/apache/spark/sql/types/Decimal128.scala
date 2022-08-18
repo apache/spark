@@ -17,32 +17,56 @@
 
 package org.apache.spark.sql.types
 
+import java.math.BigInteger
+
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.types.Decimal.ROUND_HALF_UP
+import org.apache.spark.sql.util.Int128Math
 
 @Unstable
 final class Decimal128 extends Ordered[Decimal128] with Serializable {
   import org.apache.spark.sql.types.Decimal128._
 
-  private var _scale: Int = 0
   private var int128: Int128 = null
+  private var longVal: Long = 0L
+  private var _scale: Int = 0
 
   def scale: Int = _scale
   def high: Long = int128.high
   def low: Long = int128.low
 
-  def set(intVal: Int): Decimal128 = {
-    set(Int128(0, intVal.toLong), 0)
+  /**
+   * Set this Decimal128 to the given Long. Will have precision 20 and scale 0.
+   */
+  def set(longVal: Long): Decimal128 = {
+    if (longVal <= -POW_10(MAX_LONG_DIGITS) || longVal >= POW_10(MAX_LONG_DIGITS)) {
+      // We can't represent this compactly as a long without risking overflow
+      this.int128 = Int128(longVal)
+      this.longVal = 0L
+    } else {
+      this.int128 = null
+      this.longVal = longVal
+    }
+    this._scale = 0
+    this
   }
 
-  def set(str: String): Decimal128 = {
-    set(Int128(str), 0)
+  /**
+   * Set this Decimal128 to the given Int. Will have precision 10 and scale 0.
+   */
+  def set(intVal: Int): Decimal128 = {
+    this.int128 = null
+    this.longVal = intVal
+    this._scale = 0
+    this
   }
 
   def set(high: Long, low: Long, scale: Int): Decimal128 = {
     assert(scale >= 0)
     this.int128 = Int128(high, low)
+    this.longVal = 0
     this._scale = scale
     this
   }
@@ -50,33 +74,121 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   def set(int128: Int128, scale: Int): Decimal128 = {
     assert(scale >= 0)
     this.int128 = int128
+    this.longVal = 0
     this._scale = scale
     this
   }
 
-  def isPositive(): Boolean = int128.isPositive()
+  /**
+   * Set this Decimal128 to the given unscaled Long, with a given scale.
+   */
+  def set(unscaled: Long, scale: Int): Decimal128 = {
+    DecimalType.checkNegativeScale(scale)
+    if (unscaled <= -POW_10(MAX_LONG_DIGITS) || unscaled >= POW_10(MAX_LONG_DIGITS)) {
+      this.int128 = Int128(unscaled)
+      this.longVal = 0L
+    } else {
+      this.int128 = null
+      this.longVal = unscaled
+    }
+    this._scale = scale
+    this
+  }
 
-  def isNegative(): Boolean = int128.isNegative()
+  /**
+   * Set this Decimal128 to the given BigDecimal value, inheriting its precision and scale.
+   */
+  def set(decimal: BigDecimal): Decimal128 = {
+    val result = Int128(decimal.underlying().unscaledValue())
+    throwIfOverflows(result.high, result.low)
+    this.int128 = result
+    this.longVal = 0
+    this._scale = decimal.scale
+    this
+  }
 
-  def isZero(): Boolean = int128.isZero()
+  /**
+   * Set this Decimal128 to the given BigDecimal value, with a given scale.
+   */
+  def set(decimal: BigDecimal, scale: Int): Decimal128 = {
+    DecimalType.checkNegativeScale(scale)
+    set(decimal.setScale(scale, ROUND_HALF_UP))
+  }
+
+  def toInt128: Int128 = {
+    if (int128.ne(null)) {
+      int128
+    } else {
+      Int128(longVal)
+    }
+  }
+
+  /**
+   * If the value is not in the range of long, convert it to BigDecimal and
+   * the precision and scale are based on the converted value.
+   *
+   * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
+   */
+  def set(bigInteger: BigInteger): Decimal128 = {
+    try {
+      this.int128 = null
+      this.longVal = bigInteger.longValueExact()
+      this._scale = 0
+      this
+    } catch {
+      case _: ArithmeticException =>
+        set(BigDecimal(bigInteger))
+    }
+  }
+
+  def toBigDecimal: BigDecimal = {
+    if (int128.ne(null)) {
+      BigDecimal(int128.toBigInteger, _scale)
+    } else {
+      BigDecimal(longVal, _scale)
+    }
+  }
+
+  def isPositive: Boolean = int128.isPositive()
+
+  def isNegative: Boolean = int128.isNegative()
+
+  override def toString: String = toBigDecimal.toString()
 
   def toDouble: Double = int128.toDouble
 
   def toFloat: Float = int128.toFloat
 
-  def toLong(): Long = int128.toLong()
+  def toLong: Long = int128.toLong()
 
   def toInt: Int = int128.toInt
 
   def + (that: Decimal128): Decimal128 = {
-    if (this._scale == that._scale) {
-      Decimal128(this.int128 + that.int128, this._scale)
-    } else if (this._scale > that._scale) {
-      val upScaleN = checkScale(that.int128, this._scale - that._scale)
-      Decimal128(this.int128 + that.int128.scaleUpTen(upScaleN), this._scale)
+    if (int128.eq(null) && that.int128.eq(null) && _scale == that._scale) {
+      Decimal128(longVal + that.longVal, scale)
     } else {
-      val upScaleN = checkScale(this.int128, that._scale - this._scale)
-      Decimal128(this.int128.scaleUpTen(upScaleN) + that.int128, that._scale)
+      val result = new Array[Long](2)
+      val left = toInt128
+      val right = that.toInt128
+      var newScale = 0
+      if (this._scale == that.scale) {
+        newScale = this._scale
+        Int128Math.add(left.high, left.low, right.high, right.low, result)
+      } else if (this._scale > that.scale) {
+        newScale = this._scale
+        Int128Math.shiftLeftBy10(right.high, right.low, this._scale - that.scale, result, 0)
+        Int128Math.add(left.high, left.low, result.head, result.last, result)
+      } else {
+        newScale = that.scale
+        Int128Math.shiftLeftBy10(left.high, left.low, that.scale - this._scale, result, 0)
+        Int128Math.add(result.head, result.last, right.high, right.low, result)
+      }
+
+      if (Int128.overflows(result.head, result.last)) {
+        throw new ArithmeticException("Decimal overflow")
+      }
+
+      Decimal128(Int128(result.head, result.last), newScale)
     }
   }
 
@@ -111,30 +223,61 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   override def compare(other: Decimal128): Int = {
-    if (this == other) {
-      return 0
-    }
-
-    if (this._scale == other._scale) {
-      this.int128.compare(other.int128)
-    } else if (this._scale > other._scale) {
-      val upScaleN = this._scale - other._scale
-      this.int128.compare(other.int128.scaleUpTen(upScaleN))
+    if (int128.eq(null) && other.int128.eq(null) && _scale == other._scale) {
+      if (longVal < other.longVal) -1 else if (longVal == other.longVal) 0 else 1
     } else {
-      val upScaleN = other._scale - this._scale
-      this.int128.scaleUpTen(upScaleN).compare(other.int128)
+      val left = toInt128
+      val right = other.toInt128
+      if (this._scale == other._scale) {
+        left.compare(right)
+      } else {
+        val result = new Array[Long](2)
+        if (this._scale > other._scale) {
+          Int128Math.shiftLeftBy10(right.high, right.low, this._scale - other.scale, result, 0)
+          Int128.compareLongLong(left.high, left.low, result.head, result.last)
+        } else {
+          Int128Math.shiftLeftBy10(left.high, left.low, other.scale - this._scale, result, 0)
+          Int128.compareLongLong(result.head, result.last, right.high, right.low)
+        }
+      }
     }
   }
+
+  override def equals(other: Any): Boolean = other match {
+    case d: Decimal128 =>
+      compare(d) == 0
+    case _ =>
+      false
+  }
+
+  override def hashCode(): Int = toInt128.hashCode() ^ scale.hashCode()
+
+  def isZero: Boolean = if (int128.ne(null)) int128.isZero() else longVal == 0
 }
 
 @Unstable
 object Decimal128 {
 
+  /** Maximum number of decimal digits a Long can represent */
+  val MAX_LONG_DIGITS = 18
+
+  val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
+
+  def apply(value: Long): Decimal128 = new Decimal128().set(value)
+
+  def apply(value: Int): Decimal128 = new Decimal128().set(value)
+
+  def apply(value: BigDecimal): Decimal128 = new Decimal128().set(value)
+
+  def apply(value: BigDecimal, scale: Int): Decimal128 = new Decimal128().set(value, scale)
+
   def apply(high: Long, low: Long, scale: Int): Decimal128 = new Decimal128().set(high, low, scale)
 
   def apply(int128: Int128, scale: Int): Decimal128 = new Decimal128().set(int128, scale)
 
-  def apply(value: String): Decimal128 = new Decimal128().set(value)
+  def apply(unscaled: Long, scale: Int): Decimal128 = new Decimal128().set(unscaled, scale)
+
+  def apply(value: String): Decimal128 = new Decimal128().set(BigDecimal(value))
 
   def checkScale(int128: Int128, scale: Long): Int = {
     var asInt = scale.toInt
@@ -154,6 +297,12 @@ object Decimal128 {
       }
     }
     asInt
+  }
+
+  def throwIfOverflows(high: Long, low: Long): Unit = {
+    if (Int128.overflows(high, low)) {
+      throw new ArithmeticException("Decimal overflow");
+    }
   }
 
   /** Common methods for Decimal128 evidence parameters */
