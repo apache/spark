@@ -120,7 +120,7 @@ case class SQLQueryContext(
     if (!isValid) {
       ""
     } else {
-      sqlText.get.substring(originStartIndex.get, originStopIndex.get)
+      sqlText.get.substring(originStartIndex.get, originStopIndex.get + 1)
     }
   }
 
