@@ -146,14 +146,13 @@ private[spark] object SparkThrowableHelper {
     format match {
       case PRETTY => e.getMessage
       case MINIMAL | STANDARD if e.getErrorClass == null =>
-        toJsonString { g =>
+        toJsonString { generator =>
+          val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
           g.writeStringField("errorClass", "LEGACY")
           g.writeObjectFieldStart("messageParameters")
           g.writeStringField("message", e.getMessage)
           g.writeEndObject()
-          g.writeArrayFieldStart("queryContext")
-          g.writeEndArray()
           g.writeEndObject()
         }
       case MINIMAL | STANDARD =>
@@ -178,19 +177,22 @@ private[spark] object SparkThrowableHelper {
             g.writeStringField(name, value)
           }
           g.writeEndObject()
-          g.writeArrayFieldStart("queryContext")
-          e.getQueryContext.map { c =>
-            g.writeStartObject()
-            g.writeStringField("objectType", c.objectType())
-            g.writeStringField("objectName", c.objectName())
-            val startIndex = c.startIndex() + 1
-            if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
-            val stopIndex = c.stopIndex() + 1
-            if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
-            g.writeStringField("fragment", c.fragment())
-            g.writeEndObject()
+          val queryContext = e.getQueryContext
+          if (!queryContext.isEmpty) {
+            g.writeArrayFieldStart("queryContext")
+            e.getQueryContext.foreach { c =>
+              g.writeStartObject()
+              g.writeStringField("objectType", c.objectType())
+              g.writeStringField("objectName", c.objectName())
+              val startIndex = c.startIndex() + 1
+              if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
+              val stopIndex = c.stopIndex() + 1
+              if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
+              g.writeStringField("fragment", c.fragment())
+              g.writeEndObject()
+            }
+            g.writeEndArray()
           }
-          g.writeEndArray()
           g.writeEndObject()
         }
     }

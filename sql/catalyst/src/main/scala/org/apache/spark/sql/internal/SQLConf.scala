@@ -3879,7 +3879,8 @@ object SQLConf {
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
-      "STANDARD includes an additional JSON field `message`.")
+      "STANDARD includes an additional JSON field `message`. This configuration property " +
+      "influences on error messages of Thrift Server while running queries.")
     .version("3.4.0")
     .stringConf.transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ErrorMessageFormat.values.map(_.toString))
