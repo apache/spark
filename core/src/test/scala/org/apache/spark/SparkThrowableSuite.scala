@@ -45,7 +45,6 @@ class SparkThrowableSuite extends SparkFunSuite {
         "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
    }}}
    */
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
   private val errorClassDir = getWorkspaceFilePath(
     "core", "src", "main", "resources", "error").toFile
 

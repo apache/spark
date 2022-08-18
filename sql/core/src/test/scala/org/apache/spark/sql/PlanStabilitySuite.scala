@@ -71,8 +71,6 @@ import org.apache.spark.tags.ExtendedSQLTest
 // scalastyle:on line.size.limit
 trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-
   protected val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
     getWorkspaceFilePath("sql", "core", "src", "test", "resources", "tpcds-plan-stability").toFile
