@@ -5646,6 +5646,24 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(psdf.mad(), pdf.mad())
         self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
 
+    def test_mode(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, None, 4, 5, 4, 2],
+                "B": [-0.1, 0.2, -0.3, np.nan, 0.5, -0.1, -0.1],
+                "C": ["d", "b", "c", "c", "e", "a", "a"],
+                "D": [np.nan, np.nan, np.nan, np.nan, 0.1, -0.1, -0.1],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.mode(), pdf.mode())
+        self.assert_eq(psdf.mode(numeric_only=True), pdf.mode(numeric_only=True))
+        self.assert_eq(psdf.mode(dropna=False), pdf.mode(dropna=False))
+
+        with self.assertRaises(ValueError):
+            psdf.mode(axis=2)
+
     def test_abs(self):
         pdf = pd.DataFrame({"a": [-2, -1, 0, 1]})
         psdf = ps.from_pandas(pdf)
