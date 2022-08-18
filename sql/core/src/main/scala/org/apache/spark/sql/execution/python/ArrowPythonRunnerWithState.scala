@@ -203,6 +203,7 @@ class ArrowPythonRunnerWithState(
       private var root: VectorSchemaRoot = _
       private var schema: StructType = _
       private var vectors: Array[ColumnVector] = _
+      private var unsafeProjForData: UnsafeProjection = _
 
       context.addTaskCompletionListener[Unit] { _ =>
         if (reader != null) {
@@ -237,6 +238,12 @@ class ArrowPythonRunnerWithState(
                 root = reader.getVectorSchemaRoot()
                 // FIXME: should we validate schema here with value schema and state schema?
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())
+
+                val dataAttributes = schema(0).dataType.asInstanceOf[StructType].toAttributes
+                val stateInfoAttribute = schema(1).dataType.asInstanceOf[StructType].toAttributes
+
+                unsafeProjForData = UnsafeProjection.create(dataAttributes, dataAttributes)
+
                 vectors = root.getFieldVectors().asScala.map { vector =>
                   new ArrowColumnVector(vector)
                 }.toArray[ColumnVector]
@@ -260,21 +267,13 @@ class ArrowPythonRunnerWithState(
         assert(batch.numRows() > 0)
         assert(schema.length == 2)
 
-        val dataAttributes = schema(0).dataType.asInstanceOf[StructType].toAttributes
-        val stateInfoAttribute = schema(1).dataType.asInstanceOf[StructType].toAttributes
-
-        val unsafeProjForStateInfo = UnsafeProjection.create(
-          stateInfoAttribute, stateInfoAttribute)
-        val unsafeProjForData = UnsafeProjection.create(
-          dataAttributes, dataAttributes)
-
         val structVectorForState = batch.column(1).asInstanceOf[ArrowColumnVector]
         val outputVectorsForState = schema(1).dataType.asInstanceOf[StructType]
           .indices.map(structVectorForState.getChild)
         val flattenedBatchForState = new ColumnarBatch(outputVectorsForState.toArray)
         flattenedBatchForState.setNumRows(1)
 
-        val rowForStateInfo = unsafeProjForStateInfo(flattenedBatchForState.getRow(0))
+        val rowForStateInfo = flattenedBatchForState.getRow(0)
 
         //  UDF returns a StructType column in ColumnarBatch, select the children here
         val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
@@ -290,12 +289,11 @@ class ArrowPythonRunnerWithState(
 
         // FIXME: we rely on known schema for state info, but would we want to access this by
         //  column name?
+        // Received state information does not need schemas - this class already knows them.
         /*
         Array(
           StructField("properties", StringType),
-          StructField("keySchema", StringType),
           StructField("keyRow", BinaryType),
-          StructField("objectSchema", StringType),
           StructField("object", BinaryType)
         )
         */
@@ -304,14 +302,14 @@ class ArrowPythonRunnerWithState(
         val propertiesAsJson = parse(rowForStateInfo.getUTF8String(0).toString)
         // FIXME: keySchema is probably not needed as we already know it... let's check whether
         //   it is needed for python worker, and if it does not, remove it. Or double check?
-        val pickledKeyRow = rowForStateInfo.getBinary(2)
+        val pickledKeyRow = rowForStateInfo.getBinary(1)
         val keyRowAsGenericRow = PythonSQLUtils.toJVMRow(pickledKeyRow, keySchema,
           keyRowDeserializer)
         val keyRowAsInternalRow = keyRowSerializer.apply(keyRowAsGenericRow)
-        val maybeObjectRow = if (rowForStateInfo.isNullAt(4)) {
+        val maybeObjectRow = if (rowForStateInfo.isNullAt(2)) {
           None
         } else {
-          val pickledRow = rowForStateInfo.getBinary(4)
+          val pickledRow = rowForStateInfo.getBinary(2)
           Some(PythonSQLUtils.toJVMRow(pickledRow, stateSchema, stateRowDeserializer))
         }
 

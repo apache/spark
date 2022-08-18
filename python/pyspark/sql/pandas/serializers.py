@@ -21,8 +21,8 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 import sys
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField
-
 
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
@@ -384,6 +384,14 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
 
+        self.state_df_type = StructType([
+            StructField('__state__properties', StringType()),
+            StructField('__state__keyRow', BinaryType()),
+            StructField('__state__object', BinaryType()),
+        ])
+
+        self.state_pdf_arrow_type = to_arrow_type(self.state_df_type)
+
     def arrow_to_pandas(self, arrow_column):
         return super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
 
@@ -431,7 +439,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         def init_stream_yield_batches():
             import pandas as pd
-            from pyspark.sql.pandas.types import to_arrow_type
 
             should_write_start_length = True
             for data in iterator:
@@ -447,34 +454,22 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 pdf_with_empty_row = pd.concat([new_empty_row, pdf[:]], axis=0).reset_index(drop=True)
 
                 state_properties = state.json().encode("utf-8")
-                state_key_schema = state._key_schema.json().encode("utf-8")
                 state_key_row = self.pickleSer.dumps(state._key_schema.toInternal(state._key))
-                state_object_schema = state._value_schema.json().encode("utf-8")
                 state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
 
+                len_pdf = len(pdf)
+                none_array = [None, ] * len_pdf
                 state_dict = {
-                    '__state__properties': [state_properties, ] + [None, ] * len(pdf),
-                    '__state__keySchema': [state_key_schema, ] + [None, ] * len(pdf),
-                    '__state__keyRow': [state_key_row, ] + [None, ] * len(pdf),
-                    '__state__objectSchema': [state_object_schema, ] + [None, ] * len(pdf),
-                    '__state__object': [state_object, ] + [None, ] * len(pdf),
+                    '__state__properties': [state_properties, ] + none_array,
+                    '__state__keyRow': [state_key_row, ] + none_array,
+                    '__state__object': [state_object, ] + none_array,
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
 
-                state_df_type = StructType([
-                    StructField('__state__properties', StringType()),
-                    StructField('__state__keySchema', StringType()),
-                    StructField('__state__keyRow', BinaryType()),
-                    StructField('__state__objectSchema', StringType()),
-                    StructField('__state__object', BinaryType()),
-                ])
-
-                state_pdf_arrow_type = to_arrow_type(state_df_type)
-
                 batch = self._create_batch([
                     (pdf_with_empty_row, return_schema),
-                    (state_pdf, state_pdf_arrow_type)])
+                    (state_pdf, self.state_pdf_arrow_type)])
 
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)

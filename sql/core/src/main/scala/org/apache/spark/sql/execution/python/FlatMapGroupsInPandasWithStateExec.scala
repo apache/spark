@@ -104,6 +104,8 @@ case class FlatMapGroupsInPandasWithStateExec(
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
 
+    private val keyUnsafeProj = UnsafeProjection.create(keySchema)
+
     /**
      * For every group, get the key, values and corresponding state and call the function,
      * and return an iterator of rows
@@ -147,10 +149,8 @@ case class FlatMapGroupsInPandasWithStateExec(
     }
 
     private def process(
-       iter: Iterator[(InternalRow, StateData, Iterator[InternalRow])],
-       hasTimedOut: Boolean): Iterator[InternalRow] = {
-      val keyUnsafeProj = UnsafeProjection.create(keySchema)
-
+        iter: Iterator[(InternalRow, StateData, Iterator[InternalRow])],
+        hasTimedOut: Boolean): Iterator[InternalRow] = {
       val runner = new ArrowPythonRunnerWithState(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
