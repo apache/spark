@@ -1987,7 +1987,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         aesFuncName,
         "key",
         "a binary value with 16, 24 or 32 bytes",
-        s"${actualLength.toString} bytes."))
+        s"${actualLength.toString} bytes"))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
@@ -2086,10 +2086,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidPatternError(funcName: String, pattern: String): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      errorSubClass = "INVALID_ARGUMENT_VALUE",
       messageParameters = Array(
-        "regexp",
         toSQLId(funcName),
+        "regexp",
         pattern))
   }
 }

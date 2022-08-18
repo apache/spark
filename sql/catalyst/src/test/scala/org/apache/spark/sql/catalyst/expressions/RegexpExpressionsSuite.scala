@@ -502,18 +502,20 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
     val r = $"r".int.at(2)
-    val prefix = "[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in"
+    val prefix = "[INVALID_FUNCTION_ARGUMENTS.INVALID_ARGUMENT_VALUE] " +
+      "Arguments of the %s function are invalid: " +
+      "The value of parameter(s) 'regexp'"
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtract(s, p, r),
       create_row("1a 2b 14m", "(?l)", 0),
-      s"$prefix `regexp_extract` is invalid: (?l)")
+      s"${prefix.format("`regexp_extract`")} is invalid: (?l)")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpExtractAll(s, p, r),
       create_row("abc", "] [", 0),
-      s"$prefix `regexp_extract_all` is invalid: ] [")
+      s"${prefix.format("`regexp_extract_all`")} is invalid: ] [")
     checkExceptionInExpression[SparkRuntimeException](
       RegExpInStr(s, p, r),
       create_row("abc", ", (", 0),
-      s"$prefix `regexp_instr` is invalid: , (")
+      s"${prefix.format("`regexp_instr`")} is invalid: , (")
   }
 }

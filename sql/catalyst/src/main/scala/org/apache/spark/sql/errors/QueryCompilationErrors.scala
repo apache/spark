@@ -70,7 +70,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def zeroArgumentIndexError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("INVALID_ARGUMENT_INDEX",
+      errorSubClass = "INVALID_ARGUMENT_INDEX",
+      messageParameters = Array(
         toSQLId("format_string"), "strfmt", "%1$, %2$ and so on", "%0$"))
   }
 
@@ -498,8 +499,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("INVALID_NUMBER_OF_ARGUMENTS",
-        name, expectedInfo, s"$actualNumber"))
+      errorSubClass = "INVALID_NUMBER_OF_ARGUMENTS",
+      messageParameters = Array(name, expectedInfo, s"$actualNumber"))
   }
 
   def invalidFunctionArgumentNumberError(
@@ -507,7 +508,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     if (validParametersCount.isEmpty) {
       new AnalysisException(
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
-        messageParameters = Array("EMPTY_NUMBER_OF_ARGUMENTS", name))
+        errorSubClass = "EMPTY_NUMBER_OF_ARGUMENTS",
+        messageParameters = Array(name))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -522,7 +524,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("CAST_ALIAS", name))
+      errorSubClass = "CAST_ALIAS",
+      messageParameters = Array(name))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -828,7 +831,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def secondArgumentNotDoubleLiteralError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("APPROX_COUNT_DISTINCT", name)
+      errorSubClass = "APPROX_COUNT_DISTINCT",
+      messageParameters = Array(name)
     )
   }
 
@@ -1551,8 +1555,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("INVALID_OPERATION_FOR_V2FUNCTION",
-        unbound.name, arguments.map(x => toSQLType(x.dataType)).mkString(", "),
+      errorSubClass = "INVALID_OPERATION_FOR_V2FUNCTION",
+      messageParameters = Array(
+        unbound.name,
+        arguments.map(x => toSQLType(x.dataType)).mkString(", "),
         unsupported.getMessage),
       cause = Some(unsupported))
   }
@@ -1562,7 +1568,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       args: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION",
+      errorSubClass = "INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION",
+      messageParameters = Array(
         bound.name(), s"${args.length}",
         s"${bound.inputTypes().length}")
     )
@@ -1647,7 +1654,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("FIRST_LAST", funcName)
+      errorSubClass = "FIRST_LAST",
+      messageParameters = Array(funcName)
     )
   }
 

@@ -76,10 +76,10 @@ class QueryExecutionErrorsSuite
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = "INVALID_ARGUMENT_LENGTH",
-        parameters = Map("parameter" -> "key",
-          "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("expects a binary value with 16, 24 or 32 bytes, but got " +
-            inputBytes.toString + " bytes.")),
+        parameters = Map("funcName" -> "`aes_encrypt`/`aes_decrypt`",
+          "parameter" -> "key",
+          "expected" -> "a binary value with 16, 24 or 32 bytes",
+          "found" -> s"${inputBytes.toString} bytes"),
         sqlState = "22023")
     }
 
@@ -114,9 +114,10 @@ class QueryExecutionErrorsSuite
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = "INVALID_ARGUMENT_VALUE",
-        parameters = Map("parameter" -> "expr, key",
-          "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-          "expected" -> ("Detail message: " +
+        parameters = Map(
+          "funcName" -> "`aes_encrypt`/`aes_decrypt`",
+          "parameter" -> "expr, key",
+          "message" -> ("Detail message: " +
             "Given final block not properly padded. " +
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")

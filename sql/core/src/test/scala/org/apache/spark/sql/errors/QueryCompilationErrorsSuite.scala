@@ -120,13 +120,10 @@ class QueryCompilationErrorsSuite
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = Some("INVALID_ARGUMENT_INDEX"),
         parameters = Map(
+          "funcName" -> "`format_string`",
           "parameter" -> "strfmt",
-          "functionName" -> "`format_string`",
-          "expected" -> "expects %1$, %2$ and so on, but got %0$."))
-//      msg = "Arguments of the `format_string` function are invalid: " +
-//        "The value of parameter(s) 'strfmt' has invalid index, " +
-//        "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7"
-      ,
+          "expected" -> "%1$, %2$ and so on",
+          "found" -> "%0$"))
     }
   }
 
@@ -626,67 +623,75 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid number of the udf function arguments") {
     spark.udf.register("testFunc", (n: Int) => n.toString)
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql(s"SELECT testFunc(123, 123) as value")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS"),
-      msg = "Arguments of the testFunc function are invalid: " +
-        "Invalid number of arguments. Expected: 1; Found: 2; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "testFunc",
+        "expected" -> "1",
+        "found" -> "2"
+      ),
       sqlState = Some("22023")
     )
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: empty number of the function arguments") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql("SELECT CAST()")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("EMPTY_NUMBER_OF_ARGUMENTS"),
-      msg = "Arguments of the cast function are invalid: " +
-        "Empty number of arguments; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "cast"
+      ),
       sqlState = Some("22023")
     )
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid number of the function arguments") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql("SELECT to_timestamp_ntz()")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS"),
-      msg = "Arguments of the to_timestamp_ntz function are invalid: " +
-        "Invalid number of arguments. " +
-        "Expected: one of 1 and 2; Found: 0; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "to_timestamp_ntz",
+        "expected" -> "one of 1 and 2",
+        "found" -> "0"
+      ),
       sqlState = Some("22023")
     )
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: the function use two arguments") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql(s"SELECT int('1', '2')")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("CAST_ALIAS"),
-      msg = "Arguments of the int function are invalid: " +
-        "Function accepts only one argument; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "int"
+      ),
       sqlState = Some("22023")
     )
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the int type") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql(s"SELECT approx_count_distinct(1,1)")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("APPROX_COUNT_DISTINCT"),
-      msg = "Arguments of the approx_count_distinct function are invalid: " +
-        "The second argument should be a double literal; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "approx_count_distinct"
+      ),
       sqlState = Some("22023")
     )
   }
@@ -697,15 +702,17 @@ class QueryCompilationErrorsSuite
       spark.sessionState.catalogManager.catalog("testcat")
         .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
-      checkErrorClass(
+      checkError(
         exception = intercept[AnalysisException](
           sql("SELECT testcat.ns.strlen(map('abc', 'abc'))")
         ),
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = Some("INVALID_OPERATION_FOR_V2FUNCTION"),
-        msg = "Arguments of the strlen function are invalid: " +
-          "V2Function cannot process input: (\"MAP<STRING, STRING>\"): Expect StringType, " +
-          "but found MapType(StringType,StringType,false); line 1 pos 7",
+        parameters = Map(
+          "funcName" -> "strlen",
+          "type" -> "\"MAP<STRING, STRING>\"",
+          "message" -> "Expect StringType, but found MapType(StringType,StringType,false)"
+        ),
         sqlState = Some("22023")
       )
       spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
@@ -718,15 +725,17 @@ class QueryCompilationErrorsSuite
       spark.sessionState.catalogManager.catalog("testcat")
       .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
-      checkErrorClass(
+      checkError(
         exception = intercept[AnalysisException](
           sql("SELECT testcat.ns.strlen('abc','abc')")
         ),
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
         errorSubClass = Some("INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION"),
-        msg = "Arguments of the strlen function are invalid: " +
-          "There are 2 arguments in V2Function, " +
-          "but 1 parameters returned from 'inputTypes()'; line 1 pos 7",
+        parameters = Map(
+          "funcName" -> "strlen",
+          "expected" -> "2",
+          "found" -> "1"
+        ),
         sqlState = Some("22023")
       )
       spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
@@ -734,14 +743,15 @@ class QueryCompilationErrorsSuite
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the string type") {
-    checkErrorClass(
+    checkError(
       exception = intercept[AnalysisException](
         sql(s"SELECT first(1, '1')")
       ),
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       errorSubClass = Some("FIRST_LAST"),
-      msg = "Arguments of the first function are invalid: " +
-        "The second argument should be a boolean literal; line 1 pos 7",
+      parameters = Map(
+        "funcName" -> "first"
+      ),
       sqlState = Some("22023")
     )
   }

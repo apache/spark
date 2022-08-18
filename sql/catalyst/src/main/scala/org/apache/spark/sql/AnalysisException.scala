@@ -94,6 +94,18 @@ class AnalysisException protected[sql] (
       errorClass: String,
       errorSubClass: String,
       messageParameters: Array[String],
+      cause: Option[Throwable]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
+      errorClass = Some(errorClass),
+      errorSubClass = Some(errorSubClass),
+      messageParameters = messageParameters,
+      cause = cause)
+
+  def this(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String],
       origin: Origin) =
     this(
       SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),

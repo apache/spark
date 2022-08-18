@@ -131,7 +131,7 @@ SELECT regexp_extract('1a 2b 14m', '(?l)')
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[INVALID_PARAMETER_VALUE] The value of parameter(s) 'regexp' in `regexp_extract` is invalid: (?l)
+[INVALID_FUNCTION_ARGUMENTS.INVALID_ARGUMENT_VALUE] Arguments of the `regexp_extract` function are invalid: The value of parameter(s) 'regexp' is invalid: (?l)
 
 
 -- !query
