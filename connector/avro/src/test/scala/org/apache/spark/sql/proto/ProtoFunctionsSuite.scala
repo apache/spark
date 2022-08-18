@@ -4,6 +4,7 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorSet
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.proto.SimpleMessageProtos.SimpleMessage
+
 import java.io.{ByteArrayOutputStream, InputStream}
 
 class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
@@ -36,7 +37,7 @@ class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Seriali
 
   test("reading proto files from .pb format") {
     withTempPath { dir =>
-      val df = spark.read.format("proto").load("/Users/sandishkumarhn/Downloads/latest.pb")
+      val df = spark.read.format("proto").option("protoSchemaUrl", "saved_model.pb").load("saved_model.pb")
       df.show()
     }
   }

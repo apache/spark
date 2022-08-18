@@ -1,0 +1,9 @@
+{
+  "type" : "record",
+  "name" : "test_schema",
+  "fields" : [{
+    "name" : "string",
+    "type" : "string",
+    "doc"  : "Meaningless string of characters"
+  }]
+}

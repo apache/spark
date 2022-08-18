@@ -41,6 +41,7 @@ private[sql] object ProtoUtils extends Logging {
         inferProtoSchemaFromFiles(files, conf, new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
+    println(s"SchemaConverters.toSqlTyp protoSchema: ${protoSchema.toProto.toString}")
     SchemaConverters.toSqlType(protoSchema).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
@@ -59,11 +60,12 @@ private[sql] object ProtoUtils extends Logging {
     // figure out the schema of the whole dataset.
     val protoReader = files.iterator.map { f =>
       val path = f.getPath
-      if (!path.getName.endsWith(".proto")) {
+      if (!path.getName.endsWith(".pb")) {
         None
       } else {
         Utils.tryWithResource {
-          new FileInputStream(path.toUri.toString)
+          println(s"path.toUri.toString: ${path.toUri.toString}")
+          new FileInputStream("saved_model.pb")
         } { in =>
           try {
             Some(DescriptorProtos.DescriptorProto.parseFrom(in).getDescriptorForType)

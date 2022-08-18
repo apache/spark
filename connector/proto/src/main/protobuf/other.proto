@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.apache.spark.sql.proto;
+option java_outer_classname = "OtherMessageProtos";
+
+message OtherMessage {
+  string key = 1;
+  int32 other = 2;
+}
