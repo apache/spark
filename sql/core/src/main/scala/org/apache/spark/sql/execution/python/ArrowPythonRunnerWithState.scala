@@ -76,6 +76,8 @@ class ArrowPythonRunnerWithState(
     StructType(
       Array(
         StructField("properties", StringType),
+        // FIXME: don't need to send the key row in state separately if there is any data
+        // FIXME: same: don't need to send the key schema as we know the schema
         StructField("keySchema", StringType),
         StructField("keyRow", BinaryType),
         StructField("objectSchema", StringType),
@@ -240,7 +242,6 @@ class ArrowPythonRunnerWithState(
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())
 
                 val dataAttributes = schema(0).dataType.asInstanceOf[StructType].toAttributes
-                val stateInfoAttribute = schema(1).dataType.asInstanceOf[StructType].toAttributes
 
                 unsafeProjForData = UnsafeProjection.create(dataAttributes, dataAttributes)
 
@@ -300,9 +301,9 @@ class ArrowPythonRunnerWithState(
         implicit val formats = org.json4s.DefaultFormats
 
         val propertiesAsJson = parse(rowForStateInfo.getUTF8String(0).toString)
-        // FIXME: keySchema is probably not needed as we already know it... let's check whether
-        //   it is needed for python worker, and if it does not, remove it. Or double check?
         val pickledKeyRow = rowForStateInfo.getBinary(1)
+        // FIXME: we convert key as byte array -> generic Row -> internal Row -> unsafe Row
+        //   is there any util to skip a part of conversion?
         val keyRowAsGenericRow = PythonSQLUtils.toJVMRow(pickledKeyRow, keySchema,
           keyRowDeserializer)
         val keyRowAsInternalRow = keyRowSerializer.apply(keyRowAsGenericRow)

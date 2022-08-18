@@ -384,10 +384,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
 
+        # FIXME: result_state_df_type?
         self.state_df_type = StructType([
-            StructField('__state__properties', StringType()),
-            StructField('__state__keyRow', BinaryType()),
-            StructField('__state__object', BinaryType()),
+            StructField('properties', StringType()),
+            StructField('keyRow', BinaryType()),
+            StructField('object', BinaryType()),
         ])
 
         self.state_pdf_arrow_type = to_arrow_type(self.state_df_type)
@@ -412,10 +413,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             state_info_col_object_schema = state_info_col['objectSchema']
             state_info_col_object = state_info_col['object']
 
-            state_properties = json.loads(state_info_col_properties)
+            # FIXME: schemas can be retrieved as metadata since they are applied for all data
             state_key_schema = StructType.fromJson(json.loads(state_info_col_key_schema))
-            state_key_row = self.pickleSer.loads(state_info_col_key_row)
             state_object_schema = StructType.fromJson(json.loads(state_info_col_object_schema))
+
+            state_properties = json.loads(state_info_col_properties)
+            state_key_row = self.pickleSer.loads(state_info_col_key_row)
             if state_info_col_object:
                 state_object = self.pickleSer.loads(state_info_col_object)
             else:
@@ -460,9 +463,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 len_pdf = len(pdf)
                 none_array = [None, ] * len_pdf
                 state_dict = {
-                    '__state__properties': [state_properties, ] + none_array,
-                    '__state__keyRow': [state_key_row, ] + none_array,
-                    '__state__object': [state_object, ] + none_array,
+                    'properties': [state_properties, ] + none_array,
+                    'keyRow': [state_key_row, ] + none_array,
+                    'object': [state_object, ] + none_array,
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
