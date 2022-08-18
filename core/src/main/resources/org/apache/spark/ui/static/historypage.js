@@ -166,7 +166,7 @@ $(document).ready(function() {
       "showCompletedColumns": !requestedIncomplete,
     };
 
-    $.get(uiRoot + "/static/historypage-template.html", function(template) {
+    $.get(uiRoot + "/static/historypage-template.mustache", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();
       var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
