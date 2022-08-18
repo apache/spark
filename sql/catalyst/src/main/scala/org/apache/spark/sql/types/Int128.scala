@@ -125,6 +125,8 @@ final class Int128 extends Ordered[Int128] with Serializable {
     remainder.get()
   }
 
+  def quot (that: Int128): Int128 = this / that
+
   def unary_- : Int128 = {
     val newHigh = Int128Math.negateHigh(this.high, this.low)
     val newLow = Int128Math.negateLow(this.low)
@@ -184,7 +186,7 @@ object Int128 {
 
   /** A [[scala.math.Integral]] evidence parameter for Int128s. */
   private[sql] object Int128IsIntegral extends Int128IsConflicted with Integral[Int128] {
-    override def quot(x: Int128, y: Int128): Int128 = x / y
+    override def quot(x: Int128, y: Int128): Int128 = x quot y
     override def rem(x: Int128, y: Int128): Int128 = x % y
   }
 }

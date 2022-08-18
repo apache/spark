@@ -90,11 +90,6 @@ public class DataTypes {
   public static final DataType LongType = LongType$.MODULE$;
 
   /**
-   * Gets the Int128Type object.
-   */
-  public static final DataType Int128Type = Int128Type$.MODULE$;
-
-  /**
    * Gets the ShortType object.
    */
   public static final DataType ShortType = ShortType$.MODULE$;
@@ -138,6 +133,17 @@ public class DataTypes {
    */
   public static DecimalType createDecimalType() {
     return DecimalType$.MODULE$.USER_DEFAULT();
+  }
+
+  public static Int128Type createInt128Type() {
+    return Int128Type$.MODULE$;
+  }
+
+  /**
+   * Creates a Decimal128Type with default scale 0.
+   */
+  public static Decimal128Type createDecimal128Type() {
+    return Decimal128Type$.MODULE$.USER_DEFAULT();
   }
 
   /**
