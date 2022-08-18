@@ -40,18 +40,13 @@ import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
-class DataSourceV2SQLSuite
+abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests with DatasourceV2SQLBase {
+  with DeleteFromTests with DatasourceV2SQLBase {
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  private val v2Source = classOf[FakeV2Provider].getName
+  protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
-  override protected val catalogAndNamespace = "testcat.ns1.ns2."
-  private val defaultUser: String = Utils.getCurrentUserName()
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
@@ -66,6 +61,20 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.table(tableName), expected)
   }
 
+  protected def assertAnalysisError(
+      sqlStatement: String,
+      expectedError: String): Unit = {
+    val ex = intercept[AnalysisException] {
+      sql(sqlStatement)
+    }
+    assert(ex.getMessage.contains(expectedError))
+  }
+}
+
+class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableTests {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  override protected val catalogAndNamespace = "testcat.ns1.ns2."
   override def getTableMetadata(tableName: String): Table = {
     val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val v2Catalog = catalog(nameParts.head).asTableCatalog
@@ -622,8 +631,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType)
-        .add("data", StringType))
+      .add("id", LongType)
+      .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -639,8 +648,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType)
-        .add("data", StringType))
+      .add("id", LongType)
+      .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -659,8 +668,8 @@ class DataSourceV2SQLSuite
     assert(table2.partitioning.isEmpty)
     assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType()
-        .add("id", LongType)
-        .add("data", StringType))
+      .add("id", LongType)
+      .add("data", StringType))
 
     val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), spark.table("source"))
@@ -677,8 +686,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType)
-        .add("data", StringType))
+      .add("id", LongType)
+      .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -708,8 +717,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType)
-        .add("data", StringType))
+      .add("id", LongType)
+      .add("data", StringType))
 
     val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -1526,148 +1535,6 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("REPLACE TABLE is only supported with v2 tables"))
   }
 
-  test("DeleteFrom: basic - delete all") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t")
-      checkAnswer(spark.table(t), Seq())
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: basic - delete all") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t")
-      checkAnswer(spark.table(t), Seq())
-    }
-  }
-
-  test("DeleteFrom: basic - delete with where clause") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t WHERE id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: basic - delete with where clause") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t WHERE id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom: delete from aliased target table") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: delete from aliased target table") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom: normalize attribute names") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: normalize attribute names") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
-      checkAnswer(spark.table(t), Seq(
-        Row(3, "c", 3)))
-    }
-  }
-
-  test("DeleteFrom: fail if has subquery") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
-      }
-
-      assert(spark.table(t).count === 3)
-      assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: fail if has subquery") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
-      }
-
-      assert(spark.table(t).count === 3)
-      assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
-    }
-  }
-
-  test("DeleteFrom: delete with unsupported predicates") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
-      }
-
-      assert(spark.table(t).count === 3)
-      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
-    }
-  }
-
-  test("DeleteFrom with v2 filtering: delete with unsupported predicates") {
-    val t = "testv2filter.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
-      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
-      }
-
-      assert(spark.table(t).count === 3)
-      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
-    }
-  }
-
   test("DeleteFrom: - delete with invalid predicate") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1679,37 +1546,6 @@ class DataSourceV2SQLSuite
 
       assert(spark.table(t).count === 3)
       assert(exc.getMessage.contains(s"Cannot delete from table $t"))
-    }
-  }
-
-  test("DeleteFrom: DELETE is only supported with v2 tables") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-    val v1Table = "tbl"
-    withTable(v1Table) {
-      sql(s"CREATE TABLE $v1Table" +
-          s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
-      val exc = intercept[AnalysisException] {
-        sql(s"DELETE FROM $v1Table WHERE i = 2")
-      }
-
-      assert(exc.getMessage.contains("DELETE is only supported with v2 tables"))
-    }
-  }
-
-  test("SPARK-33652: DeleteFrom should refresh caches referencing the table") {
-    val t = "testcat.ns1.ns2.tbl"
-    val view = "view"
-    withTable(t) {
-      withTempView(view) {
-        sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-        sql(s"CACHE TABLE view AS SELECT id FROM $t")
-        assert(spark.table(view).count() == 3)
-
-        sql(s"DELETE FROM $t WHERE id = 2")
-        assert(spark.table(view).count() == 1)
-      }
     }
   }
 
@@ -2272,7 +2108,7 @@ class DataSourceV2SQLSuite
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
-        "PARTITIONED BY (bucket(4, id), id)")
+          "PARTITIONED BY (bucket(4, id), id)")
 
       val sqlQuery = spark.sql(s"SELECT * FROM $t1 WHERE index = 0")
       val dfQuery = spark.table(t1).filter("index = 0")
@@ -2796,15 +2632,6 @@ class DataSourceV2SQLSuite
     assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
-  private def assertAnalysisError(
-      sqlStatement: String,
-      expectedError: String): Unit = {
-    val ex = intercept[AnalysisException] {
-      sql(sqlStatement)
-    }
-    assert(ex.getMessage.contains(expectedError))
-  }
-
   private def assertAnalysisErrorClass(
       sqlStatement: String,
       expectedErrorClass: String,
@@ -2815,8 +2642,12 @@ class DataSourceV2SQLSuite
     assert(ex.getErrorClass == expectedErrorClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
+
 }
 
+class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
+  override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
+}
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends SimpleTableProvider {

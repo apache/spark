@@ -925,7 +925,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeTransform = df => df.orderBy("data", "id"),
+      writeTransform = df => df.sortWithinPartitions("data", "id"),
       writeCommand = command,
       distributionStrictlyRequired = distributionStrictlyRequired,
       dataSkewed = dataSkewed,

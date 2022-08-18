@@ -84,6 +84,12 @@ private[sql] class JSONOptions(
   val ignoreNullFields = parameters.get("ignoreNullFields").map(_.toBoolean)
     .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
+  // If this is true, when writing NULL values to columns of JSON tables with explicit DEFAULT
+  // values, never skip writing the NULL values to storage, overriding 'ignoreNullFields' above.
+  // This can be useful to enforce that inserted NULL values are present in storage to differentiate
+  // from missing data.
+  val writeNullIfWithDefaultValue = SQLConf.get.jsonWriteNullIfWithDefaultValue
+
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
