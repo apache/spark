@@ -182,7 +182,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           |    "objectName" : "",
           |    "startIndex" : 8,
           |    "stopIndex" : 12,
-          |    "fragment" : "1 / "
+          |    "fragment" : "1 / 0"
           |  } ]
           |}""".stripMargin)
 
@@ -201,7 +201,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           |    "objectName" : "",
           |    "startIndex" : 8,
           |    "stopIndex" : 12,
-          |    "fragment" : "1 / "
+          |    "fragment" : "1 / 0"
           |  } ]
           |}""".stripMargin)
       // scalastyle:on line.size.limit
