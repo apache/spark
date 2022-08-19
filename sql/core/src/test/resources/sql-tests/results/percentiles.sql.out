@@ -178,12 +178,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_cont'."
-  }
-}
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -199,12 +194,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_disc'."
-  }
-}
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -219,12 +209,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'median'."
-  }
-}
+Cannot specify order by or frame for 'median'.
 
 
 -- !query
@@ -240,12 +225,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_cont'."
-  }
-}
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -261,12 +241,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_disc'."
-  }
-}
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -281,12 +256,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'median'."
-  }
-}
+Cannot specify order by or frame for 'median'.
 
 
 -- !query
@@ -366,12 +336,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_cont'."
-  }
-}
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -388,12 +353,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_disc'."
-  }
-}
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -409,12 +369,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'median'."
-  }
-}
+Cannot specify order by or frame for 'median'.
 
 
 -- !query
@@ -431,12 +386,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_cont'."
-  }
-}
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -453,12 +403,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'percentile_disc'."
-  }
-}
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -474,12 +419,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Cannot specify order by or frame for 'median'."
-  }
-}
+Cannot specify order by or frame for 'median'.
 
 
 -- !query

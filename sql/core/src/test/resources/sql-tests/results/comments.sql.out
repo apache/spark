@@ -132,12 +132,20 @@ select 1 as a
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nUnclosed bracketed comment(line 3, pos 0)\n\n== SQL ==\n/*abc*/\nselect 1 as a\n/*\n^^^\n\n2 as b\n/*abc*/\n, 3 as c\n\n/**/\n"
-  }
-}
+
+Unclosed bracketed comment(line 3, pos 0)
+
+== SQL ==
+/*abc*/
+select 1 as a
+/*
+^^^
+
+2 as b
+/*abc*/
+, 3 as c
+
+/**/
 
 
 -- !query
@@ -155,9 +163,18 @@ select 4 as d
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nUnclosed bracketed comment(line 3, pos 0)\n\n== SQL ==\n/*abc*/\nselect 1 as a\n/*\n^^^\n\n2 as b\n/*abc*/\n, 3 as c\n\n/**/\nselect 4 as d\n"
-  }
-}
+
+Unclosed bracketed comment(line 3, pos 0)
+
+== SQL ==
+/*abc*/
+select 1 as a
+/*
+^^^
+
+2 as b
+/*abc*/
+, 3 as c
+
+/**/
+select 4 as d

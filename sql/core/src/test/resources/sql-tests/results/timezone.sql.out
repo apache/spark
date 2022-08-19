@@ -45,12 +45,12 @@ SET TIME ZONE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE\n^^^\n"
-  }
-}
+
+Invalid time zone displacement value(line 1, pos 0)
+
+== SQL ==
+SET TIME ZONE
+^^^
 
 
 -- !query
@@ -59,12 +59,7 @@ SET TIME ZONE 'invalid/zone'
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)"
-  }
-}
+'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)
 
 
 -- !query
@@ -73,12 +68,12 @@ SET TIME ZONE INTERVAL 3 DAYS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 3 DAYS\n--------------^^^\n"
-  }
-}
+
+The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
+
+== SQL ==
+SET TIME ZONE INTERVAL 3 DAYS
+--------------^^^
 
 
 -- !query
@@ -87,12 +82,12 @@ SET TIME ZONE INTERVAL 24 HOURS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 24 HOURS\n--------------^^^\n"
-  }
-}
+
+The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
+
+== SQL ==
+SET TIME ZONE INTERVAL 24 HOURS
+--------------^^^
 
 
 -- !query
@@ -101,12 +96,12 @@ SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND\n--------------^^^\n"
-  }
-}
+
+The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
+
+== SQL ==
+SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
+--------------^^^
 
 
 -- !query
@@ -115,12 +110,12 @@ SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 'GMT+1'\n^^^\n"
-  }
-}
+
+Invalid time zone displacement value(line 1, pos 0)
+
+== SQL ==
+SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
+^^^
 
 
 -- !query
@@ -129,9 +124,9 @@ SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND\n--------------^^^\n"
-  }
-}
+
+The interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)
+
+== SQL ==
+SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
+--------------^^^

@@ -546,12 +546,7 @@ SELECT '' AS `xxx`, i, k, t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 20"
-  }
-}
+Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 20
 
 
 -- !query
@@ -3240,12 +3235,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 63"
-  }
-}
+Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 63
 
 
 -- !query

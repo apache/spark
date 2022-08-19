@@ -21,12 +21,12 @@ select date '2020-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 2020-01-01中文(line 1, pos 7)\n\n== SQL ==\nselect date '2020-01-01中文'\n-------^^^\n"
-  }
-}
+
+Cannot parse the DATE value: 2020-01-01中文(line 1, pos 7)
+
+== SQL ==
+select date '2020-01-01中文'
+-------^^^
 
 
 -- !query
@@ -43,12 +43,7 @@ select make_date(2000, 13, 1)
 struct<>
 -- !query output
 java.time.DateTimeException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error."
-  }
-}
+Invalid value for MonthOfYear (valid values 1 - 12): 13. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -57,12 +52,7 @@ select make_date(2000, 1, 33)
 struct<>
 -- !query output
 java.time.DateTimeException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33. If necessary set spark.sql.ansi.enabled to false to bypass this error."
-  }
-}
+Invalid value for DayOfMonth (valid values 1 - 28/31): 33. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -71,12 +61,12 @@ select date'015'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 015(line 1, pos 7)\n\n== SQL ==\nselect date'015'\n-------^^^\n"
-  }
-}
+
+Cannot parse the DATE value: 015(line 1, pos 7)
+
+== SQL ==
+select date'015'
+-------^^^
 
 
 -- !query
@@ -85,12 +75,12 @@ select date'2021-4294967297-11'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nCannot parse the DATE value: 2021-4294967297-11(line 1, pos 7)\n\n== SQL ==\nselect date'2021-4294967297-11'\n-------^^^\n"
-  }
-}
+
+Cannot parse the DATE value: 2021-4294967297-11(line 1, pos 7)
+
+== SQL ==
+select date'2021-4294967297-11'
+-------^^^
 
 
 -- !query
@@ -213,12 +203,7 @@ select next_day("2015-07-23", "xx")
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to false to bypass this error."
-  }
-}
+Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -324,12 +309,7 @@ select date_add('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -338,12 +318,7 @@ select date_add('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
 
 
 -- !query
@@ -352,12 +327,7 @@ select date_add('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
 
 
 -- !query
@@ -463,12 +433,7 @@ select date_sub('2011-11-11', 1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1L)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1L' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -477,12 +442,7 @@ select date_sub('2011-11-11', 1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 1.0BD)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
 
 
 -- !query
@@ -491,12 +451,7 @@ select date_sub('2011-11-11', 1E1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
 
 
 -- !query
@@ -602,12 +557,7 @@ select date '2011-11-11' + 1E1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(DATE '2011-11-11', 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(DATE '2011-11-11', 10.0D)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, '10.0D' is of double type.; line 1 pos 7
 
 
 -- !query
@@ -696,12 +646,7 @@ select date'2011-11-11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DATE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DATE)' is of date type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DATE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DATE)' is of date type.; line 1 pos 7
 
 
 -- !query
@@ -710,12 +655,7 @@ select '1' + date'2011-11-11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'date_add(CAST('1' AS DATE), DATE '2011-11-11')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'DATE '2011-11-11'' is of date type.; line 1 pos 7"
-  }
-}
+cannot resolve 'date_add(CAST('1' AS DATE), DATE '2011-11-11')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'DATE '2011-11-11'' is of date type.; line 1 pos 7
 
 
 -- !query

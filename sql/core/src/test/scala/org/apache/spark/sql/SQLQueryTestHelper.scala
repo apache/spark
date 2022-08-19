@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -73,14 +73,6 @@ trait SQLQueryTestHelper {
     if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
-  private def toLegacyJson(msg: String, format: ErrorMessageFormat.Value): String = {
-    val e = new Throwable with SparkThrowable {
-      override val getErrorClass = null
-      override val getMessage = msg
-    }
-    getMessage(e, format)
-  }
-
   /**
    * This method handles exceptions occurred during query execution as they may need special care
    * to become comparable to the expected output.
@@ -99,7 +91,7 @@ trait SQLQueryTestHelper {
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
         val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (emptySchema, Seq(a.getClass.getName, toLegacyJson(msg.replaceAll("#\\d+", "#x"), format)))
+        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
       case s: SparkException if s.getCause != null =>
         // For a runtime exception, it is hard to match because its message contains
         // information of stage, task ID, etc.
@@ -108,11 +100,11 @@ trait SQLQueryTestHelper {
           case e: SparkThrowable with Throwable if e.getErrorClass != null =>
             (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
           case cause =>
-            (emptySchema, Seq(cause.getClass.getName, toLegacyJson(cause.getMessage, format)))
+            (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
         }
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
-        (emptySchema, Seq(e.getClass.getName, toLegacyJson(e.getMessage, format)))
+        (emptySchema, Seq(e.getClass.getName, e.getMessage))
     }
   }
 }

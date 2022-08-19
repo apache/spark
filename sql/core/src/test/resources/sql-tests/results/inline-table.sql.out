@@ -110,12 +110,7 @@ select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot evaluate expression rand(5) in inline table definition; line 1 pos 29"
-  }
-}
+cannot evaluate expression rand(5) in inline table definition; line 1 pos 29
 
 
 -- !query
@@ -124,12 +119,7 @@ select * from values ("one", 2.0), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "expected 2 columns but found 1 columns in row 1; line 1 pos 14"
-  }
-}
+expected 2 columns but found 1 columns in row 1; line 1 pos 14
 
 
 -- !query
@@ -138,12 +128,7 @@ select * from values ("one", array(0, 1)), ("two", struct(1, 2)) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "incompatible types found in column b for inline table; line 1 pos 14"
-  }
-}
+incompatible types found in column b for inline table; line 1 pos 14
 
 
 -- !query
@@ -152,12 +137,7 @@ select * from values ("one"), ("two") as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "expected 2 columns but found 1 columns in row 0; line 1 pos 14"
-  }
-}
+expected 2 columns but found 1 columns in row 0; line 1 pos 14
 
 
 -- !query
@@ -166,12 +146,7 @@ select * from values ("one", random_not_exist_func(1)), ("two", 2) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 29"
-  }
-}
+Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 29
 
 
 -- !query
@@ -180,12 +155,7 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot evaluate expression count(1) in inline table definition; line 1 pos 29"
-  }
-}
+cannot evaluate expression count(1) in inline table definition; line 1 pos 29
 
 
 -- !query

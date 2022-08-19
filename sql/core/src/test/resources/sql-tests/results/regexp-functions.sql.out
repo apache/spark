@@ -5,12 +5,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 1"
-  }
-}
+Regex group count is 0, but the specified group index is 1
 
 
 -- !query
@@ -27,12 +22,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 1"
-  }
-}
+Regex group count is 0, but the specified group index is 1
 
 
 -- !query
@@ -41,12 +31,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 2)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 2"
-  }
-}
+Regex group count is 0, but the specified group index is 2
 
 
 -- !query
@@ -55,12 +40,7 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "The specified group index cannot be less than zero"
-  }
-}
+The specified group index cannot be less than zero
 
 
 -- !query
@@ -117,12 +97,7 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 2, but the specified group index is 3"
-  }
-}
+Regex group count is 2, but the specified group index is 3
 
 
 -- !query
@@ -131,12 +106,7 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "The specified group index cannot be less than zero"
-  }
-}
+The specified group index cannot be less than zero
 
 
 -- !query
@@ -178,12 +148,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 1"
-  }
-}
+Regex group count is 0, but the specified group index is 1
 
 
 -- !query
@@ -200,12 +165,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 1"
-  }
-}
+Regex group count is 0, but the specified group index is 1
 
 
 -- !query
@@ -214,12 +174,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 2)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 0, but the specified group index is 2"
-  }
-}
+Regex group count is 0, but the specified group index is 2
 
 
 -- !query
@@ -228,12 +183,7 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "The specified group index cannot be less than zero"
-  }
-}
+The specified group index cannot be less than zero
 
 
 -- !query
@@ -290,12 +240,7 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Regex group count is 2, but the specified group index is 3"
-  }
-}
+Regex group count is 2, but the specified group index is 3
 
 
 -- !query
@@ -304,12 +249,7 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "The specified group index cannot be less than zero"
-  }
-}
+The specified group index cannot be less than zero
 
 
 -- !query
@@ -359,12 +299,7 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', -2)' due to data type mismatch: Position expression must be positive, but got: -2; line 1 pos 7"
-  }
-}
+cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)' due to data type mismatch: Position expression must be positive, but got: -2; line 1 pos 7
 
 
 -- !query
@@ -373,12 +308,7 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', 0)' due to data type mismatch: Position expression must be positive, but got: 0; line 1 pos 7"
-  }
-}
+cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)' due to data type mismatch: Position expression must be positive, but got: 0; line 1 pos 7
 
 
 -- !query

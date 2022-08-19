@@ -93,12 +93,7 @@ SELECT string(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Function string accepts only one argument; line 1 pos 7"
-  }
-}
+Function string accepts only one argument; line 1 pos 7
 
 
 -- !query

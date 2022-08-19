@@ -852,12 +852,12 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Table-valued function range with alternatives: \n    range(start: long, end: long, step: long, numSlices: integer)\n    range(start: long, end: long, step: long)\n    range(start: long, end: long)\n    range(end: long)\ncannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14"
-  }
-}
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14
 
 
 -- !query

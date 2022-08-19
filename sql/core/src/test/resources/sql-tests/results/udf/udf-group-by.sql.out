@@ -15,12 +15,7 @@ SELECT udf(a), udf(COUNT(b)) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get."
-  }
-}
+grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(CAST(udf(cast(count(b) as string)) AS BIGINT) AS `udf(count(b))`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -48,12 +43,7 @@ SELECT udf(a), udf(COUNT(udf(b))) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get."
-  }
-}
+expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -117,12 +107,7 @@ SELECT udf(a + 2), udf(COUNT(b)) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get."
-  }
-}
+expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -179,12 +164,7 @@ SELECT udf(COUNT(b)) AS k FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "aggregate functions are not allowed in GROUP BY, but found CAST(udf(cast(count(b) as string)) AS BIGINT)"
-  }
-}
+aggregate functions are not allowed in GROUP BY, but found CAST(udf(cast(count(b) as string)) AS BIGINT)
 
 
 -- !query
@@ -202,12 +182,7 @@ SELECT k AS a, udf(COUNT(udf(v))) FROM testDataHasSameNameWithAlias GROUP BY udf
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "expression 'testdatahassamenamewithalias.k' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get."
-  }
-}
+expression 'testdatahassamenamewithalias.k' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -303,12 +278,7 @@ SELECT udf(id) FROM range(10) HAVING id > 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get."
-  }
-}
+grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -414,12 +384,7 @@ SELECT every(udf(1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS INT)' is of int type.; line 1 pos 7"
-  }
-}
+cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS INT)' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -428,12 +393,7 @@ SELECT some(udf(1S))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS SMALLINT)' is of smallint type.; line 1 pos 7"
-  }
-}
+cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS SMALLINT)' is of smallint type.; line 1 pos 7
 
 
 -- !query
@@ -442,12 +402,7 @@ SELECT any(udf(1L))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS BIGINT)' is of bigint type.; line 1 pos 7"
-  }
-}
+cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS BIGINT)' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -456,12 +411,7 @@ SELECT udf(every("true"))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 11"
-  }
-}
+cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 11
 
 
 -- !query
@@ -547,12 +497,10 @@ SELECT udf(count(*)) FROM test_agg WHERE count(*) > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [(count(1) > 1L)]\nInvalid expressions: [count(1)]"
-  }
-}
+
+Aggregate/Window/Generate expressions are not valid in where clause of the query.
+Expression in where clause: [(count(1) > 1L)]
+Invalid expressions: [count(1)]
 
 
 -- !query
@@ -561,12 +509,10 @@ SELECT udf(count(*)) FROM test_agg WHERE count(*) + 1L > 1L
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [((count(1) + 1L) > 1L)]\nInvalid expressions: [count(1)]"
-  }
-}
+
+Aggregate/Window/Generate expressions are not valid in where clause of the query.
+Expression in where clause: [((count(1) + 1L) > 1L)]
+Invalid expressions: [count(1)]
 
 
 -- !query
@@ -575,9 +521,7 @@ SELECT udf(count(*)) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "\nAggregate/Window/Generate expressions are not valid in where clause of the query.\nExpression in where clause: [(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))]\nInvalid expressions: [count(1), max(test_agg.k)]"
-  }
-}
+
+Aggregate/Window/Generate expressions are not valid in where clause of the query.
+Expression in where clause: [(((test_agg.k = 1) OR (test_agg.k = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.k) > 1)))]
+Invalid expressions: [count(1), max(test_agg.k)]

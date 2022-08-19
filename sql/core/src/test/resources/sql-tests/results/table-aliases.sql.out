@@ -39,12 +39,7 @@ SELECT * FROM testData AS t(col1, col2, col3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14"
-  }
-}
+Number of column aliases does not match number of columns. Number of column aliases: 3; number of columns: 2.; line 1 pos 14
 
 
 -- !query
@@ -53,12 +48,7 @@ SELECT * FROM testData AS t(col1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14"
-  }
-}
+Number of column aliases does not match number of columns. Number of column aliases: 1; number of columns: 2.; line 1 pos 14
 
 
 -- !query

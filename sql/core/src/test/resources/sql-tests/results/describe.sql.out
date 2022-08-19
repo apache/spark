@@ -362,12 +362,9 @@ DESC t PARTITION (c='Us', d=2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Partition not found in table 't' database 'default':\nc -> Us\nd -> 2"
-  }
-}
+Partition not found in table 't' database 'default':
+c -> Us
+d -> 2
 
 
 -- !query
@@ -376,12 +373,7 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "LEGACY",
-  "messageParameters" : {
-    "message" : "Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'"
-  }
-}
+Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'
 
 
 -- !query
