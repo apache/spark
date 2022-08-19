@@ -220,7 +220,11 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
                 java_param = self._java_obj.getParam(param.name)
                 # SPARK-14931: Only check set params back to avoid default params mismatch.
                 if self._java_obj.isSet(java_param):
-                    value = _java2py(sc, self._java_obj.getOrDefault(java_param))
+                    java_value = self._java_obj.getOrDefault(java_param)
+                    if param.typeConverter.__name__.startswith("toList"):
+                        value = [_java2py(sc, x) for x in list(java_value)]
+                    else:
+                        value = _java2py(sc, java_value)
                     self._set(**{param.name: value})
                 # SPARK-10931: Temporary fix for params that have a default in Java
                 if self._java_obj.hasDefault(java_param) and not self.isDefined(param):
