@@ -20,7 +20,7 @@
 name: Build / Cache base image
 
 on:
-  # Run jobs when all commits is merged
+  # Run jobs when a commit is merged
   push:
     branches:
     - 'master'
