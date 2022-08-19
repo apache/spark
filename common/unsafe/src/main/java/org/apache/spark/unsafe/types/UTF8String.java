@@ -1305,10 +1305,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses UTF8String(trimmed if needed) to long. This method is used when ANSI is enabled.
+   * Parses UTF8String(trimmed if needed) to long. This method is used for implicit casting
+   * when ANSI is enabled. It doesn't allow any decimal point in the string.
    *
-   * @return If string contains valid numeric value then it returns the long value otherwise a
-   * NumberFormatException  is thrown.
+   * @return If string contains valid long value then it returns the long value otherwise a
+   * NumberFormatException is thrown.
    */
   public long toLongExact() {
     LongWrapper result = new LongWrapper();
@@ -1319,9 +1320,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Parses UTF8String(trimmed if needed) to int. This method is used when ANSI is enabled.
+   * Parses UTF8String(trimmed if needed) to int. This method is used for implicit casting
+   * when ANSI is enabled. It doesn't allow any decimal point in the string.
    *
-   * @return If string contains valid numeric value then it returns the int value otherwise a
+   * @return If string contains valid int value then it returns the int value otherwise a
    * NumberFormatException  is thrown.
    */
   public int toIntExact() {

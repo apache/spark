@@ -184,6 +184,22 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     castErrMsg(l, to, l.dataType)
   }
 
+  protected def checkCastDecimalStringToIntegralType(v: Any, to: DataType, expected: Any): Unit = {
+    checkExceptionInExpression[NumberFormatException](cast(v, to),
+      castErrMsg(v, to))
+  }
+
+  test ("cast from decimal string to integral types") {
+    Seq((IntegerType, (x: Int) => x),
+      (ShortType, (x: Int) => x.toShort),
+      (ByteType, (x: Int) => x.toByte),
+      (LongType, (x: Int) => x.toLong)).foreach { case (dataType, converter) =>
+      checkCastDecimalStringToIntegralType("1.93", dataType, converter(1))
+      checkCastDecimalStringToIntegralType("-1.93", dataType, converter(-1))
+      checkCastDecimalStringToIntegralType("-0.0", dataType, converter(0))
+    }
+  }
+
   test("cast from invalid string to numeric should throw NumberFormatException") {
     def check(value: String, dataType: DataType): Unit = {
       checkExceptionInExpression[NumberFormatException](cast(value, dataType),
@@ -194,8 +210,17 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       check("string", dataType)
       check("123-string", dataType)
       check("2020-07-19", dataType)
-      check("1.23", dataType)
     }
+
+    check("128.1", ByteType)
+    check("-129.1", ByteType)
+    check("32768.1", ShortType)
+    check("-32769.1", ShortType)
+    check("2147483648.1", IntegerType)
+    check("-2147483649.1", IntegerType)
+    check("9223372036854775808.1", LongType)
+    check("-9223372036854775809.1", LongType)
+
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       check("string", dataType)
@@ -617,5 +642,17 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("SPARK-39749: cast Decimal to string") {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "0.000000123")
+  }
+}
+
+class UserSpecifiedCastWithAnsiOnSuite extends CastWithAnsiOnSuite {
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String]): Cast = {
+    val expr = super.cast(v, targetType, timeZoneId)
+    expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    expr
+  }
+
+  override def checkCastDecimalStringToIntegralType(v: Any, to: DataType, expected: Any): Unit = {
+    checkEvaluation(cast(v, to), expected)
   }
 }

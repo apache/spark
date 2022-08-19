@@ -509,6 +509,10 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
+  private def isUserSpecified: Boolean = {
+    getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false)
+  }
+
   private def typeCheckFailureMessage: String = evalMode match {
     case EvalMode.ANSI =>
       if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
@@ -891,7 +895,11 @@ case class Cast(
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toLongExact(v, getContextOrNull()))
+      if (isUserSpecified) {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toLongAnsi(v, getContextOrNull()))
+      } else {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toLongExact(v, getContextOrNull()))
+      }
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -914,7 +922,11 @@ case class Cast(
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toIntExact(v, getContextOrNull()))
+      if (isUserSpecified) {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toIntAnsi(v, getContextOrNull()))
+      } else {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toIntExact(v, getContextOrNull()))
+      }
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -946,7 +958,11 @@ case class Cast(
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toShortExact(v, getContextOrNull()))
+      if (isUserSpecified) {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toShortAnsi(v, getContextOrNull()))
+      } else {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toShortExact(v, getContextOrNull()))
+      }
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -993,7 +1009,11 @@ case class Cast(
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, getContextOrNull()))
+      if (isUserSpecified) {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toByteAnsi(v, getContextOrNull()))
+      } else {
+        buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, getContextOrNull()))
+      }
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -2113,7 +2133,12 @@ case class Cast(
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
-      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c, $errorContext);"
+      val conversionMethod = if (isUserSpecified) {
+        "toByteAnsi"
+      } else {
+        "toByteExact"
+      }
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.$conversionMethod($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -2150,7 +2175,12 @@ case class Cast(
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
-      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toShortExact($c, $errorContext);"
+      val conversionMethod = if (isUserSpecified) {
+        "toShortAnsi"
+      } else {
+        "toShortExact"
+      }
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.$conversionMethod($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -2185,7 +2215,12 @@ case class Cast(
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
-      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toIntExact($c, $errorContext);"
+      val conversionMethod = if (isUserSpecified) {
+        "toIntAnsi"
+      } else {
+        "toIntExact"
+      }
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.$conversionMethod($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -2220,7 +2255,12 @@ case class Cast(
     case StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
-      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toLongExact($c, $errorContext);"
+      val conversionMethod = if (isUserSpecified) {
+        "toLongAnsi"
+      } else {
+        "toLongExact"
+      }
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.$conversionMethod($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>

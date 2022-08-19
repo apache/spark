@@ -1,6 +1,10 @@
 -- cast string representing a valid fractional number to integral should truncate the number
+SELECT CAST('1.23' AS byte);
+SELECT CAST('1.23' AS short);
 SELECT CAST('1.23' AS int);
 SELECT CAST('1.23' AS long);
+SELECT CAST('-4.56' AS byte);
+SELECT CAST('-4.56' AS short);
 SELECT CAST('-4.56' AS int);
 SELECT CAST('-4.56' AS long);
 

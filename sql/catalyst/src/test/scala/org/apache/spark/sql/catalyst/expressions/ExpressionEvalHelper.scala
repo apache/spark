@@ -76,7 +76,9 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
-    serializer.deserialize(serializer.serialize(expr))
+    val result = serializer.deserialize(serializer.serialize(expr)).asInstanceOf[Expression]
+    result.copyTagsFrom(expression)
+    result
   }
 
   protected def checkEvaluation(

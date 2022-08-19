@@ -1,6 +1,10 @@
 -- TRY_CAST string representing a valid fractional number to integral should truncate the number
+SELECT TRY_CAST('1.23' AS byte);
+SELECT TRY_CAST('1.23' AS short);
 SELECT TRY_CAST('1.23' AS int);
 SELECT TRY_CAST('1.23' AS long);
+SELECT TRY_CAST('-4.56' AS byte);
+SELECT TRY_CAST('-4.56' AS short);
 SELECT TRY_CAST('-4.56' AS int);
 SELECT TRY_CAST('-4.56' AS long);
 

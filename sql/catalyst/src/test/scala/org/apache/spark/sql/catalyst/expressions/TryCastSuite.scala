@@ -26,15 +26,17 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 // A test suite to check analysis behaviors of `TryCast`.
-class TryCastSuite extends CastWithAnsiOnSuite {
+class TryCastSuite extends UserSpecifiedCastWithAnsiOnSuite {
 
   override def evalMode: EvalMode.Value = EvalMode.TRY
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
-    v match {
+    val expr = v match {
       case lit: Expression => Cast(lit, targetType, timeZoneId, EvalMode.TRY)
       case _ => Cast(Literal(v), targetType, timeZoneId, EvalMode.TRY)
     }
+    expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    expr
   }
 
   override def checkExceptionInExpression[T <: Throwable : ClassTag](
