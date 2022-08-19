@@ -12,7 +12,7 @@ sklearn
 matplotlib<3.3.0
 
 # PySpark test dependencies
-xmlrunner
+unittest-xml-reporting
 
 # PySpark test dependencies (optional)
 coverage

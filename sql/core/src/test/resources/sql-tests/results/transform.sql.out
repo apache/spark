@@ -715,15 +715,12 @@ WHERE a <= 4
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL] The feature is not supported: TRANSFORM with the DISTINCT/ALL clause.(line 1, pos 17)
-
-== SQL ==
-SELECT TRANSFORM(DISTINCT b, a, c)
------------------^^^
-  USING 'cat' AS (a, b, c)
-FROM script_trans
-WHERE a <= 4
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -735,15 +732,12 @@ WHERE a <= 4
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL] The feature is not supported: TRANSFORM with the DISTINCT/ALL clause.(line 1, pos 17)
-
-== SQL ==
-SELECT TRANSFORM(ALL b, a, c)
------------------^^^
-  USING 'cat' AS (a, b, c)
-FROM script_trans
-WHERE a <= 4
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -756,16 +750,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'AS'(line 1, pos 19)
-
-== SQL ==
-SELECT TRANSFORM(b AS b_1, MAX(a), CAST(sum(c) AS STRING))
--------------------^^^
-  USING 'cat' AS (a, b, c)
-FROM script_trans
-WHERE a <= 2
-GROUP BY b
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -778,16 +770,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'b_1'(line 1, pos 19)
-
-== SQL ==
-SELECT TRANSFORM(b b_1, MAX(a), CAST(sum(c) AS STRING))
--------------------^^^
-  USING 'cat' AS (a, b, c)
-FROM script_trans
-WHERE a <= 2
-GROUP BY b
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'b_1'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -800,16 +790,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'AS'(line 1, pos 27)
-
-== SQL ==
-SELECT TRANSFORM(b, MAX(a) AS max_a, CAST(sum(c) AS STRING))
----------------------------^^^
-  USING 'cat' AS (a, b, c)
-FROM script_trans
-WHERE a <= 2
-GROUP BY b
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

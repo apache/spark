@@ -49,7 +49,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.catalyst.{CatalystIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -503,8 +503,7 @@ private[hive] class HiveClientImpl(
     val comment = properties.get("comment")
 
     CatalogTable(
-      identifier = CatalystIdentifier.attachSessionCatalog(
-        TableIdentifier(h.getTableName, Option(h.getDbName))),
+      identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
       tableType = h.getTableType match {
         case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
         case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED

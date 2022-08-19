@@ -19,16 +19,27 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, BitwiseAnd, HiveHash, Literal, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder, String2StringExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 trait V1WriteCommand extends DataWritingCommand {
-  // Specify the required ordering for the V1 write command. `FileFormatWriter` will
-  // add SortExec if necessary when the requiredOrdering is empty.
+
+  /**
+   * Specify the partition columns of the V1 write command.
+   */
+  def partitionColumns: Seq[Attribute]
+
+  /**
+   * Specify the required ordering for the V1 write command. `FileFormatWriter` will
+   * add SortExec if necessary when the requiredOrdering is empty.
+   */
   def requiredOrdering: Seq[SortOrder]
 }
 
@@ -41,7 +52,12 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
       plan.transformDown {
         case write: V1WriteCommand =>
           val newQuery = prepareQuery(write, write.query)
-          write.withNewChildren(newQuery :: Nil)
+          val attrMap = AttributeMap(write.query.output.zip(newQuery.output))
+          val newWrite = write.withNewChildren(newQuery :: Nil).transformExpressions {
+            case a: Attribute if attrMap.contains(a) =>
+              a.withExprId(attrMap(a).exprId)
+          }
+          newWrite
       }
     } else {
       plan
@@ -49,10 +65,21 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   }
 
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
-    val requiredOrdering = write.requiredOrdering
+    val empty2NullPlan = if (hasEmptyToNull(query)) {
+      query
+    } else {
+      val projectList = V1WritesUtils.convertEmptyToNull(query.output, write.partitionColumns)
+      if (projectList.isEmpty) query else Project(projectList, query)
+    }
+    assert(empty2NullPlan.output.length == query.output.length)
+    val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
+
+    // Rewrite the attribute references in the required ordering to use the new output.
+    val requiredOrdering = write.requiredOrdering.map(_.transform {
+      case a: Attribute => attrMap.getOrElse(a, a)
+    }.asInstanceOf[SortOrder])
     val outputOrdering = query.outputOrdering
-    // Check if the ordering is already matched. It is needed to ensure the
-    // idempotency of the rule.
+    // Check if the ordering is already matched to ensure the idempotency of the rule.
     val orderingMatched = if (requiredOrdering.length > outputOrdering.length) {
       false
     } else {
@@ -61,14 +88,40 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
       }
     }
     if (orderingMatched) {
-      query
+      empty2NullPlan
     } else {
-      Sort(requiredOrdering, global = false, query)
+      Sort(requiredOrdering, global = false, empty2NullPlan)
     }
+  }
+
+  private def hasEmptyToNull(plan: LogicalPlan): Boolean = {
+    plan.find {
+      case p: Project => V1WritesUtils.hasEmptyToNull(p.projectList)
+      case _ => false
+    }.isDefined
   }
 }
 
 object V1WritesUtils {
+
+  /** A function that converts the empty string to null for partition values. */
+  case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+    override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+    override def nullable: Boolean = true
+    override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+      nullSafeCodeGen(ctx, ev, c => {
+        s"""if ($c.numBytes() == 0) {
+           |  ${ev.isNull} = true;
+           |  ${ev.value} = null;
+           |} else {
+           |  ${ev.value} = $c;
+           |}""".stripMargin
+      })
+    }
+
+    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+      copy(child = newChild)
+  }
 
   def getWriterBucketSpec(
       bucketSpec: Option[BucketSpec],
@@ -134,10 +187,26 @@ object V1WritesUtils {
     } else {
       // We should first sort by dynamic partition columns, then bucket id, and finally sorting
       // columns.
-      // Note we do not need to convert empty string partition columns to null when sorting the
-      // columns since null and empty string values will be next to each other.
       (dynamicPartitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns)
         .map(SortOrder(_, Ascending))
     }
+  }
+
+  def convertEmptyToNull(
+      output: Seq[Attribute],
+      partitionColumns: Seq[Attribute]): Seq[NamedExpression] = {
+    val partitionSet = AttributeSet(partitionColumns)
+    var needConvert = false
+    val projectList: Seq[NamedExpression] = output.map {
+      case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
+        needConvert = true
+        Alias(Empty2Null(p), p.name)()
+      case attr => attr
+    }
+    if (needConvert) projectList else Nil
+  }
+
+  def hasEmptyToNull(expressions: Seq[Expression]): Boolean = {
+    expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 }

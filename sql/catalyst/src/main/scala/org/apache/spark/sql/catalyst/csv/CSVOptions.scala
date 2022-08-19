@@ -149,23 +149,29 @@ class CSVOptions(
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   /**
-   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type).
-   * Disabled by default for backwards compatibility and performance. When enabled, date entries in
-   * timestamp columns will be cast to timestamp upon parsing. Not compatible with
-   * legacyTimeParserPolicy == LEGACY since legacy date parser will accept extra trailing characters
+   * Infer columns with all valid date entries as date type (otherwise inferred as timestamp type)
+   * if schema inference is enabled. When being used with user-provided schema, tries to parse
+   * timestamp values as dates if the values do not conform to the timestamp formatter before
+   * falling back to the backward compatible parsing - the parsed values will be cast to timestamp
+   * afterwards.
+   *
+   * Disabled by default for backwards compatibility and performance.
+   *
+   * Not compatible with legacyTimeParserPolicy == LEGACY since legacy date parser will accept
+   * extra trailing characters.
    */
-  val inferDate = {
-    val inferDateFlag = getBool("inferDate")
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY && inferDateFlag) {
+  val prefersDate = {
+    val inferDateFlag = getBool("prefersDate")
+    if (inferDateFlag && SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       throw QueryExecutionErrors.inferDateWithLegacyTimeParserError()
     }
     inferDateFlag
   }
 
-  // Provide a default value for dateFormatInRead when inferDate. This ensures that the
+  // Provide a default value for dateFormatInRead when prefersDate. This ensures that the
   // Iso8601DateFormatter (with strict date parsing) is used for date inference
   val dateFormatInRead: Option[String] =
-    if (inferDate) {
+    if (prefersDate) {
       Option(parameters.getOrElse("dateFormat", DateFormatter.defaultPattern))
     } else {
       parameters.get("dateFormat")

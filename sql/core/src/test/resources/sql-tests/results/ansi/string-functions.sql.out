@@ -79,10 +79,23 @@ select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 43) ==
-...t("abcd", -2), left("abcd", 0), left("abcd", 'a')
-                                   ^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 43,
+    "stopIndex" : 59,
+    "fragment" : "left(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -107,10 +120,23 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 45) ==
-...("abcd", -2), right("abcd", 0), right("abcd", 'a')
-                                   ^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 62,
+    "fragment" : "right(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -175,7 +201,10 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
+{
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -416,10 +445,23 @@ SELECT lpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT lpad('hi', 'invalid_length')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "lpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query
@@ -428,10 +470,23 @@ SELECT rpad('hi', 'invalid_length')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'invalid_length' of the type "STRING" cannot be cast to "INT" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT rpad('hi', 'invalid_length')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "rpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query

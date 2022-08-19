@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
@@ -24,23 +26,41 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 // A test suite to check analysis behaviors of `TryCast`.
-class TryCastSuite extends SparkFunSuite {
+class TryCastSuite extends CastWithAnsiOnSuite {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): TryCast = {
+  override def evalMode: EvalMode.Value = EvalMode.TRY
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
-      case lit: Expression => TryCast(lit, targetType, timeZoneId)
-      case _ => TryCast(Literal(v), targetType, timeZoneId)
+      case lit: Expression => Cast(lit, targetType, timeZoneId, EvalMode.TRY)
+      case _ => Cast(Literal(v), targetType, timeZoneId, EvalMode.TRY)
     }
   }
 
+  override def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      expectedErrMsg: String): Unit = {
+    checkEvaluation(expression, null, inputRow)
+  }
+
+  override def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+    checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
+  }
+
+  override def checkCastToNumericError(l: Literal, to: DataType,
+      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
+    checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
+  }
+
   test("print string") {
-    assert(TryCast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
-    assert(TryCast(Literal("1"), IntegerType).sql == "TRY_CAST('1' AS INT)")
+    assert(cast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
+    assert(cast(Literal("1"), IntegerType).sql == "TRY_CAST('1' AS INT)")
   }
 
   test("nullability") {
-    assert(cast("abcdef", StringType).nullable)
-    assert(cast("abcdef", BinaryType).nullable)
+    assert(!cast("abcdef", StringType).nullable)
+    assert(!cast("abcdef", BinaryType).nullable)
   }
 
   test("only require timezone for datetime types") {
@@ -77,5 +97,16 @@ class TryCastSuite extends SparkFunSuite {
       .add("a", BooleanType, nullable = true)
       .add("b", BooleanType, nullable = false))
     assert(!c4.resolved)
+  }
+}
+
+class TryCastThrowExceptionSuite extends SparkFunSuite with ExpressionEvalHelper {
+  // The method checkExceptionInExpression is overridden in TryCastSuite, so here we have a
+  // new test suite for testing exceptions from the child of `try_cast()`.
+  test("TryCast should not catch the exception from it's child") {
+    val child = Divide(Literal(1.0), Literal(0.0), failOnError = true)
+    checkExceptionInExpression[Exception](
+      Cast(child, StringType, None, EvalMode.TRY),
+      "Division by zero")
   }
 }

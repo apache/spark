@@ -220,7 +220,10 @@ class SQLAppStatusListener(
             metricAggregationMap.put(className, method)
             method
           } catch {
-            case NonFatal(_) =>
+            case NonFatal(e) =>
+              logWarning(s"Unable to load custom metric object for class `$className`. " +
+                "Please make sure that the custom metric class is in the classpath and " +
+                "it has 0-arg constructor.", e)
               // Cannot initialize custom metric object, we might be in history server that does
               // not have the custom metric class.
               val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"

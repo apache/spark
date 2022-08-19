@@ -241,19 +241,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
-  def mapKeyNotExistError(
-      key: Any,
-      dataType: DataType,
-      context: SQLQueryContext): NoSuchElementException = {
-    new SparkNoSuchElementException(
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(
-        toSQLValue(key, dataType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
@@ -533,6 +520,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
     arithmeticOverflowError(
       s"${toSQLValue(eval1, ShortType)} $symbol ${toSQLValue(eval2, ShortType)} caused overflow")
+  }
+
+  def intervalArithmeticOverflowError(
+      message: String,
+      hint: String = "",
+      context: SQLQueryContext): ArithmeticException = {
+    val alternative = if (hint.nonEmpty) {
+      s" Use '$hint' to tolerate overflow and return NULL instead."
+    } else ""
+    new SparkArithmeticException(
+      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW",
+      messageParameters = Array(message, alternative),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def failedToCompileMsg(e: Exception): String = {

@@ -69,7 +69,7 @@ case class LogicalRelation(
   }
 
   override lazy val metadataOutput: Seq[AttributeReference] = relation match {
-    case _: HadoopFsRelation =>
+    case relation: HadoopFsRelation =>
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
       def isOutputColumn(col: AttributeReference): Boolean = {
@@ -78,7 +78,7 @@ case class LogicalRelation(
       // filter out the metadata struct column if it has the name conflicting with output columns.
       // if the file has a column "_metadata",
       // then the data column should be returned not the metadata struct column
-      Seq(FileFormat.createFileMetadataCol).filterNot(isOutputColumn)
+      Seq(FileFormat.createFileMetadataCol(relation.fileFormat)).filterNot(isOutputColumn)
     case _ => Nil
   }
 

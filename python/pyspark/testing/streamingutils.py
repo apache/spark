@@ -35,7 +35,7 @@ if should_skip_kinesis_tests:
     )
 else:
     kinesis_asl_assembly_jar = search_jar(
-        "external/kinesis-asl-assembly",
+        "connector/kinesis-asl-assembly",
         "spark-streaming-kinesis-asl-assembly-",
         "spark-streaming-kinesis-asl-assembly_",
     )

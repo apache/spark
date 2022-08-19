@@ -71,6 +71,11 @@ class KafkaTestUtils(
   private val localHostNameForURI = Utils.localHostNameForURI()
   logInfo(s"Local host name is $localHostNameForURI")
 
+  // MiniKDC uses canonical host name on host part, hence we need to provide canonical host name
+  // on the 'host' part of the principal.
+  private val localCanonicalHostName = Utils.localCanonicalHostName()
+  logInfo(s"Local canonical host name is $localCanonicalHostName")
+
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
@@ -88,7 +93,7 @@ class KafkaTestUtils(
   private var brokerConf: KafkaConfig = _
 
   private val brokerServiceName = "kafka"
-  private val clientUser = s"client/$localHostNameForURI"
+  private val clientUser = s"client/$localCanonicalHostName"
   private var clientKeytabFile: File = _
 
   // Kafka broker server
@@ -202,17 +207,17 @@ class KafkaTestUtils(
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
-    val zkServerUser = s"zookeeper/$localHostNameForURI"
+    val zkServerUser = s"zookeeper/$localCanonicalHostName"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
-    val zkClientUser = s"zkclient/$localHostNameForURI"
+    val zkClientUser = s"zkclient/$localCanonicalHostName"
     val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
-    val kafkaServerUser = s"kafka/$localHostNameForURI"
+    val kafkaServerUser = s"kafka/$localCanonicalHostName"
     val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")

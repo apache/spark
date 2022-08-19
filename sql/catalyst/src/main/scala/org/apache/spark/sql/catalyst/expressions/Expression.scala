@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -315,7 +316,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new IllegalStateException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
   protected def typeSuffix =
@@ -396,12 +397,18 @@ trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplacea
  * them with Min and Max respectively.
  */
 trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
-  override def aggBufferSchema: StructType = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
-  override def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
-  override def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  override def aggBufferSchema: StructType = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  }
+  override def aggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  }
+  override def inputAggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  }
 }
 
 /**

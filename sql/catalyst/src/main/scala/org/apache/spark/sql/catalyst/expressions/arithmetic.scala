@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
-import org.apache.spark.sql.catalyst.util.{IntervalUtils, MathUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -89,7 +89,7 @@ case class UnaryMinus(
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
     case _: AnsiIntervalType =>
       nullSafeCodeGen(ctx, ev, eval => {
-        val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+        val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
         s"${ev.value} = $mathUtils.negateExact($eval);"
       })
   }
@@ -98,8 +98,8 @@ case class UnaryMinus(
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
-    case _: DayTimeIntervalType => MathUtils.negateExact(input.asInstanceOf[Long])
-    case _: YearMonthIntervalType => MathUtils.negateExact(input.asInstanceOf[Int])
+    case _: DayTimeIntervalType => IntervalMathUtils.negateExact(input.asInstanceOf[Long])
+    case _: YearMonthIntervalType => IntervalMathUtils.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -278,6 +278,8 @@ abstract class BinaryArithmetic extends BinaryOperator
     throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
       "calendarIntervalMethod", "genCode")
 
+  protected def isAnsiInterval: Boolean = dataType.isInstanceOf[AnsiIntervalType]
+
   // Name of the function for the exact version of this expression in [[Math]].
   // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
@@ -305,7 +307,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       assert(exactMathMethod.isDefined,
         s"The expression '$nodeName' must override the exactMathMethod() method " +
         "if it is supposed to operate over interval types.")
-      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+      val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
@@ -406,9 +408,9 @@ case class Add(
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _: DayTimeIntervalType =>
-      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+      IntervalMathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
-      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+      IntervalMathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], getContextOrNull())
     case _: LongType if failOnError =>
@@ -475,9 +477,9 @@ case class Subtract(
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
     case _: DayTimeIntervalType =>
-      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+      IntervalMathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
-      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+      IntervalMathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _: IntegerType if failOnError =>
       MathUtils.subtractExact(
         input1.asInstanceOf[Int],

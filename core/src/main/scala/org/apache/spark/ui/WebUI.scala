@@ -140,7 +140,8 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   def initServer(): ServerInfo = {
-    val hostName = Utils.localHostNameForURI()
+    val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
+        .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
     val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
     server
   }
@@ -152,7 +153,9 @@ private[spark] abstract class WebUI(
       val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
-      logInfo(s"Bound $className to ${Utils.localHostNameForURI()}, and started at $webUrl")
+      val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
+          .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
+      logInfo(s"Bound $className to $hostName, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)
