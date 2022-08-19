@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -3875,6 +3875,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
+    .doc("When PRETTY, the error message consists of textual representation of error class, " +
+      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "STANDARD includes an additional JSON field `message`. This configuration property " +
+      "influences on error messages of Thrift Server while running queries.")
+    .version("3.4.0")
+    .stringConf.transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ErrorMessageFormat.values.map(_.toString))
+    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4657,6 +4667,9 @@ class SQLConf extends Serializable with Logging {
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
+
+  def errorMessageFormat: ErrorMessageFormat.Value =
+    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   /** ********************** SQLConf functionality methods ************ */
 
