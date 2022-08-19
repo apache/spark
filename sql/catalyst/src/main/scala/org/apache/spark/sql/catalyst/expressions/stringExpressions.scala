@@ -2499,7 +2499,7 @@ object ToBinary {
             || a == '/' || a == '+' =>
           if (padSize != 0) return false // Padding symbols should conclude the string.
           position += 1
-        case pad if pad == '=' =>
+        case '=' =>
           padSize += 1
           // Last group preceding padding should have 2 or more symbols. Padding size should be 1 or
           // less.
