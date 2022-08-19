@@ -383,7 +383,8 @@ object KubernetesUtils extends Logging {
   }
 
   /**
-   * This function builds the EnvVar objects for each key-value env.
+   * This function builds the EnvVar objects for each key-value env with no-null value.
+   * If value is empty string, define a key-only environment variable.
    */
   @Since("3.4.0")
   def buildEnvVars(env: Seq[(String, String)]): Seq[EnvVar] = {
@@ -397,16 +398,18 @@ object KubernetesUtils extends Logging {
   }
 
   /**
-   * This function builds the EnvVar objects for each field ref env.
+   * This function builds the EnvVar objects for each field ref env
+   * with no-null apiVersion and fieldPath.
    */
   @Since("3.4.0")
   def buildEnvVarsWithFieldRef(env: Seq[(String, String, String)]): Seq[EnvVar] = {
-    env.filter(env => env._2 != null && env._3 != null)
-      .map { env =>
+    env.filterNot(_._2 == null)
+      .filterNot(_._3 == null)
+      .map { case (key, apiVersion, fieldPath) =>
         new EnvVarBuilder()
-          .withName(env._1)
+          .withName(key)
           .withValueFrom(new EnvVarSourceBuilder()
-            .withNewFieldRef(env._2, env._3)
+            .withNewFieldRef(apiVersion, fieldPath)
             .build())
           .build()
       }

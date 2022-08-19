@@ -128,19 +128,20 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
     }
   }
 
-  test("SPARK-38582: verify that envVars built with kv env as expected") {
+  test("SPARK-38582: verify that envVars is built with kv env as expected") {
     val input = for (i <- 9 to 1 by -1) yield (s"testEnvKey.$i", s"testEnvValue.$i")
-    val expectedEnvVars = input.map { case(k, v) =>
+    val expectedEnvVars = (input :+ ("testKeyWithEmptyValue" -> "")).map { case(k, v) =>
       new EnvVarBuilder()
         .withName(k)
         .withValue(v).build()
     }
     val outputEnvVars =
-      KubernetesUtils.buildEnvVars(input :+ ("testKeyForNull" -> null))
+      KubernetesUtils.buildEnvVars(input ++
+        Seq("testKeyWithNullValue" -> null, "testKeyWithEmptyValue" -> ""))
     assert(outputEnvVars.toSet == expectedEnvVars.toSet)
   }
 
-  test("SPARK-38582: verify that envVars built with field ref env as expected") {
+  test("SPARK-38582: verify that envVars is built with field ref env as expected") {
     val input = for (i <- 9 to 1 by -1) yield (s"testEnvKey.$i", s"v$i", s"testEnvValue.$i")
     val expectedEnvVars = input.map { env =>
       new EnvVarBuilder()

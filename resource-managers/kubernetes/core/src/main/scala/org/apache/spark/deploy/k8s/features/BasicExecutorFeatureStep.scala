@@ -122,21 +122,25 @@ private[spark] class BasicExecutorFeatureStep(
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
     val executorEnv: Seq[EnvVar] = {
-      val sparkAuthSecret = if (kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
-        Map(SecurityManager.ENV_AUTH_SECRET -> secMgr.getSecretKey())
-      } else {
-        Nil
-      }
+      val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
+        case authSecret: String if kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty =>
+          Seq(SecurityManager.ENV_AUTH_SECRET -> authSecret)
+        case _ => null
+      }.getOrElse(Nil)
+
       val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>
         val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
           kubernetesConf.executorId)
           Utils.splitCommandString(subsOpts)
       }
+
       val sparkOpts = Utils.sparkJavaOpts(kubernetesConf.sparkConf,
         SparkConf.isExecutorStartupConf)
+
       val allOpts = (userOpts ++ sparkOpts).zipWithIndex.map { case (opt, index) =>
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
       }.toMap
+
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
@@ -149,7 +153,7 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_RESOURCE_PROFILE_ID -> resourceProfile.id.toString)
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
-          ++ Map(ENV_CLASSPATH-> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
+          ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
           ++ allOpts) ++
       KubernetesUtils.buildEnvVarsWithFieldRef(
         Seq(
