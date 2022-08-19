@@ -82,8 +82,6 @@ class ArrowPythonRunnerWithState(
     )
   )
 
-  logWarning(s"DEBUG: schemaWithState: ${schemaWithState}")
-
   val stateRowSerializer = stateEncoder.createSerializer()
   val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -125,9 +123,6 @@ class ArrowPythonRunnerWithState(
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schemaWithState, timeZoneId)
-
-        logWarning(s"DEBUG: arrowSchema: ${arrowSchema}")
-
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
@@ -316,7 +311,6 @@ class ArrowPythonRunnerWithState(
         val newGroupState = GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson)
 
         val rowIterator = if (isEmptyData) {
-          logWarning("DEBUG: no data is available")
           Iterator.empty
         } else {
           //  UDF returns a StructType column in ColumnarBatch, select the children here

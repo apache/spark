@@ -213,11 +213,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
     def wrapped(key_series, value_series, state):
         import pandas as pd
 
-        print("=== <wrapped> key_series: %s value_series: %s state: %s" % (key_series, value_series, state, ), file=sys.stderr)
-
         key = tuple(s[0] for s in key_series)
-        print("=== <wrapped> key: %s" % (key, ), file=sys.stderr)
-
         if state.hasTimedOut:
             # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
             result = f(key, pd.DataFrame(columns=pd.concat(value_series, axis=1).columns), state)

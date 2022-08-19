@@ -249,7 +249,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         arrs = []
         for s, t in series:
-            print("==== <_create_batch> s: %s t: %s" % (s, t, ), file=sys.stderr)
             if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError(
@@ -387,7 +386,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.utf8_deserializer = UTF8Deserializer()
         self.state_object_schema = state_object_schema
 
-        # FIXME: result_state_df_type?
         self.result_state_df_type = StructType([
             StructField('properties', StringType()),
             StructField('keyRowAsUnsafe', BinaryType()),
@@ -405,37 +403,22 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
         for batch in batches:
-            print("=== <load_stream> batch: %s type(batch): %s" % (batch, type(batch), ), file=sys.stderr)
-
             batch_schema = batch.schema
-
-            print("=== <load_stream> batch_schema: %s type(batch_schema): %s" % (batch_schema, type(batch_schema), ), file=sys.stderr)
+            data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
+            state_schema = pa.schema([batch_schema[-1], ])
 
             batch_columns = batch.columns
             data_columns = batch_columns[0:-1]
             state_column = batch_columns[-1]
 
-            print("=== <load_stream> data_columns: %s state_column: %s" % (data_columns, state_column, ), file=sys.stderr)
-
-            data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
-            state_schema = pa.schema([batch_schema[-1], ])
-
-            print("=== <load_stream> data_schema: %s state_schema: %s" % (data_schema, state_schema, ), file=sys.stderr)
-
             data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
             state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
-
-            print("=== <load_stream> data_batch: %s state_batch: %s" % (data_batch, state_batch, ), file=sys.stderr)
 
             data_arrow = pa.Table.from_batches([data_batch]).itercolumns()
             state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
 
-            print("=== <load_stream> data_arrow_columns: %s state_arrow_columns: %s" % (data_arrow, state_arrow, ), file=sys.stderr)
-
             data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
             state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
-
-            print("=== <load_stream> data_pandas: %s type(data_pandas): %s state_pandas: %s type(state_pandas): %s" % (data_pandas, type(data_pandas), state_pandas, type(state_pandas), ), file=sys.stderr)
 
             state_info_col = state_pandas.iloc[0]
 
@@ -452,8 +435,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
                                    valueSchema=self.state_object_schema, **state_properties)
-
-            print("=== <load_stream> data_pandas: %s state: %s" % (data_pandas, state, ), file=sys.stderr)
 
             # state info
             yield (data_pandas, state, )
@@ -480,15 +461,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 # FIXME: arrow type to pandas type
                 # FIXME: probably also need to check columns to validate?
 
-                print("==== <init_stream_yield_batches> pdf: %s len(pdf): %s" % (pdf, len(pdf), ), file=sys.stderr)
-
                 empty_data = len(pdf) == 0
                 if empty_data:
                     # if returned DataFrame is empty with no column information, just create a new
                     # DataFrame with empty row with column information
                     pdf = pd.DataFrame(dict.fromkeys(pa.schema(return_schema).names), index=[0])
-
-                print("==== <init_stream_yield_batches> pdf: %s state: %s return_schema: %s" % (pdf, state, return_schema, ), file=sys.stderr)
 
                 state_properties = state.json().encode("utf-8")
                 state_key_row_as_binary = state._keyAsUnsafe
@@ -502,8 +479,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
-
-                print("==== <init_stream_yield_batches> pdf: %s return_schema: %s state_pdf: %s result_state arrow_schema: %s" % (pdf, return_schema, state_pdf, self.result_state_pdf_arrow_type, ), file=sys.stderr)
 
                 batch = self._create_batch([
                     (pdf, return_schema),
