@@ -115,20 +115,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(onlyDataFrameFunctions.intersect(excludedSqlFunctions) === Set.empty)
     assert(onlySqlFunctions.intersect(excludedDataFrameFunctions) === Set.empty)
 
+    def symmDiff[T](a: Set[T], b: Set[T]): Set[T] = a.union(b).diff(a.intersect(b))
+
     // Check that only expected functions are left
-    assert(onlyDataFrameFunctions === expectedOnlyDataFrameFunctions)
+    assert(onlyDataFrameFunctions === expectedOnlyDataFrameFunctions, "symmetric difference is: "
+        + symmDiff(onlyDataFrameFunctions, expectedOnlyDataFrameFunctions))
 
     // scalastyle:off println
     println("Report: DataFrame function and SQL functon parity")
     println(s"  There are ${dataFrameFunctions.size} relevant functions in the DataFrame API")
     println(s"  There are ${sqlFunctions.size} relevant functions in the SQL function registry")
     println(s"  Number of functions in both sets: $commonCount")
-    if(onlyDataFrameFunctions.nonEmpty) {
-      val number = onlyDataFrameFunctions.size
-      val sortedList = onlyDataFrameFunctions.toList.sorted.mkString(", ")
-      println(s"  There are $number DataFrame functions that are not in SQL: $sortedList")
-    }
-    if(onlySqlFunctions.nonEmpty) {
+    if (onlySqlFunctions.nonEmpty) {
       val number = onlySqlFunctions.size
       val sortedList = onlySqlFunctions.toList.sorted.mkString(", ")
       println(s"  There are $number SQL functions that are not in the DataFrame API: $sortedList")
