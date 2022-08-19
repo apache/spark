@@ -825,6 +825,9 @@ private[spark] class TaskSchedulerImpl(
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }
+            if (state == TaskState.RUNNING) {
+              taskSet.taskInfos(tid).launchSucceeded()
+            }
           case None =>
             logError(
               ("Ignoring update with state %s for TID %s because its task set is gone (this is " +

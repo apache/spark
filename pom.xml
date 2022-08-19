@@ -115,7 +115,7 @@
     <slf4j.version>1.7.36</slf4j.version>
     <log4j.version>2.18.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.3</hadoop.version>
+    <hadoop.version>3.3.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -132,7 +132,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.7.5</orc.version>
+    <orc.version>1.7.6</orc.version>
     <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -144,7 +144,7 @@
     -->
     <codahale.metrics.version>4.2.10</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <avro.version>1.11.0</avro.version>
+    <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
@@ -165,11 +165,7 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <!--
-      SPARK-39502: Please don't upgrade the version to 4.6.2 due to
-      there is a compilation issue when run `mvn test` with Java 8
-      -->
-    <scala-maven-plugin.version>4.6.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
@@ -203,7 +199,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
-    <tink.version>1.6.1</tink.version>
+    <tink.version>1.7.0</tink.version>
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
@@ -678,7 +674,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.4.4</version>
+        <version>7.4.5</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -2919,7 +2915,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
+          <version>3.10.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -3042,7 +3038,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.2</version>
+          <version>3.2.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -3093,7 +3089,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.4.0</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3346,7 +3342,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.43</version>
+            <version>9.3</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3408,7 +3404,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.0.4</version>
+        <version>1.1.1640084764.9f463a9</version>
         <configuration>
           <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
@@ -3783,7 +3779,7 @@
                       <pluginExecutionFilter>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-jar-plugin</artifactId>
-                        <versionRange>3.1.2</versionRange>
+                        <versionRange>3.2.2</versionRange>
                         <goals>
                           <goal>test-jar</goal>
                         </goals>

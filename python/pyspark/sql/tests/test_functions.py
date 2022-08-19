@@ -100,12 +100,7 @@ class FunctionsTests(ReusedSQLTestCase):
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = {
-            "call_udf",  # TODO(SPARK-39734)
-            "localtimestamp",  # TODO(SPARK-36259)
-            "map_contains_key",  # TODO(SPARK-39733)
-            "pmod",  # TODO(SPARK-37348)
-        }
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"

@@ -224,7 +224,7 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
-      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` and increase the array index by 1(the starting array index is 1 for `try_element_at`) to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
@@ -286,11 +286,6 @@
       "Invalid SQL syntax: <inputString>"
     ],
     "sqlState" : "42000"
-  },
-  "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [
-      "Key <keyValue> does not exist. Use `try_element_at` to tolerate non-existent key and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
-    ]
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [

@@ -56,8 +56,6 @@ import com.google.common.cache.Weigher;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,8 +70,12 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.DBBackend;
+import org.apache.spark.network.shuffledb.DBIterator;
+import org.apache.spark.network.shuffledb.StoreVersion;
+import org.apache.spark.network.util.DBProvider;
 import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -107,8 +109,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final String APP_ATTEMPT_SHUFFLE_FINALIZE_STATUS_KEY_PREFIX =
       "AppAttemptShuffleFinalized";
   private static final String APP_ATTEMPT_PATH_KEY_PREFIX = "AppAttemptPathInfo";
-  private static final LevelDBProvider.StoreVersion
-      CURRENT_VERSION = new LevelDBProvider.StoreVersion(1, 0);
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
   /**
    * A concurrent hashmap where the key is the applicationId, and the value includes
@@ -155,7 +156,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
-    db = LevelDBProvider.initLevelDB(this.recoveryFile, CURRENT_VERSION, mapper);
+    DBBackend dbBackend = null;
+    if (recoveryFile != null) {
+      String dbBackendName =
+        conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+      dbBackend = DBBackend.byName(dbBackendName);
+      logger.info("Configured {} as {} and actually used value {}",
+        Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
+    }
+    db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
       reloadAndCleanUpAppShuffleInfo(db);
     }

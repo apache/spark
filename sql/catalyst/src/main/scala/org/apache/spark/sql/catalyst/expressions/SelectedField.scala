@@ -96,7 +96,7 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _, _) =>
+      case GetMapValue(child, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val MapType(keyType, _, valueContainsNull) = child.dataType

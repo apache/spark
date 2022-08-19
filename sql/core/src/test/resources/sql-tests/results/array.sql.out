@@ -295,3 +295,35 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7
+
+
+-- !query
+select get(array(1, 2, 3), 0)
+-- !query schema
+struct<get(array(1, 2, 3), 0):int>
+-- !query output
+1
+
+
+-- !query
+select get(array(1, 2, 3), 3)
+-- !query schema
+struct<get(array(1, 2, 3), 3):int>
+-- !query output
+NULL
+
+
+-- !query
+select get(array(1, 2, 3), null)
+-- !query schema
+struct<get(array(1, 2, 3), NULL):int>
+-- !query output
+NULL
+
+
+-- !query
+select get(array(1, 2, 3), -1)
+-- !query schema
+struct<get(array(1, 2, 3), -1):int>
+-- !query output
+NULL

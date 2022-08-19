@@ -643,8 +643,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val union = view.union(view)
       testSparkPlanMetrics(union, 1, Map(
         0L -> ("Union" -> Map()),
-        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
-        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+        1L -> ("Project" -> Map()),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
     }
   }
 

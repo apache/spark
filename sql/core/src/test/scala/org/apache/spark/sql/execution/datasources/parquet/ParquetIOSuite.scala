@@ -1307,6 +1307,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-40128 read DELTA_LENGTH_BYTE_ARRAY encoded strings") {
+    withAllParquetReaders {
+      checkAnswer(
+        // "fruit" column in this file is encoded using DELTA_LENGTH_BYTE_ARRAY.
+        // The file comes from https://github.com/apache/parquet-testing
+        readResourceParquetFile("test-data/delta_length_byte_array.parquet"),
+        (0 to 999).map(i => Row("apple_banana_mango" + Integer.toString(i * i))))
+    }
+  }
+
   test("SPARK-12589 copy() on rows returned from reader works for strings") {
     withTempPath { dir =>
       val data = (1, "abc") ::(2, "helloabcde") :: Nil
