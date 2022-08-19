@@ -199,7 +199,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function."},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function."
+  }
+}
 
 
 -- !query
@@ -214,7 +219,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function."},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function."
+  }
+}
 
 
 -- !query
@@ -229,7 +239,14 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`year`","objectList":"`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"},"queryContext":[]}
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`year`",
+    "objectList" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+  }
+}
 
 
 -- !query
@@ -259,7 +276,12 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
+  }
+}
 
 
 -- !query
@@ -310,7 +332,15 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"PIVOT_VALUE_DATA_TYPE_MISMATCH","sqlState":"42000","messageParameters":{"value":"dotNET","valueType":"string","pivotType":"struct<course:string,year:int>"},"queryContext":[]}
+{
+  "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "value" : "dotNET",
+    "valueType" : "string",
+    "pivotType" : "struct<course:string,year:int>"
+  }
+}
 
 
 -- !query
@@ -323,7 +353,14 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"UNRESOLVED_COLUMN","sqlState":"42000","messageParameters":{"objectName":"`s`","objectList":"`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"},"queryContext":[]}
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`s`",
+    "objectList" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+  }
+}
 
 
 -- !query
@@ -336,7 +373,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"NON_LITERAL_PIVOT_VALUES","sqlState":"42000","messageParameters":{"expression":"\"course\""},"queryContext":[]}
+{
+  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"course\""
+  }
+}
 
 
 -- !query
@@ -421,7 +464,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"INCOMPARABLE_PIVOT_COLUMN","sqlState":"42000","messageParameters":{"columnName":"`__auto_generated_subquery_name`.`m`"},"queryContext":[]}
+{
+  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "columnName" : "`__auto_generated_subquery_name`.`m`"
+  }
+}
 
 
 -- !query
@@ -438,7 +487,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"INCOMPARABLE_PIVOT_COLUMN","sqlState":"42000","messageParameters":{"columnName":"`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"},"queryContext":[]}
+{
+  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "columnName" : "`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"
+  }
+}
 
 
 -- !query

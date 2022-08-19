@@ -18,8 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
-
-import java.io.Serializable;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * Represent an extract function, which extracts and returns the value of a
@@ -44,7 +43,7 @@ import java.io.Serializable;
  */
 
 @Evolving
-public class Extract implements Expression, Serializable {
+public class Extract extends ExpressionWithToString {
 
   private String field;
   private Expression source;

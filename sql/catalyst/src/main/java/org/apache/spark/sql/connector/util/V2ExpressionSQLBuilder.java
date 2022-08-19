@@ -155,6 +155,9 @@ public class V2ExpressionSQLBuilder {
         case "SHA2":
         case "MD5":
         case "CRC32":
+        case "BIT_LENGTH":
+        case "CHAR_LENGTH":
+        case "CONCAT":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {

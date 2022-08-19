@@ -19,12 +19,9 @@ package org.apache.spark.sql
 
 import scala.util.control.NonFatal
 
-import org.json4s.{JInt, JString}
-import org.json4s.JsonAST.{JArray, JObject}
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
-
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{ErrorMessageFormat, SparkException, SparkThrowable}
+import org.apache.spark.ErrorMessageFormat.MINIMAL
+import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -76,30 +73,12 @@ trait SQLQueryTestHelper {
     if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
-  private def toJson(e: SparkThrowable): String = {
-    assert(e.getParameterNames.size == e.getMessageParameters.size,
-      "Number of message parameter names and values must be the same")
-    val jValue = ("errorClass" -> e.getErrorClass) ~
-      ("errorSubClass" -> Option(e.getErrorSubClass)) ~
-      ("sqlState" -> Option(e.getSqlState)) ~
-      ("messageParameters" ->
-        JObject((e.getParameterNames zip e.getMessageParameters.map(JString)).toList)) ~
-      ("queryContext" -> JArray(
-        e.getQueryContext.map(c => JObject(
-          "objectType" -> JString(c.objectType()),
-          "objectName" -> JString(c.objectName()),
-          "startIndex" -> JInt(c.startIndex()),
-          "stopIndex" -> JInt(c.stopIndex()),
-          "fragment" -> JString(c.fragment()))).toList)
-      )
-    compact(render(jValue))
-  }
-
-  private def toLegacyJson(msg: String): String = {
-    val jValue = ("errorClass" -> "legacy") ~
-      ("messageParameters" -> JObject(List("message" -> JString(msg)))) ~
-      ("queryContext" -> JArray(List.empty))
-    compact(render(jValue))
+  private def toLegacyJson(msg: String, format: ErrorMessageFormat.Value): String = {
+    val e = new Throwable with SparkThrowable {
+      override val getErrorClass = null
+      override val getMessage = msg
+    }
+    getMessage(e, format)
   }
 
   /**
@@ -109,30 +88,31 @@ trait SQLQueryTestHelper {
    * @param result a function that returns a pair of schema and output
    */
   protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    val format = MINIMAL
     try {
       result
     } catch {
-      case e: SparkThrowable if e.getErrorClass != null =>
-        (emptySchema, Seq(e.getClass.getName, toJson(e)))
+      case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+        (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
         val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (emptySchema, Seq(a.getClass.getName, toLegacyJson(msg.replaceAll("#\\d+", "#x"))))
+        (emptySchema, Seq(a.getClass.getName, toLegacyJson(msg.replaceAll("#\\d+", "#x"), format)))
       case s: SparkException if s.getCause != null =>
         // For a runtime exception, it is hard to match because its message contains
         // information of stage, task ID, etc.
         // To make result matching simpler, here we match the cause of the exception if it exists.
         s.getCause match {
-          case e: SparkThrowable if e.getErrorClass != null =>
-            (emptySchema, Seq(e.getClass.getName, toJson(e)))
+          case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+            (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
           case cause =>
-            (emptySchema, Seq(cause.getClass.getName, toLegacyJson(cause.getMessage)))
+            (emptySchema, Seq(cause.getClass.getName, toLegacyJson(cause.getMessage, format)))
         }
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
-        (emptySchema, Seq(e.getClass.getName, toLegacyJson(e.getMessage)))
+        (emptySchema, Seq(e.getClass.getName, toLegacyJson(e.getMessage, format)))
     }
   }
 }

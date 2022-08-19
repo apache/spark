@@ -128,7 +128,12 @@ select sort_array(array('b', 'd'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -137,7 +142,12 @@ select sort_array(array('b', 'd'), cast(NULL as boolean))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -181,7 +191,10 @@ select element_at(array(1, 2, 3), 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":{},"queryContext":[]}
+{
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -294,4 +307,41 @@ select array_size(map('a', 1, 'b', 2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'array_size(map('a', 1, 'b', 2))' due to data type mismatch: argument 1 requires array type, however, 'map('a', 1, 'b', 2)' is of map<string,int> type.; line 1 pos 7"
+  }
+}
+
+
+-- !query
+select get(array(1, 2, 3), 0)
+-- !query schema
+struct<get(array(1, 2, 3), 0):int>
+-- !query output
+1
+
+
+-- !query
+select get(array(1, 2, 3), 3)
+-- !query schema
+struct<get(array(1, 2, 3), 3):int>
+-- !query output
+NULL
+
+
+-- !query
+select get(array(1, 2, 3), null)
+-- !query schema
+struct<get(array(1, 2, 3), NULL):int>
+-- !query output
+NULL
+
+
+-- !query
+select get(array(1, 2, 3), -1)
+-- !query schema
+struct<get(array(1, 2, 3), -1):int>
+-- !query output
+NULL

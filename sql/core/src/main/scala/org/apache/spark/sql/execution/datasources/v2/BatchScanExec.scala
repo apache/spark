@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 
 /**
@@ -37,7 +38,8 @@ case class BatchScanExec(
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
+    ordering: Option[Seq[SortOrder]] = None,
+    @transient table: Table) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -108,13 +110,15 @@ case class BatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
+    val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
     }
+    postDriverMetrics()
+    rdd
   }
 
   override def doCanonicalize(): BatchScanExec = {
@@ -132,9 +136,7 @@ case class BatchScanExec(
     redact(result)
   }
 
-  /**
-   * Returns the name of this type of TreeNode.  Defaults to the class name.
-   * Note that we remove the "Exec" suffix for physical operators here.
-   */
-  override def nodeName: String = s"BatchScan ${scan.name()}"
+  override def nodeName: String = {
+    s"BatchScan ${table.name()}".trim
+  }
 }

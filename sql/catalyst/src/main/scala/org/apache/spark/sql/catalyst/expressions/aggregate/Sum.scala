@@ -249,17 +249,15 @@ case class TrySum(child: Expression) extends SumBase(child) {
 
   override lazy val mergeExpressions: Seq[Expression] =
     if (useAnsiAdd) {
-      getMergeExpressions.map(TryEval)
+      val expressions = getMergeExpressions
+      // If the length of getMergeExpressions is larger than 1, the tail expressions are for
+      // tracking whether the input is empty, which doesn't need `TryEval` execution.
+      Seq(TryEval(expressions.head)) ++ expressions.tail
     } else {
       getMergeExpressions
     }
 
-  override lazy val evaluateExpression: Expression =
-    if (useAnsiAdd) {
-      TryEval(getEvaluateExpression())
-    } else {
-      getEvaluateExpression()
-    }
+  override lazy val evaluateExpression: Expression = getEvaluateExpression()
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

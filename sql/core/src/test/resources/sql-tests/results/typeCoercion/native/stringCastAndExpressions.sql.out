@@ -101,7 +101,12 @@ select cast(a as array<string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -110,7 +115,12 @@ select cast(a as struct<s:string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -119,7 +129,12 @@ select cast(a as map<string, string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -136,7 +151,14 @@ select to_timestamp('2018-01-01', a) from t
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'aa'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'aa'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -153,7 +175,14 @@ select to_unix_timestamp('2018-01-01', a) from t
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'aa'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'aa'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -170,7 +199,14 @@ select unix_timestamp('2018-01-01', a) from t
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'aa'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'aa'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query

@@ -166,7 +166,14 @@ SHOW TABLE EXTENDED
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"end of input","hint":""},"queryContext":[]}
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "end of input",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -186,7 +193,14 @@ SHOW TABLE EXTENDED PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'PARTITION'","hint":""},"queryContext":[]}
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'PARTITION'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -195,7 +209,12 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{"errorClass":"legacy","messageParameters":{"message":"Table or view 'show_t*' not found in database 'showdb'"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view 'show_t*' not found in database 'showdb'"
+  }
+}
 
 
 -- !query
@@ -204,7 +223,12 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`showdb`.`show_t1`'"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`showdb`.`show_t1`'"
+  }
+}
 
 
 -- !query
@@ -213,7 +237,12 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"a is not a valid partition column in table `spark_catalog`.`showdb`.`show_t1`."},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "a is not a valid partition column in table `spark_catalog`.`showdb`.`show_t1`."
+  }
+}
 
 
 -- !query
@@ -222,7 +251,12 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Ch', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-{"errorClass":"legacy","messageParameters":{"message":"Partition not found in table 'show_t1' database 'showdb':\nc -> Ch\nd -> 1"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Partition not found in table 'show_t1' database 'showdb':\nc -> Ch\nd -> 1"
+  }
+}
 
 
 -- !query

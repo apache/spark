@@ -400,7 +400,12 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nLINES TERMINATED BY only supports newline '\\n' right now: @(line 3, pos 4)\n\n== SQL ==\nSELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (\n  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)\n    ROW FORMAT DELIMITED\n----^^^\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n    USING 'cat' AS (\n      a string,\n      b string,\n      c string,\n      d string,\n      e string,\n      f string,\n      g string,\n      h string,\n      i string,\n      j string,\n      k string,\n      l string)\n    ROW FORMAT DELIMITED\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n  FROM t\n) tmp\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nLINES TERMINATED BY only supports newline '\\n' right now: @(line 3, pos 4)\n\n== SQL ==\nSELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (\n  SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)\n    ROW FORMAT DELIMITED\n----^^^\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n    USING 'cat' AS (\n      a string,\n      b string,\n      c string,\n      d string,\n      e string,\n      f string,\n      g string,\n      h string,\n      i string,\n      j string,\n      k string,\n      l string)\n    ROW FORMAT DELIMITED\n    FIELDS TERMINATED BY ','\n    LINES TERMINATED BY '@'\n    NULL DEFINED AS 'NULL'\n  FROM t\n) tmp\n"
+  }
+}
 
 
 -- !query
@@ -686,7 +691,12 @@ WHERE a <= 4
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"TRANSFORM_DISTINCT_ALL","sqlState":"0A000","messageParameters":{},"queryContext":[]}
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -698,7 +708,12 @@ WHERE a <= 4
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"UNSUPPORTED_FEATURE","errorSubClass":"TRANSFORM_DISTINCT_ALL","sqlState":"0A000","messageParameters":{},"queryContext":[]}
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -711,7 +726,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'AS'","hint":""},"queryContext":[]}
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -724,7 +746,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'b_1'","hint":""},"queryContext":[]}
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'b_1'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -737,7 +766,14 @@ GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"PARSE_SYNTAX_ERROR","sqlState":"42000","messageParameters":{"error":"'AS'","hint":""},"queryContext":[]}
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'AS'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

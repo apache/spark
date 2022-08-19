@@ -45,7 +45,12 @@ SET TIME ZONE
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE\n^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE\n^^^\n"
+  }
+}
 
 
 -- !query
@@ -54,7 +59,12 @@ SET TIME ZONE 'invalid/zone'
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":{"message":"'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)"
+  }
+}
 
 
 -- !query
@@ -63,7 +73,12 @@ SET TIME ZONE INTERVAL 3 DAYS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 3 DAYS\n--------------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 3 DAYS\n--------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -72,7 +87,12 @@ SET TIME ZONE INTERVAL 24 HOURS
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 24 HOURS\n--------------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 24 HOURS\n--------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -81,7 +101,12 @@ SET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND\n--------------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL '19:40:32' HOUR TO SECOND\n--------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -90,7 +115,12 @@ SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 'GMT+1'\n^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nInvalid time zone displacement value(line 1, pos 0)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 'GMT+1'\n^^^\n"
+  }
+}
 
 
 -- !query
@@ -99,4 +129,9 @@ SET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND\n--------------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe interval value must be in the range of [-18, +18] hours with second precision(line 1, pos 14)\n\n== SQL ==\nSET TIME ZONE INTERVAL 10 HOURS 1 MILLISECOND\n--------------^^^\n"
+  }
+}

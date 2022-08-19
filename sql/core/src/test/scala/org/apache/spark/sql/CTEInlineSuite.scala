@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, LessThan, Literal, Or}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RepartitionOperation, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RebalancePartitions, RepartitionByExpression, RepartitionOperation, WithCTE}
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -42,8 +42,13 @@ abstract class CTEInlineSuiteBase
            |select * from v except select * from v
          """.stripMargin)
       checkAnswer(df, Nil)
+
+      val r = df.queryExecution.optimizedPlan.find {
+        case RepartitionByExpression(p, _, None) => p.isEmpty
+        case _ => false
+      }
       assert(
-        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        r.isDefined,
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
@@ -485,4 +490,23 @@ abstract class CTEInlineSuiteBase
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite
 
-class CTEInlineSuiteAEOn extends CTEInlineSuiteBase with EnableAdaptiveExecutionSuite
+class CTEInlineSuiteAEOn extends CTEInlineSuiteBase with EnableAdaptiveExecutionSuite {
+  import testImplicits._
+
+  test("SPARK-40105: Improve repartition in ReplaceCTERefWithRepartition") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as (
+           |  select /*+ rebalance(c1) */ c1, c2, rand() from t
+           |)
+           |select * from v except select * from v
+         """.stripMargin)
+      checkAnswer(df, Nil)
+
+      assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]))
+      assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RebalancePartitions]))
+    }
+  }
+}

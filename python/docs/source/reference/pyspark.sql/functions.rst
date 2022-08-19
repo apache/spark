@@ -84,6 +84,7 @@ Math Functions
     log10
     log1p
     log2
+    pmod
     pow
     rint
     round
@@ -125,6 +126,7 @@ Datetime Functions
     quarter
     month
     last_day
+    localtimestamp
     minute
     months_between
     next_day
@@ -188,6 +190,7 @@ Collection Functions
     flatten
     sequence
     array_repeat
+    map_contains_key
     map_keys
     map_values
     map_entries
@@ -326,6 +329,7 @@ UDF
 .. autosummary::
     :toctree: api/
 
+    call_udf
     pandas_udf
     udf
     unwrap_udt

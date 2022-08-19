@@ -2,19 +2,17 @@
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":{"keyValue":"5","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":40,"fragment":"element_at(map(1, 'a', 2, 'b'), 5"}]}
+NULL
 
 
 -- !query
 select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":{"keyValue":"5","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":28,"fragment":"map(1, 'a', 2, 'b')[5"}]}
+NULL
 
 
 -- !query
@@ -71,7 +69,12 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -80,38 +83,9 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7"},"queryContext":[]}
-
-
--- !query
-set spark.sql.ansi.strictIndexOperator=false
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.ansi.strictIndexOperator	false
-
-
--- !query
-select map(1, 'a', 2, 'b')[5]
--- !query schema
-struct<map(1, a, 2, b)[5]:string>
--- !query output
-NULL
-
-
--- !query
-select element_at(map(1, 'a', 2, 'b'), 5)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkNoSuchElementException
-{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":{"keyValue":"5","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":40,"fragment":"element_at(map(1, 'a', 2, 'b'), 5"}]}
-
-
--- !query
-select element_at(map('a', 1, 'b', 2), 'c')
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkNoSuchElementException
-{"errorClass":"MAP_KEY_DOES_NOT_EXIST","messageParameters":{"keyValue":"'c'","config":"\"spark.sql.ansi.enabled\""},"queryContext":[{"objectType":"","objectName":"","startIndex":7,"stopIndex":42,"fragment":"element_at(map('a', 1, 'b', 2), 'c'"}]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7"
+  }
+}

@@ -13,7 +13,12 @@ select timestamp '2019-01-01中文'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nCannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)\n\n== SQL ==\nselect timestamp '2019-01-01中文'\n-------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nCannot parse the TIMESTAMP value: 2019-01-01中文(line 1, pos 7)\n\n== SQL ==\nselect timestamp '2019-01-01中文'\n-------^^^\n"
+  }
+}
 
 
 -- !query
@@ -22,7 +27,12 @@ select timestamp'4294967297'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nCannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)\n\n== SQL ==\nselect timestamp'4294967297'\n-------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nCannot parse the TIMESTAMP value: 4294967297(line 1, pos 7)\n\n== SQL ==\nselect timestamp'4294967297'\n-------^^^\n"
+  }
+}
 
 
 -- !query
@@ -31,7 +41,12 @@ select timestamp'2021-01-01T12:30:4294967297.123456'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"legacy","messageParameters":{"message":"\nCannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)\n\n== SQL ==\nselect timestamp'2021-01-01T12:30:4294967297.123456'\n-------^^^\n"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nCannot parse the TIMESTAMP value: 2021-01-01T12:30:4294967297.123456(line 1, pos 7)\n\n== SQL ==\nselect timestamp'2021-01-01T12:30:4294967297.123456'\n-------^^^\n"
+  }
+}
 
 
 -- !query
@@ -176,7 +191,12 @@ select TIMESTAMP_SECONDS(1230219000123123)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-{"errorClass":"legacy","messageParameters":{"message":"long overflow"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "long overflow"
+  }
+}
 
 
 -- !query
@@ -185,7 +205,12 @@ select TIMESTAMP_SECONDS(-1230219000123123)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-{"errorClass":"legacy","messageParameters":{"message":"long overflow"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "long overflow"
+  }
+}
 
 
 -- !query
@@ -194,7 +219,12 @@ select TIMESTAMP_MILLIS(92233720368547758)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-{"errorClass":"legacy","messageParameters":{"message":"long overflow"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "long overflow"
+  }
+}
 
 
 -- !query
@@ -203,7 +233,12 @@ select TIMESTAMP_MILLIS(-92233720368547758)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-{"errorClass":"legacy","messageParameters":{"message":"long overflow"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "long overflow"
+  }
+}
 
 
 -- !query
@@ -212,7 +247,12 @@ select TIMESTAMP_SECONDS(0.1234567)
 struct<>
 -- !query output
 java.lang.ArithmeticException
-{"errorClass":"legacy","messageParameters":{"message":"Rounding necessary"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Rounding necessary"
+  }
+}
 
 
 -- !query
@@ -590,7 +630,12 @@ select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - '2011-11-11 11:11:10')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:10'' is of string type.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - '2011-11-11 11:11:10')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:10'' is of string type.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -599,7 +644,12 @@ select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '('2011-11-11 11:11:11' - TIMESTAMP '2011-11-11 11:11:10')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:11'' is of string type.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '('2011-11-11 11:11:11' - TIMESTAMP '2011-11-11 11:11:10')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:11'' is of string type.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -632,7 +682,12 @@ select str - timestamp'2011-11-11 11:11:11' from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(ts_view.str - TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(ts_view.str - TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -641,7 +696,12 @@ select timestamp'2011-11-11 11:11:11' - str from ts_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - ts_view.str)' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - ts_view.str)' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -650,7 +710,12 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -659,7 +724,12 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' (double and timestamp).; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + TIMESTAMP '2011-11-11 11:11:11')' (double and timestamp).; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -668,7 +738,12 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' (timestamp and void).; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' (timestamp and void).; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -677,7 +752,12 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"cannot resolve '(NULL + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP '2011-11-11 11:11:11')' (void and timestamp).; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(NULL + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP '2011-11-11 11:11:11')' (void and timestamp).; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -709,7 +789,14 @@ select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'yyyy-MM-dd GGGGG'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'yyyy-MM-dd GGGGG'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -718,7 +805,14 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd MM yyyy EEEEEE'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEEE'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -727,7 +821,14 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd MM yyyy EEEEE'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEE'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -736,7 +837,14 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd MM yyyy EEEEE'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEE'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -745,7 +853,14 @@ select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat'
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd/MMMMM/yyyy'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd/MMMMM/yyyy'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -754,7 +869,14 @@ select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMM
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-{"errorClass":"INCONSISTENT_BEHAVIOR_CROSS_VERSION","errorSubClass":"DATETIME_PATTERN_RECOGNITION","messageParameters":{"pattern":"'dd/MMMMM/yyyy'","config":"\"spark.sql.legacy.timeParserPolicy\""},"queryContext":[]}
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd/MMMMM/yyyy'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query

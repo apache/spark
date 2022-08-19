@@ -85,7 +85,12 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with tinyint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with tinyint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -94,7 +99,12 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with tinyint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with tinyint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -103,7 +113,12 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with tinyint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with tinyint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -112,7 +127,12 @@ SELECT cast(1 as tinyint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with tinyint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with tinyint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -193,7 +213,12 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with smallint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with smallint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -202,7 +227,12 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with smallint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with smallint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -211,7 +241,12 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with smallint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with smallint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -220,7 +255,12 @@ SELECT cast(1 as smallint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with smallint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with smallint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -301,7 +341,12 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with int at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with int at same column of first table"
+  }
+}
 
 
 -- !query
@@ -310,7 +355,12 @@ SELECT cast(1 as int) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with int at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with int at same column of first table"
+  }
+}
 
 
 -- !query
@@ -319,7 +369,12 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timest
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with int at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with int at same column of first table"
+  }
+}
 
 
 -- !query
@@ -328,7 +383,12 @@ SELECT cast(1 as int) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with int at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with int at same column of first table"
+  }
+}
 
 
 -- !query
@@ -409,7 +469,12 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with bigint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with bigint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -418,7 +483,12 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with bigint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with bigint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -427,7 +497,12 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with bigint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with bigint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -436,7 +511,12 @@ SELECT cast(1 as bigint) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with bigint at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with bigint at same column of first table"
+  }
+}
 
 
 -- !query
@@ -517,7 +597,12 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with float at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with float at same column of first table"
+  }
+}
 
 
 -- !query
@@ -526,7 +611,12 @@ SELECT cast(1 as float) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with float at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with float at same column of first table"
+  }
+}
 
 
 -- !query
@@ -535,7 +625,12 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as time
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with float at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with float at same column of first table"
+  }
+}
 
 
 -- !query
@@ -544,7 +639,12 @@ SELECT cast(1 as float) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with float at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with float at same column of first table"
+  }
+}
 
 
 -- !query
@@ -625,7 +725,12 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with double at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with double at same column of first table"
+  }
+}
 
 
 -- !query
@@ -634,7 +739,12 @@ SELECT cast(1 as double) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with double at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with double at same column of first table"
+  }
+}
 
 
 -- !query
@@ -643,7 +753,12 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as tim
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with double at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with double at same column of first table"
+  }
+}
 
 
 -- !query
@@ -652,7 +767,12 @@ SELECT cast(1 as double) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with double at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with double at same column of first table"
+  }
+}
 
 
 -- !query
@@ -733,7 +853,12 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with decimal(10,0) at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with decimal(10,0) at same column of first table"
+  }
+}
 
 
 -- !query
@@ -742,7 +867,12 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with decimal(10,0) at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with decimal(10,0) at same column of first table"
+  }
+}
 
 
 -- !query
@@ -751,7 +881,12 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00.0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with decimal(10,0) at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with decimal(10,0) at same column of first table"
+  }
+}
 
 
 -- !query
@@ -760,7 +895,12 @@ SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast('2017-12-11 09:30:00' 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with decimal(10,0) at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with decimal(10,0) at same column of first table"
+  }
+}
 
 
 -- !query
@@ -841,7 +981,12 @@ SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with string at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with string at same column of first table"
+  }
+}
 
 
 -- !query
@@ -850,7 +995,12 @@ SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with string at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with string at same column of first table"
+  }
+}
 
 
 -- !query
@@ -877,7 +1027,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as tinyint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -886,7 +1041,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as smallint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -895,7 +1055,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as int) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -904,7 +1069,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as bigint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -913,7 +1083,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as float) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -922,7 +1097,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as double) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -931,7 +1111,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -940,7 +1125,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -958,7 +1148,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as boolean) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -967,7 +1162,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -976,7 +1176,12 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2017-12-11 09:30:00' as dat
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with binary at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with binary at same column of first table"
+  }
+}
 
 
 -- !query
@@ -985,7 +1190,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as tinyint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -994,7 +1204,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as smallint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1003,7 +1218,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as int) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1012,7 +1232,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as bigint) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1021,7 +1246,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as float) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1030,7 +1260,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as double) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1039,7 +1274,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1048,7 +1288,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1057,7 +1302,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1074,7 +1324,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as ti
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is timestamp type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1083,7 +1338,12 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with boolean at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is date type which is not compatible with boolean at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1092,7 +1352,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1101,7 +1366,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1110,7 +1380,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1119,7 +1394,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1128,7 +1408,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1137,7 +1422,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1146,7 +1436,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1164,7 +1459,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2' a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1173,7 +1473,12 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with timestamp at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with timestamp at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1200,7 +1505,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as tinyint
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is tinyint type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1209,7 +1519,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as smallin
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is smallint type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1218,7 +1533,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as int) FR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is int type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1227,7 +1547,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as bigint)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is bigint type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1236,7 +1561,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as float) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is float type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1245,7 +1575,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as double)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is double type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1254,7 +1589,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as decimal
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is decimal(10,0) type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1272,7 +1612,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2' as binar
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is binary type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query
@@ -1281,7 +1626,12 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as boolean
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with date at same column of first table"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Union can only be performed on tables with the compatible column types. The first column of the second table is boolean type which is not compatible with date at same column of first table"
+  }
+}
 
 
 -- !query

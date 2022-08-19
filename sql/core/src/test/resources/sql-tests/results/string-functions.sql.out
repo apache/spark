@@ -5,7 +5,12 @@ select concat_ws()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"requirement failed: concat_ws requires at least one argument.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "requirement failed: concat_ws requires at least one argument.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -14,7 +19,12 @@ select format_string()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"requirement failed: format_string() should take at least 1 argument; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "requirement failed: format_string() should take at least 1 argument; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -167,7 +177,10 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-{"errorClass":"ELEMENT_AT_BY_INDEX_ZERO","messageParameters":{},"queryContext":[]}
+{
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -648,7 +661,12 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -657,7 +675,12 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -1122,7 +1145,12 @@ select to_binary(null, cast(null as int))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -1131,7 +1159,12 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The 'format' parameter of function 'to_binary' needs to be a string literal.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -1140,7 +1173,12 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'."},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'."
+  }
+}
 
 
 -- !query
@@ -1149,4 +1187,9 @@ select to_binary('a!', 'base64')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-{"errorClass":"legacy","messageParameters":{"message":"Last unit does not have enough valid bits"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Last unit does not have enough valid bits"
+  }
+}

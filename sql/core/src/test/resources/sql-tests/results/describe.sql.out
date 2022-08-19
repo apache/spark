@@ -362,7 +362,12 @@ DESC t PARTITION (c='Us', d=2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-{"errorClass":"legacy","messageParameters":{"message":"Partition not found in table 't' database 'default':\nc -> Us\nd -> 2"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Partition not found in table 't' database 'default':\nc -> Us\nd -> 2"
+  }
+}
 
 
 -- !query
@@ -371,7 +376,12 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"legacy","messageParameters":{"message":"Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'"},"queryContext":[]}
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`spark_catalog`.`default`.`t`'"
+  }
+}
 
 
 -- !query
@@ -380,7 +390,13 @@ DESC t PARTITION (c='Us', d)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-{"errorClass":"INVALID_SQL_SYNTAX","sqlState":"42000","messageParameters":{"inputString":"PARTITION specification is incomplete: `d`"},"queryContext":[]}
+{
+  "errorClass" : "INVALID_SQL_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "inputString" : "PARTITION specification is incomplete: `d`"
+  }
+}
 
 
 -- !query
@@ -456,7 +472,14 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"FORBIDDEN_OPERATION","messageParameters":{"statement":"DESC PARTITION","objectType":"TEMPORARY VIEW","objectName":"`temp_v`"},"queryContext":[]}
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "statement" : "DESC PARTITION",
+    "objectType" : "TEMPORARY VIEW",
+    "objectName" : "`temp_v`"
+  }
+}
 
 
 -- !query
@@ -535,7 +558,14 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-{"errorClass":"FORBIDDEN_OPERATION","messageParameters":{"statement":"DESC PARTITION","objectType":"VIEW","objectName":"`v`"},"queryContext":[]}
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "statement" : "DESC PARTITION",
+    "objectType" : "VIEW",
+    "objectName" : "`v`"
+  }
+}
 
 
 -- !query
