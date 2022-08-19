@@ -165,10 +165,21 @@ select element_at(array(1, 2, 3), 5)
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX_IN_ELEMENT_AT] The index 5 is out of bounds. The array has 3 elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(array(1, 2, 3), 5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "messageParameters" : {
+    "indexValue" : "5",
+    "arraySize" : "3",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "element_at(array(1, 2, 3), 5)"
+  } ]
+}
 
 
 -- !query
@@ -177,10 +188,21 @@ select element_at(array(1, 2, 3), -5)
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX_IN_ELEMENT_AT] The index -5 is out of bounds. The array has 3 elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select element_at(array(1, 2, 3), -5)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "messageParameters" : {
+    "indexValue" : "-5",
+    "arraySize" : "3",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "element_at(array(1, 2, 3), -5)"
+  } ]
+}
 
 
 -- !query
@@ -189,7 +211,10 @@ select element_at(array(1, 2, 3), 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
+{
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -198,10 +223,21 @@ select elt(4, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 4 is out of bounds. The array has 2 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select elt(4, '123', '456')
-       ^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "messageParameters" : {
+    "indexValue" : "4",
+    "arraySize" : "2",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "elt(4, '123', '456')"
+  } ]
+}
 
 
 -- !query
@@ -210,10 +246,21 @@ select elt(0, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 0 is out of bounds. The array has 2 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select elt(0, '123', '456')
-       ^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "messageParameters" : {
+    "indexValue" : "0",
+    "arraySize" : "2",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "elt(0, '123', '456')"
+  } ]
+}
 
 
 -- !query
@@ -222,10 +269,21 @@ select elt(-1, '123', '456')
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 2 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select elt(-1, '123', '456')
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "messageParameters" : {
+    "indexValue" : "-1",
+    "arraySize" : "2",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "elt(-1, '123', '456')"
+  } ]
+}
 
 
 -- !query
@@ -266,10 +324,21 @@ select array(1, 2, 3)[5]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index 5 is out of bounds. The array has 3 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select array(1, 2, 3)[5]
-       ^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "messageParameters" : {
+    "indexValue" : "5",
+    "arraySize" : "3",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "array(1, 2, 3)[5]"
+  } ]
+}
 
 
 -- !query
@@ -278,10 +347,21 @@ select array(1, 2, 3)[-1]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-[INVALID_ARRAY_INDEX] The index -1 is out of bounds. The array has 3 elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select array(1, 2, 3)[-1]
-       ^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "messageParameters" : {
+    "indexValue" : "-1",
+    "arraySize" : "3",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "array(1, 2, 3)[-1]"
+  } ]
+}
 
 
 -- !query

@@ -631,7 +631,16 @@ select cast(interval '23:59:59' hour to second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '23:59:59' HOUR TO SECOND of the type "INTERVAL HOUR TO SECOND" cannot be cast to "SMALLINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "INTERVAL '23:59:59' HOUR TO SECOND",
+    "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
+    "targetType" : "\"SMALLINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -656,7 +665,16 @@ select cast(interval '-1000' month as tinyint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '-1000' MONTH of the type "INTERVAL MONTH" cannot be cast to "TINYINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "INTERVAL '-1000' MONTH",
+    "sourceType" : "\"INTERVAL MONTH\"",
+    "targetType" : "\"TINYINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -665,7 +683,16 @@ select cast(interval '1000000' second as smallint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value INTERVAL '1000000' SECOND of the type "INTERVAL SECOND" cannot be cast to "SMALLINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "INTERVAL '1000000' SECOND",
+    "sourceType" : "\"INTERVAL SECOND\"",
+    "targetType" : "\"SMALLINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -746,7 +773,16 @@ select cast(2147483647 as interval year)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value 2147483647 of the type "INT" cannot be cast to "INTERVAL YEAR" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "2147483647",
+    "sourceType" : "\"INT\"",
+    "targetType" : "\"INTERVAL YEAR\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -755,7 +791,16 @@ select cast(-9223372036854775808L as interval day)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value -9223372036854775808L of the type "BIGINT" cannot be cast to "INTERVAL DAY" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "-9223372036854775808L",
+    "sourceType" : "\"BIGINT\"",
+    "targetType" : "\"INTERVAL DAY\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -820,7 +865,16 @@ select cast(interval '10.123' second as decimal(1, 0))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(compact, 10, 18, 6) cannot be represented as Decimal(1, 0). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "Decimal(compact, 10, 18, 6)",
+    "precision" : "1",
+    "scale" : "0",
+    "config" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query

@@ -149,12 +149,12 @@ SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN] The feature is not supported: NATURAL join with LATERAL correlation.(line 1, pos 14)
-
-== SQL ==
-SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
---------------^^^
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "LATERAL_NATURAL_JOIN",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -163,12 +163,12 @@ SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[UNSUPPORTED_FEATURE.LATERAL_JOIN_USING] The feature is not supported: JOIN USING with LATERAL correlation.(line 1, pos 14)
-
-== SQL ==
-SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
---------------^^^
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "LATERAL_JOIN_USING",
+  "sqlState" : "0A000",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -266,7 +266,14 @@ SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b =
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t2`.`c1` cannot be resolved. Did you mean one of the following? []; line 1 pos 50
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t2`.`c1`",
+    "objectList" : ""
+  }
+}
 
 
 -- !query
@@ -384,7 +391,14 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t1`.`c1` cannot be resolved. Did you mean one of the following? []; line 1 pos 61
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t1`.`c1`",
+    "objectList" : ""
+  }
+}
 
 
 -- !query
@@ -393,7 +407,14 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `c2` cannot be resolved. Did you mean one of the following? []; line 1 pos 70
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`c2`",
+    "objectList" : ""
+  }
+}
 
 
 -- !query
@@ -420,7 +441,14 @@ SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t1`.`c1` cannot be resolved. Did you mean one of the following? [`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`]; line 1 pos 73
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t1`.`c1`",
+    "objectList" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
+  }
+}
 
 
 -- !query

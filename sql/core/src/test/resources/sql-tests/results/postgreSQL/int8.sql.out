@@ -389,10 +389,22 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 29) ==
-SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
-                            ^^^^^^^
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 35,
+    "fragment" : "q1 * q2"
+  } ]
+}
 
 
 -- !query
@@ -647,10 +659,20 @@ select bigint('9223372036854775800') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select bigint('9223372036854775800') / bigint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "bigint('9223372036854775800') / bigint('0')"
+  } ]
+}
 
 
 -- !query
@@ -659,10 +681,20 @@ select bigint('-9223372036854775808') / smallint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select bigint('-9223372036854775808') / smallint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "bigint('-9223372036854775808') / smallint('0')"
+  } ]
+}
 
 
 -- !query
@@ -671,10 +703,20 @@ select smallint('100') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select smallint('100') / bigint('0')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "smallint('100') / bigint('0')"
+  } ]
+}
 
 
 -- !query
@@ -691,7 +733,16 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value 4567890123456789L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "4567890123456789L",
+    "sourceType" : "\"BIGINT\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -708,7 +759,16 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value 4567890123456789L of the type "BIGINT" cannot be cast to "SMALLINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "4567890123456789L",
+    "sourceType" : "\"BIGINT\"",
+    "targetType" : "\"SMALLINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -745,7 +805,16 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value 9.223372036854776E20D of the type "DOUBLE" cannot be cast to "BIGINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "9.223372036854776E20D",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"BIGINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -817,7 +886,16 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value -9223372036854775808L of the type "BIGINT" cannot be cast to "INT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "-9223372036854775808L",
+    "sourceType" : "\"BIGINT\"",
+    "targetType" : "\"INT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -826,10 +904,22 @@ SELECT bigint((-9223372036854775808)) * bigint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * bigint((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "bigint((-9223372036854775808)) * bigint((-1))"
+  } ]
+}
 
 
 -- !query
@@ -854,10 +944,22 @@ SELECT bigint((-9223372036854775808)) * int((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * int((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "bigint((-9223372036854775808)) * int((-1))"
+  } ]
+}
 
 
 -- !query
@@ -882,10 +984,22 @@ SELECT bigint((-9223372036854775808)) * smallint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT bigint((-9223372036854775808)) * smallint((-1))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "bigint((-9223372036854775808)) * smallint((-1))"
+  } ]
+}
 
 
 -- !query

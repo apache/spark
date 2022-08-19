@@ -129,13 +129,14 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 1, pos 7)
-
-== SQL ==
-WITH t() AS (SELECT 1)
--------^^^
-SELECT * FROM t
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

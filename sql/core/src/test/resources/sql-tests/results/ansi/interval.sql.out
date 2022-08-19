@@ -119,10 +119,23 @@ select interval 2 second * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select interval 2 second * 'a'
-       ^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second * 'a'"
+  } ]
+}
 
 
 -- !query
@@ -131,10 +144,23 @@ select interval 2 second / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select interval 2 second / 'a'
-       ^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second / 'a'"
+  } ]
+}
 
 
 -- !query
@@ -143,10 +169,23 @@ select interval 2 year * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select interval 2 year * 'a'
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year * 'a'"
+  } ]
+}
 
 
 -- !query
@@ -155,10 +194,23 @@ select interval 2 year / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select interval 2 year / 'a'
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year / 'a'"
+  } ]
+}
 
 
 -- !query
@@ -183,10 +235,23 @@ select 'a' * interval 2 second
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select 'a' * interval 2 second
-       ^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "'a' * interval 2 second"
+  } ]
+}
 
 
 -- !query
@@ -195,10 +260,23 @@ select 'a' * interval 2 year
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'a' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select 'a' * interval 2 year
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "'a' * interval 2 year"
+  } ]
+}
 
 
 -- !query
@@ -225,10 +303,18 @@ select interval '2 seconds' / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2 seconds' / 0
-       ^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "interval '2 seconds' / 0"
+  } ]
+}
 
 
 -- !query
@@ -261,10 +347,18 @@ select interval '2' year / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2' year / 0
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval '2' year / 0"
+  } ]
+}
 
 
 -- !query
@@ -661,10 +755,23 @@ select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 1234567890123456789, 20, 0) cannot be represented as Decimal(18, 6). If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "Decimal(expanded, 1234567890123456789, 20, 0)",
+    "precision" : "18",
+    "scale" : "6",
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)"
+  } ]
+}
 
 
 -- !query
@@ -1366,12 +1473,14 @@ select interval 30 day day day
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
-
-== SQL ==
-select interval 30 day day day
----------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'day'",
+    "hint" : ": extra input 'day'"
+  }
+}
 
 
 -- !query
@@ -1398,12 +1507,14 @@ select interval 30 days days days
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
-
-== SQL ==
-select interval 30 days days days
------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'days'",
+    "hint" : ": extra input 'days'"
+  }
+}
 
 
 -- !query
@@ -1513,10 +1624,23 @@ select '4 11:11' - interval '4 22:12' day to minute
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '4 11:11' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select '4 11:11' - interval '4 22:12' day to minute
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'4 11:11'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "'4 11:11' - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1525,10 +1649,23 @@ select '4 12:12:12' + interval '4 22:12' day to minute
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '4 12:12:12' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select '4 12:12:12' + interval '4 22:12' day to minute
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'4 12:12:12'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "'4 12:12:12' + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1563,10 +1700,23 @@ select str - interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select str - interval '4 22:12' day to minute from interval_view
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1575,10 +1725,23 @@ select str + interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select str + interval '4 22:12' day to minute from interval_view
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1786,7 +1949,14 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : ""
+  }
+}
 
 
 -- !query
@@ -1795,7 +1965,14 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead."
+  }
+}
 
 
 -- !query
@@ -1804,7 +1981,14 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead."
+  }
+}
 
 
 -- !query
@@ -2033,10 +2217,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1"
+  } ]
+}
 
 
 -- !query
@@ -2045,10 +2240,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1L"
+  } ]
+}
 
 
 -- !query
@@ -2091,10 +2297,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1"
+  } ]
+}
 
 
 -- !query
@@ -2103,10 +2320,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L"
+  } ]
+}
 
 
 -- !query
