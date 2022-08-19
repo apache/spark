@@ -277,7 +277,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
-      ResolveTableValuedFunctions(v1SessionCatalog) ::
+      ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
@@ -2392,6 +2392,60 @@ class Analyzer(override val catalogManager: CatalogManager)
       } catch {
         case _: NoSuchMethodException =>
           None
+      }
+    }
+  }
+
+  /**
+   * Rule that resolves table-valued function references.
+   */
+  object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
+        withPosition(u) {
+          val resolvedFunc = try {
+            resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+              val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name.asMultipart)
+              if (CatalogV2Util.isSessionCatalog(catalog)) {
+                v1SessionCatalog.resolvePersistentTableFunction(
+                  ident.asFunctionIdentifier, u.functionArgs)
+              } else {
+                throw QueryCompilationErrors.missingCatalogAbilityError(
+                  catalog, "table-valued functions")
+              }
+            }
+          } catch {
+            case _: NoSuchFunctionException =>
+              u.failAnalysis(s"could not resolve `${u.name}` to a table-valued function")
+          }
+          // If alias names assigned, add `Project` with the aliases
+          if (u.outputNames.nonEmpty) {
+            val outputAttrs = resolvedFunc.output
+            // Checks if the number of the aliases is equal to expected one
+            if (u.outputNames.size != outputAttrs.size) {
+              u.failAnalysis(
+                s"Number of given aliases does not match number of output columns. " +
+                  s"Function name: ${u.name}; number of aliases: " +
+                  s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
+            }
+            val aliases = outputAttrs.zip(u.outputNames).map {
+              case (attr, name) => Alias(attr, name)()
+            }
+            Project(aliases, resolvedFunc)
+          } else {
+            resolvedFunc
+          }
+        }
+    }
+
+    private def resolveBuiltinOrTempTableFunction(
+        name: FunctionIdentifier,
+        arguments: Seq[Expression]): Option[LogicalPlan] = {
+      if (name.database.isEmpty) {
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.funcName, arguments)
+      } else {
+        None
       }
     }
   }
