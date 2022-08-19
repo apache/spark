@@ -27,15 +27,16 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.apache.spark.{SparkEnv, TaskContext}
 
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.ArrowWriter.createFieldWriter
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -81,6 +82,8 @@ class ArrowPythonRunnerWithState(
     )
   )
 
+  logWarning(s"DEBUG: schemaWithState: ${schemaWithState}")
+
   val stateRowSerializer = stateEncoder.createSerializer()
   val stateRowDeserializer = stateEncoder.createDeserializer()
 
@@ -122,37 +125,55 @@ class ArrowPythonRunnerWithState(
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schemaWithState, timeZoneId)
+
+        logWarning(s"DEBUG: arrowSchema: ${arrowSchema}")
+
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
-          val nullDataRow = new GenericInternalRow(Array.fill(inputSchema.length)(null: Any))
-          val nullStateInfoRow = new GenericInternalRow(Array.fill(1)(null: Any))
+          val arrowWriterForData = {
+            val children = root.getFieldVectors().asScala.dropRight(1).map { vector =>
+              vector.allocateNew()
+              createFieldWriter(vector)
+            }
 
-          val arrowWriter = ArrowWriter.create(root)
+            new ArrowWriter(root, children.toArray)
+          }
+          val arrowWriterForState = {
+            val children = root.getFieldVectors().asScala.takeRight(1).map { vector =>
+              vector.allocateNew()
+              createFieldWriter(vector)
+            }
+            new ArrowWriter(root, children.toArray)
+          }
+
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
-          val joinedRow = new JoinedRow
           while (inputIterator.hasNext) {
             val (keyRow, groupState, dataIter) = inputIterator.next()
 
+            assert(dataIter.hasNext, "should have at least one data row!")
+
             // Provide state info row in the first row
             val stateInfoRow = buildStateInfoRow(keyRow, groupState)
-            joinedRow.withLeft(nullDataRow).withRight(stateInfoRow)
-            arrowWriter.write(joinedRow)
+            arrowWriterForState.write(stateInfoRow)
 
             // Continue providing remaining data rows
             while (dataIter.hasNext) {
               val dataRow = dataIter.next()
-              joinedRow.withLeft(dataRow).withRight(nullStateInfoRow)
-              arrowWriter.write(joinedRow)
+              arrowWriterForData.write(dataRow)
             }
 
-            arrowWriter.finish()
+            // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
+            // side, as we know there is at least one data row.
+            arrowWriterForState.finish()
+            arrowWriterForData.finish()
             writer.writeBatch()
-            arrowWriter.reset()
+            arrowWriterForState.reset()
+            arrowWriterForData.reset()
           }
           // end writes footer to the output stream and doesn't clean any resources.
           // It could throw exception if the output stream is closed, so it should be
@@ -267,18 +288,6 @@ class ArrowPythonRunnerWithState(
 
         val rowForStateInfo = flattenedBatchForState.getRow(0)
 
-        //  UDF returns a StructType column in ColumnarBatch, select the children here
-        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-        val outputVectors = schema(0).dataType.asInstanceOf[StructType]
-          .indices.map(structVector.getChild)
-        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-        flattenedBatch.setNumRows(batch.numRows())
-
-        val rowIterator = flattenedBatch.rowIterator.asScala
-        // drop first row as it's reserved for state
-        assert(rowIterator.hasNext)
-        rowIterator.next()
-
         // FIXME: we rely on known schema for state info, but would we want to access this by
         //  column name?
         // Received state information does not need schemas - this class already knows them.
@@ -286,7 +295,8 @@ class ArrowPythonRunnerWithState(
         Array(
           StructField("properties", StringType),
           StructField("keyRowAsUnsafe", BinaryType),
-          StructField("object", BinaryType)
+          StructField("object", BinaryType),
+          StructField('isEmptyData', BooleanType)
         )
         */
         implicit val formats = org.json4s.DefaultFormats
@@ -301,10 +311,26 @@ class ArrowPythonRunnerWithState(
           val pickledRow = rowForStateInfo.getBinary(2)
           Some(PythonSQLUtils.toJVMRow(pickledRow, stateSchema, stateRowDeserializer))
         }
+        val isEmptyData = rowForStateInfo.getBoolean(3)
 
         val newGroupState = GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson)
 
-        (keyRowAsUnsafe, newGroupState, rowIterator.map(unsafeProjForData))
+        val rowIterator = if (isEmptyData) {
+          logWarning("DEBUG: no data is available")
+          Iterator.empty
+        } else {
+          //  UDF returns a StructType column in ColumnarBatch, select the children here
+          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+          val outputVectors = schema(0).dataType.asInstanceOf[StructType]
+            .indices.map(structVector.getChild)
+          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+          flattenedBatch.setNumRows(batch.numRows())
+
+          val rowIterator = flattenedBatch.rowIterator.asScala
+          rowIterator.map(unsafeProjForData)
+        }
+
+        (keyRowAsUnsafe, newGroupState, rowIterator)
       }
     }
   }
