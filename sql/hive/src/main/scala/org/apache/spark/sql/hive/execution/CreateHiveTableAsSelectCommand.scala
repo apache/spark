@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -39,7 +39,7 @@ trait CreateHiveTableAsSelectBase extends V1WriteCommand with V1WritesHiveUtils 
 
   protected val tableIdentifier = tableDesc.identifier
 
-  override def requiredOrdering: Seq[SortOrder] = {
+  override lazy val partitionColumns: Seq[Attribute] = {
     // If the table does not exist the schema should always be empty.
     val table = if (tableDesc.schema.isEmpty) {
       val tableSchema = CharVarcharUtils.getRawSchema(outputColumns.toStructType, conf)
@@ -49,7 +49,10 @@ trait CreateHiveTableAsSelectBase extends V1WriteCommand with V1WritesHiveUtils 
     }
     // For CTAS, there is no static partition values to insert.
     val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
-    val partitionColumns = getDynamicPartitionColumns(table, partition, query)
+    getDynamicPartitionColumns(table, partition, query)
+  }
+
+  override def requiredOrdering: Seq[SortOrder] = {
     val options = getOptionsWithHiveBucketWrite(tableDesc.bucketSpec)
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, tableDesc.bucketSpec, options)
   }
