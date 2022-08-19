@@ -232,7 +232,7 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }.getOrElse(executorContainerWithConfVolume)
     } else {
-      executorContainer
+      executorContainerWithConfVolume
     }
     val containerWithLifecycle =
       if (!kubernetesConf.workerDecommissioning) {
