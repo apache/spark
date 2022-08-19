@@ -96,6 +96,9 @@ case class Mode(
 
 /**
  * Mode in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * It has two main difference from `Mode`:
+ * 1, it accepts NULLs when `ignoreNA` is False;
+ * 2, it returns all the modes for a multimodal dataset;
  */
 case class PandasMode(
     child: Expression,
@@ -106,7 +109,7 @@ case class PandasMode(
 
   def this(child: Expression) = this(child, true, 0, 0)
 
-  // Returns empty Seq for empty inputs
+  // Returns empty array for empty inputs
   override def nullable: Boolean = false
 
   override def dataType: DataType = ArrayType(child.dataType, containsNull = !ignoreNA)
@@ -137,7 +140,7 @@ case class PandasMode(
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
     if (buffer.isEmpty) {
-      return Seq.empty
+      return new GenericArrayData(Seq.empty)
     }
 
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
