@@ -84,7 +84,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val driverCustomEnvs = KubernetesUtils.buildEnvVars(
-      Map(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
+      Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>

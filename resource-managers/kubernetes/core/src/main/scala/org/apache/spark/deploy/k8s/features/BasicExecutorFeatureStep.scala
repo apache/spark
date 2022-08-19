@@ -138,7 +138,7 @@ private[spark] class BasicExecutorFeatureStep(
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
       }.toMap
       KubernetesUtils.buildEnvVars(
-        Map(
+        Seq(
           ENV_DRIVER_URL -> driverUrl,
           ENV_EXECUTOR_CORES -> execResources.cores.get.toString,
           ENV_EXECUTOR_MEMORY -> executorMemoryString,

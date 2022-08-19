@@ -386,14 +386,14 @@ object KubernetesUtils extends Logging {
    * This function builds the EnvVar objects for each key-value env.
    */
   @Since("3.4.0")
-  def buildEnvVars(env: Map[String, String]): Seq[EnvVar] = {
-    env.filter(env => env._2 != null)
-      .map { env =>
+  def buildEnvVars(env: Seq[(String, String)]): Seq[EnvVar] = {
+    env.filterNot(_._2 == null)
+      .map { case (k, v) =>
         new EnvVarBuilder()
-          .withName(env._1)
-          .withValue(env._2)
+          .withName(k)
+          .withValue(v)
           .build()
-      }.toSeq
+      }
   }
 
   /**
