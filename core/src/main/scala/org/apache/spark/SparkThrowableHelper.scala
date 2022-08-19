@@ -26,6 +26,7 @@ import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
+import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
 
 /**
@@ -55,6 +56,10 @@ private[spark] case class ErrorInfo(
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
+}
+
+object ErrorMessageFormat extends Enumeration {
+  val PRETTY, MINIMAL, STANDARD = Value
 }
 
 /**
@@ -134,5 +139,62 @@ private[spark] object SparkThrowableHelper {
 
   def isInternalError(errorClass: String): Boolean = {
     errorClass == "INTERNAL_ERROR"
+  }
+
+  def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
+    import ErrorMessageFormat._
+    format match {
+      case PRETTY => e.getMessage
+      case MINIMAL | STANDARD if e.getErrorClass == null =>
+        toJsonString { generator =>
+          val g = generator.useDefaultPrettyPrinter()
+          g.writeStartObject()
+          g.writeStringField("errorClass", "LEGACY")
+          g.writeObjectFieldStart("messageParameters")
+          g.writeStringField("message", e.getMessage)
+          g.writeEndObject()
+          g.writeEndObject()
+        }
+      case MINIMAL | STANDARD =>
+        val errorClass = e.getErrorClass
+        assert(e.getParameterNames.size == e.getMessageParameters.size,
+          "Number of message parameter names and values must be the same")
+        toJsonString { generator =>
+          val g = generator.useDefaultPrettyPrinter()
+          g.writeStartObject()
+          g.writeStringField("errorClass", errorClass)
+          val errorSubClass = e.getErrorSubClass
+          if (errorSubClass != null) g.writeStringField("errorSubClass", errorSubClass)
+          if (format == STANDARD) {
+            val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+              throw SparkException.internalError(s"Cannot find the error class '$errorClass'"))
+            g.writeStringField("message", errorInfo.messageFormat)
+          }
+          val sqlState = e.getSqlState
+          if (sqlState != null) g.writeStringField("sqlState", sqlState)
+          g.writeObjectFieldStart("messageParameters")
+          (e.getParameterNames zip e.getMessageParameters).foreach { case (name, value) =>
+            g.writeStringField(name, value)
+          }
+          g.writeEndObject()
+          val queryContext = e.getQueryContext
+          if (!queryContext.isEmpty) {
+            g.writeArrayFieldStart("queryContext")
+            e.getQueryContext.foreach { c =>
+              g.writeStartObject()
+              g.writeStringField("objectType", c.objectType())
+              g.writeStringField("objectName", c.objectName())
+              val startIndex = c.startIndex() + 1
+              if (startIndex > 0) g.writeNumberField("startIndex", startIndex)
+              val stopIndex = c.stopIndex() + 1
+              if (stopIndex > 0) g.writeNumberField("stopIndex", stopIndex)
+              g.writeStringField("fragment", c.fragment())
+              g.writeEndObject()
+            }
+            g.writeEndArray()
+          }
+          g.writeEndObject()
+        }
+    }
   }
 }

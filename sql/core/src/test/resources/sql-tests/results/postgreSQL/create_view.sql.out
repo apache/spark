@@ -63,7 +63,14 @@ CREATE VIEW key_dependent_view_no_cols AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `FROM` cannot be resolved. Did you mean one of the following? []; line 2 pos 10
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`FROM`",
+    "objectList" : ""
+  }
+}
 
 
 -- !query

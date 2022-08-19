@@ -22,7 +22,7 @@ import java.net.URI
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -145,13 +145,16 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends V1WriteCommand {
 
-  override def requiredOrdering: Seq[SortOrder] = {
+  override lazy val partitionColumns: Seq[Attribute] = {
     val unresolvedPartitionColumns = table.partitionColumnNames.map(UnresolvedAttribute.quoted)
-    val partitionColumns = DataSource.resolvePartitionColumns(
+    DataSource.resolvePartitionColumns(
       unresolvedPartitionColumns,
       outputColumns,
       query,
       SparkSession.active.sessionState.conf.resolver)
+  }
+
+  override def requiredOrdering: Seq[SortOrder] = {
     val options = table.storage.properties
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
   }

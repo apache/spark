@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.ErrorMessageFormat.MINIMAL
+import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -78,9 +80,12 @@ trait SQLQueryTestHelper {
    * @param result a function that returns a pair of schema and output
    */
   protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    val format = MINIMAL
     try {
       result
     } catch {
+      case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+        (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
@@ -91,8 +96,12 @@ trait SQLQueryTestHelper {
         // For a runtime exception, it is hard to match because its message contains
         // information of stage, task ID, etc.
         // To make result matching simpler, here we match the cause of the exception if it exists.
-        val cause = s.getCause
-        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
+        s.getCause match {
+          case e: SparkThrowable with Throwable if e.getErrorClass != null =>
+            (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
+          case cause =>
+            (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
+        }
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (emptySchema, Seq(e.getClass.getName, e.getMessage))
