@@ -100,9 +100,11 @@ abstract class TaskContext extends Serializable {
   def isInterrupted(): Boolean
 
   /**
-   * Adds a (Java friendly) listener to be executed on task completion.
-   * This will be called in all situations - success, failure, or cancellation. Adding a listener
-   * to an already completed task will result in that listener being called immediately.
+   * :: DeveloperApi ::
+   *
+   * Adds a listener to be executed on task completion. This will be called in all situations -
+   * success, failure, or cancellation. Adding a listener to an already completed task will result
+   * in that listener being called immediately.
    *
    * Two listeners registered in the same thread will be invoked in reverse order of registration if
    * the task completes after both are registered. There are no ordering guarantees for listeners
@@ -113,15 +115,19 @@ abstract class TaskContext extends Serializable {
    *
    * Exceptions thrown by the listener will result in failure of the task.
    */
+  @DeveloperApi
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
   /**
+   * :: DeveloperApi ::
+   *
    * Adds a listener to be executed on task failure (which includes completion listener failure, if
    * the task body did not already fail). Adding a listener to an already failed task will result in
    * that listener being called immediately.
    *
    * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
+  @DeveloperApi
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
