@@ -125,7 +125,7 @@ private[spark] class BasicExecutorFeatureStep(
       val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
         case authSecret: String if kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty =>
           Seq(SecurityManager.ENV_AUTH_SECRET -> authSecret)
-        case _ => null
+        case _ => Nil
       }.getOrElse(Nil)
 
       val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>
