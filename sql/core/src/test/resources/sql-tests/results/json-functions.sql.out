@@ -87,8 +87,16 @@ select to_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the to_json function are invalid: Invalid number of arguments. Expected: one of 1 and 2; Found: 0; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "to_json",
+    "expected" : "one of 1 and 2",
+    "found" : "0"
+  }
+}
 
 -- !query
 select from_json('{"a":1}', 'a INT')
@@ -161,8 +169,16 @@ select from_json()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the from_json function are invalid: Invalid number of arguments. Expected: one of 2 and 3; Found: 0; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "from_json",
+    "expected" : "one of 2 and 3",
+    "found" : "0"
+  }
+}
 
 -- !query
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a')
@@ -446,8 +462,16 @@ select json_array_length()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the json_array_length function are invalid: Invalid number of arguments. Expected: 1; Found: 0; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "json_array_length",
+    "expected" : "1",
+    "found" : "0"
+  }
+}
 
 -- !query
 select json_array_length('')
@@ -519,8 +543,16 @@ select json_object_keys()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the json_object_keys function are invalid: Invalid number of arguments. Expected: 1; Found: 0; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "json_object_keys",
+    "expected" : "1",
+    "found" : "0"
+  }
+}
 
 -- !query
 select json_object_keys(null)

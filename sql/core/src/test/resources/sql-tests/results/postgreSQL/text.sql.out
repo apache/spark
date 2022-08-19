@@ -308,14 +308,15 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-#[INVALID_FUNCTION_ARGUMENTS.INVALID_ARGUMENT_INDEX] Arguments of the `format_string` function are invalid: The value of parameter(s) 'strfmt' has invalid index, expects %1$, %2$ and so on, but got %0$.; line 1 pos 7
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_ARGUMENT_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
+    "funcName" : "`format_string`",
     "parameter" : "strfmt",
-    "functionName" : "`format_string`",
-    "expected" : "expects %1$, %2$ and so on, but got %0$."
+    "expected" : "%1$, %2$ and so on",
+    "found" : "%0$"
   }
 }
 

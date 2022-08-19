@@ -70,8 +70,16 @@ select from_csv()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the from_csv function are invalid: Invalid number of arguments. Expected: one of 2 and 3; Found: 0; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "from_csv",
+    "expected" : "one of 2 and 3",
+    "found" : "0"
+  }
+}
 
 -- !query
 select from_csv('1,abc', schema_of_csv('1,abc'))

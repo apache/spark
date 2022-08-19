@@ -651,7 +651,16 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the decode function are invalid: Invalid number of arguments. Expected: 2; Found: 0; line 1 pos 7
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "decode",
+    "expected" : "2",
+    "found" : "0"
+  }
+}
 
 
 -- !query
@@ -660,8 +669,16 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INVALID_FUNCTION_ARGUMENTS.INVALID_NUMBER_OF_ARGUMENTS] Arguments of the decode function are invalid: Invalid number of arguments. Expected: 2; Found: 1; line 1 pos 7
-
+{
+  "errorClass" : "INVALID_FUNCTION_ARGUMENTS",
+  "errorSubClass" : "INVALID_NUMBER_OF_ARGUMENTS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "funcName" : "decode",
+    "expected" : "2",
+    "found" : "1"
+  }
+}
 
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
