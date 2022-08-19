@@ -1077,10 +1077,22 @@ select to_binary(' ab cdef= = ', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value ' ab cdef= = ' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary(' ab cdef= = ', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "' ab cdef= = '",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "to_binary(' ab cdef= = ', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1099,10 +1111,22 @@ select to_binary('a', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'a' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('a', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'a'",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "to_binary('a', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1111,10 +1135,22 @@ select to_binary('a?', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'a?' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('a?', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'a?'",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "to_binary('a?', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1123,10 +1159,22 @@ select to_binary('abcde', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'abcde' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('abcde', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'abcde'",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "to_binary('abcde', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1135,10 +1183,22 @@ select to_binary('abcd=', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'abcd=' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('abcd=', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'abcd='",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "to_binary('abcd=', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1147,10 +1207,22 @@ select to_binary('a===', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'a===' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('a===', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'a==='",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "to_binary('a===', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1159,10 +1231,22 @@ select to_binary('ab==f', 'base64')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'ab==f' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('ab==f', 'base64')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'ab==f'",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "to_binary('ab==f', 'base64')"
+  } ]
+}
 
 
 -- !query
@@ -1244,10 +1328,22 @@ select to_binary('GG')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value 'GG' ('hex') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('GG')
-       ^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'GG'",
+    "fmt" : "'hex'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "to_binary('GG')"
+  } ]
+}
 
 
 -- !query
@@ -1256,10 +1352,22 @@ select to_binary('01 AF', 'hex')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value '01 AF' ('hex') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary('01 AF', 'hex')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "'01 AF'",
+    "fmt" : "'hex'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "to_binary('01 AF', 'hex')"
+  } ]
+}
 
 
 -- !query
@@ -1276,10 +1384,22 @@ select to_binary(' ab cdef= = ', substr('base64whynot', 0, 6))
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value ' ab cdef= = ' ('base64') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary(' ab cdef= = ', substr('base64whynot', 0, 6))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "' ab cdef= = '",
+    "fmt" : "'base64'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "to_binary(' ab cdef= = ', substr('base64whynot', 0, 6))"
+  } ]
+}
 
 
 -- !query
@@ -1288,10 +1408,22 @@ select to_binary(' ab cdef= = ', replace('HEX0', '0'))
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_INPUT] The value ' ab cdef= = ' ('HEX') cannot be converted to "BINARY" because it is malformed. Correct the value as per the syntax, or change its format. Use 'try_to_binary' to tolerate malformed input and return NULL instead.
-== SQL(line 1, position 8) ==
-select to_binary(' ab cdef= = ', replace('HEX0', '0'))
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_INPUT",
+  "messageParameters" : {
+    "str" : "' ab cdef= = '",
+    "fmt" : "'HEX'",
+    "targetType" : "\"BINARY\"",
+    "hint" : " Use 'try_to_binary' to tolerate malformed input and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "to_binary(' ab cdef= = ', replace('HEX0', '0'))"
+  } ]
+}
 
 
 -- !query
@@ -1340,10 +1472,22 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_FORMAT] Invalid value for the `format` parameter of function `to_binary`: '1'.The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.
-== SQL(line 1, position 8) ==
-select to_binary('abc', 1)
-       ^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_FORMAT",
+  "messageParameters" : {
+    "fmt" : "`format`",
+    "function" : "`to_binary`",
+    "value" : "'1'",
+    "hint" : "The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "to_binary('abc', 1)"
+  } ]
+}
 
 
 -- !query
@@ -1352,7 +1496,19 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
-[CONVERSION_INVALID_FORMAT] Invalid value for the `format` parameter of function `to_binary`: 'invalidFormat'.The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'.
-== SQL(line 1, position 8) ==
-select to_binary('abc', 'invalidFormat')
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CONVERSION_INVALID_FORMAT",
+  "messageParameters" : {
+    "fmt" : "`format`",
+    "function" : "`to_binary`",
+    "value" : "'invalidFormat'",
+    "hint" : "The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "to_binary('abc', 'invalidFormat')"
+  } ]
+}
