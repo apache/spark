@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, DataType}
 import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off line.size.limit
@@ -87,6 +88,81 @@ case class Mode(
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Mode =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+/**
+ * Mode in Pandas' fashion. This expression is dedicated only for Pandas API on Spark.
+ * It has two main difference from `Mode`:
+ * 1, it accepts NULLs when `ignoreNA` is False;
+ * 2, it returns all the modes for a multimodal dataset;
+ */
+case class PandasMode(
+    child: Expression,
+    ignoreNA: Boolean = true,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
+  with ImplicitCastInputTypes with UnaryLike[Expression] {
+
+  def this(child: Expression) = this(child, true, 0, 0)
+
+  // Returns empty array for empty inputs
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = ArrayType(child.dataType, containsNull = !ignoreNA)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def prettyName: String = "pandas_mode"
+
+  override def update(
+      buffer: OpenHashMap[AnyRef, Long],
+      input: InternalRow): OpenHashMap[AnyRef, Long] = {
+    val key = child.eval(input).asInstanceOf[AnyRef]
+
+    if (key != null || !ignoreNA) {
+      buffer.changeValue(key, 1L, _ + 1L)
+    }
+    buffer
+  }
+
+  override def merge(
+      buffer: OpenHashMap[AnyRef, Long],
+      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
+    other.foreach { case (key, count) =>
+      buffer.changeValue(key, count, _ + count)
+    }
+    buffer
+  }
+
+  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
+    if (buffer.isEmpty) {
+      return new GenericArrayData(Seq.empty)
+    }
+
+    val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
+    var maxCount = -1L
+    val iter = buffer.iterator
+    while (iter.hasNext) {
+      val (key, count) = iter.next()
+      if (maxCount < count) {
+        modes.clear()
+        modes.append(key)
+        maxCount = count
+      } else if (maxCount == count) {
+        modes.append(key)
+      }
+    }
+    new GenericArrayData(modes.toSeq)
+  }
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PandasMode =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): PandasMode =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
