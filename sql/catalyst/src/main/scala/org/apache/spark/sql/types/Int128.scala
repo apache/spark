@@ -49,6 +49,8 @@ final class Int128 extends Ordered[Int128] with Serializable {
     this
   }
 
+  def set(value: Long): Int128 = set(value >> 63, value)
+
   def set(bigInteger: BigInteger): Int128 = {
     _low = bigInteger.longValue()
     try {
@@ -155,7 +157,7 @@ final class Int128 extends Ordered[Int128] with Serializable {
   }
 
   override def compare(other: Int128): Int = {
-    compareLongLong(this.high, this.low, other.high, other.low)
+    Int128.compare(this.high, this.low, other.high, other.low)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -181,7 +183,7 @@ object Int128 {
 
   def apply(high: Long, low: Long): Int128 = new Int128().set(high, low)
 
-  def apply(value: Long): Int128 = new Int128().set(value >> 63, value)
+  def apply(value: Long): Int128 = new Int128().set(value)
 
   def apply(bigInteger: BigInteger): Int128 = new Int128().set(bigInteger)
 
@@ -194,7 +196,7 @@ object Int128 {
   val MAX_UNSCALED_DECIMAL = Int128("99999999999999999999999999999999999999")
   val MIN_UNSCALED_DECIMAL = Int128("-99999999999999999999999999999999999999")
 
-  def compareLongLong(leftHigh: Long, leftLow: Long, rightHigh: Long, rightLow: Long): Int = {
+  def compare(leftHigh: Long, leftLow: Long, rightHigh: Long, rightLow: Long): Int = {
     var comparison = JLong.compare(leftHigh, rightHigh)
     if (comparison == 0) {
       comparison = JLong.compareUnsigned(leftLow, rightLow)
@@ -209,8 +211,8 @@ object Int128 {
   }
 
   def overflows(high: Long, low: Long): Boolean = {
-    compareLongLong(high, low, MAX_UNSCALED_DECIMAL.high, MAX_UNSCALED_DECIMAL.low) > 0 ||
-      compareLongLong(high, low, MIN_UNSCALED_DECIMAL.high, MIN_UNSCALED_DECIMAL.low) < 0
+    compare(high, low, MAX_UNSCALED_DECIMAL.high, MAX_UNSCALED_DECIMAL.low) > 0 ||
+      compare(high, low, MIN_UNSCALED_DECIMAL.high, MIN_UNSCALED_DECIMAL.low) < 0
   }
 
   /** Common methods for Int128 evidence parameters */

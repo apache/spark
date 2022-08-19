@@ -20,6 +20,7 @@ package org.apache.spark.sql.util;
 import org.apache.spark.sql.types.Int128;
 
 import java.math.BigInteger;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static java.lang.Math.pow;
 import static java.lang.Math.round;
@@ -126,6 +127,10 @@ public final class Int128Math {
     return low - 1;
   }
 
+  public static Int128 and(Int128 a, Int128 b) {
+    return Int128.apply(andHigh(a.high(), b.high()), andLow(a.low(), b.low()));
+  }
+
   public static void rescale(long high, long low, int factor, long[] result, int offset) {
     if (factor == 0) {
       result[offset] = high;
@@ -177,8 +182,53 @@ public final class Int128Math {
     return ((a >>> 1) + (b >>> 1) + ((a & b) & 1)) >>> 63;
   }
 
-  public static void add(
-    long leftHigh, long leftLow, long rightHigh, long rightLow, long[] result) {
+  public static long[] add(Int128 left, Int128 right) {
+    return add(left.high(), left.low(), right.high(), right.low());
+  }
+
+  public static long[] add(long left, long right) {
+    return add(left >> 63, left, right >> 63, right);
+  }
+
+  public static long[] add(long left, Int128 right) {
+    return add(right, left);
+  }
+
+  public static long[] add(Int128 left, long right) {
+    return add(left.high(), left.low(), right >> 63, right);
+  }
+
+  public static long[] add(long left, long right, int rescale, boolean rescaleLeft) {
+    return add(left >> 63, left, right >> 63, right, rescale, rescaleLeft);
+  }
+
+  public static long[] add(Int128 left, Int128 right, int rescale, boolean rescaleLeft) {
+    return add(left.high(), left.low(), right.high(), right.low(), rescale, rescaleLeft);
+  }
+
+  public static long[] add(long left, Int128 right, int rescale, boolean rescaleLeft) {
+    return add(right, left, rescale, !rescaleLeft);
+  }
+
+  public static long[] add(Int128 left, long right, int rescale, boolean rescaleLeft) {
+    return add(left.high(), left.low(), right >> 63, right, rescale, rescaleLeft);
+  }
+
+  private static long[] add(
+    long leftHigh, long leftLow, long rightHigh, long rightLow, int rescale, boolean rescaleLeft) {
+    long[] result = new long[2];
+    if (rescaleLeft) {
+      rescale(leftHigh, leftLow, rescale, result, 0);
+      return add(result[0], result[1], rightHigh, rightLow);
+    } else {
+      rescale(rightHigh, rightLow, rescale, result, 0);
+      return add(leftHigh, leftLow, result[0], result[1]);
+    }
+  }
+
+  public static long[] add(
+    long leftHigh, long leftLow, long rightHigh, long rightLow) {
+    long[] result = new long[2];
     long carry = unsignedCarry(leftLow, rightLow);
 
     long resultLow = leftLow + rightLow;
@@ -190,6 +240,8 @@ public final class Int128Math {
     if (((resultHigh ^ leftHigh) & (resultHigh ^ rightHigh)) < 0) {
       throw overflowException();
     }
+
+    return result;
   }
 
   public static void add(
@@ -246,6 +298,11 @@ public final class Int128Math {
     return aLow - bLow;
   }
 
+  public static Int128 subtract(Int128 a, Int128 b) {
+    return Int128.apply(subtractHigh(a.high(), a.low(), b.high(), b.low()),
+      subtractLow(a.low(), b.low()));
+  }
+
   public static long multiplyHigh(long aHigh, long aLow, long bHigh, long bLow) {
     return MoreMath.unsignedMultiplyHigh(aLow, bLow) + aLow * bHigh + aHigh * bLow;
   }
@@ -271,6 +328,12 @@ public final class Int128Math {
     }
   }
 
+  public static Int128 shiftLeft(Int128 value, int shift)
+  {
+    return Int128.apply(shiftLeftHigh(value.high(), value.low(), shift),
+      shiftLeftLow(value.high(), value.low(), shift));
+  }
+
   public static long shiftRightUnsignedHigh(long high, long low, int shift) {
     if (shift < 64) {
       return high >>> shift;
@@ -287,12 +350,22 @@ public final class Int128Math {
     }
   }
 
+  public static Int128 shiftRightUnsigned(Int128 value, int shift) {
+    return Int128.apply(shiftRightUnsignedHigh(value.high(), value.low(), shift),
+      shiftRightUnsignedLow(value.high(), value.low(), shift));
+  }
+
   public static long andHigh(long aHigh, long bHigh) {
     return aHigh & bHigh;
   }
 
   public static long andLow(long aLow, long bLow) {
     return aLow & bLow;
+  }
+
+  public static Int128 add2(Int128 a, Int128 b) {
+    return Int128.apply(addHigh(a.high(), a.low(), b.high(), b.low()),
+      addLow(a.low(), b.low()));
   }
 
   public static int numberOfLeadingZeros(long high, long low) {
@@ -317,6 +390,10 @@ public final class Int128Math {
     return Long.bitCount(high) + Long.bitCount(low);
   }
 
+  public static int bitCount(Int128 value) {
+    return bitCount(value.high(), value.low());
+  }
+
   private static void negate(long[] value, int offset) {
     long high = value[offset];
     long low = value[offset + 1];
@@ -339,6 +416,11 @@ public final class Int128Math {
 
   public static long negateLow(long low) {
     return -low;
+  }
+
+  public static Int128 decrement(Int128 value) {
+    return Int128.apply(decrementHigh(value.high(), value.low()),
+      decrementLow(value.high(), value.low()));
   }
 
   private static void incrementUnsafe(long[] value, int offset) {
@@ -842,7 +924,84 @@ public final class Int128Math {
     remainder.low((uhat << 32 | lowLow) - quotientLow * divisor >>> shift);
   }
 
+  public static void divide(
+    Int128 dividend, Int128 divisor, Int128Holder quotient, Int128Holder remainder) {
+    Int128Math.divide(
+      dividend.high(), dividend.low(), divisor.high(), divisor.low(), quotient, remainder);
+  }
+
+  public static Int128 remainder(Int128 dividend, Int128 divisor) {
+    Int128Holder quotient = new Int128Holder();
+    Int128Holder remainder = new Int128Holder();
+    divide(dividend, divisor, quotient, remainder);
+
+    return remainder.get();
+  }
+
   private static ArithmeticException overflowException() {
     return new ArithmeticException("Overflow");
+  }
+
+  /**
+   * A random value between 2^(magnitude - 1) (inclusive) and 2^magnitude (exclusive).
+   * Returns 0 if magnitude is 0.
+   */
+  public static Int128 random(int magnitude) {
+    if (magnitude > 126 || magnitude < 0) {
+      throw new IllegalArgumentException("Magnitude must be in [0, 126] range");
+    }
+
+    if (magnitude == 0) {
+      return Int128.ZERO();
+    }
+
+    if (magnitude == 1) {
+      return Int128.ONE();
+    }
+
+    // TODO: optimize
+    Int128 base = shiftLeft(Int128.apply(1), magnitude - 1);
+    Int128 value = random(base);
+    return add2(base, value);
+  }
+
+  /**
+   * @return a random value between {@link Int128#MIN_VALUE()} (inclusive) and
+   * {@link Int128#MAX_VALUE()} (inclusive)
+   */
+  public static Int128 random() {
+    return Int128.apply(ThreadLocalRandom.current().nextLong(),
+      ThreadLocalRandom.current().nextLong());
+  }
+
+  /**
+   * @return a random value between 0 (inclusive) and given bound (exclusive)
+   */
+  public static Int128 random(Int128 bound) {
+    // Based on Random.nextLong(bound)
+
+    // TODO optimize
+    if (!bound.isPositive()) {
+      throw new IllegalArgumentException("bound must be positive: " + bound);
+    }
+
+    Int128 m = decrement(bound);
+    Int128 result = random();
+    if (bitCount(bound) == 1) {
+      // power of two
+      result = and(result, m);
+    }
+    else {
+      Int128 value = shiftRightUnsigned(result, 1);
+      while (true) {
+        result = remainder(value, bound);
+        if (!subtract(add2(value, m), result).isNegative()) {
+          break;
+        }
+        value = shiftRightUnsigned(random(), 1);
+      }
+    }
+
+    return result;
   }
 }

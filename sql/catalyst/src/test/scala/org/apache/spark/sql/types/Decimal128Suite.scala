@@ -49,6 +49,8 @@ class Decimal128Suite extends SparkFunSuite {
     checkDecimal128(Decimal128(17L, 2, 1), "31359464925306237747.4", 1)
     checkDecimal128(
       Decimal128(BigDecimal("31359464925306237747.4"), 1), "31359464925306237747.4", 1)
+    checkDecimal128(Decimal128("15432.21543600787131"), "15432.21543600787131", 14)
+    checkDecimal128(Decimal128(BigDecimal("15432.21543600787131"), 10), "15432.2154360079", 10)
     checkDecimal128(Decimal128(170L, 4, 2), "31359464925306237747.24", 2)
     checkDecimal128(Decimal128(17L, 24, 1), "31359464925306237749.6", 1)
     checkDecimal128(Decimal128(1e17.toLong, 18, 0), "1844674407370955161600000000000000018", 0)
@@ -98,6 +100,8 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128(100, 1) + Decimal128(-100, 2) === Decimal128(900, 2))
     assert(Decimal128(100, 1) + Decimal128(-100, 2) === Decimal128("9.00"))
     assert(Decimal128("10.0") + Decimal128("-1.00") === Decimal128(BigDecimal("9.00")))
+    assert(Decimal128("15432.21543600787131") + Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("73264.43087201574444")))
 //    assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
 //    assert(Decimal(1e13) * Decimal(1e13) === Decimal(1e26))
 //    assert(Decimal(100) / Decimal(-100) === Decimal(-1))

@@ -71,6 +71,13 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     this
   }
 
+  def set(int128: Int128): Decimal128 = {
+    this.int128 = int128
+    this.longVal = 0
+    this._scale = 0
+    this
+  }
+
   def set(int128: Int128, scale: Int): Decimal128 = {
     assert(scale >= 0)
     this.int128 = int128
@@ -99,10 +106,9 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
    * Set this Decimal128 to the given BigDecimal value, inheriting its precision and scale.
    */
   def set(decimal: BigDecimal): Decimal128 = {
-    val result = Int128(decimal.underlying().unscaledValue())
-    throwIfOverflows(result.high, result.low)
-    this.int128 = result
-    this.longVal = 0
+    set(decimal.underlying().unscaledValue())
+//    val result = Int128(decimal.underlying().unscaledValue())
+//    throwIfOverflows(result.high, result.low)
     this._scale = decimal.scale
     this
   }
@@ -113,14 +119,6 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   def set(decimal: BigDecimal, scale: Int): Decimal128 = {
     DecimalType.checkNegativeScale(scale)
     set(decimal.setScale(scale, ROUND_HALF_UP))
-  }
-
-  def toInt128: Int128 = {
-    if (int128.ne(null)) {
-      int128
-    } else {
-      Int128(longVal)
-    }
   }
 
   /**
@@ -137,7 +135,15 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
       this
     } catch {
       case _: ArithmeticException =>
-        set(BigDecimal(bigInteger))
+        set(Int128(bigInteger))
+    }
+  }
+
+  def toInt128: Int128 = {
+    if (int128.ne(null)) {
+      int128
+    } else {
+      Int128(longVal)
     }
   }
 
@@ -164,31 +170,27 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   def toInt: Int = int128.toInt
 
   def + (that: Decimal128): Decimal128 = {
-    if (int128.eq(null) && that.int128.eq(null) && _scale == that._scale) {
-      Decimal128(longVal + that.longVal, scale)
+    if (this.int128.eq(null) && that.int128.eq(null) && this._scale == that.scale) {
+      Decimal128(this.longVal + that.longVal, scale)
     } else {
-      val result = new Array[Long](2)
-      val left = toInt128
-      val right = that.toInt128
-      var newScale = 0
-      if (this._scale == that.scale) {
-        newScale = this._scale
-        Int128Math.add(left.high, left.low, right.high, right.low, result)
-      } else if (this._scale > that.scale) {
-        newScale = this._scale
-        Int128Math.shiftLeftBy10(right.high, right.low, this._scale - that.scale, result, 0)
-        Int128Math.add(left.high, left.low, result.head, result.last, result)
+      val (resultScale, rescale, rescaleLeft) = if (this._scale > that.scale) {
+        (this._scale, this._scale - that.scale, false)
+      } else if (this._scale < that.scale) {
+        (that.scale, that.scale - this._scale, true)
       } else {
-        newScale = that.scale
-        Int128Math.shiftLeftBy10(left.high, left.low, that.scale - this._scale, result, 0)
-        Int128Math.add(result.head, result.last, right.high, right.low, result)
+        (this._scale, 0, false)
+      }
+      val result = if (rescale == 0) {
+        Int128Math.add(toInt128, that.toInt128)
+      } else {
+        operatorWithRescale(toInt128, that.toInt128, rescale, rescaleLeft) (Int128Math.add)
       }
 
       if (Int128.overflows(result.head, result.last)) {
         throw new ArithmeticException("Decimal overflow")
       }
 
-      Decimal128(Int128(result.head, result.last), newScale)
+      Decimal128(Int128(result.head, result.last), resultScale)
     }
   }
 
@@ -223,22 +225,22 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   override def compare(other: Decimal128): Int = {
-    if (int128.eq(null) && other.int128.eq(null) && _scale == other._scale) {
-      if (longVal < other.longVal) -1 else if (longVal == other.longVal) 0 else 1
+    if (this.int128.eq(null) && other.int128.eq(null) && this._scale == other._scale) {
+      if (this.longVal < other.longVal) -1 else if (this.longVal == other.longVal) 0 else 1
     } else {
+      val (rescale, rescaleLeft) = if (this._scale > other.scale) {
+        (this._scale - other.scale, false)
+      } else if (this._scale < other.scale) {
+        (other.scale - this._scale, true)
+      } else {
+        (0, false)
+      }
       val left = toInt128
       val right = other.toInt128
-      if (this._scale == other._scale) {
+      if (rescale == 0) {
         left.compare(right)
       } else {
-        val result = new Array[Long](2)
-        if (this._scale > other._scale) {
-          Int128Math.shiftLeftBy10(right.high, right.low, this._scale - other.scale, result, 0)
-          Int128.compareLongLong(left.high, left.low, result.head, result.last)
-        } else {
-          Int128Math.shiftLeftBy10(left.high, left.low, other.scale - this._scale, result, 0)
-          Int128.compareLongLong(result.head, result.last, right.high, right.low)
-        }
+        operatorWithRescale(toInt128, other.toInt128, rescale, rescaleLeft) (Int128.compare)
       }
     }
   }
@@ -268,6 +270,8 @@ object Decimal128 {
   def apply(value: Int): Decimal128 = new Decimal128().set(value)
 
   def apply(value: BigDecimal): Decimal128 = new Decimal128().set(value)
+
+  def apply(value: java.math.BigDecimal): Decimal128 = new Decimal128().set(value)
 
   def apply(value: BigDecimal, scale: Int): Decimal128 = new Decimal128().set(value, scale)
 
@@ -302,6 +306,71 @@ object Decimal128 {
   def throwIfOverflows(high: Long, low: Long): Unit = {
     if (Int128.overflows(high, low)) {
       throw new ArithmeticException("Decimal overflow");
+    }
+  }
+
+  def add(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Array[Long] =
+    add(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
+
+  private def add(
+      leftHigh: Long,
+      leftLow: Long,
+      rightHigh: Long,
+      rightLow: Long,
+      rescale: Int,
+      rescaleLeft: Boolean): Array[Long] = {
+    val result = new Array[Long](2)
+    if (rescaleLeft) {
+      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
+      Int128Math.add(result.head, result.last, rightHigh, rightLow)
+    } else {
+      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
+      Int128Math.add(leftHigh, leftLow, result.head, result.last)
+    }
+  }
+
+  def compare(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Int =
+    compare(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
+
+  def compare(
+      leftHigh: Long,
+      leftLow: Long,
+      rightHigh: Long,
+      rightLow: Long,
+      rescale: Int,
+      rescaleLeft: Boolean): Int = {
+    val result = new Array[Long](2)
+    if (rescaleLeft) {
+      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
+      Int128.compare(result.head, result.last, rightHigh, rightLow)
+    } else {
+      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
+      Int128.compare(leftHigh, leftLow, result.head, result.last)
+    }
+  }
+
+  def operatorWithRescale[T](
+      left: Int128,
+      right: Int128,
+      rescale: Int,
+      rescaleLeft: Boolean) (f: (Long, Long, Long, Long) => T): T = {
+    operatorWithRescale(left.high, left.low, right.high, right.low, rescale, rescaleLeft) (f)
+  }
+
+  def operatorWithRescale[T](
+      leftHigh: Long,
+      leftLow: Long,
+      rightHigh: Long,
+      rightLow: Long,
+      rescale: Int,
+      rescaleLeft: Boolean) (f: (Long, Long, Long, Long) => T): T = {
+    val result = new Array[Long](2)
+    if (rescaleLeft) {
+      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
+      f(result.head, result.last, rightHigh, rightLow)
+    } else {
+      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
+      f(leftHigh, leftLow, result.head, result.last)
     }
   }
 
