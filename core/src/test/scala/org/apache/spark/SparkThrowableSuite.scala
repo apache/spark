@@ -223,7 +223,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
-  test("get message in the specified format") {
+  test("Get message in the specified format") {
     import ErrorMessageFormat._
     class TestQueryContext extends QueryContext {
       override val objectName = "v1"
@@ -274,13 +274,27 @@ class SparkThrowableSuite extends SparkFunSuite {
         |  } ]
         |}""".stripMargin)
       // scalastyle:on line.size.limit
+    // STANDARD w/ errorSubClass but w/o queryContext
+    val e2 = new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_SAVE_MODE",
+      errorSubClass = Some("EXISTENT_PATH"),
+      messageParameters = Array("UNSUPPORTED_MODE"))
+    assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
+      """{
+        |  "errorClass" : "UNSUPPORTED_SAVE_MODE",
+        |  "errorSubClass" : "EXISTENT_PATH",
+        |  "message" : "The save mode <saveMode> is not supported for:",
+        |  "messageParameters" : {
+        |    "saveMode" : "UNSUPPORTED_MODE"
+        |  }
+        |}""".stripMargin)
     // Legacy mode when an exception does not have any error class
     class LegacyException extends Throwable with SparkThrowable {
       override def getErrorClass: String = null
       override def getMessage: String = "Test message"
     }
-    val e2 = new LegacyException
-    assert(SparkThrowableHelper.getMessage(e2, MINIMAL) ===
+    val e3 = new LegacyException
+    assert(SparkThrowableHelper.getMessage(e3, MINIMAL) ===
       """{
         |  "errorClass" : "LEGACY",
         |  "messageParameters" : {
