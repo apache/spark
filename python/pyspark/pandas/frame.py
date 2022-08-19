@@ -501,7 +501,7 @@ class DataFrame(Frame, Generic[T]):
     def _update_internal_frame(
         self,
         internal: InternalFrame,
-        requires_same_anchor: bool = True,
+        check_same_anchor: bool = True,
         anchor_force_disconnect: bool = False,
     ) -> None:
         """
@@ -511,7 +511,7 @@ class DataFrame(Frame, Generic[T]):
         `anchor_force_disconnect` flag is set to True, disconnect the original anchor and create
         a new one.
 
-        If `requires_same_anchor` is `False`, checking whether or not the same anchor is ignored
+        If `check_same_anchor` is `False`, checking whether or not the same anchor is ignored
         and force to update the InternalFrame, e.g., replacing the internal with the resolved_copy,
         updating the underlying Spark DataFrame which need to combine a different Spark DataFrame.
 
@@ -519,7 +519,7 @@ class DataFrame(Frame, Generic[T]):
         ----------
         internal : InternalFrame
             The new InternalFrame
-        requires_same_anchor : bool
+        check_same_anchor : bool
             Whether checking the same anchor
         anchor_force_disconnect : bool
             Force to disconnect the original anchor and create a new one
@@ -536,7 +536,7 @@ class DataFrame(Frame, Generic[T]):
                     psser = self._pssers[old_label]
 
                     renamed = old_label != new_label
-                    not_same_anchor = requires_same_anchor and not same_anchor(internal, psser)
+                    not_same_anchor = check_same_anchor and not same_anchor(internal, psser)
 
                     if renamed or not_same_anchor or anchor_force_disconnect:
                         psdf: DataFrame = DataFrame(self._internal.select_column(old_label))
@@ -5676,7 +5676,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._update_internal_frame(psdf._internal, requires_same_anchor=False)
+            self._update_internal_frame(psdf._internal, check_same_anchor=False)
             return None
         else:
             return psdf
@@ -8614,7 +8614,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             *HIDDEN_COLUMNS,
         )
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
-        self._update_internal_frame(internal, requires_same_anchor=False)
+        self._update_internal_frame(internal, check_same_anchor=False)
 
     # TODO: ddof should be implemented.
     def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
@@ -12185,7 +12185,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.
-            self._update_internal_frame(result._internal, requires_same_anchor=False)
+            self._update_internal_frame(result._internal, check_same_anchor=False)
             return None
         elif should_return_series:
             return first_series(result).rename(series_name)
