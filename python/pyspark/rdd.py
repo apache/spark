@@ -356,7 +356,8 @@ class RDD(Generic[T_co]):
         Examples
         --------
         >>> rdd = sc.range(5)
-        >>> _ = rdd.id()
+        >>> rdd.id()  # doctest: +SKIP
+        3
         """
         return self._id
 
@@ -478,7 +479,8 @@ class RDD(Generic[T_co]):
             ...
         py4j.protocol.Py4JJavaError: ...
 
-        Can assign another storage level after call `unpersist`
+        Assign another storage level after `unpersist`
+
         >>> _ = rdd2.unpersist()
         >>> rdd2.is_cached
         False
@@ -1787,6 +1789,7 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.toLocalIterator`
+        :meth:`pyspark.sql.DataFrame.collect`
 
         Examples
         --------
@@ -2273,6 +2276,7 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.countApprox`
+        :meth:`pyspark.sql.DataFrame.count`
 
         Examples
         --------
@@ -2300,6 +2304,7 @@ class RDD(Generic[T_co]):
         :meth:`RDD.variance`
         :meth:`RDD.sampleVariance`
         :meth:`RDD.histogram`
+        :meth:`pyspark.sql.DataFrame.stat`
         """
 
         def redFunc(left_counter: StatCounter, right_counter: StatCounter) -> StatCounter:
@@ -2759,6 +2764,7 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.first`
+        :meth:`pyspark.sql.DataFrame.take`
 
         Notes
         -----
@@ -2829,6 +2835,8 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.take`
+        :meth:`pyspark.sql.DataFrame.first`
+        :meth:`pyspark.sql.DataFrame.head`
 
         Examples
         --------
@@ -2858,6 +2866,7 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.first`
+        :meth:`pyspark.sql.DataFrame.isEmpty`
 
         Notes
         -----
@@ -2933,10 +2942,10 @@ class RDD(Generic[T_co]):
         ...     # Create the conf for reading
         ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
         ...
+        ...     # Load this Hadoop file as an RDD
         ...     loaded = sc.newAPIHadoopRDD(input_format_class,
         ...         key_class, value_class, conf=read_conf)
-        ...     collected = sorted(loaded.collect())
-        >>> collected
+        ...     sorted(loaded.collect())
         [(1, ''), (1, 'a'), (3, 'x')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
@@ -3011,8 +3020,8 @@ class RDD(Generic[T_co]):
         ...     rdd = sc.parallelize([(1, {3.0: "bb"}), (2, {1.0: "aa"}), (3, {2.0: "dd"})])
         ...     rdd.saveAsNewAPIHadoopFile(path, output_format_class)
         ...
-        ...     collected = sorted(sc.sequenceFile(path).collect())
-        >>> collected
+        ...     # Load this Hadoop file as an RDD
+        ...     sorted(sc.sequenceFile(path).collect())
         [(1, {3.0: 'bb'}), (2, {1.0: 'aa'}), (3, {2.0: 'dd'})]
         """
         jconf = self.ctx._dictToJavaMap(conf)
@@ -3092,9 +3101,9 @@ class RDD(Generic[T_co]):
         ...     # Create the conf for reading
         ...     read_conf = {"mapreduce.input.fileinputformat.inputdir": path}
         ...
+        ...     # Load this Hadoop file as an RDD
         ...     loaded = sc.hadoopRDD(input_format_class, key_class, value_class, conf=read_conf)
-        ...     collected = sorted(loaded.collect())
-        >>> collected
+        ...     sorted(loaded.collect())
         [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
@@ -3176,9 +3185,9 @@ class RDD(Generic[T_co]):
         ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
         ...     rdd.saveAsHadoopFile(path, output_format_class, key_class, value_class)
         ...
+        ...     # Load this Hadoop file as an RDD
         ...     loaded = sc.hadoopFile(path, input_format_class, key_class, value_class)
-        ...     collected = sorted(loaded.collect())
-        >>> collected
+        ...     sorted(loaded.collect())
         [(0, '1\\t'), (0, '1\\ta'), (0, '3\\tx')]
         """
         jconf = self.ctx._dictToJavaMap(conf)
@@ -3238,13 +3247,13 @@ class RDD(Generic[T_co]):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     path = os.path.join(d, "sequence_file")
         ...
-        ...     # Write a temporary Hadoop file
+        ...     # Write a temporary sequence file
         ...     rdd = sc.parallelize([(1, ""), (1, "a"), (3, "x")])
         ...     rdd.saveAsSequenceFile(path)
         ...
+        ...     # Load this sequence file as an RDD
         ...     loaded = sc.sequenceFile(path)
-        ...     collected = sorted(loaded.collect())
-        >>> collected
+        ...     sorted(loaded.collect())
         [(1, ''), (1, 'a'), (3, 'x')]
         """
         pickledRDD = self._pickled()
@@ -3278,13 +3287,13 @@ class RDD(Generic[T_co]):
         >>> import os
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "pickle_file")
+        ...
         ...     # Write a temporary pickled file
-        ...     path = os.path.join(d, "pickled")
         ...     sc.parallelize(range(10)).saveAsPickleFile(path, 3)
         ...
-        ...     # Load picked file
-        ...     collected = sorted(sc.pickleFile(path, 3).collect())
-        >>> collected
+        ...     # Load picked file as an RDD
+        ...     sorted(sc.pickleFile(path, 3).collect())
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         ser: Serializer
@@ -3320,19 +3329,25 @@ class RDD(Generic[T_co]):
         >>> from fileinput import input
         >>> from glob import glob
         >>> with tempfile.TemporaryDirectory() as d1:
-        ...     path1 = os.path.join(d1, "text")
+        ...     path1 = os.path.join(d1, "text_file1")
+        ...
+        ...     # Write a temporary text file
         ...     sc.parallelize(range(10)).saveAsTextFile(path1)
-        ...     content1 = ''.join(sorted(input(glob(path1 + "/part-0000*"))))
-        >>> content1
+        ...
+        ...     # Load text file as an RDD
+        ...     ''.join(sorted(input(glob(path1 + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
 
         Empty lines are tolerated when saving to text files.
 
         >>> with tempfile.TemporaryDirectory() as d2:
-        ...     path2 = os.path.join(d2, "text2")
+        ...     path2 = os.path.join(d2, "text2_file2")
+        ...
+        ...     # Write another temporary text file
         ...     sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(path2)
-        ...     content2 = ''.join(sorted(input(glob(path2 + "/part-0000*"))))
-        >>> content2
+        ...
+        ...     # Load text file as an RDD
+        ...     ''.join(sorted(input(glob(path2 + "/part-0000*"))))
         '\\n\\n\\nbar\\nfoo\\n'
 
         Using compressionCodecClass
@@ -3341,11 +3356,13 @@ class RDD(Generic[T_co]):
         >>> with tempfile.TemporaryDirectory() as d3:
         ...     path3 = os.path.join(d3, "text3")
         ...     codec = "org.apache.hadoop.io.compress.GzipCodec"
+        ...
+        ...     # Write another temporary text file with specified codec
         ...     sc.parallelize(['foo', 'bar']).saveAsTextFile(path3, codec)
+        ...
+        ...     # Load text file as an RDD
         ...     result = sorted(input(glob(path3 + "/part*.gz"), openhook=hook_compressed))
-        ...     content3 = ''.join([r.decode('utf-8') if isinstance(r, bytes) else r
-        ...         for r in result])
-        >>> content3
+        ...     ''.join([r.decode('utf-8') if isinstance(r, bytes) else r for r in result])
         'bar\\nfoo\\n'
         """
 
@@ -5032,6 +5049,7 @@ class RDD(Generic[T_co]):
         See Also
         --------
         :meth:`RDD.collect`
+        :meth:`pyspark.sql.DataFrame.toLocalIterator`
 
         Examples
         --------
