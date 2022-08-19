@@ -34,11 +34,15 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-  // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,
-  // we skip them in the TPCDS-related tests.
-  // NOTE: q6" and "q75" can cause flaky test results, so we must exclude them.
-  // For more details, see SPARK-35327.
-  private val excludedTpcdsQueries: Set[String] = Set("q6", "q34", "q64", "q74", "q75", "q78")
+  private val excludedTpcdsQueries: Set[String] = if (regenerateGoldenFiles) {
+    Set()
+  } else {
+    // Since `tpcdsQueriesV2_7_0` has almost the same queries with these ones below,
+    // we skip them in the TPCDS-related tests.
+    // NOTE: q6" and "q75" can cause flaky test results, so we must exclude them.
+    // For more details, see SPARK-35327.
+    Set("q6", "q34", "q64", "q74", "q75", "q78")
+  }
 
   val tpcdsQueries: Seq[String] = tpcdsAllQueries.filterNot(excludedTpcdsQueries.contains)
 
