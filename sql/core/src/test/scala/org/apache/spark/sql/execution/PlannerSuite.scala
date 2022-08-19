@@ -1293,6 +1293,23 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numSorts.size == 2)
     }
   }
+
+  test("SPARK-39890: Make TakeOrderedAndProjectExec inherit AliasAwareOutputOrdering") {
+    val df = spark.range(20).repartition($"id")
+      .orderBy("id")
+      .selectExpr("id as c")
+      .limit(10)
+      .orderBy("c")
+
+    val topKs = collect(df.queryExecution.executedPlan) {
+      case topK: TakeOrderedAndProjectExec => topK
+    }
+    val sorts = collect(df.queryExecution.executedPlan) {
+      case sort: SortExec => sort
+    }
+    assert(topKs.size == 1)
+    assert(sorts.isEmpty)
+  }
 }
 
 // Used for unit-testing EnsureRequirements

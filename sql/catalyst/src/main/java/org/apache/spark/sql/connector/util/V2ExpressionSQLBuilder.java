@@ -149,6 +149,15 @@ public class V2ExpressionSQLBuilder {
         case "DATE_ADD":
         case "DATE_DIFF":
         case "TRUNC":
+        case "AES_ENCRYPT":
+        case "AES_DECRYPT":
+        case "SHA1":
+        case "SHA2":
+        case "MD5":
+        case "CRC32":
+        case "BIT_LENGTH":
+        case "CHAR_LENGTH":
+        case "CONCAT":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {

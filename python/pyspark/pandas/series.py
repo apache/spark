@@ -629,7 +629,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     def pow(self, other: Any) -> "Series":
-        return self ** other
+        return self**other
 
     pow.__doc__ = _flex_doc_SERIES.format(
         desc="Exponential power of series",
@@ -640,7 +640,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     def rpow(self, other: Any) -> "Series":
-        return other ** self
+        return other**self
 
     rpow.__doc__ = _flex_doc_SERIES.format(
         desc="Reverse Exponential power",
@@ -2775,11 +2775,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> psser = ps.Series([2, 1, 3, 3], name='A')
-        >>> psser.unique().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1
-        ...  2
-        ...  3
+        >>> psser.unique().sort_values()
+        1    1
+        0    2
+        2    3
         Name: A, dtype: int64
 
         >>> ps.Series([pd.Timestamp('2016-01-01') for _ in range(3)]).unique()
@@ -2787,11 +2786,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: datetime64[ns]
 
         >>> psser.name = ('x', 'a')
-        >>> psser.unique().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1
-        ...  2
-        ...  3
+        >>> psser.unique().sort_values()
+        1    1
+        0    2
+        2    3
         Name: (x, a), dtype: int64
         """
         sdf = self._internal.spark_frame.select(self.spark.column).distinct()
@@ -4718,21 +4716,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         13    NaN
         dtype: float64
 
-        >>> s.mode().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1.0
-        ...  2.0
-        ...  3.0
+        >>> s.mode().sort_values()
+        0    1.0
+        1    2.0
+        2    3.0
         dtype: float64
 
         With 'dropna' set to 'False', we can also see NaN in the result
 
-        >>> s.mode(False).sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1.0
-        ...  2.0
-        ...  3.0
-        ...  NaN
+        >>> s.mode(False).sort_values()
+        0    1.0
+        1    2.0
+        2    3.0
+        3    NaN
         dtype: float64
         """
         ser_count = self.value_counts(dropna=dropna, sort=False)
@@ -6266,11 +6262,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        axis : {{None}}
+        axis : None
             Dummy argument for consistency with Series.
         skipna : bool, default True
-            Exclude NA/null values. If the entire Series is NA, the result
-            will be NA.
+            Exclude NA/null values.
 
         Returns
         -------
@@ -6322,12 +6317,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # If the maximum is achieved in multiple locations, the first row position is returned.
             return -1 if max_value[0] is None else max_value[1]
 
-    def argmin(self) -> int:
+    def argmin(self, axis: Axis = None, skipna: bool = True) -> int:
         """
         Return int position of the smallest value in the Series.
 
         If the minimum is achieved in multiple locations,
         the first row position is returned.
+
+        Parameters
+        ----------
+        axis : None
+            Dummy argument for consistency with Series.
+        skipna : bool, default True
+            Exclude NA/null values.
 
         Returns
         -------
@@ -6350,24 +6352,30 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.argmin()  # doctest: +SKIP
         0
         """
+        axis = validate_axis(axis, none_axis=0)
+        if axis == 1:
+            raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
-        min_value = sdf.select(
-            F.min(scol_for(sdf, self._internal.data_spark_column_names[0])),
-            F.first(NATURAL_ORDER_COLUMN_NAME),
-        ).head()
-        if min_value[1] is None:
-            raise ValueError("attempt to get argmin of an empty sequence")
-        elif min_value[0] is None:
-            return -1
-        # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(
-            sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
+            sdf,
+            seq_col_name,
         )
-        # If the minimum is achieved in multiple locations, the first row position is returned.
-        return sdf.filter(
-            scol_for(sdf, self._internal.data_spark_column_names[0]) == min_value[0]
-        ).head()[0]
+        scol = scol_for(sdf, self._internal.data_spark_column_names[0])
+
+        if skipna:
+            sdf = sdf.orderBy(scol.asc_nulls_last(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+        else:
+            sdf = sdf.orderBy(scol.asc_nulls_first(), NATURAL_ORDER_COLUMN_NAME, seq_col_name)
+
+        results = sdf.select(scol, seq_col_name).take(1)
+
+        if len(results) == 0:
+            raise ValueError("attempt to get argmin of an empty sequence")
+        else:
+            min_value = results[0]
+            # If the maximum is achieved in multiple locations, the first row position is returned.
+            return -1 if min_value[0] is None else min_value[1]
 
     def compare(
         self, other: "Series", keep_shape: bool = False, keep_equal: bool = False
@@ -7052,7 +7060,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if on is None and not isinstance(self.index, DatetimeIndex):
             raise NotImplementedError("resample currently works only for DatetimeIndex")
         if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
-            raise NotImplementedError("resample currently works only for TimestampType")
+            raise NotImplementedError("`on` currently works only for TimestampType")
 
         agg_columns: List[ps.Series] = []
         column_label = self._internal.column_labels[0]

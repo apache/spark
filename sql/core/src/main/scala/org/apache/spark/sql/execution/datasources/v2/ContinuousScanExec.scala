@@ -55,7 +55,7 @@ case class ContinuousScanExec(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)
       .askSync[Unit](SetReaderPartitions(partitions.size))
-    new ContinuousDataSourceRDD(
+    val inputRDD = new ContinuousDataSourceRDD(
       sparkContext,
       conf.continuousStreamingExecutorQueueSize,
       conf.continuousStreamingExecutorPollIntervalMs,
@@ -63,5 +63,7 @@ case class ContinuousScanExec(
       schema,
       readerFactory,
       customMetrics)
+    postDriverMetrics()
+    inputRDD
   }
 }

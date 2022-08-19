@@ -802,12 +802,12 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
-        self.assertEqual(_infer_type(2 ** 10), LongType())
-        self.assertEqual(_infer_type(2 ** 20), LongType())
-        self.assertEqual(_infer_type(2 ** 31 - 1), LongType())
-        self.assertEqual(_infer_type(2 ** 31), LongType())
-        self.assertEqual(_infer_type(2 ** 61), LongType())
-        self.assertEqual(_infer_type(2 ** 71), LongType())
+        self.assertEqual(_infer_type(2**10), LongType())
+        self.assertEqual(_infer_type(2**20), LongType())
+        self.assertEqual(_infer_type(2**31 - 1), LongType())
+        self.assertEqual(_infer_type(2**31), LongType())
+        self.assertEqual(_infer_type(2**61), LongType())
+        self.assertEqual(_infer_type(2**71), LongType())
 
     def test_infer_binary_type(self):
         binaryrow = [Row(f1="a", f2=b"abcd")]
@@ -1256,17 +1256,17 @@ class DataTypeVerificationTests(unittest.TestCase):
             # Boolean
             (True, BooleanType()),
             # Byte
-            (-(2 ** 7), ByteType()),
-            (2 ** 7 - 1, ByteType()),
+            (-(2**7), ByteType()),
+            (2**7 - 1, ByteType()),
             # Short
-            (-(2 ** 15), ShortType()),
-            (2 ** 15 - 1, ShortType()),
+            (-(2**15), ShortType()),
+            (2**15 - 1, ShortType()),
             # Integer
-            (-(2 ** 31), IntegerType()),
-            (2 ** 31 - 1, IntegerType()),
+            (-(2**31), IntegerType()),
+            (2**31 - 1, IntegerType()),
             # Long
-            (-(2 ** 63), LongType()),
-            (2 ** 63 - 1, LongType()),
+            (-(2**63), LongType()),
+            (2**63 - 1, LongType()),
             # Float & Double
             (1.0, FloatType()),
             (1.0, DoubleType()),
@@ -1318,16 +1318,16 @@ class DataTypeVerificationTests(unittest.TestCase):
             ("True", BooleanType(), TypeError),
             ([1], BooleanType(), TypeError),
             # Byte
-            (-(2 ** 7) - 1, ByteType(), ValueError),
-            (2 ** 7, ByteType(), ValueError),
+            (-(2**7) - 1, ByteType(), ValueError),
+            (2**7, ByteType(), ValueError),
             ("1", ByteType(), TypeError),
             (1.0, ByteType(), TypeError),
             # Short
-            (-(2 ** 15) - 1, ShortType(), ValueError),
-            (2 ** 15, ShortType(), ValueError),
+            (-(2**15) - 1, ShortType(), ValueError),
+            (2**15, ShortType(), ValueError),
             # Integer
-            (-(2 ** 31) - 1, IntegerType(), ValueError),
-            (2 ** 31, IntegerType(), ValueError),
+            (-(2**31) - 1, IntegerType(), ValueError),
+            (2**31, IntegerType(), ValueError),
             # Float & Double
             (1, FloatType(), TypeError),
             (1, DoubleType(), TypeError),

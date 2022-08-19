@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -315,7 +316,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new IllegalStateException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
   protected def typeSuffix =
@@ -396,12 +397,18 @@ trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplacea
  * them with Min and Max respectively.
  */
 trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
-  override def aggBufferSchema: StructType = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
-  override def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
-  override def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  override def aggBufferSchema: StructType = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  }
+  override def aggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  }
+  override def inputAggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  }
 }
 
 /**
@@ -593,9 +600,19 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
  * to executors. It will also be kept after rule transforms.
  */
 trait SupportQueryContext extends Expression with Serializable {
-  protected var queryContext: String = initQueryContext()
+  protected var queryContext: Option[SQLQueryContext] = initQueryContext()
 
-  def initQueryContext(): String
+  def initQueryContext(): Option[SQLQueryContext]
+
+  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
+
+  def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
+    if (withErrorContext && queryContext.isDefined) {
+      ctx.addReferenceObj("errCtx", queryContext.get)
+    } else {
+      "null"
+    }
+  }
 
   // Note: Even though query contexts are serialized to executors, it will be regenerated from an
   //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors

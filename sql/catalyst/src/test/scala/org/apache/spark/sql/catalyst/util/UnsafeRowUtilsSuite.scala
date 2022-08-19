@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.{BigDecimal => JavaBigDecimal}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, StructField, StructType}
 
 class UnsafeRowUtilsSuite extends SparkFunSuite {
 
@@ -51,5 +53,32 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
       Seq(StructField("struct", StructType(Seq(StructField("value1", StringType, true))), true),
         StructField("value2", IntegerType, false)))
     assert(!UnsafeRowUtils.validateStructuralIntegrity(testRow, invalidSchema))
+  }
+
+  test("Handle special case for null variable-length Decimal") {
+    val schema = StructType(StructField("d", DecimalType(19, 0), nullable = true) :: Nil)
+    val unsafeRowProjection = UnsafeProjection.create(schema)
+    val row = unsafeRowProjection(new SpecificInternalRow(schema))
+
+    // row is empty at this point
+    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
+    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+
+    // set Decimal field to precision-overflowed value
+    val bigDecimalVal = Decimal(new JavaBigDecimal("12345678901234567890")) // precision=20, scale=0
+    row.setDecimal(0, bigDecimalVal, 19) // should overflow and become null
+    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
+    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+
+    // set Decimal field to valid non-null value
+    val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789")) // precision=19, scale=0
+    row.setDecimal(0, bigDecimalVal2, 19) // should succeed
+    assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
+    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+
+    // set Decimal field to null explicitly, after which this field no longer supports updating
+    row.setNullAt(0)
+    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (0, 0))
+    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
   }
 }

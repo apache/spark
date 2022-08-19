@@ -65,8 +65,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         getProjection(child).map { projection => MapKeys(projection) }
       case MapValues(child) =>
         getProjection(child).map { projection => MapValues(projection) }
-      case GetMapValue(child, key, failOnError) =>
-        getProjection(child).map { projection => GetMapValue(projection, key, failOnError) }
+      case GetMapValue(child, key) =>
+        getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>

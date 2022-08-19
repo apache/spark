@@ -31,10 +31,10 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -824,6 +824,16 @@ class DataFrameSuite extends QueryTest
       df,
       testData.collect().toSeq)
     assert(df.schema.map(_.name) === Seq("key", "value"))
+  }
+
+  test("SPARK-39895: drop two column references") {
+    val col = Column("key")
+    val randomCol = Column("random")
+    val df = testData.drop(col, randomCol)
+    checkAnswer(
+      df,
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
   }
 
   test("drop unknown column with same name with column reference") {
@@ -2011,7 +2021,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-39748: build the stats for LogicalRDD based on originLogicalPlan") {
+  test("SPARK-39834: build the stats for LogicalRDD based on origin stats") {
     def buildExpectedColumnStats(attrs: Seq[Attribute]): AttributeMap[ColumnStat] = {
       AttributeMap(
         attrs.map {
@@ -2040,7 +2050,8 @@ class DataFrameSuite extends QueryTest
 
     val outputList = Seq(
       AttributeReference("cbool", BooleanType)(),
-      AttributeReference("cbyte", BooleanType)()
+      AttributeReference("cbyte", ByteType)(),
+      AttributeReference("cint", IntegerType)()
     )
 
     val expectedSize = 16
@@ -2052,9 +2063,11 @@ class DataFrameSuite extends QueryTest
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
 
+      // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+      // there is no matching physical node for OutputListAwareStatsTestPlan.
       val logicalRDD = LogicalRDD(
-        df.logicalPlan.output, spark.sparkContext.emptyRDD, Some(df.queryExecution.analyzed),
-        isStreaming = true)(spark)
+        df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
+        spark, Some(df.queryExecution.optimizedPlan.stats), None)
 
       val stats = logicalRDD.computeStats()
       val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
@@ -2065,12 +2078,50 @@ class DataFrameSuite extends QueryTest
       // reflected as well.
       val newLogicalRDD = logicalRDD.newInstance()
       val newStats = newLogicalRDD.computeStats()
-      // LogicalRDD.newInstance adds projection to originLogicalPlan, which triggers estimation
-      // on sizeInBytes. We don't intend to check the estimated value.
-      val newExpectedStats = Statistics(sizeInBytes = newStats.sizeInBytes, rowCount = Some(2),
+      val newExpectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
         attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
       assert(newStats === newExpectedStats)
     }
+  }
+
+  test("SPARK-39834: build the constraints for LogicalRDD based on origin constraints") {
+    def buildExpectedConstraints(attrs: Seq[Attribute]): ExpressionSet = {
+      val exprs = attrs.flatMap { attr =>
+        attr.dataType match {
+          case BooleanType => Some(EqualTo(attr, Literal(true, BooleanType)))
+          case IntegerType => Some(GreaterThan(attr, Literal(5, IntegerType)))
+          case _ => None
+        }
+      }
+      ExpressionSet(exprs)
+    }
+
+    val outputList = Seq(
+      AttributeReference("cbool", BooleanType)(),
+      AttributeReference("cbyte", ByteType)(),
+      AttributeReference("cint", IntegerType)()
+    )
+
+    val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
+
+    val df = Dataset.ofRows(spark, statsPlan)
+
+    // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
+    // there is no matching physical node for OutputListAwareConstraintsTestPlan.
+    val logicalRDD = LogicalRDD(
+      df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
+      spark, None, Some(df.queryExecution.optimizedPlan.constraints))
+
+    val constraints = logicalRDD.constraints
+    val expectedConstraints = buildExpectedConstraints(logicalRDD.output)
+    assert(constraints === expectedConstraints)
+
+    // This method re-issues expression IDs for all outputs. We expect constraints to be
+    // reflected as well.
+    val newLogicalRDD = logicalRDD.newInstance()
+    val newConstraints = newLogicalRDD.constraints
+    val newExpectedConstraints = buildExpectedConstraints(newLogicalRDD.output)
+    assert(newConstraints === newExpectedConstraints)
   }
 
   test("SPARK-10656: completely support special chars") {
@@ -3307,6 +3358,67 @@ class DataFrameSuite extends QueryTest
     val d1 = Seq("a").toDF
     assert(d1.exceptAll(d1).count() === 0)
   }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child") {
+    val df = sql(
+      """
+        |SELECT a, b AS a FROM (
+        |  SELECT a, a AS b FROM (SELECT a FROM VALUES (1) AS t(a))
+        |  UNION ALL
+        |  SELECT a, b FROM (SELECT a, b FROM VALUES (1, 2) AS t(a, b))
+        |)
+        |""".stripMargin)
+    val stringCols = df.logicalPlan.output.map(Column(_).cast(StringType))
+    val castedDf = df.select(stringCols: _*)
+    checkAnswer(castedDf, Row("1", "1") :: Row("1", "2") :: Nil)
+  }
+
+  test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child 2") {
+    val df = sql(
+      """
+        |SELECT
+        |  to_date(a) a,
+        |  to_date(b) b
+        |FROM
+        |  (
+        |    SELECT
+        |      a,
+        |      a AS b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a
+        |        FROM
+        |        VALUES
+        |          ('2020-02-01') AS t1(a)
+        |        GROUP BY
+        |          to_date(a)
+        |      ) t3
+        |    UNION ALL
+        |    SELECT
+        |      a,
+        |      b
+        |    FROM
+        |      (
+        |        SELECT
+        |          to_date(a) a,
+        |          to_date(b) b
+        |        FROM
+        |        VALUES
+        |          ('2020-01-01', '2020-01-02') AS t1(a, b)
+        |        GROUP BY
+        |          to_date(a),
+        |          to_date(b)
+        |      ) t4
+        |  ) t5
+        |GROUP BY
+        |  to_date(a),
+        |  to_date(b);
+        |""".stripMargin)
+    checkAnswer(df,
+      Row(java.sql.Date.valueOf("2020-02-01"), java.sql.Date.valueOf("2020-02-01")) ::
+        Row(java.sql.Date.valueOf("2020-01-01"), java.sql.Date.valueOf("2020-01-02")) :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
@@ -3356,3 +3468,26 @@ case class OutputListAwareStatsTestPlan(
   }
   override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }
+
+/**
+ * This class is used for unit-testing. It's a logical plan whose output is passed in.
+ */
+case class OutputListAwareConstraintsTestPlan(
+    outputList: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+  override def output: Seq[Attribute] = outputList
+
+  override lazy val constraints: ExpressionSet = {
+    val exprs = outputList.flatMap { attr =>
+      attr.dataType match {
+        case BooleanType => Some(EqualTo(attr, Literal(true, BooleanType)))
+        case IntegerType => Some(GreaterThan(attr, Literal(5, IntegerType)))
+        case _ => None
+      }
+    }
+    ExpressionSet(exprs)
+  }
+
+  override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
+}
+
+

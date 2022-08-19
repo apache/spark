@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * The general representation of user defined scalar function, which contains the upper-cased
@@ -31,7 +30,7 @@ import org.apache.spark.sql.internal.connector.ToStringSQLBuilder;
  * @since 3.4.0
  */
 @Evolving
-public class UserDefinedScalarFunc implements Expression, Serializable {
+public class UserDefinedScalarFunc extends ExpressionWithToString {
   private String name;
   private String canonicalName;
   private Expression[] children;
@@ -60,11 +59,5 @@ public class UserDefinedScalarFunc implements Expression, Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(name, canonicalName, children);
-  }
-
-  @Override
-  public String toString() {
-    ToStringSQLBuilder builder = new ToStringSQLBuilder();
-    return builder.build(this);
   }
 }

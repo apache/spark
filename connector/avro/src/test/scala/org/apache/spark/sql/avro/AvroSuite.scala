@@ -875,7 +875,7 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "Not an enum: null")
+      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1075,8 +1075,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains(
-        "null of string in string in field Name of test_schema in test_schema"))
+      assert(message.contains("null in string in field Name"))
     }
   }
 
@@ -1817,7 +1816,7 @@ abstract class AvroSuite
   // It generates input files for the test below:
   // "SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
   ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4/3.2") {
-    val resourceDir = "external/avro/src/test/resources"
+    val resourceDir = "connector/avro/src/test/resources"
     val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     def save(
       in: Seq[String],
@@ -2335,7 +2334,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2368,7 +2367,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2408,7 +2407,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val basePath = dir.getCanonicalPath + "/avro"
       val expected_plan_fragment =
         s"""
-           |\\(1\\) BatchScan
+           |\\(1\\) BatchScan avro file:$basePath
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
@@ -2449,7 +2448,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

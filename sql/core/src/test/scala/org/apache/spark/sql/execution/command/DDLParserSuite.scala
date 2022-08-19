@@ -120,13 +120,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       containsThesePhrases = Seq("key_with_value"))
   }
 
-  test("alter table - SerDe property values must be set") {
-    assertUnsupported(
-      sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
-        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
   test("alter table: exchange partition (not supported)") {
     assertUnsupported(
       """

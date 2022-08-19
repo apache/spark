@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -476,14 +475,14 @@ class Dataset[T] private[sql](
    *   int.</li>
    *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
    *   still keep their own metadata if not overwritten by the specified schema.</li>
-   *   <li>Fail if the nullability are not compatible. For example, the column and/or inner field is
+   *   <li>Fail if the nullability is not compatible. For example, the column and/or inner field is
    *   nullable but the specified schema requires them to be not nullable.</li>
    * </ul>
    *
    * @group basic
    * @since 3.4.0
    */
-  def as(schema: StructType): DataFrame = withPlan {
+  def to(schema: StructType): DataFrame = withPlan {
     Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
   }
 
@@ -710,29 +709,10 @@ class Dataset[T] private[sql](
         internalRdd.doCheckpoint()
       }
 
-      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-      // joins.
-      @scala.annotation.tailrec
-      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-        partitioning match {
-          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-          case p => p
-        }
-      }
-
-      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
       Dataset.ofRows(
         sparkSession,
-        LogicalRDD(
-          logicalPlan.output,
-          internalRdd,
-          Some(queryExecution.analyzed),
-          outputPartitioning,
-          physicalPlan.outputOrdering,
-          isStreaming
-        )(sparkSession)).as[T]
+        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+      ).as[T]
     }
   }
 
@@ -2128,6 +2108,17 @@ class Dataset[T] private[sql](
     unpivot(ids, Array.empty, variableColumnName, valueColumnName)
 
   /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      values: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
    * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
    * which cannot be reversed. This is an alias for `unpivot`.
@@ -2866,7 +2857,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset with a column dropped.
+   * Returns a new Dataset with column dropped.
+   *
+   * This method can only be used to drop top level column.
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
@@ -2875,15 +2868,31 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    drop(col, Seq.empty : _*)
+  }
+
+  /**
+   * Returns a new Dataset with columns dropped.
+   *
+   * This method can only be used to drop top level columns.
+   * This is a no-op if the Dataset doesn't have a columns
+   * with an equivalent expression.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def drop(col: Column, cols: Column*): DataFrame = {
+    val allColumns = col +: cols
+    val expressions = (for (col <- allColumns) yield col match {
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
-    }
+    })
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      !attr.semanticEquals(expression)
+      expressions.forall(expression => !attr.semanticEquals(expression))
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }

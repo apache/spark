@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType}
 
 object TableOutputResolver {
   def resolveOutputColumns(
@@ -220,6 +220,21 @@ object TableOutputResolver {
     }
   }
 
+  private def containsIntegralOrDecimalType(dt: DataType): Boolean = dt match {
+    case _: IntegralType | _: DecimalType => true
+    case a: ArrayType => containsIntegralOrDecimalType(a.elementType)
+    case m: MapType =>
+      containsIntegralOrDecimalType(m.keyType) || containsIntegralOrDecimalType(m.valueType)
+    case s: StructType =>
+      s.fields.exists(sf => containsIntegralOrDecimalType(sf.dataType))
+    case _ => false
+  }
+
+  private def canCauseCastOverflow(cast: Cast): Boolean = {
+    containsIntegralOrDecimalType(cast.dataType) &&
+      !Cast.canUpCast(cast.child.dataType, cast.dataType)
+  }
+
   private def checkField(
       tableAttr: Attribute,
       queryExpr: NamedExpression,
@@ -238,7 +253,11 @@ object TableOutputResolver {
           val cast = Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
           cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          cast
+          if (canCauseCastOverflow(cast)) {
+            CheckOverflowInTableInsert(cast, tableAttr.name)
+          } else {
+            cast
+          }
         case StoreAssignmentPolicy.LEGACY =>
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = false)

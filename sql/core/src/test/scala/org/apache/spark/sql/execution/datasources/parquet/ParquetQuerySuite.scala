@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupport
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1136,6 +1137,25 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsColumnar)
         checkAnswer(df3, df.selectExpr(columns : _*))
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+          val df4 = spark.range(10).select(struct(
+            Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*).as("nested"))
+          df4.write.mode(SaveMode.Overwrite).parquet(path)
+
+          // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
+          val df5 = spark.read.parquet(path)
+          val fileScan5 = df5.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+          assert(!fileScan5.asInstanceOf[FileSourceScanExec].supportsColumnar)
+          checkAnswer(df5, df4)
+
+          // return batch
+          val columns2 = Seq.tabulate(9) {i => s"nested.c$i"}
+          val df6 = df5.selectExpr(columns2 : _*)
+          val fileScan6 = df6.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+          assert(fileScan6.asInstanceOf[FileSourceScanExec].supportsColumnar)
+          checkAnswer(df6, df4.selectExpr(columns2 : _*))
+        }
       }
     }
   }
@@ -1173,6 +1193,29 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         val parquetScan3 = fileScan3.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
         assert(parquetScan3.createReaderFactory().supportColumnarReads(null))
         checkAnswer(df3, df.selectExpr(columns : _*))
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+          val df4 = spark.range(10).select(struct(
+            Seq.tabulate(11) {i => ($"id" + i).as(s"c$i")} : _*).as("nested"))
+          df4.write.mode(SaveMode.Overwrite).parquet(path)
+
+          // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
+          val df5 = spark.read.parquet(path)
+          val fileScan5 = df5.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+          val parquetScan5 = fileScan5.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+          // The method `supportColumnarReads` in Parquet doesn't depends on the input partition.
+          // Here we can pass null input partition to the method for testing propose.
+          assert(!parquetScan5.createReaderFactory().supportColumnarReads(null))
+          checkAnswer(df5, df4)
+
+          // return batch
+          val columns2 = Seq.tabulate(9) {i => s"nested.c$i"}
+          val df6 = df5.selectExpr(columns2 : _*)
+          val fileScan6 = df6.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+          val parquetScan6 = fileScan6.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+          assert(parquetScan6.createReaderFactory().supportColumnarReads(null))
+          checkAnswer(df6, df4.selectExpr(columns2 : _*))
+        }
       }
     }
   }

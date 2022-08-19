@@ -172,37 +172,54 @@ object Project {
     expected.map { f =>
       val matched = fields.filter(field => conf.resolver(field._1, f.name))
       if (matched.isEmpty) {
-        if (columnPath.isEmpty) {
-          throw QueryCompilationErrors.unresolvedColumnError(f.name, fields.map(_._1))
+        if (f.nullable) {
+          val columnExpr = Literal.create(null, f.dataType)
+          // Fill nullable missing new column with null value.
+          createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
         } else {
-          throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
+          if (columnPath.isEmpty) {
+            throw QueryCompilationErrors.unresolvedColumnError(f.name, fields.map(_._1))
+          } else {
+            throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
+          }
         }
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.ambiguousColumnOrFieldError(
           columnPath :+ f.name, matched.length)
-      }
+      } else {
+        val columnExpr = matched.head._2
+        val originalMetadata = columnExpr match {
+          case ne: NamedExpression => ne.metadata
+          case g: GetStructField => g.childSchema(g.ordinal).metadata
+          case _ => Metadata.empty
+        }
 
-      val columnExpr = matched.head._2
-      val originalMetadata = columnExpr match {
-        case ne: NamedExpression => ne.metadata
-        case g: GetStructField => g.childSchema(g.ordinal).metadata
-        case _ => Metadata.empty
+        val newColumnPath = columnPath :+ matched.head._1
+        val newColumnExpr = reconcileColumnType(
+          columnExpr, newColumnPath, f.dataType, f.nullable, conf)
+        createNewColumn(newColumnExpr, f.name, f.metadata, originalMetadata)
       }
-      val newMetadata = new MetadataBuilder()
-        .withMetadata(originalMetadata)
-        .withMetadata(f.metadata)
-        .build()
+    }
+  }
 
-      val newColumnPath = columnPath :+ matched.head._1
-      reconcileColumnType(columnExpr, newColumnPath, f.dataType, f.nullable, conf) match {
-        case a: Attribute => a.withName(f.name).withMetadata(newMetadata)
-        case other =>
-          if (newMetadata == Metadata.empty) {
-            Alias(other, f.name)()
-          } else {
-            Alias(other, f.name)(explicitMetadata = Some(newMetadata))
-          }
-      }
+  private def createNewColumn(
+      col: Expression,
+      name: String,
+      newMetadata: Metadata,
+      originalMetadata: Metadata): NamedExpression = {
+    val metadata = new MetadataBuilder()
+      .withMetadata(originalMetadata)
+      .withMetadata(newMetadata)
+      .build()
+
+    col match {
+      case a: Attribute => a.withName(name).withMetadata(metadata)
+      case other =>
+        if (metadata == Metadata.empty) {
+          Alias(other, name)()
+        } else {
+          Alias(other, name)(explicitMetadata = Some(metadata))
+        }
     }
   }
 }
@@ -1431,8 +1448,13 @@ object Limit {
  * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
  *
  * See [[Limit]] for more information.
+ *
+ * Note that, we can not make it inherit [[OrderPreservingUnaryNode]] due to the different strategy
+ * of physical plan. The output ordering of child will be broken if a shuffle exchange comes in
+ * between the child and global limit, due to the fact that shuffle reader fetches blocks in random
+ * order.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {

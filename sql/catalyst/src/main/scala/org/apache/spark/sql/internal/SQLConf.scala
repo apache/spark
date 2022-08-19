@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -2914,10 +2914,27 @@ object SQLConf {
     buildConf("spark.sql.defaultColumn.allowedProviders")
       .internal()
       .doc("List of table providers wherein SQL commands are permitted to assign DEFAULT column " +
-        "values. Comma-separated list, whitespace ignored, case-insensitive.")
+        "values. Comma-separated list, whitespace ignored, case-insensitive. If an asterisk " +
+        "appears after any table provider in this list, any command may assign DEFAULT column " +
+        "except `ALTER TABLE ... ADD COLUMN`. Otherwise, if no asterisk appears, all commands " +
+        "are permitted. This is useful because in order for such `ALTER TABLE ... ADD COLUMN` " +
+        "commands to work, the target data source must include support for substituting in the " +
+        "provided values when the corresponding fields are not present in storage.")
       .version("3.4.0")
       .stringConf
       .createWithDefault("csv,json,orc,parquet")
+
+  val JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE =
+    buildConf("spark.sql.jsonGenerator.writeNullIfWithDefaultValue")
+      .internal()
+      .doc("When true, when writing NULL values to columns of JSON tables with explicit DEFAULT " +
+        "values using INSERT, UPDATE, or MERGE commands, never skip writing the NULL values to " +
+        "storage, overriding spark.sql.jsonGenerator.ignoreNullFields or the ignoreNullFields " +
+        "option. This can be useful to enforce that inserted NULL values are present in " +
+        "storage to differentiate from missing data.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -2937,15 +2954,6 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
-
-  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
-    .internal()
-    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
-      "operator will throw an exception if array index is out of bound, or map key does not " +
-      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -3867,6 +3875,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
+    .doc("When PRETTY, the error message consists of textual representation of error class, " +
+      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "STANDARD includes an additional JSON field `message`. This configuration property " +
+      "influences on error messages of Thrift Server while running queries.")
+    .version("3.4.0")
+    .stringConf.transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(ErrorMessageFormat.values.map(_.toString))
+    .createWithDefault(ErrorMessageFormat.PRETTY.toString)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3965,7 +3983,11 @@ object SQLConf {
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
-        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead."),
+      RemovedConfig("spark.sql.ansi.strictIndexOperator", "3.4.0", "true",
+        "This was an internal configuration. It is not needed anymore since Spark SQL always " +
+          "returns null when getting a map value with a non-existing key. See SPARK-40066 " +
+          "for more details.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4518,12 +4540,13 @@ class SQLConf extends Serializable with Logging {
 
   def defaultColumnAllowedProviders: String = getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
 
+  def jsonWriteNullIfWithDefaultValue: Boolean =
+    getConf(JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE)
+
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
-
-  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
@@ -4644,6 +4667,9 @@ class SQLConf extends Serializable with Logging {
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
+
+  def errorMessageFormat: ErrorMessageFormat.Value =
+    ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   /** ********************** SQLConf functionality methods ************ */
 

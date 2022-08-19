@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
@@ -101,8 +102,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def unpivotValDataTypeMismatchError(values: Seq[NamedExpression]): Throwable = {
     val dataTypes = values
       .groupBy(_.dataType)
-      .mapValues(values => values.map(value => toSQLId(value.toString)))
+      .mapValues(values => values.map(value => toSQLId(value.toString)).sorted)
       .mapValues(values => if (values.length > 3) values.take(3) :+ "..." else values)
+      .toList.sortBy(_._1.sql)
       .map { case (dataType, values) => s"${toSQLType(dataType)} (${values.mkString(", ")})" }
 
     new AnalysisException(
@@ -855,7 +857,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s" cannot translate expression to source filter: $f")
   }
 
-  def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Filter]): Throwable = {
+  def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
     new AnalysisException(
       s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
   }
@@ -2515,10 +2517,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "literal value")
   }
 
-  def defaultReferencesNotAllowedInDataSource(dataSource: String): Throwable = {
+  def defaultReferencesNotAllowedInDataSource(
+      statementType: String, dataSource: String): Throwable = {
     new AnalysisException(
-      s"Failed to execute command because DEFAULT values are not supported for target data " +
-        "source with table provider: \"" + dataSource + "\"")
+      s"Failed to execute $statementType command because DEFAULT values are not supported for " +
+        "target data source with table provider: \"" + dataSource + "\"")
+  }
+
+  def addNewDefaultColumnToExistingTableNotAllowed(
+      statementType: String, dataSource: String): Throwable = {
+    new AnalysisException(
+      s"Failed to execute $statementType command because DEFAULT values are not supported when " +
+        "adding new columns to previously existing target data source with table " +
+        "provider: \"" + dataSource + "\"")
   }
 
   def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {

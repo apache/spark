@@ -900,23 +900,6 @@ class DDLParserSuite extends AnalysisTest {
       )))
   }
 
-  test("alter table: set location") {
-    val hint = Some("Please use ALTER VIEW instead.")
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
-      SetTableLocation(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
-        None,
-        "new location"))
-
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
-      SetTableLocation(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
-        Some(Map("ds" -> "2017-06-10")),
-        "new location"))
-  }
-
   test("alter table: rename column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
@@ -1878,97 +1861,6 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin)
-  }
-
-  test("alter table: SerDe properties") {
-    val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
-    val hint = Some("Please use ALTER VIEW instead.")
-    val parsed1 = parsePlan(sql1)
-    val expected1 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      None,
-      None)
-    comparePlans(parsed1, expected1)
-
-    val sql2 =
-      """
-        |ALTER TABLE table_name SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed2 = parsePlan(sql2)
-    val expected2 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed2, expected2)
-
-    val sql3 =
-      """
-        |ALTER TABLE table_name
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed3 = parsePlan(sql3)
-    val expected3 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed3, expected3)
-
-    val sql4 =
-      """
-        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed4 = parsePlan(sql4)
-    val expected4 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed4, expected4)
-
-    val sql5 =
-      """
-        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed5 = parsePlan(sql5)
-    val expected5 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed5, expected5)
-
-    val sql6 =
-      """
-        |ALTER TABLE a.b.c SET SERDE 'org.apache.class'
-        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed6 = parsePlan(sql6)
-    val expected6 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    comparePlans(parsed6, expected6)
-
-    val sql7 =
-      """
-        |ALTER TABLE a.b.c PARTITION (test=1, dt='2008-08-08', country='us')
-        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed7 = parsePlan(sql7)
-    val expected7 = SetTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed7, expected7)
   }
 
   test("alter view: AS Query") {

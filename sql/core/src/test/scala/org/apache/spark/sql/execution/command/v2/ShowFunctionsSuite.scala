@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.command
  */
 class ShowFunctionsSuite extends command.ShowFunctionsSuiteBase with CommandSuiteBase {
   override protected def funCatalog: String = s"fun_$catalog"
-  override protected def showFun(ns: String, name: String): String = name
 
   private def getFunCatalog(): InMemoryCatalog = {
     spark.sessionState.catalogManager.catalog(funCatalog).asInstanceOf[InMemoryCatalog]

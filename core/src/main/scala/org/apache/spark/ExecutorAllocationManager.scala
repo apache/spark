@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
@@ -231,16 +231,7 @@ private[spark] class ExecutorAllocationManager(
     cleaner.foreach(_.attachListener(executorMonitor))
 
     val scheduleTask = new Runnable() {
-      override def run(): Unit = {
-        try {
-          schedule()
-        } catch {
-          case ct: ControlThrowable =>
-            throw ct
-          case t: Throwable =>
-            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-        }
-      }
+      override def run(): Unit = Utils.tryLog(schedule())
     }
 
     if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {

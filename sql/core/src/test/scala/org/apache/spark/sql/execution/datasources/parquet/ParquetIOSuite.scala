@@ -1202,15 +1202,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
         }.getCause.getMessage
-        // SPARK-39622: The current case must handle the `TaskSetFailed` event before SPARK-39195
-        // due to `maxTaskFailures` is 1 when local mode. After SPARK-39195, it may handle to one
-        // of the `TaskSetFailed` event and `StageFailed` event, and the execution order of the
-        // two events is uncertain, so the assertion of `Authorized committer (attemptNumber=n,
-        // stage=s, partition=p) failed; but task commit success, data duplication may happen.`
-        // is added for workaround.
-        assert(m1.contains("Intentional exception for testing purposes") ||
-          (m1.contains("Authorized committer") &&
-            m1.contains("failed; but task commit success, data duplication may happen.")))
+        assert(m1.contains("Intentional exception for testing purposes"))
       }
 
       withTempPath { dir =>
@@ -1219,9 +1211,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }.getCause.getMessage
-        assert(m2.contains("Intentional exception for testing purposes") ||
-          (m2.contains("Authorized committer") &&
-            m2.contains("failed; but task commit success, data duplication may happen.")))
+        assert(m2.contains("Intentional exception for testing purposes"))
       }
     }
   }
@@ -1314,6 +1304,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         // and dictionary encodings.
         readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
         (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
+    }
+  }
+
+  test("SPARK-40128 read DELTA_LENGTH_BYTE_ARRAY encoded strings") {
+    withAllParquetReaders {
+      checkAnswer(
+        // "fruit" column in this file is encoded using DELTA_LENGTH_BYTE_ARRAY.
+        // The file comes from https://github.com/apache/parquet-testing
+        readResourceParquetFile("test-data/delta_length_byte_array.parquet"),
+        (0 to 999).map(i => Row("apple_banana_mango" + Integer.toString(i * i))))
     }
   }
 

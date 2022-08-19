@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -1140,6 +1140,30 @@ class AdaptiveQueryExecSuite
         assert(plan.asInstanceOf[V2TableWriteExec].child.isInstanceOf[AdaptiveSparkPlanExec])
 
         spark.listenerManager.unregister(listener)
+      }
+    }
+  }
+
+  test("SPARK-37287: apply AQE on child plan of a v1 write command") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+        SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString) {
+        withTable("t1") {
+          val df = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col")
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[CommandResultExec])
+          val commandPhysicalPlan = plan.asInstanceOf[CommandResultExec].commandPhysicalPlan
+          if (enabled) {
+            assert(commandPhysicalPlan.isInstanceOf[AdaptiveSparkPlanExec])
+            assert(commandPhysicalPlan.asInstanceOf[AdaptiveSparkPlanExec]
+              .executedPlan.isInstanceOf[DataWritingCommandExec])
+          } else {
+            assert(commandPhysicalPlan.isInstanceOf[DataWritingCommandExec])
+            assert(commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
+              .child.isInstanceOf[AdaptiveSparkPlanExec])
+          }
+        }
       }
     }
   }

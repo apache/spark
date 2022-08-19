@@ -158,7 +158,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
           bindAddress = value
           argv = tail
         case ("--hostname") :: value :: tail =>
-          hostname = value
+          // entrypoint.sh sets SPARK_EXECUTOR_POD_IP without '[]'
+          hostname = Utils.addBracketsIfNeeded(value)
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt

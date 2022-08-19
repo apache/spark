@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, _}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -250,6 +250,8 @@ case class ConcatWs(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
+      > SELECT _FUNC_(2, 'a', 1);
+       1
   """,
   since = "2.0.0",
   group = "string_funcs")
@@ -296,7 +298,8 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length, queryContext)
+          throw QueryExecutionErrors.invalidArrayIndexError(
+            index, inputExprs.length, getContextOrNull())
         } else {
           null
         }
@@ -348,7 +351,7 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
-      val errorContext = ctx.addReferenceObj("errCtx", queryContext)
+      val errorContext = getContextOrNullCode(ctx)
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
@@ -382,10 +385,10 @@ case class Elt(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 
-  override def initQueryContext(): String = if (failOnError) {
-    origin.context
+  override def initQueryContext(): Option[SQLQueryContext] = if (failOnError) {
+    Some(origin.context)
   } else {
-    ""
+    None
   }
 }
 
@@ -1864,6 +1867,8 @@ case class StringSpace(child: Expression)
        SQL
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
+       k SQL
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1955,6 +1960,8 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 3);
+       Spa
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -1987,6 +1994,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL ');
        10
+      > SELECT _FUNC_(x'537061726b2053514c');
+       9
       > SELECT CHAR_LENGTH('Spark SQL ');
        10
       > SELECT CHARACTER_LENGTH('Spark SQL ');
@@ -2024,6 +2033,8 @@ case class Length(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
+      > SELECT _FUNC_(x'537061726b2053514c');
+       72
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2059,6 +2070,8 @@ case class BitLength(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       9
+      > SELECT _FUNC_(x'537061726b2053514c');
        9
   """,
   since = "2.3.0",
@@ -2248,6 +2261,8 @@ case class Chr(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       U3BhcmsgU1FM
+      > SELECT _FUNC_(x'537061726b2053514c');
        U3BhcmsgU1FM
   """,
   since = "1.5.0",

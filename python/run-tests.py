@@ -71,7 +71,22 @@ else:
     raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(target_dir, test_name, pyspark_python):
+def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
+    """
+    Runs an individual test. This function is called by the multi-process runner of all tests.
+
+    Parameters
+    ----------
+    target_dir
+        Destination for the Hive and log directory.
+    test_name
+        Test name.
+    pyspark_python
+        Python version used to run the test.
+    keep_test_output
+        Flag indicating if the test output should be retained after successful execution.
+
+    """
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -107,7 +122,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
-    per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, suffix=".log")
+    # Delete is always set to False since the cleanup will be either done by removing the
+    # whole test dir, or the test output is retained.
+    per_test_output = tempfile.NamedTemporaryFile(prefix=output_prefix, dir=tmp_dir,
+                                                  suffix=".log", delete=False)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
@@ -115,12 +133,13 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
-        # There exists a race condition in Python and it causes flakiness in MacOS
-        # https://github.com/python/cpython/issues/73885
-        if platform.system() == "Darwin":
-            os.system("rm -rf " + tmp_dir)
-        else:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        if not keep_test_output:
+            # There exists a race condition in Python and it causes flakiness in MacOS
+            # https://github.com/python/cpython/issues/73885
+            if platform.system() == "Darwin":
+                os.system("rm -rf " + tmp_dir)
+            else:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
@@ -226,6 +245,13 @@ def parse_opts():
             "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
             "'--modules' option is ignored if they are given.")
     )
+    group.add_argument(
+        "-k", "--keep-test-output", action='store_true',
+        default=False,
+        help=("If set to true will retain the temporary test directories. In addition, the "
+              "standard output and standard error are redirected to a file in the target "
+              "directory.")
+    )
 
     args, unknown = parser.parse_known_args()
     if unknown:
@@ -317,7 +343,8 @@ def main():
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(target_dir, test_goal, python_exec)
+                run_individual_python_test(target_dir, test_goal,
+                                           python_exec, opts.keep_test_output)
             finally:
                 task_queue.task_done()
 

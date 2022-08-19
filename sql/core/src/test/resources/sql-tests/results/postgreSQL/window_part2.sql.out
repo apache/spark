@@ -222,7 +222,7 @@ from range(9223372036854775804, 9223372036854775807) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 
 
 -- !query
@@ -232,7 +232,7 @@ from range(-9223372036854775806, -9223372036854775805) x
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 
 
 -- !query

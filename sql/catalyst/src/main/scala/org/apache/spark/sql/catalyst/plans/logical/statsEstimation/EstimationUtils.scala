@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
@@ -82,10 +82,20 @@ object EstimationUtils {
    */
   def getAliasStats(
       expressions: Seq[Expression],
-      attributeStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
+      attributeStats: AttributeMap[ColumnStat],
+      rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
+      case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
+        val value = expr.eval(EmptyRow)
+        val size = expr.dataType.defaultSize
+        val columnStat = if (value == null) {
+          ColumnStat(Some(0), None, None, Some(rowCount), Some(size), Some(size), None, 2)
+        } else {
+          ColumnStat(Some(1), Some(value), Some(value), Some(0), Some(size), Some(size), None, 2)
+        }
+        alias.toAttribute -> columnStat
     }
   }
 

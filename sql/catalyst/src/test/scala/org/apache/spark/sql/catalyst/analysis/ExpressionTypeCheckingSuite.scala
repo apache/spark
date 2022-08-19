@@ -247,9 +247,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     assert(Literal.create(Array(1, 2, null), ArrayType(IntegerType)).sql ==
       "ARRAY(1, 2, CAST(NULL AS INT))")
     assert(Literal.default(StructType(Seq(StructField("col", StringType)))).sql ==
-      "NAMED_STRUCT(col, '')")
+      "NAMED_STRUCT('col', '')")
     assert(Literal.default(StructType(Seq(StructField("col", NullType)))).sql ==
-      "NAMED_STRUCT(col, NULL)")
+      "NAMED_STRUCT('col', NULL)")
     assert(Literal.create(Map(42L -> true), MapType(LongType, BooleanType)).sql ==
       "MAP(42L, true)")
     assert(Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==

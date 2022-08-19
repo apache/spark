@@ -68,6 +68,7 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
+    case s: UTF8String => Literal(s, StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
@@ -499,7 +500,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       val structFields: Array[String] =
         structNames.zip(structValues).map {
-          kv => s"${kv._1}, ${kv._2}"
+          kv => s"'${kv._1}', ${kv._2}"
         }
       s"NAMED_STRUCT(${structFields.mkString(", ")})"
     case (data: ArrayBasedMapData, mapType: MapType) =>

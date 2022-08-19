@@ -26,9 +26,14 @@ import org.apache.spark.sql.AnalysisException
  */
 class InvalidUDFClassException private[sql](
     message: String,
-    errorClass: Option[String] = None)
-  extends AnalysisException(message = message, errorClass = errorClass) {
+    errorClass: Option[String] = None,
+    messageParameters: Array[String] = Array.empty)
+  extends AnalysisException(
+    message = message, errorClass = errorClass, messageParameters = messageParameters) {
 
   def this(errorClass: String, messageParameters: Array[String]) =
-    this(SparkThrowableHelper.getMessage(errorClass, null, messageParameters), Some(errorClass))
+    this(
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
+      Some(errorClass),
+      messageParameters)
 }

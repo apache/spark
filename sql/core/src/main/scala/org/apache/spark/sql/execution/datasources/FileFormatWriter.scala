@@ -35,13 +35,10 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -52,25 +49,6 @@ object FileFormatWriter extends Logging {
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
       outputColumns: Seq[Attribute])
-
-  /** A function that converts the empty string to null for partition values. */
-  case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
-    override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
-    override def nullable: Boolean = true
-    override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-      nullSafeCodeGen(ctx, ev, c => {
-        s"""if ($c.numBytes() == 0) {
-           |  ${ev.isNull} = true;
-           |  ${ev.value} = null;
-           |} else {
-           |  ${ev.value} = $c;
-           |}""".stripMargin
-      })
-    }
-
-    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
-      copy(child = newChild)
-  }
 
   /** Describes how concurrent output writers should be executed. */
   case class ConcurrentOutputWriterSpec(
@@ -83,6 +61,7 @@ object FileFormatWriter extends Logging {
    */
   private[sql] var outputOrderingMatched: Boolean = false
 
+  // scalastyle:off argcount
   /**
    * Basic work flow of this command is:
    * 1. Driver side setup, including output committer initialization and data source specific
@@ -107,8 +86,10 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      options: Map[String, String])
+      options: Map[String, String],
+      numStaticPartitionCols: Int = 0)
     : Set[String] = {
+    require(partitionColumns.size >= numStaticPartitionCols)
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
@@ -122,14 +103,16 @@ object FileFormatWriter extends Logging {
       .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation))
     val dataColumns = finalOutputSpec.outputColumns.filterNot(partitionSet.contains)
 
-    var needConvert = false
-    val projectList: Seq[NamedExpression] = plan.output.map {
-      case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
-        needConvert = true
-        Alias(Empty2Null(p), p.name)()
-      case attr => attr
+    val hasEmpty2Null = plan.find {
+      case p: ProjectExec => V1WritesUtils.hasEmptyToNull(p.projectList)
+      case _ => false
+    }.isDefined
+    val empty2NullPlan = if (hasEmpty2Null) {
+      plan
+    } else {
+      val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
+      if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
     }
-    val empty2NullPlan = if (needConvert) ProjectExec(projectList, plan) else plan
 
     val writerBucketSpec = V1WritesUtils.getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = V1WritesUtils.getBucketSortColumns(bucketSpec, dataColumns)
@@ -160,11 +143,13 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
-    // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering =
-      partitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
+    // We should first sort by dynamic partition columns, then bucket id, and finally sorting
+    // columns.
+    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
+        writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     // the sort order doesn't matter
-    val actualOrdering = empty2NullPlan.outputOrdering.map(_.child)
+    // Use the output ordering from the original plan before adding the empty2null projection.
+    val actualOrdering = plan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
       false
     } else {
@@ -264,6 +249,7 @@ object FileFormatWriter extends Logging {
       throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
+  // scalastyle:on argcount
 
   /** Writes data out in a single Spark task. */
   private def executeTask(

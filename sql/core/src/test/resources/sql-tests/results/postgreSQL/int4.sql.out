@@ -197,7 +197,7 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^^^^^^
@@ -220,7 +220,7 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_multiply' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^
@@ -243,7 +243,7 @@ SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^^^^^^
@@ -267,7 +267,7 @@ SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^
@@ -291,7 +291,7 @@ SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^^^^^^
@@ -315,7 +315,7 @@ SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead. If necessary set spark.sql.ansi.enabled to "false" to bypass this error.
 == SQL(line 1, position 26) ==
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
                          ^^^^^^^^^^^^^^^

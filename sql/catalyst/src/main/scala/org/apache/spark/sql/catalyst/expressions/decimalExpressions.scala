@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -122,14 +123,10 @@ case class CheckOverflow(
       dataType.scale,
       Decimal.ROUND_HALF_UP,
       nullOnOverflow,
-      queryContext)
+      getContextOrNull())
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      "\"\""
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
@@ -148,10 +145,10 @@ case class CheckOverflow(
   override protected def withNewChildInternal(newChild: Expression): CheckOverflow =
     copy(child = newChild)
 
-  override def initQueryContext(): String = if (nullOnOverflow) {
-    ""
+  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
+    Some(origin.context)
   } else {
-    origin.context
+    None
   }
 }
 
@@ -160,7 +157,7 @@ case class CheckOverflowInSum(
     child: Expression,
     dataType: DecimalType,
     nullOnOverflow: Boolean,
-    queryContext: String = "") extends UnaryExpression {
+    context: SQLQueryContext) extends UnaryExpression with SupportQueryContext {
 
   override def nullable: Boolean = true
 
@@ -168,24 +165,20 @@ case class CheckOverflowInSum(
     val value = child.eval(input)
     if (value == null) {
       if (nullOnOverflow) null
-      else throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
+      else throw QueryExecutionErrors.overflowInSumOfDecimalError(context)
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
         dataType.scale,
         Decimal.ROUND_HALF_UP,
         nullOnOverflow,
-        queryContext)
+        context)
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val errorContextCode = if (nullOnOverflow) {
-      "\"\""
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
@@ -215,6 +208,8 @@ case class CheckOverflowInSum(
 
   override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
 }
 
 /**
@@ -260,12 +255,12 @@ case class DecimalDivideWithOverflowCheck(
     left: Expression,
     right: Expression,
     override val dataType: DecimalType,
-    avgQueryContext: String,
+    context: SQLQueryContext,
     nullOnOverflow: Boolean)
   extends BinaryExpression with ExpectsInputTypes with SupportQueryContext {
   override def nullable: Boolean = nullOnOverflow
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, DecimalType)
-  override def initQueryContext(): String = avgQueryContext
+  override def initQueryContext(): Option[SQLQueryContext] = Option(context)
   def decimalMethod: String = "$div"
 
   override def eval(input: InternalRow): Any = {
@@ -274,22 +269,18 @@ case class DecimalDivideWithOverflowCheck(
       if (nullOnOverflow)  {
         null
       } else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(queryContext)
+        throw QueryExecutionErrors.overflowInSumOfDecimalError(getContextOrNull())
       }
     } else {
       val value2 = right.eval(input)
       dataType.fractional.asInstanceOf[Fractional[Any]].div(value1, value2).asInstanceOf[Decimal]
         .toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow,
-          queryContext)
+          getContextOrNull())
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val errorContextCode = if (nullOnOverflow) {
-      "\"\""
-    } else {
-      ctx.addReferenceObj("errCtx", queryContext)
-    }
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {

@@ -620,7 +620,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -637,8 +637,6 @@ case class ArrayExists(
     } else {
       super.nullable
     }
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
@@ -708,12 +706,10 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback with Predicate {
 
   override def nullable: Boolean =
       super.nullable || function.nullable
-
-  override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
 
