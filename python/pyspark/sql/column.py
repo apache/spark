@@ -427,7 +427,7 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column representing whether each element of Column as items contained in key.
+            Column representing the item(s) got at position out of a list or by key out of a dict.
 
         Examples
         --------
@@ -509,7 +509,7 @@ class Column:
         -------
         :class:`Column`
             Column representing whether each element of Column
-            which field added/replaced by fileName.
+            which field added/replaced by fieldName.
 
         Examples
         --------
@@ -553,7 +553,7 @@ class Column:
         Returns
         -------
         :class:`Column`
-            Column representing whether each element of Column which field dropped by fileName.
+            Column representing whether each element of Column with field dropped by fieldName.
 
         Examples
         --------
@@ -820,7 +820,7 @@ class Column:
         Parameters
         ----------
         cols
-            The result will only be true at a location if all the labels match in the Column.
+            The result will only be true at a location if any value matches in the Column.
 
         Returns
         -------
