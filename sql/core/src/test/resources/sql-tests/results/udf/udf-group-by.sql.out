@@ -199,7 +199,14 @@ SELECT a AS k, udf(COUNT(udf(b))) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `k` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 57
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+  }
+}
 
 
 -- !query

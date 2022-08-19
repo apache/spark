@@ -22,13 +22,13 @@ import java.util.List
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
-import org.fusesource.leveldbjni.JniDBFactory
-import org.iq80.leveldb.{DB, Options}
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.shuffledb.DB
+import org.apache.spark.network.shuffledb.DBBackend
+import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
  * just a cheat to get package-visible members in tests
@@ -68,7 +68,7 @@ object ShuffleTestAccessor {
     mergeManager.recoveryFile
   }
 
-  def shuffleServiceLevelDB(resolver: ExternalShuffleBlockResolver): DB = {
+  def shuffleServiceDB(resolver: ExternalShuffleBlockResolver): DB = {
     resolver.db
   }
 
@@ -208,11 +208,9 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
+    dbBackend: DBBackend,
     file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val options: Options = new Options
-    options.createIfMissing(true)
-    val factory = new JniDBFactory
-    val db = factory.open(file, options)
+    val db = DBProvider.initDB(dbBackend, file)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result
