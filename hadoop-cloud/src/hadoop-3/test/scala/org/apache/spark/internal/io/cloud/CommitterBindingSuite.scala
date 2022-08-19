@@ -54,22 +54,15 @@ class CommitterBindingSuite extends SparkFunSuite {
    */
   test("BindingParquetOutputCommitter binds to the inner committer") {
 
-
     val path = new Path("http://example/data")
     val job = newJob(path)
     val conf = job.getConfiguration
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
     conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
-
-
-
     StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
     val tContext: TaskAttemptContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
-
-
     val parquet = new BindingParquetOutputCommitter(path, tContext)
     val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitterWithDynamicPartioning]
-
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)
@@ -113,23 +106,18 @@ class CommitterBindingSuite extends SparkFunSuite {
 
   test("committer protocol can be serialized and deserialized") {
     val tempDir = File.createTempFile("ser", ".bin")
-
     tempDir.delete()
     val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString, false)
-
     val serData = File.createTempFile("ser", ".bin")
     var out: ObjectOutputStream = null
     var in: ObjectInputStream = null
-
     try {
       out = new ObjectOutputStream(new FileOutputStream(serData))
       out.writeObject(committer)
       out.close
       in = new ObjectInputStream(new FileInputStream(serData))
       val result = in.readObject()
-
       val committer2 = result.asInstanceOf[PathOutputCommitProtocol]
-
       assert(committer.destination === committer2.destination,
         "destination mismatch on round trip")
       assert(committer.destPath === committer2.destPath,
@@ -144,7 +132,6 @@ class CommitterBindingSuite extends SparkFunSuite {
     val instance = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
       jobId, "file:///tmp", false)
-
     val protocol = instance.asInstanceOf[PathOutputCommitProtocol]
     assert("file:///tmp" === protocol.destination)
   }
@@ -155,13 +142,11 @@ class CommitterBindingSuite extends SparkFunSuite {
     val conf = job.getConfiguration
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
     conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
-
     StubPathOutputCommitterBinding.bind(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val committer = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
       jobId, path.toUri.toString, true)
-
     val ioe = intercept[IOException] {
       committer.setupJob(tContext)
     }
@@ -182,7 +167,6 @@ class CommitterBindingSuite extends SparkFunSuite {
     val conf = job.getConfiguration
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
     conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
-
     StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val committer: PathOutputCommitProtocol = FileCommitProtocol.instantiate(
@@ -192,7 +176,6 @@ class CommitterBindingSuite extends SparkFunSuite {
       true).asInstanceOf[PathOutputCommitProtocol]
     committer.setupJob(tContext)
     committer.setupTask(tContext)
-
     val spec = FileNameSpec(".lotus.", ".123")
     val absPath = committer.newTaskTempFileAbsPath(
       tContext,
