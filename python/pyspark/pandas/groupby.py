@@ -2382,7 +2382,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                   ["g", "g3"],
         ...                   ["h", "h0"],
         ...                   ["h", "h1"]], columns=["A", "B"])
-        >>> df.groupby("A").head(-1) # doctest: +SKIP
+        >>> df.groupby("A").head(-1)
            A   B
         0  g  g0
         1  g  g1
@@ -2450,7 +2450,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ...                   ["g", "g3"],
         ...                   ["h", "h0"],
         ...                   ["h", "h1"]], columns=["A", "B"])
-        >>> df.groupby("A").tail(-1) # doctest: +SKIP
+        >>> df.groupby("A").tail(-1)
            A   B
         3  g  g3
         2  g  g2
