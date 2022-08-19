@@ -577,8 +577,9 @@ def avg(col: "ColumnOrName") -> Column:
 def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
+    An alias of :func:`avg`.
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
@@ -775,7 +776,7 @@ def asin(col: "ColumnOrName") -> Column:
     """
     Computes inverse sine of the input column.
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
 
     Parameters
     ----------
