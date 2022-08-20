@@ -493,7 +493,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 return None
 
-    @property  # type: ignore[misc]
+    @property
     def sparkContext(self) -> SparkContext:
         """
         Returns the underlying :class:`SparkContext`.
@@ -517,7 +517,7 @@ class SparkSession(SparkConversionMixin):
         """
         return self._sc
 
-    @property  # type: ignore[misc]
+    @property
     def version(self) -> str:
         """
         The version of Spark on which this application is running.
@@ -535,7 +535,7 @@ class SparkSession(SparkConversionMixin):
         """
         return self._jsparkSession.version()
 
-    @property  # type: ignore[misc]
+    @property
     def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 
