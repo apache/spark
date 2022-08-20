@@ -3872,18 +3872,39 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
-def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Column:
-    r"""Replace all substrings of the specified string value that match regexp with rep.
+def regexp_replace(
+    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+) -> Column:
+    r"""Replace all substrings of the specified string value that match regexp with replacement.
 
     .. versionadded:: 1.5.0
 
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string value
+    pattern : :class:`~pyspark.sql.Column` or str
+        column object or str containing the regexp pattern
+    replacement : :class:`~pyspark.sql.Column` or str
+        column object or str containing the replacement
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('100-200',)], ['str'])
+    >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
     [Row(d='-----')]
+    >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
+    [Row(d='-----')]
     """
-    return _invoke_function("regexp_replace", _to_java_column(str), pattern, replacement)
+    if isinstance(pattern, str):
+        pattern_col = _create_column_from_literal(pattern)
+    else:
+        pattern_col = _to_java_column(pattern)
+    if isinstance(replacement, str):
+        replacement_col = _create_column_from_literal(replacement)
+    else:
+        replacement_col = _to_java_column(replacement)
+    return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
 
 
 def initcap(col: "ColumnOrName") -> Column:
