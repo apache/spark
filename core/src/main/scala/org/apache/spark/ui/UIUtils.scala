@@ -692,4 +692,3 @@ private[spark] object UIUtils extends Logging {
     }
   }
 }
-
