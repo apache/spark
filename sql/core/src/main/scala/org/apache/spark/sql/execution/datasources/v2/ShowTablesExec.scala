@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.convert.ImplicitConversions.`map AsScala`
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec.convertToPartIdent
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
