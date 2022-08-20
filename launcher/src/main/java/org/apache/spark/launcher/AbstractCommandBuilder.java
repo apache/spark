@@ -304,4 +304,3 @@ abstract class AbstractCommandBuilder {
   }
 
 }
-
