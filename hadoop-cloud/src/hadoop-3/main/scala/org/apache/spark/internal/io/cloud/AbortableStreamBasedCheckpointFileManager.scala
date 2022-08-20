@@ -33,7 +33,7 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
 
   if (!fc.hasPathCapability(path, CommonPathCapabilities.ABORTABLE_STREAM)) {
     throw new UnsupportedFileSystemException("AbortableStreamBasedCheckpointFileManager requires" +
-      " an fs with abortable stream support")
+      s" an fs (path: $path) with abortable stream support")
   }
 
   logInfo(s"Writing atomically to $path based on abortable stream")
