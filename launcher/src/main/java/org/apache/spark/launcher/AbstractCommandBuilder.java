@@ -17,21 +17,11 @@
 
 package org.apache.spark.launcher;
 
-import static org.apache.spark.launcher.CommandBuilderUtils.DEFAULT_PROPERTIES_FILE;
-import static org.apache.spark.launcher.CommandBuilderUtils.ENV_SPARK_HOME;
-import static org.apache.spark.launcher.CommandBuilderUtils.checkArgument;
-import static org.apache.spark.launcher.CommandBuilderUtils.checkState;
-import static org.apache.spark.launcher.CommandBuilderUtils.findJarsDir;
-import static org.apache.spark.launcher.CommandBuilderUtils.firstNonEmpty;
-import static org.apache.spark.launcher.CommandBuilderUtils.isEmpty;
-import static org.apache.spark.launcher.CommandBuilderUtils.join;
-import static org.apache.spark.launcher.CommandBuilderUtils.parseOptionString;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,6 +32,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Abstract Spark command builder that defines common functionality.
@@ -312,3 +304,4 @@ abstract class AbstractCommandBuilder {
   }
 
 }
+
