@@ -26,19 +26,17 @@ import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
-
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-
 import org.apache.spark._
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
-import org.apache.spark.sql.catalyst.{TableIdentifier, WalkedTypePath}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier, WalkedTypePath}
 import org.apache.spark.sql.catalyst.ScalaReflection.Schema
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -2089,4 +2087,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         toSQLId(funcName),
         pattern))
   }
+
+  def showTableExtendedMultiPartitionUnsupportedError(tableName: String): Throwable = {
+    new UnsupportedOperationException(
+      s"The table $tableName does not support show table extended of multiple partition.")
+  }
+
+  def notExistPartitionError(
+      tableName: String,
+      partitionIdent: InternalRow,
+      partitionSchema: StructType): Throwable = {
+    new NoSuchPartitionException(tableName, partitionIdent, partitionSchema)
+  }
+
 }

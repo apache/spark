@@ -176,10 +176,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _ =>
         }
 
-      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
-      case _: ShowTableExtended =>
-        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
-
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           // Check argument data types of higher-order functions downwards first.

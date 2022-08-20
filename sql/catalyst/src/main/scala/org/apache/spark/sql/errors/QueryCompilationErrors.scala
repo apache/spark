@@ -1559,10 +1559,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       "definitions will take precedence. See more details in SPARK-28228.")
   }
 
-  def commandUnsupportedInV2TableError(name: String): Throwable = {
-    new AnalysisException(s"$name is not supported for v2 tables.")
-  }
-
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(s"""Cannot resolve column name "$colName" among ($fieldNames)""")
