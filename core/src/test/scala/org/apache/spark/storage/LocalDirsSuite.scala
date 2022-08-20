@@ -85,5 +85,4 @@ class LocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
     assert(!f1.exists())
     assert(!f2.exists())
   }
-
 }
