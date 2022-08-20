@@ -23,7 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.types.Decimal.ROUND_HALF_UP
-import org.apache.spark.sql.util.Int128Math
+import org.apache.spark.sql.util.{Int128Math, Int128Math2}
 
 @Unstable
 final class Decimal128 extends Ordered[Decimal128] with Serializable {
@@ -181,16 +181,16 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
         (this._scale, 0, false)
       }
       val result = if (rescale == 0) {
-        Int128Math.add(toInt128, that.toInt128)
+        Int128Math2.add(toInt128, that.toInt128)
       } else {
-        operatorWithRescale(toInt128, that.toInt128, rescale, rescaleLeft) (Int128Math.add)
+        operatorWithRescale(toInt128, that.toInt128, rescale, rescaleLeft) (Int128Math2.add)
       }
 
-      if (Int128.overflows(result.head, result.last)) {
-        throw new ArithmeticException("Decimal overflow")
+      if (Int128.overflows(result._1, result._2)) {
+        throw new ArithmeticException("Overflow in decimal addition")
       }
 
-      Decimal128(Int128(result.head, result.last), resultScale)
+      Decimal128(Int128(result._1, result._2), resultScale)
     }
   }
 
@@ -309,45 +309,45 @@ object Decimal128 {
     }
   }
 
-  def add(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Array[Long] =
-    add(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
+//  def add(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Array[Long] =
+//    add(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
 
-  private def add(
-      leftHigh: Long,
-      leftLow: Long,
-      rightHigh: Long,
-      rightLow: Long,
-      rescale: Int,
-      rescaleLeft: Boolean): Array[Long] = {
-    val result = new Array[Long](2)
-    if (rescaleLeft) {
-      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
-      Int128Math.add(result.head, result.last, rightHigh, rightLow)
-    } else {
-      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
-      Int128Math.add(leftHigh, leftLow, result.head, result.last)
-    }
-  }
-
-  def compare(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Int =
-    compare(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
-
-  def compare(
-      leftHigh: Long,
-      leftLow: Long,
-      rightHigh: Long,
-      rightLow: Long,
-      rescale: Int,
-      rescaleLeft: Boolean): Int = {
-    val result = new Array[Long](2)
-    if (rescaleLeft) {
-      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
-      Int128.compare(result.head, result.last, rightHigh, rightLow)
-    } else {
-      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
-      Int128.compare(leftHigh, leftLow, result.head, result.last)
-    }
-  }
+//  private def add(
+//      leftHigh: Long,
+//      leftLow: Long,
+//      rightHigh: Long,
+//      rightLow: Long,
+//      rescale: Int,
+//      rescaleLeft: Boolean): Array[Long] = {
+//    val result = new Array[Long](2)
+//    if (rescaleLeft) {
+//      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
+//      Int128Math.add(result.head, result.last, rightHigh, rightLow)
+//    } else {
+//      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
+//      Int128Math.add(leftHigh, leftLow, result.head, result.last)
+//    }
+//  }
+//
+//  def compare(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Int =
+//    compare(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
+//
+//  def compare(
+//      leftHigh: Long,
+//      leftLow: Long,
+//      rightHigh: Long,
+//      rightLow: Long,
+//      rescale: Int,
+//      rescaleLeft: Boolean): Int = {
+//    val result = new Array[Long](2)
+//    if (rescaleLeft) {
+//      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
+//      Int128.compare(result.head, result.last, rightHigh, rightLow)
+//    } else {
+//      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
+//      Int128.compare(leftHigh, leftLow, result.head, result.last)
+//    }
+//  }
 
   def operatorWithRescale[T](
       left: Int128,
