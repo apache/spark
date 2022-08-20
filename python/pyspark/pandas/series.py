@@ -2114,7 +2114,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._psdf._update_internal_frame(psser._psdf._internal, requires_same_anchor=False)
+            self._psdf._update_internal_frame(psser._psdf._internal, check_same_anchor=False)
             return None
         else:
             return psser.copy()
@@ -2418,7 +2418,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
                     data_fields=[self._internal.data_fields[0]],
                 )
-                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                self._psdf._update_internal_frame(internal, check_same_anchor=False)
                 return None
             else:
                 return self._with_new_scol(
@@ -5129,7 +5129,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._column_label, scol  # TODO: dtype?
             )
 
-            self._psdf._update_internal_frame(internal.resolved_copy, requires_same_anchor=False)
+            self._psdf._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
 
     def where(self, cond: "Series", other: Any = np.nan) -> "Series":
         """
