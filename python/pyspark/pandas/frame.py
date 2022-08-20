@@ -569,7 +569,7 @@ class DataFrame(Frame, Generic[T]):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df  # doctest: +SKIP
+        >>> df
                max_speed  shield
         cobra          1       2
         viper          4       5
@@ -7249,19 +7249,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> df = ps.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
 
-        >>> df.sort_index()  # doctest: +SKIP
+        >>> df.sort_index()
                 A
         a     1.0
         b     2.0
         None  NaN
 
-        >>> df.sort_index(ascending=False)  # doctest: +SKIP
+        >>> df.sort_index(ascending=False)
                 A
         b     2.0
         a     1.0
         None  NaN
 
-        >>> df.sort_index(na_position='first')  # doctest: +SKIP
+        >>> df.sort_index(na_position='first')
                 A
         None  NaN
         a     1.0
@@ -7274,7 +7274,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  NaN
 
         >>> df.sort_index(inplace=True)
-        >>> df  # doctest: +SKIP
+        >>> df
                 A
         a     1.0
         b     2.0

@@ -2969,7 +2969,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         >>> s = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
-        >>> s.sort_index()  # doctest: +SKIP
+        >>> s.sort_index()
         a       1.0
         b       2.0
         None    NaN
@@ -2981,20 +2981,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    NaN
         dtype: float64
 
-        >>> s.sort_index(ascending=False)  # doctest: +SKIP
+        >>> s.sort_index(ascending=False)
         b       2.0
         a       1.0
         None    NaN
         dtype: float64
 
-        >>> s.sort_index(na_position='first')  # doctest: +SKIP
+        >>> s.sort_index(na_position='first')
         None    NaN
         a       1.0
         b       2.0
         dtype: float64
 
         >>> s.sort_index(inplace=True)
-        >>> s  # doctest: +SKIP
+        >>> s
         a       1.0
         b       2.0
         None    NaN
