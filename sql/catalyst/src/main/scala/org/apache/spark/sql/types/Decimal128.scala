@@ -23,7 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.types.Decimal.ROUND_HALF_UP
-import org.apache.spark.sql.util.{Int128Math, Int128Math2}
+import org.apache.spark.sql.util.Int128Math2
 
 @Unstable
 final class Decimal128 extends Ordered[Decimal128] with Serializable {
@@ -309,46 +309,6 @@ object Decimal128 {
     }
   }
 
-//  def add(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Array[Long] =
-//    add(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
-
-//  private def add(
-//      leftHigh: Long,
-//      leftLow: Long,
-//      rightHigh: Long,
-//      rightLow: Long,
-//      rescale: Int,
-//      rescaleLeft: Boolean): Array[Long] = {
-//    val result = new Array[Long](2)
-//    if (rescaleLeft) {
-//      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
-//      Int128Math.add(result.head, result.last, rightHigh, rightLow)
-//    } else {
-//      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
-//      Int128Math.add(leftHigh, leftLow, result.head, result.last)
-//    }
-//  }
-//
-//  def compare(left: Int128, right: Int128, rescale: Int, rescaleLeft: Boolean): Int =
-//    compare(left.high, left.low, right.high, right.low, rescale, rescaleLeft)
-//
-//  def compare(
-//      leftHigh: Long,
-//      leftLow: Long,
-//      rightHigh: Long,
-//      rightLow: Long,
-//      rescale: Int,
-//      rescaleLeft: Boolean): Int = {
-//    val result = new Array[Long](2)
-//    if (rescaleLeft) {
-//      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
-//      Int128.compare(result.head, result.last, rightHigh, rightLow)
-//    } else {
-//      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
-//      Int128.compare(leftHigh, leftLow, result.head, result.last)
-//    }
-//  }
-
   def operatorWithRescale[T](
       left: Int128,
       right: Int128,
@@ -364,13 +324,12 @@ object Decimal128 {
       rightLow: Long,
       rescale: Int,
       rescaleLeft: Boolean) (f: (Long, Long, Long, Long) => T): T = {
-    val result = new Array[Long](2)
     if (rescaleLeft) {
-      Int128Math.rescale(leftHigh, leftLow, rescale, result, 0)
-      f(result.head, result.last, rightHigh, rightLow)
+      val (newLeftHigh, newLeftLow) = Int128Math2.rescale(leftHigh, leftLow, rescale)
+      f(newLeftHigh, newLeftLow, rightHigh, rightLow)
     } else {
-      Int128Math.rescale(rightHigh, rightLow, rescale, result, 0)
-      f(leftHigh, leftLow, result.head, result.last)
+      val (newRightHigh, newRightLow) = Int128Math2.rescale(rightHigh, rightLow, rescale)
+      f(leftHigh, leftLow, newRightHigh, newRightLow)
     }
   }
 
