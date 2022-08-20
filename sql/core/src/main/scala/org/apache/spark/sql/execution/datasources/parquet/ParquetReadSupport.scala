@@ -24,6 +24,7 @@ import java.util.{Locale, Map => JMap, UUID}
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
@@ -546,5 +547,36 @@ object ParquetReadSupport extends Logging {
     case p: PrimitiveType => p.getId != null
     // We don't require all fields to have IDs, so we use `exists` here.
     case g: GroupType => g.getId != null || g.getFields.asScala.exists(containsFieldIds)
+  }
+
+  def setConf(hadoopConf: Configuration, readDataSchema: StructType, sqlConf: SQLConf): Unit = {
+    val readDataSchemaAsJson = readDataSchema.json
+
+    hadoopConf.set(
+      ParquetInputFormat.READ_SUPPORT_CLASS,
+      classOf[ParquetReadSupport].getName)
+    hadoopConf.set(
+      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      readDataSchemaAsJson)
+    hadoopConf.set(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key,
+      sqlConf.sessionLocalTimeZone)
+    hadoopConf.setBoolean(
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+      sqlConf.nestedSchemaPruningEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.CASE_SENSITIVE.key,
+      sqlConf.caseSensitiveAnalysis)
+
+    // Sets flags for `ParquetToSparkSchemaConverter`
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      sqlConf.isParquetBinaryAsString)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      sqlConf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sqlConf.parquetTimestampNTZEnabled)
   }
 }
