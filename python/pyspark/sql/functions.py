@@ -4914,25 +4914,44 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
 
-def array_sort(col: "ColumnOrName") -> Column:
+def array_sort(
+    col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
+) -> Column:
     """
     Collection function: sorts the input array in ascending order. The elements of the input array
     must be orderable. Null elements will be placed at the end of the returned array.
 
     .. versionadded:: 2.4.0
+    .. versionchanged:: 3.4.0
+        Can take a `comparator` function.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         name of column or expression
+    comparator : callable, optional
+        A binary ``(Column, Column) -> Column: ...``.
+        The comparator will take two
+        arguments representing two elements of the array. It returns a negative integer, 0, or a
+        positive integer as the first element is less than, equal to, or greater than the second
+        element. If the comparator function returns null, the function will fail and raise an error.
 
     Examples
     --------
     >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
     >>> df.select(array_sort(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+    >>> df = spark.createDataFrame([(["foo", "foobar", None, "bar"],),(["foo"],),([],)], ['data'])
+    >>> df.select(array_sort(
+    ...     "data",
+    ...     lambda x, y: when(x.isNull() | y.isNull(), lit(0)).otherwise(length(y) - length(x))
+    ... ).alias("r")).collect()
+    [Row(r=['foobar', 'foo', None, 'bar']), Row(r=['foo']), Row(r=[])]
     """
-    return _invoke_function_over_columns("array_sort", col)
+    if comparator is None:
+        return _invoke_function_over_columns("array_sort", col)
+    else:
+        return _invoke_higher_order_function("ArraySort", [col], [comparator])
 
 
 def shuffle(col: "ColumnOrName") -> Column:
