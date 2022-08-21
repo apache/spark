@@ -20,7 +20,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.InputPartition
 
@@ -50,6 +51,12 @@ case class FilePartition(index: Int, files: Array[PartitionedFile])
 
 object FilePartition extends Logging {
 
+  private val taskParallelismNum = {
+    val sparkConf = SparkSession.active.sparkContext.conf
+    sparkConf.get(config.EXECUTOR_CORES) / sparkConf.get(config.CPUS_PER_TASK) *
+      SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
+  }
+
   def getFilePartitions(
       sparkSession: SparkSession,
       partitionedFiles: Seq[PartitionedFile],
@@ -69,10 +76,23 @@ object FilePartition extends Logging {
       currentSize = 0
     }
 
-    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val expectedFilePartitionNum =
+      sparkSession.sessionState.conf.filesExpectPartitionNum.getOrElse(taskParallelismNum)
+    var openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    var maxPartitionBytes = maxSplitBytes
+    if (partitionedFiles.size < expectedFilePartitionNum) {
+      openCostInBytes = maxSplitBytes
+    } else {
+      val totalSize = partitionedFiles.foldLeft(0L)((totalSize, file) => totalSize + file.length)
+      val expectFilePartitionSize = totalSize / expectedFilePartitionNum
+      if (expectFilePartitionSize < maxPartitionBytes) {
+        maxPartitionBytes = expectFilePartitionSize
+      }
+    }
+    logInfo(s"Using $openCostInBytes as openCost.")
     // Assign files to partitions using "Next Fit Decreasing"
     partitionedFiles.foreach { file =>
-      if (currentSize + file.length > maxSplitBytes) {
+      if (currentSize + file.length > maxPartitionBytes) {
         closePartition()
       }
       // Add the given file to the current partition.

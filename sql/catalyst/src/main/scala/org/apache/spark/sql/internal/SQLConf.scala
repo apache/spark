@@ -1644,6 +1644,18 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
+  val FILES_EXPECTED_PARTITION_NUM = buildConf("spark.sql.files.expectPartitionNum")
+    .doc("The expected number of File partitions. It will automatically merge file splits to " +
+      "provide the best concurrency when the file partitions after split exceed the " +
+      "expected num and the size of file partition is less than maxSplitSize. If not set, " +
+      "the default value is the number of concurrent tasks configured by user. " +
+      "This configuration is effective only when using file-based sources such as " +
+      "Parquet, JSON and ORC.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(v => v > 0, "The expected partition number must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -4104,6 +4116,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
+  def filesExpectPartitionNum: Option[Int] = getConf(FILES_EXPECTED_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
