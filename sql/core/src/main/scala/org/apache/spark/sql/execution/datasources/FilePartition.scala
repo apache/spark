@@ -76,14 +76,17 @@ object FilePartition extends Logging {
       currentSize = 0
     }
 
+    val sqlConf = sparkSession.sessionState.conf
+    var openCostInBytes = sqlConf.filesOpenCostInBytes
     val expectedFilePartitionNum =
-      sparkSession.sessionState.conf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
-    var openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    var maxPartitionBytes = maxSplitBytes
+      sqlConf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
+    var maxPartitionBytes = sqlConf.filesMaxPartitionBytes
     if (partitionedFiles.size < expectedFilePartitionNum) {
       openCostInBytes = maxSplitBytes
     } else {
-      val totalSize = partitionedFiles.foldLeft(0L)((totalSize, file) => totalSize + file.length)
+      val totalSize = partitionedFiles.foldLeft(0L) {
+        (totalSize, file) => totalSize + file.length + openCostInBytes
+      }
       val expectFilePartitionSize = totalSize / expectedFilePartitionNum
       if (expectFilePartitionSize < maxPartitionBytes) {
         maxPartitionBytes = expectFilePartitionSize

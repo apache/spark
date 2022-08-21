@@ -46,31 +46,33 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
-    val table =
-      createTable(
-        files = Seq(
-          "file1" -> 1,
-          "file2" -> 1,
-          "file3" -> 1,
-          "file4" -> 1,
-          "file5" -> 1,
-          "file6" -> 1,
-          "file7" -> 1,
-          "file8" -> 1,
-          "file9" -> 1,
-          "file10" -> 1))
+    withSQLConf(SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(
+          files = Seq(
+            "file1" -> 1,
+            "file2" -> 1,
+            "file3" -> 1,
+            "file4" -> 1,
+            "file5" -> 1,
+            "file6" -> 1,
+            "file7" -> 1,
+            "file8" -> 1,
+            "file9" -> 1,
+            "file10" -> 1))
 
-    checkScan(table.select($"c1")) { partitions =>
-      // 10 one byte files should fit in a single partition with 10 files.
-      assert(partitions.size == 1, "when checking partitions")
-      assert(partitions.head.files.size == 10, "when checking partition 1")
-      // 1 byte files are too small to split so we should read the whole thing.
-      assert(partitions.head.files.head.start == 0)
-      assert(partitions.head.files.head.length == 1)
+      checkScan(table.select($"c1")) { partitions =>
+        // 10 one byte files should fit in a single partition with 10 files.
+        assert(partitions.size == 1, "when checking partitions")
+        assert(partitions.head.files.size == 10, "when checking partition 1")
+        // 1 byte files are too small to split so we should read the whole thing.
+        assert(partitions.head.files.head.start == 0)
+        assert(partitions.head.files.head.length == 1)
+      }
+
+      checkPartitionSchema(StructType(Nil))
+      checkDataSchema(StructType(Nil).add("c1", IntegerType))
     }
-
-    checkPartitionSchema(StructType(Nil))
-    checkDataSchema(StructType(Nil).add("c1", IntegerType))
   }
 
   test("unpartitioned table, multiple partitions") {
