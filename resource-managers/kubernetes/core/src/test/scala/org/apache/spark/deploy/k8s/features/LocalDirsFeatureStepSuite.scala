@@ -101,7 +101,8 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       configuredPod.container.getEnv.get(0) ===
         new EnvVarBuilder()
           .withName("SPARK_LOCAL_DIRS")
-          .withValue("/var/data/my-local-dir-2,/var/data/my-local-dir-1"))
+          .withValue("/var/data/my-local-dir-2,/var/data/my-local-dir-1")
+          .build())
   }
 
   test("Use tmpfs to back default local dir") {
