@@ -425,42 +425,65 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
+        index_assigned = False
         if isinstance(data, InternalFrame):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            internal = data
+            if index is None:
+                internal = data
         elif isinstance(data, SparkDataFrame):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            internal = InternalFrame(spark_frame=data, index_spark_columns=None)
+            if index is None:
+                internal = InternalFrame(spark_frame=data, index_spark_columns=None)
         elif isinstance(data, ps.Series):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            data = data.to_frame()
-            internal = data._internal
-        else:
-            if isinstance(data, pd.DataFrame):
-                assert index is None
-                assert columns is None
-                assert dtype is None
-                assert not copy
+            if index is None:
+                data = data.to_frame()
+                internal = data._internal
+        elif isinstance(data, pd.DataFrame):
+            assert columns is None
+            assert dtype is None
+            assert not copy
+            if index is None:
                 pdf = data
-            else:
-                from pyspark.pandas.indexes.base import Index
+                internal = InternalFrame.from_pandas(pdf)
+        else:
+            from pyspark.pandas.indexes.base import Index
 
-                if isinstance(index, Index):
-                    raise TypeError(
-                        "The given index cannot be a pandas-on-Spark index. "
-                        "Try pandas index or array-like."
-                    )
+            if not isinstance(index, Index):
                 pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
-            internal = InternalFrame.from_pandas(pdf)
+                internal = InternalFrame.from_pandas(pdf)
+                index_assigned = True
+
+        if index is not None and not index_assigned:
+            data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)
+            index_df = ps.Index(index).to_frame()
+            combined = combine_frames(data_df, index_df)
+            combined_labels = combined._internal.column_labels
+            new_data_labels = []
+            new_index_labels = []
+            for label in combined_labels:
+                if label[0] == "this":
+                    new_data_label = label[1:]
+                    new_data_labels.append(new_data_label)
+                    combined[new_data_label] = combined[label]
+                elif label[0] == "that":
+                    # if len(label) == 2 and isinstance(label[1], int):
+                    #     new_index_label = (SPARK_INDEX_NAME_FORMAT(label[1]))
+                    # else:
+                    #     new_index_label = label[1:]
+                    new_index_label = label[1:]
+                    new_index_labels.append(new_index_label)
+                    combined[new_index_label] = combined[label]
+
+            # selected = combined[new_data_labels + new_index_labels]
+            # combined.set_index(keys=new_index_labels)
+            internal = combined._internal
 
         object.__setattr__(self, "_internal_frame", internal)
 
