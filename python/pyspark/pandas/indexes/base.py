@@ -1163,7 +1163,7 @@ class Index(IndexOpsMixin):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df  # doctest: +SKIP
+        >>> df
                max_speed  shield
         cobra          1       2
         viper          4       5

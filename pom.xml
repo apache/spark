@@ -818,7 +818,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.30</version>
+        <version>0.9.31</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1179,7 +1179,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.15.4</version>
+        <version>1.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2932,7 +2932,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M5</version>
+          <version>3.0.0-M7</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -3172,7 +3172,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.3.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
