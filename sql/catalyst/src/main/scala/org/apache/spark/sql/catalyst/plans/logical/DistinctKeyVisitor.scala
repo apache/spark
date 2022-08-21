@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, Expression, ExpressionSet, IntegerLiteral, NamedExpression, PredicateHelper, RowNumber, WindowExpression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, LeftSemiOrAnti, RightOuter}
 
 /**
  * A visitor pattern for traversing a [[LogicalPlan]] tree and propagate the distinct attributes.
  */
-object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
+object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] with PredicateHelper {
 
   private def projectDistinctKeys(
       keys: Set[ExpressionSet], projectList: Seq[NamedExpression]): Set[ExpressionSet] = {
@@ -77,7 +77,24 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
 
   override def visitExpand(p: Expand): Set[ExpressionSet] = default(p)
 
-  override def visitFilter(p: Filter): Set[ExpressionSet] = p.child.distinctKeys
+  override def visitFilter(p: Filter): Set[ExpressionSet] = {
+    var distinctKeys = p.child.distinctKeys
+    val rowNumbers = p.child.collect {
+      case w @ Window(Seq(Alias(WindowExpression(_: RowNumber, _), _)), _, _, _) => w
+    }
+    val (candidates, _) = splitConjunctivePredicates(p.condition).partition(_.deterministic)
+    candidates.collect {
+        case EqualTo(expr, IntegerLiteral(_)) => expr
+        case EqualTo(IntegerLiteral(_), expr) => expr
+      }.map {
+        case expr =>
+          rowNumbers.map {
+            case w if expr.references.subsetOf(w.windowOutputSet) =>
+              distinctKeys = addDistinctKey(distinctKeys, ExpressionSet(w.partitionSpec))
+          }
+      }
+    distinctKeys
+  }
 
   override def visitGenerate(p: Generate): Set[ExpressionSet] = default(p)
 

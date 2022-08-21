@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpressionSet, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpressionSet, RowNumber, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types.IntegerType
 
@@ -201,5 +201,15 @@ class DistinctKeyVisitorSuite extends PlanTest {
   test("WithCTE's distinct attributes") {
     checkDistinctAttributes(WithCTE(Distinct(t1), mutable.ArrayBuffer.empty[CTERelationDef].toSeq),
       Set(ExpressionSet(Seq(a, b, c))))
+  }
+
+  test("SPARK-40164: PartitionSpec should be distinct keys after filter one row of row_number") {
+    val winExpr = windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, UnspecifiedFrame))
+    checkDistinctAttributes(
+      t1.select(a, b, c, winExpr.as("rn")).where('rn === 1), Set(ExpressionSet(Seq(a))))
+    checkDistinctAttributes(
+      t1.select(a, b, c, winExpr.as("rn")).where('rn === 2), Set(ExpressionSet(Seq(a))))
+    checkDistinctAttributes(
+      t1.select(a, b, c, winExpr.as("rn")).where('rn < 2), Set())
   }
 }
