@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkFileNotFoundException
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
@@ -615,6 +620,28 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "functionName" -> "`array_contains`",
         "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"))
+  }
+
+  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
+    var srcPath: Path = null
+    val e = intercept[SparkFileNotFoundException](
+      withTempPath { p =>
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, new Configuration())
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
+        assert(!fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        fm.renameTempFile(srcPath, dstPath, true)
+      }
+    )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
+      ))
   }
 }
 

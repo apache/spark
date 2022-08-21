@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{FileNotFoundException, OutputStream}
 import java.util.{EnumSet, UUID}
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -261,7 +262,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       throw QueryExecutionErrors.renamePathAsExistsPathError(srcPath, dstPath)
     }
 
-    if (!fs.rename(srcPath, dstPath)) {
+    if (Try(fs.rename(srcPath, dstPath)).isFailure) {
       // FileSystem.rename() returning false is very ambiguous as it can be for many reasons.
       // This tries to make a best effort attempt to return the most appropriate exception.
       if (fs.exists(dstPath)) {
