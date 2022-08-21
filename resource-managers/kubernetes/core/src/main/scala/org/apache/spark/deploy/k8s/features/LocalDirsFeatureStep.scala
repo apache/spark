@@ -39,6 +39,7 @@ private[spark] class LocalDirsFeatureStep(
       .map(_.getMountPath))
     var localDirVolumes: Seq[Volume] = Seq()
     var localDirVolumeMounts: Seq[VolumeMount] = Seq()
+
     if (localDirs.isEmpty) {
       // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
       // property - we want to instead default to mounting an emptydir volume that doesn't already
@@ -50,7 +51,7 @@ private[spark] class LocalDirsFeatureStep(
         .getOrElse(defaultLocalDir)
         .split(",")
       randomize(resolvedLocalDirs)
-      localDirs = resolvedLocalDirs.toBuffer
+      localDirs = resolvedLocalDirs.toSeq
       localDirVolumes = resolvedLocalDirs
         .zipWithIndex
         .map { case (_, index) =>
