@@ -24,8 +24,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
-import jline.console.ConsoleReader
-import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
@@ -36,6 +34,8 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.thrift.transport.TSocket
+import org.jline.console.ConsoleReader
+import org.jline.console.history.FileHistory
 import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
 
