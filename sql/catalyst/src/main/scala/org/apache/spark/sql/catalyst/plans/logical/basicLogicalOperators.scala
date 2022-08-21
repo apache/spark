@@ -1146,7 +1146,8 @@ case class Aggregate(
     groupingExpressions.nonEmpty && aggregateExpressions.map {
       case Alias(child, _) => child
       case e => e
-    }.forall(a => a.deterministic && a.collect { case _: AggregateFunction => true }.isEmpty)
+    }.forall(a => a.deterministic &&
+      a.collect { case _: AggregateFunction | _: PythonUDF => true }.isEmpty)
   }
 }
 
