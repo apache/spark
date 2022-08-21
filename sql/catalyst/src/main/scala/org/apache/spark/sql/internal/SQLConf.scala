@@ -4117,7 +4117,7 @@ class SQLConf extends Serializable with Logging {
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
-  def filesExpectPartitionNum: Option[Int] = getConf(FILES_EXPECTED_PARTITION_NUM)
+  def filesExpectedPartitionNum: Option[Int] = getConf(FILES_EXPECTED_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 

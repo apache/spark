@@ -77,7 +77,7 @@ object FilePartition extends Logging {
     }
 
     val expectedFilePartitionNum =
-      sparkSession.sessionState.conf.filesExpectPartitionNum.getOrElse(taskParallelismNum)
+      sparkSession.sessionState.conf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
     var openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     var maxPartitionBytes = maxSplitBytes
     if (partitionedFiles.size < expectedFilePartitionNum) {
