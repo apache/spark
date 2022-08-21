@@ -508,7 +508,7 @@ class RDD(Generic[T_co]):
         blocking : bool, optional, default False
             whether to block until all blocks are deleted
 
-            .. versionchanged:: 3.0.0
+            .. versionadded:: 3.0.0
 
         Returns
         -------
