@@ -462,27 +462,44 @@ class DataFrame(Frame, Generic[T]):
 
         if index is not None and not index_assigned:
             data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)
-            index_df = ps.Index(index).to_frame()
+            index_ps = ps.Index(index)
+            index_df = index_ps.to_frame()
+
             combined = combine_frames(data_df, index_df)
             combined_labels = combined._internal.column_labels
+            new_labels = []
             new_data_labels = []
             new_index_labels = []
             for label in combined_labels:
                 if label[0] == "this":
                     new_data_label = label[1:]
                     new_data_labels.append(new_data_label)
+                    new_labels.append(new_data_label)
+                    # combined[new_data_label] implicitly change the label level,
+                    # so `new_data_label` can only be used after update the `column_labels_level`
                     combined[new_data_label] = combined[label]
-                elif label[0] == "that":
-                    # if len(label) == 2 and isinstance(label[1], int):
-                    #     new_index_label = (SPARK_INDEX_NAME_FORMAT(label[1]))
-                    # else:
-                    #     new_index_label = label[1:]
+                else:
+                    assert label[0] == "that"
                     new_index_label = label[1:]
                     new_index_labels.append(new_index_label)
+                    new_labels.append(new_index_label)
+                    # combined[new_data_label] implicitly change the label level,
+                    # so `new_index_label` can only be used after update the `column_labels_level`
                     combined[new_index_label] = combined[label]
 
-            # selected = combined[new_data_labels + new_index_labels]
-            # combined.set_index(keys=new_index_labels)
+            # drop old columns
+            combined = combined.drop(labels=combined_labels, axis=1)
+
+            internal = combined._internal.copy()
+            # there is no helper function to change labels with different
+            # `column_labels_level`, so directly assign them.
+            internal._column_labels = new_labels
+            internal._column_label_names = data_df._internal._column_label_names
+
+            combined = ps.DataFrame(internal)
+            combined = combined.set_index(new_index_labels)
+            combined.index.name = index_ps.name
+
             internal = combined._internal
 
         object.__setattr__(self, "_internal_frame", internal)
