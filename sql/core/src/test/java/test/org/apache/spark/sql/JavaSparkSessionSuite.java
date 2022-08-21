@@ -34,7 +34,8 @@ public class JavaSparkSessionSuite {
   }
 
   @Test
-  public void conf() {
+  public void config() {
+    // SPARK-40163: SparkSession.config(Map)
     Map<String, Object> map = new HashMap<String, Object>() {{
       put("string", "");
       put("boolean", true);

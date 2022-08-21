@@ -570,7 +570,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       s"'spark.sql.ansi.enabled' existed in:\n${logs.mkString("\n")}")
   }
 
-  test("SparkSession.conf(String, Any)") {
+  test("SPARK-40163: SparkSession.config(Map)") {
     val map: Map[String, Any] = Map(
       "string" -> "",
       "boolean" -> true,
