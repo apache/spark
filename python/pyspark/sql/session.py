@@ -102,7 +102,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         >>> rdd = spark.range(1).rdd.map(lambda x: tuple(x))
         >>> rdd.collect()
         [(0,)]
-        >>> spark.range(1).show()
+        >>> rdd.toDF().show()
         +---+
         | _1|
         +---+
@@ -1370,7 +1370,7 @@ class SparkSession(SparkConversionMixin):
         <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
 
         The example below uses Rate source that generates rows continously.
-        After that, we operate a modulo by 3, and then writes the stream out to the console.
+        After that, we operate a modulo by 3, and then write the stream out to the console.
         The streaming query stops in 3 seconds.
 
         >>> import time
