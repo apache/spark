@@ -37,3 +37,5 @@ Core Classes
     Window
     DataFrameReader
     DataFrameWriter
+    UDFRegistration
+    udf.UserDefinedFunction
