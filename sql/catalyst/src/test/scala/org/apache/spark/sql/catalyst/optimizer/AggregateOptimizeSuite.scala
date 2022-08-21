@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
+import org.apache.spark.sql.types.{LongType, StringType}
 
 class AggregateOptimizeSuite extends AnalysisTest {
   val analyzer = getAnalyzer
@@ -205,5 +207,26 @@ class AggregateOptimizeSuite extends AnalysisTest {
         .groupBy($"$t.a")(sum($"$t.a")).analyze
       comparePlans(Optimize.execute(p3), p3)
     }
+  }
+
+  test("SPARK-40159: Aggregate should be group only after collapse project to aggregate") {
+    val a = 'a.int
+    val b = 'b.int
+    val relation = LocalRelation(a, b)
+    Seq(
+      Aggregate(Seq(a + 1), Seq(Alias(a + 1, "a_1")()), relation),
+      Aggregate(Seq(a + 1), Seq(Alias((a + 1).cast(StringType), "a_1")()), relation),
+      Aggregate(Seq((a + 1).cast(StringType)),
+        Seq(Alias((a + 1).cast(StringType), "a_1")()), relation),
+      Aggregate(Seq(a), Seq(Alias(a + 2, "a_2")()), relation),
+      Aggregate(Seq((a + 1).cast(StringType)), Seq(Alias(a.cast(StringType), "a")()), relation),
+      Aggregate(Seq((a + 1).cast(LongType)),
+        Seq(Alias((a + 1).cast(StringType), "a1")()), relation)
+    ).foreach(agg => assert(agg.groupOnly === true))
+
+    Seq(
+      Aggregate(Seq(a + 1), Seq(Alias(Count(b), "sum_b")()), relation),
+      Aggregate(Seq(a + 1), Seq(Alias(Max(b), "max_b")()), relation)
+    ).foreach(agg => assert(agg.groupOnly === false))
   }
 }

@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1450,6 +1451,13 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-38221: group by stream of complex expressions should not fail") {
     val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-40159: Aggregate should be group only after collapse project to aggregate") {
+    val df = testData.distinct().select('key + 1, ('key + 1).cast("long"))
+    df.queryExecution.optimizedPlan.collect {
+      case a: Aggregate => a
+    }.foreach(agg => assert(agg.groupOnly === true))
   }
 }
 
