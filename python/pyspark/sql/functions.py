@@ -965,6 +965,7 @@ def cos(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(cos(lit(math.pi))).show()
     +----------------------+
@@ -1023,6 +1024,7 @@ def cot(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(cot(lit(math.radians(45)))).show()
     +-----------------------+
@@ -1052,6 +1054,7 @@ def csc(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(csc(lit(math.radians(90)))).show()
     +-----------------------+
@@ -1168,6 +1171,7 @@ def log(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(log(lit(math.e))).show()
     +---------------------+
@@ -1217,7 +1221,7 @@ def log1p(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        column to calculate natural logarithm for
+        column to calculate natural logarithm for.
 
     Returns
     -------
@@ -1226,6 +1230,7 @@ def log1p(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(log1p(lit(math.e))).show()
     +------------------------+
@@ -1233,6 +1238,7 @@ def log1p(col: "ColumnOrName") -> Column:
     +------------------------+
     |      1.3132616875182228|
     +------------------------+
+
     Same as:
     >>> df.select(log(lit(math.e+1))).show()
     +---------------------+
@@ -1364,6 +1370,7 @@ def sin(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(sin(lit(math.radians(90)))).show()
     +-----------------------+
@@ -1384,7 +1391,7 @@ def sinh(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        hyperbolic angle in radians
+        hyperbolic angle.
 
     Returns
     -------
@@ -1395,12 +1402,12 @@ def sinh(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(sinh(lit(math.radians(45)))).show()
-    +------------------------+
-    |SINH(0.7853981633974483)|
-    +------------------------+
-    |      0.8686709614860095|
-    +------------------------+
+    >>> df.select(sinh(lit(1.1))).show()
+    +-----------------+
+    |        SINH(1.1)|
+    +-----------------+
+    |1.335647470124177|
+    +-----------------+
     """
     return _invoke_function_over_columns("sinh", col)
 
@@ -1423,6 +1430,7 @@ def tan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(tan(lit(math.radians(45)))).show()
     +-----------------------+
@@ -1453,6 +1461,7 @@ def tanh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> import math
     >>> df = spark.range(1)
     >>> df.select(tanh(lit(math.radians(90)))).show()
     +------------------------+
@@ -1553,18 +1562,10 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([Row(age=1, name="Bob"),
-    ...                             Row(age=0, name=None),
-    ...                             Row(age=2, name="Alice")])
-    >>> df.show()
-    +---+-----+
-    |age| name|
-    +---+-----+
-    |  1|  Bob|
-    |  0| null|
-    |  2|Alice|
-    +---+-----+
-    >>> df.sort(asc_nulls_first(df.name)).show()
+    >>> df1 = spark.createDataFrame([(1, "Bob"),
+    ...                              (0, None),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(asc_nulls_first(df1.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -1572,6 +1573,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     |  2|Alice|
     |  1|  Bob|
     +---+-----+
+
     """
     return (
         col.asc_nulls_first()
@@ -1599,18 +1601,10 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([Row(age=0, name=None),
-    ...                             Row(age=1, name="Bob"),
-    ...                             Row(age=2, name="Alice")])
-    >>> df.show()
-    +---+-----+
-    |age| name|
-    +---+-----+
-    |  0| null|
-    |  1|  Bob|
-    |  2|Alice|
-    +---+-----+
-    >>> df.sort(asc_nulls_last(df.name)).show()
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(asc_nulls_last(df1.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -1618,6 +1612,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     |  1|  Bob|
     |  0| null|
     +---+-----+
+
     """
     return (
         col.asc_nulls_last() if isinstance(col, Column) else _invoke_function("asc_nulls_last", col)
@@ -1643,18 +1638,10 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([Row(age=1, name="Bob"),
-    ...                             Row(age=0, name=None),
-    ...                             Row(age=2, name="Alice")])
-    >>> df.show()
-    +---+-----+
-    |age| name|
-    +---+-----+
-    |  1|  Bob|
-    |  0| null|
-    |  2|Alice|
-    +---+-----+
-    >>> df.sort(desc_nulls_first(df.name)).show()
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(desc_nulls_first(df1.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -1662,6 +1649,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     |  1|  Bob|
     |  2|Alice|
     +---+-----+
+
     """
     return (
         col.desc_nulls_first()
@@ -1689,18 +1677,10 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([Row(age=1, name="Bob"),
-    ...                             Row(age=0, name=None),
-    ...                             Row(age=2, name="Alice")])
-    >>> df.show()
-    +---+-----+
-    |age| name|
-    +---+-----+
-    |  1|  Bob|
-    |  0| null|
-    |  2|Alice|
-    +---+-----+
-    >>> df.sort(desc_nulls_last(df.name)).show()
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(desc_nulls_last(df1.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -1708,6 +1688,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     |  2|Alice|
     |  0| null|
     +---+-----+
+
     """
     return (
         col.desc_nulls_last()
@@ -6764,14 +6745,12 @@ def _test() -> None:
     import doctest
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.functions
-    import math
 
     globs = pyspark.sql.functions.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.functions tests").getOrCreate()
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
-    globs["math"] = math
     globs["df"] = spark.createDataFrame([Row(age=2, name="Alice"), Row(age=5, name="Bob")])
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions,
