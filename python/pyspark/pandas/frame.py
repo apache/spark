@@ -65,7 +65,6 @@ if TYPE_CHECKING:
 from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
-from pyspark import SparkContext
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
@@ -12442,8 +12441,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-
         mode_scols: List[Column] = []
         mode_col_names: List[str] = []
         mode_labels: List[Label] = []
@@ -12455,7 +12452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             if not numeric_only or is_numeric:
                 scol = psser.spark.column
-                mode_scol = Column(sql_utils.pandasMode(scol._jc, dropna)).alias(col_name)
+                mode_scol = SF.mode(scol, dropna).alias(col_name)
                 mode_scols.append(mode_scol)
                 mode_col_names.append(col_name)
                 mode_labels.append(label)
