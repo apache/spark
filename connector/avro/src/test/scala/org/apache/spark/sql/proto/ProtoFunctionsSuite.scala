@@ -31,15 +31,17 @@ class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Seriali
     val simpleMessageObj = SimpleMessage.newBuilder().build()
     val dfRes = df
       .select(functions.from_proto($"value", simpleMessageObj).as("value"))
-      .select($"value.*")
+      //.select($"value.*")
     dfRes.show()
+    val dfRes2 = dfRes.select(functions.to_proto($"value", simpleMessageObj).as("value2"))
+    dfRes2.show()
   }
 
   test("reading proto files from .pb format") {
-    withTempPath { dir =>
-      val df = spark.read.format("proto").option("protoSchemaUrl", "saved_model.pb").load("saved_model.pb")
-      df.show()
-    }
+//    withTempPath { dir =>
+//      val df = spark.read.format("proto").option("protoSchemaUrl", "saved_model.pb").load("saved_model.pb")
+//      df.show()
+//    }
   }
 
   def parseSchema(intputStream : InputStream) = {

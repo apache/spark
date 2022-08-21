@@ -636,8 +636,6 @@ object DataSource extends Logging {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
-      case name if name.equalsIgnoreCase("proto") =>
-        "org.apache.spark.sql.proto.ProtoFileFormat"
       case "com.databricks.spark.avro" if conf.replaceDatabricksSparkAvroEnabled =>
         "org.apache.spark.sql.avro.AvroFileFormat"
       case name => name

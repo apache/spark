@@ -2,7 +2,7 @@ package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
   * This object contains method that are used to convert sparkSQL schemas to proto schemas and vice
@@ -61,5 +61,5 @@ object SchemaConverters {
   private[proto] class IncompatibleSchemaException(
                                                    msg: String, ex: Throwable = null) extends Exception(msg, ex)
 
-  private[proto] class UnsupportedAvroTypeException(msg: String) extends Exception(msg)
+  private[proto] class UnsupportedProtoTypeException(msg: String) extends Exception(msg)
 }
