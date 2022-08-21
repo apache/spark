@@ -967,12 +967,8 @@ def cos(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(cos(lit(math.pi))).show()
-    +----------------------+
-    |COS(3.141592653589793)|
-    +----------------------+
-    |                  -1.0|
-    +----------------------+
+    >>> df.select(cos(lit(math.pi))).first()  # doctest: +ELLIPSIS
+    Row(COS(3.14159...)=-1.0)
     """
     return _invoke_function_over_columns("cos", col)
 
@@ -996,12 +992,8 @@ def cosh(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(cosh(lit(1))).show()
-    +-----------------+
-    |          COSH(1)|
-    +-----------------+
-    |1.543080634815244|
-    +-----------------+
+    >>> df.select(cosh(lit(1))).first()  # doctest: +ELLIPSIS
+    Row(COSH(1)=1.54308...)
     """
     return _invoke_function_over_columns("cosh", col)
 
@@ -1026,12 +1018,8 @@ def cot(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(cot(lit(math.radians(45)))).show()
-    +-----------------------+
-    |COT(0.7853981633974483)|
-    +-----------------------+
-    |     1.0000000000000002|
-    +-----------------------+
+    >>> df.select(cot(lit(math.radians(45)))).first()  # doctest: +ELLIPSIS
+    Row(COT(0.78539...)=1.00000...)
     """
     return _invoke_function_over_columns("cot", col)
 
@@ -1056,12 +1044,8 @@ def csc(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(csc(lit(math.radians(90)))).show()
-    +-----------------------+
-    |CSC(1.5707963267948966)|
-    +-----------------------+
-    |                    1.0|
-    +-----------------------+
+    >>> df.select(csc(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    Row(CSC(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("csc", col)
 
@@ -1114,12 +1098,8 @@ def expm1(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(expm1(lit(1))).show()
-    +-----------------+
-    |         EXPM1(1)|
-    +-----------------+
-    |1.718281828459045|
-    +-----------------+
+    >>> df.select(expm1(lit(1))).first()  # doctest: +ELLIPSIS
+    Row(EXPM1(1)=1.71828...)
     """
     return _invoke_function_over_columns("expm1", col)
 
@@ -1173,12 +1153,8 @@ def log(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(log(lit(math.e))).show()
-    +---------------------+
-    |ln(2.718281828459045)|
-    +---------------------+
-    |                  1.0|
-    +---------------------+
+    >>> df.select(log(lit(math.e))).first()  # doctest: +ELLIPSIS
+    Row(ln(2.71828...)=1.0)
     """
     return _invoke_function_over_columns("log", col)
 
@@ -1232,20 +1208,12 @@ def log1p(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(log1p(lit(math.e))).show()
-    +------------------------+
-    |LOG1P(2.718281828459045)|
-    +------------------------+
-    |      1.3132616875182228|
-    +------------------------+
+    >>> df.select(log1p(lit(math.e))).first()  # doctest: +ELLIPSIS
+    Row(LOG1P(2.71828...)=1.31326...)
 
     Same as:
-    >>> df.select(log(lit(math.e+1))).show()
-    +---------------------+
-    |ln(3.718281828459045)|
-    +---------------------+
-    |   1.3132616875182228|
-    +---------------------+
+    >>> df.select(log(lit(math.e+1))).first()  # doctest: +ELLIPSIS
+    Row(ln(3.71828...)=1.31326...)
     """
     return _invoke_function_over_columns("log1p", col)
 
@@ -1306,12 +1274,8 @@ def sec(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(sec(lit(1.5))).show()
-    +------------------+
-    |          SEC(1.5)|
-    +------------------+
-    |14.136832902969903|
-    +------------------+
+    >>> df.select(sec(lit(1.5))).first()  # doctest: +ELLIPSIS
+    Row(SEC(1.5)=14.13683...)
     """
     return _invoke_function_over_columns("sec", col)
 
@@ -1372,12 +1336,8 @@ def sin(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(sin(lit(math.radians(90)))).show()
-    +-----------------------+
-    |SIN(1.5707963267948966)|
-    +-----------------------+
-    |                    1.0|
-    +-----------------------+
+    >>> df.select(sin(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    Row(SIN(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("sin", col)
 
@@ -1402,12 +1362,8 @@ def sinh(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(sinh(lit(1.1))).show()
-    +-----------------+
-    |        SINH(1.1)|
-    +-----------------+
-    |1.335647470124177|
-    +-----------------+
+    >>> df.select(sinh(lit(1.1))).first()  # doctest: +ELLIPSIS
+    Row(SINH(1.1)=1.33564...)
     """
     return _invoke_function_over_columns("sinh", col)
 
@@ -1432,12 +1388,8 @@ def tan(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(tan(lit(math.radians(45)))).show()
-    +-----------------------+
-    |TAN(0.7853981633974483)|
-    +-----------------------+
-    |     0.9999999999999999|
-    +-----------------------+
+    >>> df.select(tan(lit(math.radians(45)))).first()  # doctest: +ELLIPSIS
+    Row(TAN(0.78539...)=0.99999...)
     """
     return _invoke_function_over_columns("tan", col)
 
@@ -1463,12 +1415,8 @@ def tanh(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(tanh(lit(math.radians(90)))).show()
-    +------------------------+
-    |TANH(1.5707963267948966)|
-    +------------------------+
-    |      0.9171523356672744|
-    +------------------------+
+    >>> df.select(tanh(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    Row(TANH(1.57079...)=0.91715...)
     """
     return _invoke_function_over_columns("tanh", col)
 
