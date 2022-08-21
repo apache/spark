@@ -1644,7 +1644,7 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
-  val FILES_EXPECTED_PARTITION_NUM = buildConf("spark.sql.files.expectPartitionNum")
+  val FILES_EXPECTED_PARTITION_NUM = buildConf("spark.sql.files.expectedPartitionNum")
     .doc("The expected number of File partitions. It will automatically merge file splits to " +
       "provide the best concurrency when the file partitions after split exceed the " +
       "expected num and the size of file partition is less than maxSplitSize. If not set, " +
