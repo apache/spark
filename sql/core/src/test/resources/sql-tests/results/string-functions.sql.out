@@ -206,6 +206,14 @@ NULL
 
 
 -- !query
+SELECT split_part(str, delimiter, partNum) FROM VALUES ('11.12.13', '.', 3) AS v1(str, delimiter, partNum)
+-- !query schema
+struct<split_part(str, delimiter, partNum):string>
+-- !query output
+13
+
+
+-- !query
 SELECT substr('Spark SQL', 5)
 -- !query schema
 struct<substr(Spark SQL, 5, 2147483647):string>
