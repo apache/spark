@@ -675,8 +675,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): Throwable = {
-    new RuntimeException(s"Failed to cast value `$value` to " +
-      s"`$dataType` for partition column `$columnName`")
+    new SparkRuntimeException(
+      errorClass = "FAILED_CAST_PARTITION",
+      messageParameters = Array(value, s"${toSQLType(dataType)}", columnName))
   }
 
   def endOfStreamError(): Throwable = {
