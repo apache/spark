@@ -2571,7 +2571,7 @@ class DataSourceV2SQLSuite
         .condition.toString
         .split("AND")
       assert(filtersBefore.length == 5
-        && filtersBefore(3).trim.startsWith("(udfStrLen(cast(data")
+        && filtersBefore(3).trim.startsWith("(udfStrLen(data")
         && filtersBefore(4).trim.startsWith("(trim(data"))
 
       val filterAfter = spark.sql(
@@ -2587,7 +2587,7 @@ class DataSourceV2SQLSuite
         .condition.toString
         .split("AND")
       assert(filtersAfter.length == 5
-        && filtersAfter(3).trim.startsWith("(udfStrLen(cast(data")
+        && filtersAfter(3).trim.startsWith("(udfStrLen(data")
         && filtersAfter(4).trim.startsWith("(trim(data"))
     }
   }
