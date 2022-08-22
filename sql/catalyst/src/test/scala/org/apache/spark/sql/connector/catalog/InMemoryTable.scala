@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -253,7 +254,8 @@ class InMemoryTable(
   }
 
   class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+      with SupportsPushDownRequiredColumns with SupportsPushDownFilters
+    with SupportsPushDownV2Filters {
     private var schema: StructType = tableSchema
 
     override def build: Scan =
@@ -265,6 +267,7 @@ class InMemoryTable(
     }
 
     private var _pushedFilters: Array[Filter] = Array.empty
+    private var _pushedPredicates: Array[Predicate] = Array.empty
 
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
       this._pushedFilters = filters
@@ -272,6 +275,13 @@ class InMemoryTable(
     }
 
     override def pushedFilters(): Array[Filter] = this._pushedFilters
+
+    override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+      this._pushedPredicates = predicates
+      this._pushedPredicates
+    }
+
+    override def pushedPredicates(): Array[Predicate] = this._pushedPredicates
   }
 
   case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics

@@ -2551,17 +2551,17 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("Move the post-Scan Filters to the far right") {
+  test("SPARK-40045: Move the post-Scan Filters to the far right") {
     val t1 = s"${catalogAndNamespace}table"
-    val sbq = "sbq"
     withTable(t1) {
+      spark.udf.register("udfStrLen", (str: String) => str.length)
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
       val filterBefore = spark.sql(
         s"""
            |SELECT id, data FROM $t1
-           |where md5(data) = '8cde774d6f7333752ed72cacddb05126'
+           |where udfStrLen(data) = 1
            |and trim(data) = 'a'
            |and id =2
            |""".stripMargin
@@ -2571,14 +2571,14 @@ class DataSourceV2SQLSuite
         .condition.toString
         .split("AND")
       assert(filtersBefore.length == 5
-        && filtersBefore(3).trim.startsWith("(md5(cast(data")
+        && filtersBefore(3).trim.startsWith("(udfStrLen(cast(data")
         && filtersBefore(4).trim.startsWith("(trim(data"))
 
       val filterAfter = spark.sql(
         s"""
            |SELECT id, data FROM $t1
            |where id =2
-           |and md5(data) = '8cde774d6f7333752ed72cacddb05126'
+           |and udfStrLen(data) = 1
            |and trim(data) = 'a'
            |""".stripMargin
       )
@@ -2587,7 +2587,7 @@ class DataSourceV2SQLSuite
         .condition.toString
         .split("AND")
       assert(filtersAfter.length == 5
-        && filtersAfter(3).trim.startsWith("(md5(cast(data")
+        && filtersAfter(3).trim.startsWith("(udfStrLen(cast(data")
         && filtersAfter(4).trim.startsWith("(trim(data"))
     }
   }
