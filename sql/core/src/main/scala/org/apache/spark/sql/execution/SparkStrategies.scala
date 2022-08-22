@@ -81,7 +81,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(Project(projectList, child)) =>
+      case ReturnAnswer(proj @ Project(projectList, child)) =>
         planCommon(child) match {
           case collectLimit @ CollectLimitExec(_, child, _) =>
             val newChildren = Seq(execution.ProjectExec(projectList, child))
@@ -89,7 +89,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           case takeOrdered @ TakeOrderedAndProjectExec(_, _, _, child, _) =>
             val newChildren = Seq(execution.ProjectExec(projectList, child))
             takeOrdered.withNewChildren(newChildren) :: Nil
-          case other => other :: Nil
+          case other => planLater(proj) :: Nil
         }
 
       case ReturnAnswer(rootPlan) => planCommon(rootPlan) :: Nil
