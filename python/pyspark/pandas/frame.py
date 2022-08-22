@@ -424,13 +424,7 @@ class DataFrame(Frame, Generic[T]):
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
         index_assigned = False
-        if isinstance(data, DataFrame):
-            assert columns is None
-            assert dtype is None
-            assert not copy
-            if index is None:
-                internal = data._internal
-        elif isinstance(data, InternalFrame):
+        if isinstance(data, InternalFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -442,6 +436,12 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = InternalFrame(spark_frame=data, index_spark_columns=None)
+        elif isinstance(data, DataFrame):
+            assert columns is None
+            assert dtype is None
+            assert not copy
+            if index is None:
+                internal = data._internal
         elif isinstance(data, ps.Series):
             assert columns is None
             assert dtype is None
