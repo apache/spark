@@ -108,18 +108,55 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             self.assert_eq(pdf, psdf)
 
     def test_creation_index(self):
-        err_msg = (
-            "Cannot combine the series or dataframe because it comes from a different dataframe."
+
+        # test local data with ps.Index
+        self.assert_eq(
+            ps.DataFrame([1, 2], index=ps.Index([1, 2])),
+            pd.DataFrame([1, 2], index=pd.Index([1, 2])),
         )
+        self.assert_eq(
+            ps.DataFrame([1, 2], index=ps.Index([2, 3])),
+            pd.DataFrame([1, 2], index=pd.Index([2, 3])),
+        )
+        self.assert_eq(
+            ps.DataFrame([1, 2], index=ps.Index([3, 4])),
+            pd.DataFrame([1, 2], index=pd.Index([3, 4])),
+        )
+
+        # test local data with ps.MultiIndex
+        self.assert_eq(
+            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+            pd.DataFrame([1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+        )
+
+        err_msg = "Cannot combine the series or dataframe"
         with self.assertRaisesRegex(ValueError, err_msg):
-            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
+            # test ps.DataFrame with ps.Index
+            ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
         with self.assertRaisesRegex(ValueError, err_msg):
-            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+            # test ps.DataFrame with pd.Index
+            ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
 
         with ps.option_context("compute.ops_on_diff_frames", True):
-            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
-            # combine_frames doesn't work with MultiIndex
-            # ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+            # test ps.DataFrame with ps.Index
+            self.assert_eq(
+                ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([0, 1])),
+                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([1, 2])),
+                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+            # test ps.DataFrame with pd.Index
+            self.assert_eq(
+                ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
 
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):

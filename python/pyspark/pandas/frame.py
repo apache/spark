@@ -360,10 +360,8 @@ class DataFrame(Frame, Generic[T]):
     Parameters
     ----------
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
-        or pandas-on-Spark Series
+        \ pandas-on-Spark Series or pandas-on-Spark DataFrame
         Dict can contain Series, arrays, constants, or list-like objects
-        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
-        other arguments should not be used.
     index : Index or array-like
         Index to use for resulting frame. Will default to RangeIndex if
         no indexing information part of input data and no index provided
@@ -426,7 +424,13 @@ class DataFrame(Frame, Generic[T]):
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
         index_assigned = False
-        if isinstance(data, InternalFrame):
+        if isinstance(data, DataFrame):
+            assert columns is None
+            assert dtype is None
+            assert not copy
+            if index is None:
+                internal = data._internal
+        elif isinstance(data, InternalFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -454,18 +458,23 @@ class DataFrame(Frame, Generic[T]):
                 internal = InternalFrame.from_pandas(pdf)
         else:
             from pyspark.pandas.indexes.base import Index
-            if not isinstance(index, Index):
-                pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
-                internal = InternalFrame.from_pandas(pdf)
-                index_assigned = True
+
+            if isinstance(index, Index):
+                # with local data, collect ps.Index to avoid mismatched results like:
+                # ps.DataFrame([1, 2], index=ps.Index([1, 2])) vs
+                # pd.DataFrame([1, 2], index=pd.Index([1, 2]))
+                index = index.to_pandas()
+            pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
+            internal = InternalFrame.from_pandas(pdf)
+            index_assigned = True
 
         if index is not None and not index_assigned:
             data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)
             index_ps = ps.Index(index)
             index_df = index_ps.to_frame()
 
-            # todo: support when data and index
-            combined = combine_frames(data_df, index_df)
+            # `combine_frames` does not work with a MultiIndex for now
+            combined = combine_frames(data_df, index_df, how="right")
             combined_labels = combined._internal.column_labels
             index_labels = [label for label in combined_labels if label[0] == "that"]
             combined = combined.set_index(index_labels)
