@@ -109,7 +109,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // TODO(SPARK-40171): Re-enable the following flaky test case after being fixed.
   // Images with the different number of channels
-  test("readImages pixel values test") {
+  ignore("readImages pixel values test") {
     val images = spark.read.format("image").option("dropInvalid", true)
       .load(imagePath + "/cls=multichannel/").collect()
 
