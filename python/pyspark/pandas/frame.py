@@ -449,21 +449,17 @@ class DataFrame(Frame, Generic[T]):
             if index is None:
                 data = data.to_frame()
                 internal = data._internal
-        elif isinstance(data, pd.DataFrame):
-            assert columns is None
-            assert dtype is None
-            assert not copy
-            if index is None:
-                pdf = data
-                internal = InternalFrame.from_pandas(pdf)
         else:
             from pyspark.pandas.indexes.base import Index
 
-            if isinstance(index, Index):
-                # with local data, collect ps.Index to avoid mismatched results between:
-                # ps.DataFrame([1, 2], index=ps.Index([1, 2])) and
+            if index is not None and isinstance(index, Index):
+                # with local data, collect ps.Index to driver
+                # to avoid mismatched results between
+                # ps.DataFrame([1, 2], index=ps.Index([1, 2]))
+                # and
                 # pd.DataFrame([1, 2], index=pd.Index([1, 2]))
                 index = index.to_pandas()
+
             pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
             internal = InternalFrame.from_pandas(pdf)
             index_assigned = True
@@ -473,7 +469,8 @@ class DataFrame(Frame, Generic[T]):
             index_ps = ps.Index(index)
             index_df = index_ps.to_frame()
 
-            # `combine_frames` can not work with a MultiIndex for now
+            # drop un-matched rows in `data`
+            # note that `combine_frames` can not work with a MultiIndex for now
             combined = combine_frames(data_df, index_df, how="right")
             combined_labels = combined._internal.column_labels
             index_labels = [label for label in combined_labels if label[0] == "that"]
