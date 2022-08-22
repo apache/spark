@@ -460,8 +460,8 @@ class DataFrame(Frame, Generic[T]):
             from pyspark.pandas.indexes.base import Index
 
             if isinstance(index, Index):
-                # with local data, collect ps.Index to avoid mismatched results like:
-                # ps.DataFrame([1, 2], index=ps.Index([1, 2])) vs
+                # with local data, collect ps.Index to avoid mismatched results between:
+                # ps.DataFrame([1, 2], index=ps.Index([1, 2])) and
                 # pd.DataFrame([1, 2], index=pd.Index([1, 2]))
                 index = index.to_pandas()
             pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
@@ -473,7 +473,7 @@ class DataFrame(Frame, Generic[T]):
             index_ps = ps.Index(index)
             index_df = index_ps.to_frame()
 
-            # `combine_frames` does not work with a MultiIndex for now
+            # `combine_frames` can not work with a MultiIndex for now
             combined = combine_frames(data_df, index_df, how="right")
             combined_labels = combined._internal.column_labels
             index_labels = [label for label in combined_labels if label[0] == "that"]
