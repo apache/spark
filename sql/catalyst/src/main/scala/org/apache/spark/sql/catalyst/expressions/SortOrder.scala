@@ -173,7 +173,13 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       val s = p - (dt.precision - dt.scale)
       (raw) => {
         val value = raw.asInstanceOf[Decimal]
-        if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
+        if (value.changePrecision(p, s)) {
+          value.toUnscaledLong
+        } else if (value.toBigDecimal.signum < 0) {
+          Long.MinValue
+        } else {
+          Long.MaxValue
+        }
       }
     case dt: DecimalType => (raw) =>
       DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
@@ -206,15 +212,14 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"$DoublePrefixCmp.computePrefix((double)$input)"
       case StringType => s"$StringPrefixCmp.computePrefix($input)"
       case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
+      case dt: DecimalType if dt.precision < Decimal.MAX_LONG_DIGITS =>
+        s"$input.toUnscaledLong()"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          s"$input.toUnscaledLong()"
-        } else {
-          // reduce the scale to fit in a long
-          val p = Decimal.MAX_LONG_DIGITS
-          val s = p - (dt.precision - dt.scale)
-          s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : ${Long.MinValue}L"
-        }
+        // reduce the scale to fit in a long
+        val p = Decimal.MAX_LONG_DIGITS
+        val s = p - (dt.precision - dt.scale)
+        s"$input.changePrecision($p, $s) ? $input.toUnscaledLong() : " +
+            s"$input.toBigDecimal().signum() < 0 ? ${Long.MinValue}L : ${Long.MaxValue}L"
       case dt: DecimalType =>
         s"$DoublePrefixCmp.computePrefix($input.toDouble())"
       case _ => "0L"
