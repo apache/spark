@@ -36,8 +36,8 @@ import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.apache.commons.codec.binary.{Hex => ApacheHex}
-import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -389,16 +389,18 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case _ => false
   }
 
-  override protected def jsonFields: List[JField] = {
+  override protected def jsonFields: List[(String, JsonNode)] = {
+    import org.apache.spark.util.JacksonUtils
+    val factory = JacksonUtils.defaultNodeFactory
     // Turns all kinds of literal values to string in json field, as the type info is hard to
     // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
-    val jsonValue = (value, dataType) match {
-      case (null, _) => JNull
-      case (i: Int, DateType) => JString(toString)
-      case (l: Long, TimestampType) => JString(toString)
-      case (other, _) => JString(other.toString)
+    val jsonNode = (value, dataType) match {
+      case (null, _) => factory.nullNode()
+      case (_: Int, DateType) => factory.textNode(toString)
+      case (_: Long, TimestampType) => factory.textNode(toString)
+      case (other, _) => factory.textNode(other.toString)
     }
-    ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
+    ("value" -> jsonNode) :: ("dataType" -> dataType.jsonNode) :: Nil
   }
 
   override def eval(input: InternalRow): Any = value

@@ -22,10 +22,8 @@ import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Used to write log files that represent batch commit points in structured streaming.
@@ -78,11 +76,10 @@ object CommitLog {
 
 
 case class CommitMetadata(nextBatchWatermarkMs: Long = 0) {
-  def json: String = Serialization.write(this)(CommitMetadata.format)
+  def json: String = JacksonUtils.writeValueAsString(this)
 }
 
 object CommitMetadata {
-  implicit val format = Serialization.formats(NoTypeHints)
-
-  def apply(json: String): CommitMetadata = Serialization.read[CommitMetadata](json)
+  def apply(json: String): CommitMetadata =
+    JacksonUtils.readValue(json, classOf[CommitMetadata])
 }

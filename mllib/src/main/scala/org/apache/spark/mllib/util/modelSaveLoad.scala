@@ -19,14 +19,14 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.runtime.universe.TypeTag
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Trait for models and transformers which may be saved as files.
@@ -115,11 +115,11 @@ private[mllib] object Loader {
    * Load metadata from the given path.
    * @return (class name, version, metadata)
    */
-  def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
-    implicit val formats = DefaultFormats
-    val metadata = parse(sc.textFile(metadataPath(path)).first())
-    val clazz = (metadata \ "class").extract[String]
-    val version = (metadata \ "version").extract[String]
+  // TODO: JsonNode -> ObjectNode may better.
+  def loadMetadata(sc: SparkContext, path: String): (String, String, JsonNode) = {
+    val metadata = JacksonUtils.readTree(sc.textFile(metadataPath(path)).first())
+    val clazz = metadata.get("class").textValue()
+    val version = metadata.get("version").textValue()
     (clazz, version, metadata)
   }
 }

@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -36,6 +33,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -406,10 +404,10 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
 
     override protected def saveImpl(path: String): Unit = {
       // Note: numTrees is not currently used, but could be nice to store for fast querying.
-      val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses,
-        "numTrees" -> instance.getNumTrees)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numFeatures", instance.numFeatures)
+      extraMetadata.put("numClasses", instance.numClasses)
+      extraMetadata.put("numTrees", instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
@@ -422,12 +420,11 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     private val treeClassName = classOf[DecisionTreeClassificationModel].getName
 
     override def load(path: String): RandomForestClassificationModel = {
-      implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
-      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val numTrees = (metadata.metadata \ "numTrees").extract[Int]
+      val numFeatures = metadata.metadata.get("numFeatures").intValue()
+      val numClasses = metadata.metadata.get("numClasses").intValue()
+      val numTrees = metadata.metadata.get("numTrees").intValue()
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>

@@ -16,10 +16,12 @@
  */
 package org.apache.spark
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 trait JsonTestUtils {
+
   def assertValidDataInJson(validateJson: JValue, expectedJson: JValue): Unit = {
     val Diff(c, a, d) = validateJson.diff(expectedJson)
     val validatePretty = JsonMethods.pretty(validateJson)
@@ -29,6 +31,22 @@ trait JsonTestUtils {
     assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
     assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
     assert(d === JNothing, s"$errorMessage\nDeleted:\n${JsonMethods.pretty(d)}")
+  }
+
+  def assertValidDataInJson(jsonString: String, expectedJson: JValue): Unit = {
+    val validateJson = JsonMethods.parse(jsonString)
+    val Diff(c, a, d) = validateJson.diff(expectedJson)
+    val validatePretty = JsonMethods.pretty(validateJson)
+    val expectedPretty = JsonMethods.pretty(expectedJson)
+    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
+    import org.scalactic.TripleEquals._
+    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
+    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
+    assert(d === JNothing, s"$errorMessage\nDeleted:\n${JsonMethods.pretty(d)}")
+  }
+
+  def assertValidDataInJson(validateJson: JsonNode, expectedJson: JValue): Unit = {
+    assertValidDataInJson(validateJson.toPrettyString, expectedJson)
   }
 
 }

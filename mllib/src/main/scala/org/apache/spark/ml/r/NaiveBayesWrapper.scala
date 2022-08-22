@@ -18,9 +18,6 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{NaiveBayes, NaiveBayesModel}
@@ -28,6 +25,7 @@ import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.JacksonUtils
 
 private[r] class NaiveBayesWrapper private (
     val pipeline: PipelineModel,
@@ -97,10 +95,11 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> instance.labels.toSeq) ~
-        ("features" -> instance.features.toSeq)
-      val rMetadataJson: String = compact(render(rMetadata))
+      val rMetadata = JacksonUtils.createObjectNode
+      rMetadata.put("class", instance.getClass.getName)
+      rMetadata.putPOJO("labels", instance.labels.toSeq)
+      rMetadata.putPOJO("features", instance.features.toSeq)
+      val rMetadataJson: String = JacksonUtils.writeValueAsString(rMetadata)
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
@@ -110,14 +109,13 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
   class NaiveBayesWrapperReader extends MLReader[NaiveBayesWrapper] {
 
     override def load(path: String): NaiveBayesWrapper = {
-      implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val labels = (rMetadata \ "labels").extract[Array[String]]
-      val features = (rMetadata \ "features").extract[Array[String]]
+      val rMetadata = JacksonUtils.readTree(rMetadataStr)
+      val labels = JacksonUtils.treeToValue[Array[String]](rMetadata.get("labels"))
+      val features = JacksonUtils.treeToValue[Array[String]](rMetadata.get("features"))
 
       val pipeline = PipelineModel.load(pipelinePath)
       new NaiveBayesWrapper(pipeline, labels, features)

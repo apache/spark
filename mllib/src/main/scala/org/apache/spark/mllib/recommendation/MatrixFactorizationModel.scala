@@ -23,9 +23,6 @@ import java.lang.{Integer => JavaInteger}
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -37,6 +34,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Model representing the result of matrix factorization.
@@ -384,20 +382,22 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val sc = model.userFeatures.sparkContext
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       import spark.implicits._
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("rank", model.rank)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
       model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
       model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
-      implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rank = (metadata \ "rank").extract[Int]
+      val rank = metadata.get("rank").intValue()
       val userFeatures = spark.read.parquet(userPath(path)).rdd.map {
         case Row(id: Int, features: scala.collection.Seq[_]) =>
           (id, features.asInstanceOf[scala.collection.Seq[Double]].toArray)

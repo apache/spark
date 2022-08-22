@@ -18,9 +18,6 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -30,6 +27,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.JacksonUtils
 
 private[r] class GaussianMixtureWrapper private (
     val pipeline: PipelineModel,
@@ -108,10 +106,11 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("dim" -> instance.dim) ~
-        ("logLikelihood" -> instance.logLikelihood)
-      val rMetadataJson: String = compact(render(rMetadata))
+      val rMetadata = JacksonUtils.createObjectNode
+      rMetadata.put("class", instance.getClass.getName)
+      rMetadata.put("dim", instance.dim)
+      rMetadata.put("logLikelihood", instance.logLikelihood)
+      val rMetadataJson: String = JacksonUtils.writeValueAsString(rMetadata)
 
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
       instance.pipeline.save(pipelinePath)
@@ -121,15 +120,14 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
   class GaussianMixtureWrapperReader extends MLReader[GaussianMixtureWrapper] {
 
     override def load(path: String): GaussianMixtureWrapper = {
-      implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
       val pipeline = PipelineModel.load(pipelinePath)
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val dim = (rMetadata \ "dim").extract[Int]
-      val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
+      val rMetadata = JacksonUtils.readTree(rMetadataStr)
+      val dim = rMetadata.get("dim").intValue()
+      val logLikelihood = rMetadata.get("logLikelihood").doubleValue()
       new GaussianMixtureWrapper(pipeline, dim, logLikelihood, isLoaded = true)
     }
   }

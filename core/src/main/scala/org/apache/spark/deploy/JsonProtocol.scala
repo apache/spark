@@ -17,26 +17,31 @@
 
 package org.apache.spark.deploy
 
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
+import scala.collection.JavaConverters._
+
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ArrayNode
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.util.JacksonUtils
 
+// TODO: toList ? or toSeq
 private[deploy] object JsonProtocol {
 
-  private def writeResourcesInfo(info: Map[String, ResourceInformation]): JObject = {
-    val jsonFields = info.map {
-      case (k, v) => JField(k, v.toJson)
-    }
-    JObject(jsonFields.toList)
+  private def writeResourcesInfo(info: Map[String, ResourceInformation]): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    info.foreach { case (k, v) => node.set[JsonNode](k, v.toJson()) }
+    node
   }
 
-  private def writeResourceRequirement(req: ResourceRequirement): JObject = {
-    ("name" -> req.resourceName) ~
-    ("amount" -> req.amount)
+  private def writeResourceRequirement(req: ResourceRequirement): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("name", req.resourceName)
+    node.put("amount", req.amount)
+    node
   }
 
   /**
@@ -61,22 +66,24 @@ private[deploy] object JsonProtocol {
    *         `lastheartbeat` time in milliseconds that the latest heart beat message from the
    *         worker is received
    */
-  def writeWorkerInfo(obj: WorkerInfo): JObject = {
-    ("id" -> obj.id) ~
-    ("host" -> obj.host) ~
-    ("port" -> obj.port) ~
-    ("webuiaddress" -> obj.webUiAddress) ~
-    ("cores" -> obj.cores) ~
-    ("coresused" -> obj.coresUsed) ~
-    ("coresfree" -> obj.coresFree) ~
-    ("memory" -> obj.memory) ~
-    ("memoryused" -> obj.memoryUsed) ~
-    ("memoryfree" -> obj.memoryFree) ~
-    ("resources" -> writeResourcesInfo(obj.resourcesInfo)) ~
-    ("resourcesused" -> writeResourcesInfo(obj.resourcesInfoUsed)) ~
-    ("resourcesfree" -> writeResourcesInfo(obj.resourcesInfoFree)) ~
-    ("state" -> obj.state.toString) ~
-    ("lastheartbeat" -> obj.lastHeartbeat)
+  def writeWorkerInfo(obj: WorkerInfo): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("id", obj.id)
+    node.put("host", obj.host)
+    node.put("port", obj.port)
+    node.put("webuiaddress", obj.webUiAddress)
+    node.put("cores", obj.cores)
+    node.put("coresused", obj.coresUsed)
+    node.put("coresfree", obj.coresFree)
+    node.put("memory", obj.memory)
+    node.put("memoryused", obj.memoryUsed)
+    node.put("memoryfree", obj.memoryFree)
+    node.set[JsonNode]("resources", writeResourcesInfo(obj.resourcesInfo))
+    node.set[JsonNode]("resourcesused", writeResourcesInfo(obj.resourcesInfoUsed))
+    node.set[JsonNode]("resourcesfree", writeResourcesInfo(obj.resourcesInfoFree))
+    node.put("state", obj.state.toString)
+    node.put("lastheartbeat", obj.lastHeartbeat)
+    node
   }
 
   /**
@@ -96,21 +103,28 @@ private[deploy] object JsonProtocol {
    *         `duration` time in milliseconds that the application has been running
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
-  def writeApplicationInfo(obj: ApplicationInfo): JObject = {
-    ("id" -> obj.id) ~
-    ("starttime" -> obj.startTime) ~
-    ("name" -> obj.desc.name) ~
-    ("cores" -> obj.coresGranted) ~
-    ("user" -> obj.desc.user) ~
-    ("memoryperexecutor" -> obj.desc.memoryPerExecutorMB) ~
-    ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
-    ("resourcesperexecutor" -> obj.desc.resourceReqsPerExecutor
-      .toList.map(writeResourceRequirement)) ~
-    ("resourcesperslave" -> obj.desc.resourceReqsPerExecutor
-      .toList.map(writeResourceRequirement)) ~
-    ("submitdate" -> obj.submitDate.toString) ~
-    ("state" -> obj.state.toString) ~
-    ("duration" -> obj.duration)
+  def writeApplicationInfo(obj: ApplicationInfo): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("id", obj.id)
+    node.put("starttime", obj.startTime)
+    node.put("name", obj.desc.name)
+    node.put("cores", obj.coresGranted)
+    node.put("user", obj.desc.user)
+    node.put("memoryperexecutor", obj.desc.memoryPerExecutorMB)
+    node.put("memoryperslave", obj.desc.memoryPerExecutorMB)
+
+    val resourceReqsPerExecutor = obj.desc.resourceReqsPerExecutor.toList
+      .map(r => writeResourceRequirement(r)).asJava
+    val resourcePerExecutorArray =
+      JacksonUtils.createArrayNode(resourceReqsPerExecutor.size())
+    resourcePerExecutorArray.addAll(resourceReqsPerExecutor)
+    node.set[JsonNode]("resourcesperexecutor", resourcePerExecutorArray)
+    node.set[JsonNode]("resourcesperslave", resourcePerExecutorArray)
+
+    node.put("submitdate", obj.submitDate.toString)
+    node.put("state", obj.state.toString)
+    node.put("duration", obj.duration)
+    node
   }
 
   /**
@@ -126,15 +140,28 @@ private[deploy] object JsonProtocol {
    *         `command` the command string used to submit the application
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
-  def writeApplicationDescription(obj: ApplicationDescription): JObject = {
-    ("name" -> obj.name) ~
-    ("cores" -> obj.maxCores.getOrElse(0)) ~
-    ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
-    ("resourcesperexecutor" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
-    ("memoryperslave" -> obj.memoryPerExecutorMB) ~
-    ("resourcesperslave" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
-    ("user" -> obj.user) ~
-    ("command" -> obj.command.toString)
+  def writeApplicationDescription(obj: ApplicationDescription): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+
+    node.put("name", obj.name)
+    node.put("cores", obj.maxCores.getOrElse(0))
+    node.put("memoryperexecutor", obj.memoryPerExecutorMB)
+
+    val resourceReqsPerExecutor = obj.resourceReqsPerExecutor.toList
+      .map(r => writeResourceRequirement(r)).asJava
+    val resourcePerExecutorArray =
+      JacksonUtils.createArrayNode(resourceReqsPerExecutor.size())
+    resourcePerExecutorArray.addAll(resourceReqsPerExecutor)
+    node.set[JsonNode]("resourcesperexecutor", resourcePerExecutorArray)
+
+    node.put("memoryperslave", obj.memoryPerExecutorMB)
+
+    node.set[JsonNode]("resourcesperslave", resourcePerExecutorArray)
+
+    node.put("user", obj.user)
+    node.put("command", obj.command.toString)
+
+    node
   }
 
   /**
@@ -149,12 +176,14 @@ private[deploy] object JsonProtocol {
    *         `appdesc` a Json object of the [[ApplicationDescription]] of the application that the
    *         executor is working on
    */
-  def writeExecutorRunner(obj: ExecutorRunner): JObject = {
-    ("id" -> obj.execId) ~
-    ("memory" -> obj.memory) ~
-    ("resources" -> writeResourcesInfo(obj.resources)) ~
-    ("appid" -> obj.appId) ~
-    ("appdesc" -> writeApplicationDescription(obj.appDesc))
+  def writeExecutorRunner(obj: ExecutorRunner): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("id", obj.execId)
+    node.put("memory", obj.memory)
+    node.set[JsonNode]("resources", writeResourcesInfo(obj.resources))
+    node.put("appid", obj.appId)
+    node.set[JsonNode]("appdesc", writeApplicationDescription(obj.appDesc))
+    node
   }
 
   /**
@@ -172,16 +201,18 @@ private[deploy] object JsonProtocol {
    *         `worker` identifier of the worker that the driver is running on
    *         `mainclass` main class of the command string that started the driver
    */
-  def writeDriverInfo(obj: DriverInfo): JObject = {
-    ("id" -> obj.id) ~
-    ("starttime" -> obj.startTime.toString) ~
-    ("state" -> obj.state.toString) ~
-    ("cores" -> obj.desc.cores) ~
-    ("memory" -> obj.desc.mem) ~
-    ("resources" -> writeResourcesInfo(obj.resources)) ~
-    ("submitdate" -> obj.submitDate.toString) ~
-    ("worker" -> obj.worker.map(_.id).getOrElse("None")) ~
-    ("mainclass" -> obj.desc.command.arguments(2))
+  def writeDriverInfo(obj: DriverInfo): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("id", obj.id)
+    node.put("starttime", obj.startTime.toString)
+    node.put("state", obj.state.toString)
+    node.put("cores", obj.desc.cores)
+    node.put("memory", obj.desc.mem)
+    node.set("resources", writeResourcesInfo(obj.resources))
+    node.put("submitdate", obj.submitDate.toString)
+    node.put("worker", obj.worker.map(_.id).getOrElse("None"))
+    node.put("mainclass", obj.desc.command.arguments(2))
+    node
   }
 
   /**
@@ -210,22 +241,58 @@ private[deploy] object JsonProtocol {
    *         `status` status of the master,
    *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]]
    */
-  def writeMasterState(obj: MasterStateResponse): JObject = {
+  def writeMasterState(obj: MasterStateResponse): JsonNode = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
-    ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("aliveworkers" -> aliveWorkers.length) ~
-    ("cores" -> aliveWorkers.map(_.cores).sum) ~
-    ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
-    ("memory" -> aliveWorkers.map(_.memory).sum) ~
-    ("memoryused" -> aliveWorkers.map(_.memoryUsed).sum) ~
-    ("resources" -> aliveWorkers.map(_.resourcesInfo).toList.map(writeResourcesInfo)) ~
-    ("resourcesused" -> aliveWorkers.map(_.resourcesInfoUsed).toList.map(writeResourcesInfo)) ~
-    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
-    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
-    ("completeddrivers" -> obj.completedDrivers.toList.map(writeDriverInfo)) ~
-    ("status" -> obj.status.toString)
+    val node = JacksonUtils.createObjectNode
+    node.put("url", obj.uri)
+
+    val workers =
+      obj.workers.toList.map(w => writeWorkerInfo(w)).asJava
+    val workersArray = JacksonUtils.createArrayNode(workers.size())
+    workersArray.addAll(workers)
+    node.set[JsonNode]("workers", workersArray)
+
+    node.put("aliveworkers", aliveWorkers.length)
+    node.put("cores", aliveWorkers.map(_.cores).sum)
+    node.put("coresused", aliveWorkers.map(_.coresUsed).sum)
+    node.put("memory", aliveWorkers.map(_.memory).sum)
+    node.put("memoryused", aliveWorkers.map(_.memoryUsed).sum)
+
+    val resources =
+      aliveWorkers.map(_.resourcesInfo).toList.map(r => writeResourcesInfo(r)).asJava
+    val resourcesArray = JacksonUtils.createArrayNode(resources.size())
+    resourcesArray.addAll(resources)
+    node.set[JsonNode]("resources", resourcesArray)
+
+
+    val resourcesUsed =
+      aliveWorkers.map(_.resourcesInfoUsed).toList.map(r => writeResourcesInfo(r)).asJava
+    val resourcesUsedArray = JacksonUtils.createArrayNode(resourcesUsed.size())
+    resourcesUsedArray.addAll(resourcesUsed)
+    node.set[JsonNode]("resourcesused", resourcesUsedArray)
+
+    val activeApps = obj.activeApps.toList.map(r => writeApplicationInfo(r)).asJava
+    val activeAppsArray = JacksonUtils.createArrayNode(activeApps.size())
+    activeAppsArray.addAll(activeApps)
+    node.set[JsonNode]("activeapps", activeAppsArray)
+
+    val completedApps = obj.completedApps.toList.map(r => writeApplicationInfo(r)).asJava
+    val completedAppsArray = JacksonUtils.createArrayNode(completedApps.size())
+    completedAppsArray.addAll(completedApps)
+    node.set[JsonNode]("completedapps", completedAppsArray)
+
+    val activeDrivers = obj.activeDrivers.toList.map(r => writeDriverInfo(r)).asJava
+    val activeDriversArray = JacksonUtils.createArrayNode(activeDrivers.size())
+    activeDriversArray.addAll(activeDrivers)
+    node.set[JsonNode]("activedrivers", activeDriversArray)
+
+    val completedDrivers = obj.completedDrivers.toList.map(r => writeDriverInfo(r)).asJava
+    val completedDriversArray = JacksonUtils.createArrayNode(completedDrivers.size())
+    completedDriversArray.addAll(completedDrivers)
+    node.set[JsonNode]("completeddrivers", completedDriversArray)
+
+    node.put("status", obj.status.toString)
+    node
   }
 
   /**
@@ -247,17 +314,34 @@ private[deploy] object JsonProtocol {
    *         `finishedexecutors` a list of Json objects of [[ExecutorRunner]] of the finished
    *         executors of the worker
    */
-  def writeWorkerState(obj: WorkerStateResponse): JObject = {
-    ("id" -> obj.workerId) ~
-    ("masterurl" -> obj.masterUrl) ~
-    ("masterwebuiurl" -> obj.masterWebUiUrl) ~
-    ("cores" -> obj.cores) ~
-    ("coresused" -> obj.coresUsed) ~
-    ("memory" -> obj.memory) ~
-    ("memoryused" -> obj.memoryUsed) ~
-    ("resources" -> writeResourcesInfo(obj.resources)) ~
-    ("resourcesused" -> writeResourcesInfo(obj.resourcesUsed)) ~
-    ("executors" -> obj.executors.map(writeExecutorRunner)) ~
-    ("finishedexecutors" -> obj.finishedExecutors.map(writeExecutorRunner))
+  def writeWorkerState(obj: WorkerStateResponse): JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("id", obj.workerId)
+    node.put("masterurl", obj.masterUrl)
+    node.put("masterwebuiurl", obj.masterWebUiUrl)
+    node.put("cores", obj.cores)
+    node.put("coresused", obj.coresUsed)
+    node.put("memory", obj.memory)
+    node.put("memoryused", obj.memoryUsed)
+
+    node.set[JsonNode]("resources", writeResourcesInfo(obj.resources))
+    node.set[JsonNode]("resourcesused", writeResourcesInfo(obj.resourcesUsed))
+
+    val executors = obj.executors.map(r => writeExecutorRunner(r)).asJava
+    val executorsArray = JacksonUtils.createArrayNode(executors.size())
+    executorsArray.addAll(executors)
+    node.set[JsonNode]("executors", executorsArray)
+
+    val finishedExecutorsArray =
+      buildArrayNode(obj.finishedExecutors.map(r => writeExecutorRunner(r)))
+    node.set[JsonNode]("finishedexecutors", finishedExecutorsArray)
+
+    node
+  }
+
+  private def buildArrayNode(data: List[JsonNode]): ArrayNode = {
+    val node = JacksonUtils.createArrayNode(data.length)
+    node.addAll(data.asJava)
+    node
   }
 }

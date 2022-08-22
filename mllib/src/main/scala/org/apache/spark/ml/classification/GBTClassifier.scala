@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
@@ -36,6 +33,7 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
@@ -405,10 +403,9 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
   class GBTClassificationModelWriter(instance: GBTClassificationModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-
-      val extraMetadata: JObject = Map(
-        numFeaturesKey -> instance.numFeatures,
-        numTreesKey -> instance.getNumTrees)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put(numFeaturesKey, instance.numFeatures)
+      extraMetadata.put(numTreesKey, instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
@@ -420,11 +417,10 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
     private val treeClassName = classOf[DecisionTreeRegressionModel].getName
 
     override def load(path: String): GBTClassificationModel = {
-      implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
-      val numFeatures = (metadata.metadata \ numFeaturesKey).extract[Int]
-      val numTrees = (metadata.metadata \ numTreesKey).extract[Int]
+      val numFeatures = metadata.metadata.get(numFeaturesKey).intValue()
+      val numTrees = metadata.metadata.get(numTreesKey).intValue()
 
       val trees = treesData.map {
         case (treeMetadata, root) =>

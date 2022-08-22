@@ -19,11 +19,12 @@ package org.apache.spark.resource
 
 import scala.util.control.NonFatal
 
-import org.json4s.{DefaultFormats, Extraction, JValue}
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.annotation.{JsonSetter, Nulls}
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
@@ -57,21 +58,22 @@ class ResourceInformation(
 
   // TODO(SPARK-39658): reconsider whether we want to expose a third-party library's
   // symbols as part of a public API:
-  final def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
+  final def toJson(): JsonNode = ResourceInformationJson(name, addresses).toJsonNode
 }
 
 private[spark] object ResourceInformation {
 
-  private lazy val exampleJson: String = compact(render(
-    ResourceInformationJson("gpu", Seq("0", "1")).toJValue))
+  import com.fasterxml.jackson.databind.JsonNode
+
+  private lazy val exampleJson: String = JacksonUtils
+    .writeValueAsString(ResourceInformationJson("gpu", Seq("0", "1")))
 
   /**
    * Parses a JSON string into a [[ResourceInformation]] instance.
    */
   def parseJson(json: String): ResourceInformation = {
-    implicit val formats = DefaultFormats
     try {
-      parse(json).extract[ResourceInformationJson].toResourceInformation
+      JacksonUtils.readValue[ResourceInformationJson](json).toResourceInformation
     } catch {
       case NonFatal(e) =>
         throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n" +
@@ -79,10 +81,9 @@ private[spark] object ResourceInformation {
     }
   }
 
-  def parseJson(json: JValue): ResourceInformation = {
-    implicit val formats = DefaultFormats
+  def parseJson(json: JsonNode): ResourceInformation = {
     try {
-      json.extract[ResourceInformationJson].toResourceInformation
+      JacksonUtils.treeToValue[ResourceInformationJson](json).toResourceInformation
     } catch {
       case NonFatal(e) =>
         throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
@@ -91,10 +92,22 @@ private[spark] object ResourceInformation {
 }
 
 /** A case class to simplify JSON serialization of [[ResourceInformation]]. */
-private case class ResourceInformationJson(name: String, addresses: Seq[String]) {
+private case class ResourceInformationJson(
+    @JsonSetter(nulls = Nulls.FAIL) name: String,
+    @JsonSetter(nulls = Nulls.AS_EMPTY) addresses: Seq[String]) {
 
-  def toJValue: JValue = {
-    Extraction.decompose(this)(DefaultFormats)
+  def toJsonNode: JsonNode = {
+    JacksonUtils.valueToTree(this)
+//    val node = JacksonUtils.createObjectNode
+//    node.put("name", name)
+//    if (addresses != null) {
+//      import com.fasterxml.jackson.databind.node.TextNode
+//      val arrayNode = JacksonUtils.createArrayNode(addresses.size)
+//      arrayNode.addAll(addresses.map(a => new TextNode(a)).asJava)
+//      node.set("addresses", arrayNode)
+//    } else {
+//      node.set("addresses", JacksonUtils.createArrayNode(0))
+//    }
   }
 
   def toResourceInformation: ResourceInformation = {

@@ -19,10 +19,6 @@ package org.apache.spark.mllib.feature
 
 import scala.collection.mutable.ArrayBuilder
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -32,6 +28,7 @@ import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Chi Squared selector model.
@@ -133,8 +130,10 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
     def save(sc: SparkContext, model: ChiSqSelectorModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
@@ -145,9 +144,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
     }
 
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
-      implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      val (className, formatVersion, _) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 

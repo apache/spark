@@ -27,7 +27,6 @@ import scala.collection.Map
 import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
 import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -704,7 +703,7 @@ private[spark] object JsonProtocol {
     // and explore whether we can avoid exposing third-party symbols in this public API.
     executorInfo.resourcesInfo.foreach { case (k, v) =>
       g.writeFieldName(k)
-      g.writeRawValue(compact(v.toJson()))
+      g.writeObject(v.toJson())
     }
     g.writeEndObject()
     g.writeNumberField("Resource Profile Id", executorInfo.resourceProfileId)

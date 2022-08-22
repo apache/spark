@@ -21,13 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.json4s.JNull
-import org.json4s.JsonAST.{JBool, JString}
-import org.json4s.jackson.JsonMethods.parse
+import com.fasterxml.jackson.databind.node.{BooleanNode, NullNode, TextNode}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.util.JacksonUtils
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
@@ -189,10 +188,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val key = k.slice(pandasOnSparkConfPrefix.length, k.length)
       // The codes below is a simple version of Python's repr().
       // Pandas API on Spark does not support other types in the options yet.
-      val pyValue = parse(v) match {
-        case JNull => "None"
-        case JBool(v) => v.toString.capitalize
-        case JString(s) => s"'$s'"
+      val pyValue = JacksonUtils.readTree(v) match {
+        case _: NullNode => "None"
+        case v: BooleanNode => v.booleanValue().toString.capitalize
+        case s: TextNode => s"'${s.asText()}'"
         case _ => v
       }
       (key, pyValue)

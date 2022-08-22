@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
@@ -35,6 +32,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
@@ -314,9 +312,9 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numTrees" -> instance.getNumTrees)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numFeatures", instance.numFeatures)
+      extraMetadata.put("numTrees", instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
@@ -328,11 +326,10 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     private val treeClassName = classOf[DecisionTreeRegressionModel].getName
 
     override def load(path: String): RandomForestRegressionModel = {
-      implicit val format = DefaultFormats
-      val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
+      val (metadata: Metadata, treesData: Array[(Metadata, Node)], _: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
-      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val numTrees = (metadata.metadata \ "numTrees").extract[Int]
+      val numFeatures = metadata.metadata.get("numFeatures").intValue()
+      val numTrees = metadata.metadata.get("numTrees").intValue()
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map { case (treeMetadata, root) =>
         val tree =

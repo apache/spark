@@ -19,10 +19,6 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.JavaConverters._
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -31,6 +27,7 @@ import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
@@ -136,7 +133,7 @@ object KMeansModel extends Loader[KMeansModel] {
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): KMeansModel = {
-    val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, version, _) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     val classNameV2_0 = SaveLoadV2_0.thisClassName
     (loadedClassName, version) match {
@@ -169,8 +166,11 @@ object KMeansModel extends Loader[KMeansModel] {
 
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("k", model.k)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
       val dataRDD = sc.parallelize(model.clusterCentersWithNorm.zipWithIndex).map { case (p, id) =>
         Cluster(id, p.vector)
@@ -179,12 +179,11 @@ object KMeansModel extends Loader[KMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
-      implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val k = (metadata \ "k").extract[Int]
+      val k = metadata.get("k").intValue()
       val centroids = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.rdd.map(Cluster.apply).collect()
@@ -201,10 +200,13 @@ object KMeansModel extends Loader[KMeansModel] {
 
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
-         ~ ("k" -> model.k) ~ ("distanceMeasure" -> model.distanceMeasure)
-         ~ ("trainingCost" -> model.trainingCost)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("k", model.k)
+      metadataNode.put("distanceMeasure", model.distanceMeasure)
+      metadataNode.put("trainingCost", model.trainingCost)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
       val dataRDD = sc.parallelize(model.clusterCentersWithNorm.zipWithIndex).map { case (p, id) =>
         Cluster(id, p.vector)
@@ -213,18 +215,17 @@ object KMeansModel extends Loader[KMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
-      implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val k = (metadata \ "k").extract[Int]
+      val k = metadata.get("k").intValue()
       val centroids = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.rdd.map(Cluster.apply).collect()
       assert(k == localCentroids.length)
-      val distanceMeasure = (metadata \ "distanceMeasure").extract[String]
-      val trainingCost = (metadata \ "trainingCost").extract[Double]
+      val distanceMeasure = metadata.get("distanceMeasure").textValue()
+      val trainingCost = metadata.get("trainingCost").doubleValue()
       new KMeansModel(localCentroids.sortBy(_.id).map(_.point), distanceMeasure, trainingCost, -1)
     }
   }

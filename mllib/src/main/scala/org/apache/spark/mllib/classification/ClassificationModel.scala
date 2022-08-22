@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import org.json4s.{DefaultFormats, JValue}
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -64,8 +64,7 @@ private[mllib] object ClassificationModel {
    * Helper method for loading GLM classification model metadata.
    * @return (numFeatures, numClasses)
    */
-  def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
-    implicit val formats = DefaultFormats
-    ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
+  def getNumFeaturesClasses(metadata: JsonNode): (Int, Int) = {
+    (metadata.get("numFeatures").intValue(), metadata.get("numClasses").intValue())
   }
 }

@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.classification.impl
 
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Loader
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Helper class for import/export of GLM classification models.
@@ -54,9 +52,12 @@ private[classification] object GLMClassificationModel {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
-      val metadata = compact(render(
-        ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
-        ("numFeatures" -> numFeatures) ~ ("numClasses" -> numClasses)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", modelClass)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("numFeatures", numFeatures)
+      metadataNode.put("numClasses", numClasses)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.

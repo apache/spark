@@ -19,9 +19,8 @@ package org.apache.spark.ml.tree
 
 import scala.reflect.ClassTag
 
+import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -34,6 +33,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.VersionUtils
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -403,12 +403,11 @@ private[ml] object DecisionTreeModelReadWrite {
       metadata: DefaultParamsReader.Metadata,
       sparkSession: SparkSession): Node = {
     import sparkSession.implicits._
-    implicit val format = DefaultFormats
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
-      val impurityJson: JValue = metadata.getParamValue("impurity")
-      Param.jsonDecode[String](compact(render(impurityJson)))
+      val impurityJson = metadata.getParamValue("impurity")
+      Param.jsonDecode[String](JacksonUtils.writeValueAsString(impurityJson))
     }
 
     val dataPath = new Path(path, "data").toString
@@ -469,7 +468,7 @@ private[ml] object EnsembleModelReadWrite {
       instance: M,
       path: String,
       sparkSession: SparkSession,
-      extraMetadata: JObject): Unit = {
+      extraMetadata: ObjectNode): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sparkSession.sparkContext, Some(extraMetadata))
     val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
       (treeID,
@@ -507,13 +506,12 @@ private[ml] object EnsembleModelReadWrite {
       className: String,
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sparkSession.implicits._
-    implicit val format = DefaultFormats
     val metadata = DefaultParamsReader.loadMetadata(path, sparkSession.sparkContext, className)
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
-      val impurityJson: JValue = metadata.getParamValue("impurity")
-      Param.jsonDecode[String](compact(render(impurityJson)))
+      val impurityJson = metadata.getParamValue("impurity")
+      Param.jsonDecode[String](JacksonUtils.writeValueAsString(impurityJson))
     }
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString

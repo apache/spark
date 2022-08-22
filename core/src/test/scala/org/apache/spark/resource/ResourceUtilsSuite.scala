@@ -24,6 +24,7 @@ import java.util.Optional
 import org.json4s.{DefaultFormats, Extraction}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.Json4sUtils.createTempJsonFile
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceUtils._

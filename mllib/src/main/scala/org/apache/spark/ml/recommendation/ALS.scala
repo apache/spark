@@ -28,8 +28,6 @@ import scala.util.hashing.byteswap64
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
 
 import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -48,6 +46,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
@@ -541,7 +540,8 @@ object ALSModel extends MLReadable[ALSModel] {
   private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata = "rank" -> instance.rank
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("rank", instance.rank)
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
       instance.userFactors.write.format("parquet").save(userPath)
@@ -557,8 +557,7 @@ object ALSModel extends MLReadable[ALSModel] {
 
     override def load(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      implicit val format = DefaultFormats
-      val rank = (metadata.metadata \ "rank").extract[Int]
+      val rank = metadata.metadata.get("rank").intValue()
       val userPath = new Path(path, "userFactors").toString
       val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString

@@ -24,7 +24,6 @@ import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -37,6 +36,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -254,8 +254,6 @@ object CrossValidator extends MLReadable[CrossValidator] {
     private val className = classOf[CrossValidator].getName
 
     override def load(path: String): CrossValidator = {
-      implicit val format = DefaultFormats
-
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
       val cv = new CrossValidator(metadata.uid)
@@ -397,9 +395,9 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         "values are \"true\" or \"false\"")
       val persistSubModels = persistSubModelsParam.toBoolean
 
-      import org.json4s.JsonDSL._
-      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
-        ("persistSubModels" -> persistSubModels)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.putPOJO("avgMetrics", instance.avgMetrics.toSeq)
+      extraMetadata.putPOJO("persistSubModels", persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
@@ -425,16 +423,15 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     private val className = classOf[CrossValidatorModel].getName
 
     override def load(path: String): CrossValidatorModel = {
-      implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
-      val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val numFolds = metadata.params.get("numFolds").intValue()
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
-      val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
-      val persistSubModels = (metadata.metadata \ "persistSubModels")
-        .extractOrElse[Boolean](false)
+      val avgMetrics =
+        JacksonUtils.treeToValue[Seq[Double]](metadata.metadata.get("avgMetrics")).toArray
+      val persistSubModels = metadata.metadata.get("persistSubModels").asBoolean(false)
 
       val subModels: Option[Array[Array[Model[_]]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")

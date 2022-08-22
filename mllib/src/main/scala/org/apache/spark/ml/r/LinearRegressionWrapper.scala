@@ -18,9 +18,6 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -29,6 +26,7 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.JacksonUtils
 
 private[r] class LinearRegressionWrapper private (
     val pipeline: PipelineModel,
@@ -123,9 +121,10 @@ private[r] object LinearRegressionWrapper
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq)
-      val rMetadataJson: String = compact(render(rMetadata))
+      val rMetadata = JacksonUtils.createObjectNode
+      rMetadata.put("class", instance.getClass.getName)
+      rMetadata.putPOJO("features", instance.features.toSeq)
+      val rMetadataJson: String = JacksonUtils.writeValueAsString(rMetadata)
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
@@ -135,13 +134,12 @@ private[r] object LinearRegressionWrapper
   class LinearRegressionWrapperReader extends MLReader[LinearRegressionWrapper] {
 
     override def load(path: String): LinearRegressionWrapper = {
-      implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val features = (rMetadata \ "features").extract[Array[String]]
+      val rMetadata = JacksonUtils.readTree(rMetadataStr)
+      val features = JacksonUtils.treeToValue[Array[String]](rMetadata.get("features"))
 
       val pipeline = PipelineModel.load(pipelinePath)
       new LinearRegressionWrapper(pipeline, features)

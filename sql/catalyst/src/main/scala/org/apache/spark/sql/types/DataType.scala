@@ -19,13 +19,12 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.node._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
@@ -39,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -72,13 +72,14 @@ abstract class DataType extends AbstractDataType {
       .toLowerCase(Locale.ROOT)
   }
 
-  private[sql] def jsonValue: JValue = typeName
+  private[sql] def jsonNode: JsonNode =
+    JacksonUtils.defaultNodeFactory.textNode(typeName)
 
   /** The compact JSON representation of this data type. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.writeValueAsString(jsonNode)
 
   /** The pretty (i.e. indented) JSON representation of this data type. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.writeValuePrettyAsString(jsonNode)
 
   /** Readable string representation for the type. */
   def simpleString: String = typeName
@@ -166,7 +167,7 @@ object DataType {
     }
   }
 
-  def fromJson(json: String): DataType = parseDataType(parse(json))
+  def fromJson(json: String): DataType = parseDataType(JacksonUtils.readTree(json))
 
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
@@ -205,72 +206,84 @@ object DataType {
   }
 
   private object JSortedObject {
-    def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.sortBy(_._1))
-      case _ => None
+
+
+
+    def unapplySeq(value: JsonNode): Option[List[(String, JsonNode)]] = {
+      if (value.isContainerNode) {
+        Some(value.fields().asScala.map { f => (f.getKey, f.getValue) }.toList.sortBy(_._1))
+      } else {
+        None
+      }
     }
   }
 
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private[sql] def parseDataType(json: JValue): DataType = json match {
-    case JString(name) =>
-      nameToType(name)
+  private[sql] def parseDataType(json: JsonNode): DataType = json match {
+    case t: TextNode => nameToType(t.textValue())
 
     case JSortedObject(
-    ("containsNull", JBool(n)),
-    ("elementType", t: JValue),
-    ("type", JString("array"))) =>
-      ArrayType(parseDataType(t), n)
+      ("containsNull", b: BooleanNode),
+      ("elementType", t: JsonNode),
+      ("type", s: TextNode)
+    ) if s.textValue().equals("array") =>
+      ArrayType(parseDataType(t), b.booleanValue())
 
     case JSortedObject(
-    ("keyType", k: JValue),
-    ("type", JString("map")),
-    ("valueContainsNull", JBool(n)),
-    ("valueType", v: JValue)) =>
-      MapType(parseDataType(k), parseDataType(v), n)
+      ("keyType", k: JsonNode),
+      ("type", t: TextNode),
+      ("valueContainsNull", n: BooleanNode),
+      ("valueType", v: JsonNode)
+    ) if t.textValue().equals("map") =>
+      MapType(parseDataType(k), parseDataType(v), n.booleanValue())
 
     case JSortedObject(
-    ("fields", JArray(fields)),
-    ("type", JString("struct"))) =>
-      StructType(fields.map(parseStructField))
+      ("fields", fields: ArrayNode),
+      ("type", t: TextNode)
+    ) if t.textValue().equals("struct") =>
+      StructType(fields.asScala.toSeq.map(parseStructField))
 
     // Scala/Java UDT
     case JSortedObject(
-    ("class", JString(udtClass)),
-    ("pyClass", _),
-    ("sqlType", _),
-    ("type", JString("udt"))) =>
-      Utils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
+      ("class", udtClass: TextNode),
+      ("pyClass", _),
+      ("sqlType", _),
+      ("type", t: TextNode)
+    ) if t.textValue().equals("udt") =>
+      Utils.classForName[UserDefinedType[_]](udtClass.textValue()).getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(
-    ("pyClass", JString(pyClass)),
-    ("serializedClass", JString(serialized)),
-    ("sqlType", v: JValue),
-    ("type", JString("udt"))) =>
-        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+      ("pyClass", pyClass: TextNode),
+      ("serializedClass", serialized: TextNode),
+      ("sqlType", v: JsonNode),
+      ("type", t: TextNode)) if t.textValue().equals("udt") =>
+      new PythonUserDefinedType(parseDataType(v), pyClass.textValue(), serialized.textValue())
 
     case other =>
       throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
+        "Failed to convert the JSON string " +
+          s"'${JacksonUtils.writeValueAsString(other)}' to a data type.")
   }
 
-  private def parseStructField(json: JValue): StructField = json match {
+  private def parseStructField(json: JsonNode): StructField = json match {
     case JSortedObject(
-    ("metadata", metadata: JObject),
-    ("name", JString(name)),
-    ("nullable", JBool(nullable)),
-    ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
+      ("metadata", metadata: ObjectNode),
+      ("name", name: TextNode),
+      ("nullable", nullable: BooleanNode),
+      ("type", dataType: JsonNode)) =>
+      StructField(name.textValue(), parseDataType(dataType),
+        nullable.booleanValue(), Metadata.fromJObject(metadata))
     // Support reading schema when 'metadata' is missing.
     case JSortedObject(
-    ("name", JString(name)),
-    ("nullable", JBool(nullable)),
-    ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable)
+      ("name", name: TextNode),
+      ("nullable", nullable: BooleanNode),
+      ("type", dataType: JsonNode)) =>
+      StructField(name.textValue(), parseDataType(dataType), nullable.booleanValue())
     case other =>
       throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
+        "Failed to convert the JSON string " +
+          s"'${JacksonUtils.writeValueAsString(other)}' to a field.")
   }
 
   protected[types] def buildFormattedString(

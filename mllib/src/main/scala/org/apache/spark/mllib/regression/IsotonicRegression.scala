@@ -24,10 +24,6 @@ import java.util.Arrays.binarySearch
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{RangePartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
@@ -35,6 +31,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Regression model for isotonic regression.
@@ -185,9 +182,11 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
         isotonic: Boolean): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("isotonic" -> isotonic)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("isotonic", isotonic)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       spark.createDataFrame(
@@ -210,9 +209,8 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
-    implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
-    val isotonic = (metadata \ "isotonic").extract[Boolean]
+    val isotonic = metadata.get("isotonic").booleanValue()
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>

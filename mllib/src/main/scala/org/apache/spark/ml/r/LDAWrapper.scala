@@ -20,9 +20,6 @@ package org.apache.spark.ml.r
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
@@ -34,7 +31,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
-
+import org.apache.spark.util.JacksonUtils
 
 private[r] class LDAWrapper private (
     val pipeline: PipelineModel,
@@ -193,11 +190,12 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("logLikelihood" -> instance.logLikelihood) ~
-        ("logPerplexity" -> instance.logPerplexity) ~
-        ("vocabulary" -> instance.vocabulary.toList)
-      val rMetadataJson: String = compact(render(rMetadata))
+      val rMetadata = JacksonUtils.createObjectNode
+      rMetadata.put("class", instance.getClass.getName)
+      rMetadata.put("logLikelihood", instance.logLikelihood)
+      rMetadata.put("logPerplexity", instance.logPerplexity)
+      rMetadata.putPOJO("vocabulary", instance.vocabulary.toList)
+      val rMetadataJson: String = JacksonUtils.writeValueAsString(rMetadata)
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
@@ -207,15 +205,14 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
   class LDAWrapperReader extends MLReader[LDAWrapper] {
 
     override def load(path: String): LDAWrapper = {
-      implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
-      val logPerplexity = (rMetadata \ "logPerplexity").extract[Double]
-      val vocabulary = (rMetadata \ "vocabulary").extract[List[String]].toArray
+      val rMetadata = JacksonUtils.readTree(rMetadataStr)
+      val logLikelihood = rMetadata.get("logLikelihood").doubleValue()
+      val logPerplexity = rMetadata.get("logPerplexity").doubleValue()
+      val vocabulary = JacksonUtils.treeToValue[List[String]](rMetadata.get("vocabulary")).toArray
 
       val pipeline = PipelineModel.load(pipelinePath)
       new LDAWrapper(pipeline, logLikelihood, logPerplexity, vocabulary)

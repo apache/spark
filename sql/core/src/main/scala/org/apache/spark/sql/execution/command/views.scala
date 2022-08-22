@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
 
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
@@ -35,6 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -423,13 +421,12 @@ object ViewHelper extends SQLConfHelper with Logging {
    */
   private def referredTempNamesToProps(
       viewNames: Seq[Seq[String]], functionsNames: Seq[String]): Map[String, String] = {
-    val viewNamesJson =
-      JArray(viewNames.map(nameParts => JArray(nameParts.map(JString).toList)).toList)
-    val functionsNamesJson = JArray(functionsNames.map(JString).toList)
+    val viewNamesJson = JacksonUtils.writeValueAsString(viewNames)
+    val functionsNamesJson = JacksonUtils.writeValueAsString(functionsNames)
 
     val props = new mutable.HashMap[String, String]
-    props.put(VIEW_REFERRED_TEMP_VIEW_NAMES, compact(render(viewNamesJson)))
-    props.put(VIEW_REFERRED_TEMP_FUNCTION_NAMES, compact(render(functionsNamesJson)))
+    props.put(VIEW_REFERRED_TEMP_VIEW_NAMES, viewNamesJson)
+    props.put(VIEW_REFERRED_TEMP_FUNCTION_NAMES, functionsNamesJson)
     props.toMap
   }
 

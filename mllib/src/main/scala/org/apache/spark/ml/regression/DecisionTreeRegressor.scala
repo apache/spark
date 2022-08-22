@@ -18,8 +18,6 @@
 package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.Instance
@@ -36,6 +34,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">Decision tree</a>
@@ -298,8 +297,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numFeatures", instance.numFeatures)
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
@@ -315,9 +314,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     private val className = classOf[DecisionTreeRegressionModel].getName
 
     override def load(path: String): DecisionTreeRegressionModel = {
-      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+      val numFeatures = metadata.metadata.get("numFeatures").intValue()
       val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
       metadata.getAndSetParams(model)

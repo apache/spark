@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.json4s.{DefaultFormats, JValue}
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -61,10 +61,10 @@ private[mllib] object RegressionModel {
 
   /**
    * Helper method for loading GLM regression model metadata.
+   *
    * @return numFeatures
    */
-  def getNumFeatures(metadata: JValue): Int = {
-    implicit val formats = DefaultFormats
-    (metadata \ "numFeatures").extract[Int]
+  def getNumFeatures(metadata: JsonNode): Int = {
+    metadata.get("numFeatures").intValue()
   }
 }

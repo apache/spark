@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.types
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.QueryExecutionErrors
-
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
@@ -79,7 +80,7 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   def getMetadataArray(key: String): Array[Metadata] = get(key)
 
   /** Converts to its JSON representation. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.writeValueAsString(jsonNode)
 
   override def toString: String = json
 
@@ -112,7 +113,8 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
     map(key).asInstanceOf[T]
   }
 
-  private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
+  private[sql] def jsonNode: JsonNode = Metadata.toJsonNode(this)
+
 }
 
 /**
@@ -128,73 +130,80 @@ object Metadata {
 
   /** Creates a Metadata instance from JSON. */
   def fromJson(json: String): Metadata = {
-    fromJObject(parse(json).asInstanceOf[JObject])
+    fromJObject(JacksonUtils.readTree(json).asInstanceOf[ObjectNode])
   }
 
   /** Creates a Metadata instance from JSON AST. */
-  private[sql] def fromJObject(jObj: JObject): Metadata = {
+  private[sql] def fromJObject(jObj: ObjectNode): Metadata = {
     val builder = new MetadataBuilder
-    jObj.obj.foreach {
-      case (key, JInt(value)) =>
-        builder.putLong(key, value.toLong)
-      case (key, JDouble(value)) =>
-        builder.putDouble(key, value)
-      case (key, JBool(value)) =>
-        builder.putBoolean(key, value)
-      case (key, JString(value)) =>
-        builder.putString(key, value)
-      case (key, o: JObject) =>
+    jObj.fields().asScala.map(f => (f.getKey, f.getValue)).foreach {
+      case (key, value: IntNode) =>
+        builder.putLong(key, value.longValue())
+      case (key, value: DoubleNode) =>
+        builder.putDouble(key, value.doubleValue())
+      case (key, value: BooleanNode) =>
+        builder.putBoolean(key, value.booleanValue())
+      case (key, value: TextNode) =>
+        builder.putString(key, value.textValue())
+      case (key, o: ObjectNode) =>
         builder.putMetadata(key, fromJObject(o))
-      case (key, JArray(value)) =>
+      case (key, value: ArrayNode) =>
         if (value.isEmpty) {
           // If it is an empty array, we cannot infer its element type. We put an empty Array[Long].
           builder.putLongArray(key, Array.empty)
         } else {
-          value.head match {
-            case _: JInt =>
-              builder.putLongArray(key, value.asInstanceOf[List[JInt]].map(_.num.toLong).toArray)
-            case _: JDouble =>
-              builder.putDoubleArray(key, value.asInstanceOf[List[JDouble]].map(_.num).toArray)
-            case _: JBool =>
-              builder.putBooleanArray(key, value.asInstanceOf[List[JBool]].map(_.value).toArray)
-            case _: JString =>
-              builder.putStringArray(key, value.asInstanceOf[List[JString]].map(_.s).toArray)
-            case _: JObject =>
-              builder.putMetadataArray(
-                key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
+          value.get(0) match {
+            case _: IntNode =>
+              builder.putLongArray(key,
+                value.elements().asScala.map(n => n.longValue()).toArray)
+            case _: DoubleNode =>
+              builder.putDoubleArray(key,
+                value.elements().asScala.map(n => n.doubleValue()).toArray)
+            case _: BooleanNode =>
+              builder.putBooleanArray(key,
+                value.elements().asScala.map(n => n.booleanValue()).toArray)
+            case _: TextNode =>
+              builder.putStringArray(key, value.elements().asScala.map(n => n.textValue()).toArray)
+            case _: ObjectNode =>
+              builder.putMetadataArray(key,
+                value.elements().asScala.map(n => fromJObject(n.asInstanceOf[ObjectNode])).toArray)
             case other =>
               throw QueryExecutionErrors.unsupportedArrayTypeError(other.getClass)
           }
         }
-      case (key, JNull) =>
+      case (key, _: NullNode) =>
         builder.putNull(key)
-      case (key, other) =>
+      case (_, other) =>
         throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
     }
     builder.build()
   }
 
-  /** Converts to JSON AST. */
-  private def toJsonValue(obj: Any): JValue = {
+  private def toJsonNode(obj: Any): JsonNode = {
+    val factory = org.apache.spark.util.JacksonUtils.defaultNodeFactory
     obj match {
       case map: Map[_, _] =>
-        val fields = map.toList.map { case (k, v) => (k.toString, toJsonValue(v)) }
-        JObject(fields)
+        val fields = map.map { case (k, v) => (k.toString, toJsonNode(v)) }.asJava
+        val node = factory.objectNode()
+        node.setAll[JsonNode](fields)
+        node
       case arr: Array[_] =>
-        val values = arr.toList.map(toJsonValue)
-        JArray(values)
+        val values = arr.toList.map(toJsonNode).asJava
+        val node = factory.arrayNode(values.size())
+        node.addAll(values)
+        node
       case x: Long =>
-        JInt(x)
+        factory.numberNode(x)
       case x: Double =>
-        JDouble(x)
+        factory.numberNode(x)
       case x: Boolean =>
-        JBool(x)
+        factory.booleanNode(x)
       case x: String =>
-        JString(x)
+        factory.textNode(x)
       case null =>
-        JNull
+        factory.nullNode()
       case x: Metadata =>
-        toJsonValue(x.map)
+        toJsonNode(x.map)
       case other =>
         throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
     }

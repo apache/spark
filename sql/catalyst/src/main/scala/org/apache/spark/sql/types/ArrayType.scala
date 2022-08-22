@@ -19,11 +19,12 @@ package org.apache.spark.sql.types
 
 import scala.math.Ordering
 
-import org.json4s.JsonDSL._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Companion object for ArrayType.
@@ -78,10 +79,13 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     }
   }
 
-  override private[sql] def jsonValue =
-    ("type" -> typeName) ~
-      ("elementType" -> elementType.jsonValue) ~
-      ("containsNull" -> containsNull)
+  override private[sql] def jsonNode: JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("type", typeName)
+    node.set[JsonNode]("elementType", elementType.jsonNode)
+    node.put("containsNull", containsNull)
+    node
+  }
 
   /**
    * The default size of a value of the ArrayType is the default size of the element type.

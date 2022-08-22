@@ -36,8 +36,6 @@ import org.eclipse.jetty.server.handler.gzip.GzipHandler
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
@@ -48,6 +46,8 @@ import org.apache.spark.util.Utils
  * Utilities for launching a web server using Jetty's HTTP Server class
  */
 private[spark] object JettyUtils extends Logging {
+
+  import com.fasterxml.jackson.databind.JsonNode
 
   val SPARK_CONNECTOR_NAME = "Spark"
   val REDIRECT_CONNECTOR_NAME = "HttpsRedirect"
@@ -61,8 +61,8 @@ private[spark] object JettyUtils extends Logging {
     val extractFn: T => String = (in: Any) => in.toString) {}
 
   // Conversions from various types of Responder's to appropriate servlet parameters
-  implicit def jsonResponderToServlet(responder: Responder[JValue]): ServletParams[JValue] =
-    new ServletParams(responder, "text/json", (in: JValue) => pretty(render(in)))
+  implicit def jsonResponderToServlet(responder: Responder[JsonNode]): ServletParams[JsonNode] =
+    new ServletParams(responder, "text/json", (in: JsonNode) => in.toPrettyString)
 
   implicit def htmlResponderToServlet(responder: Responder[Seq[Node]]): ServletParams[Seq[Node]] =
     new ServletParams(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)

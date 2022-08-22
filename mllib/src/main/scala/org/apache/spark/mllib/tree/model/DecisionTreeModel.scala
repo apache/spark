@@ -19,10 +19,6 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -198,6 +194,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
 
     def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
+      import org.apache.spark.util.JacksonUtils
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
       // TODO: Fix this issue for real.
@@ -220,10 +217,20 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         }
       }
 
+
+      // TODO: Map should also ok, but need do some performance test.
+      // val metadata = JacksonUtils.writeValueAsString(
+      //  Map("class" -> thisClassName, "version" -> thisFormatVersion,
+      //    "algo" -> model.algo.toString, "numNodes" -> model.numNodes)
+      // )
+
       // Create JSON metadata.
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("algo" -> model.algo.toString) ~ ("numNodes" -> model.numNodes)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("algo", model.algo.toString)
+      metadataNode.put("numNodes", model.numNodes)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
@@ -312,10 +319,9 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
    */
   @Since("1.3.0")
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
-    implicit val formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
-    val algo = (metadata \ "algo").extract[String]
-    val numNodes = (metadata \ "numNodes").extract[Int]
+    val algo = metadata.get("algo").textValue()
+    val numNodes = metadata.get("numNodes").intValue()
     val classNameV1_0 = SaveLoadV1_0.thisClassName
     (loadedClassName, version) match {
       case (className, "1.0") if className == classNameV1_0 =>

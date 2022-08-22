@@ -19,9 +19,7 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -37,6 +35,7 @@ import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -419,12 +418,13 @@ private[tree] object TreeEnsembleModel extends Logging {
       }
 
       // Create JSON metadata.
-      implicit val format = DefaultFormats
       val ensembleMetadata = Metadata(model.algo.toString, model.trees(0).algo.toString,
         model.combiningStrategy.toString, model.treeWeights)
-      val metadata = compact(render(
-        ("class" -> className) ~ ("version" -> thisFormatVersion) ~
-          ("metadata" -> Extraction.decompose(ensembleMetadata))))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", className)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.putPOJO("metadata", ensembleMetadata)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
@@ -437,9 +437,8 @@ private[tree] object TreeEnsembleModel extends Logging {
     /**
      * Read metadata from the loaded JSON metadata.
      */
-    def readMetadata(metadata: JValue): Metadata = {
-      implicit val formats = DefaultFormats
-      (metadata \ "metadata").extract[Metadata]
+    def readMetadata(metadata: JsonNode): Metadata = {
+      JacksonUtils.treeToValue[Metadata](metadata.get("metadata"))
     }
 
     /**

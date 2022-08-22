@@ -19,10 +19,10 @@ package org.apache.spark.sql.types
 
 import java.util.Objects
 
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -58,11 +58,13 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   /** Convert a SQL datum to the user type */
   def deserialize(datum: Any): UserType
 
-  override private[sql] def jsonValue: JValue = {
-    ("type" -> "udt") ~
-      ("class" -> this.getClass.getName) ~
-      ("pyClass" -> pyUDT) ~
-      ("sqlType" -> sqlType.jsonValue)
+  override private[sql] def jsonNode: JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("type", "udt")
+    node.put("class", this.getClass.getName)
+    node.put("pyClass", pyUDT)
+    node.set[JsonNode]("sqlType", sqlType.jsonNode)
+    node
   }
 
   /**
@@ -124,11 +126,13 @@ private[sql] class PythonUserDefinedType(
   /* There is no Java class for Python UDT */
   override def userClass: java.lang.Class[Any] = null
 
-  override private[sql] def jsonValue: JValue = {
-    ("type" -> "udt") ~
-      ("pyClass" -> pyUDT) ~
-      ("serializedClass" -> serializedPyClass) ~
-      ("sqlType" -> sqlType.jsonValue)
+  override private[sql] def jsonNode: JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("type", "udt")
+    node.put("pyClass", pyUDT)
+    node.put("serializedClass", serializedPyClass)
+    node.set[JsonNode]("sqlType", sqlType.jsonNode)
+    node
   }
 
   override private[sql] def acceptsType(dataType: DataType): Boolean = dataType match {

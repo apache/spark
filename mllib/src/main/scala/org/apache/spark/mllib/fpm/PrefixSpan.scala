@@ -25,10 +25,6 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -40,6 +36,7 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 
 /**
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
@@ -648,8 +645,10 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
       val sc = model.freqSequences.sparkContext
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Get the type of item class
@@ -669,10 +668,9 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
     }
 
     def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
-      implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
-      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      val (className, formatVersion, _) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 

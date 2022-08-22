@@ -50,8 +50,6 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -460,13 +458,6 @@ private[spark] object TestUtils {
       if (c != '.' && c != '_') result.append(path.getAbsolutePath)
     }
     result.toArray
-  }
-
-  /** Creates a temp JSON file that contains the input JSON record. */
-  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
-    val file = File.createTempFile(prefix, ".json", dir)
-    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
-    file.getPath
   }
 
   /** Creates a temp bash script that prints the given output. */

@@ -22,15 +22,13 @@ import java.util.Optional
 
 import scala.util.control.NonFatal
 
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -249,8 +247,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     withResourcesJson[ResourceAllocation](resourcesFile) { json =>
-      implicit val formats = DefaultFormats
-      parse(json).extract[Seq[ResourceAllocation]]
+      JacksonUtils.readValue[Seq[ResourceAllocation]](json)
     }
   }
 

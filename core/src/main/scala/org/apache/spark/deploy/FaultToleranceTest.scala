@@ -30,8 +30,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.sys.process._
 
-import org.json4s.jackson.JsonMethods
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
 import org.apache.spark.internal.{config, Logging}
@@ -340,7 +338,6 @@ private object FaultToleranceTest extends App with Logging {
 private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging  {
 
-  implicit val formats = org.json4s.DefaultFormats
   var state: RecoveryState.Value = _
   var liveWorkerIPs: List[String] = _
   var numLiveApps = 0
@@ -349,22 +346,25 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
   def readState(): Unit = {
     try {
+      import org.apache.spark.util.JacksonUtils
+      import scala.collection.JavaConverters._
       val masterStream = new InputStreamReader(
         new URL("http://%s:8080/json".format(ip)).openStream, StandardCharsets.UTF_8)
-      val json = JsonMethods.parse(masterStream)
+      val jsonNode = JacksonUtils.readTree(masterStream)
 
-      val workers = json \ "workers"
-      val liveWorkers = workers.children.filter(w => (w \ "state").extract[String] == "ALIVE")
+      val workersNode = jsonNode.get("workers")
+      val liveWorkerNodes = workersNode.elements().asScala
+        .filter(n => n.get("state").asText() == "ALIVE")
       // Extract the worker IP from "webuiaddress" (rather than "host") because the host name
       // on containers is a weird hash instead of the actual IP address.
-      liveWorkerIPs = liveWorkers.map {
-        w => (w \ "webuiaddress").extract[String].stripPrefix("http://").stripSuffix(":8081")
-      }
+      liveWorkerIPs = liveWorkerNodes.map {
+        w => w.get("webuiaddress").asText().stripPrefix("http://").stripSuffix(":8081")
+      }.toList
 
-      numLiveApps = (json \ "activeapps").children.size
+      numLiveApps = jsonNode.get("activeapps").size()
 
-      val status = json \\ "status"
-      val stateString = status.extract[String]
+      val status = jsonNode.get("status")
+      val stateString = status.asText()
       state = RecoveryState.values.filter(state => state.toString == stateString).head
     } catch {
       case e: Exception =>
@@ -382,8 +382,6 @@ private class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile
 
 private class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging {
-
-  implicit val formats = org.json4s.DefaultFormats
 
   logDebug("Created worker: " + this)
 

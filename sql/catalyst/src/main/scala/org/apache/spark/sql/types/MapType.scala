@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.util.JacksonUtils
 
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
@@ -54,11 +54,14 @@ case class MapType(
     }
   }
 
-  override private[sql] def jsonValue: JValue =
-    ("type" -> typeName) ~
-      ("keyType" -> keyType.jsonValue) ~
-      ("valueType" -> valueType.jsonValue) ~
-      ("valueContainsNull" -> valueContainsNull)
+  override private[sql] def jsonNode: JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("type", typeName)
+    node.set[JsonNode]("keyType", keyType.jsonNode)
+    node.set[JsonNode]("valueType", valueType.jsonNode)
+    node.put("valueContainsNull", valueContainsNull)
+    node
+  }
 
   /**
    * The default size of a value of the MapType is

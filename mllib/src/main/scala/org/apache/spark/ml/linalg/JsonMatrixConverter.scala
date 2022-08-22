@@ -16,9 +16,7 @@
  */
 package org.apache.spark.ml.linalg
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+import org.apache.spark.util.JacksonUtils
 
 private[ml] object JsonMatrixConverter {
 
@@ -29,25 +27,25 @@ private[ml] object JsonMatrixConverter {
    * Parses the JSON representation of a Matrix into a [[Matrix]].
    */
   def fromJson(json: String): Matrix = {
-    implicit val formats = DefaultFormats
-    val jValue = parseJson(json)
-    (jValue \ "type").extract[Int] match {
+    val jsonNode = JacksonUtils.readTree(json)
+    jsonNode.get("type").intValue() match {
       case 0 => // sparse
-        val numRows = (jValue \ "numRows").extract[Int]
-        val numCols = (jValue \ "numCols").extract[Int]
-        val colPtrs = (jValue \ "colPtrs").extract[Seq[Int]].toArray
-        val rowIndices = (jValue \ "rowIndices").extract[Seq[Int]].toArray
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        val isTransposed = (jValue \ "isTransposed").extract[Boolean]
+        val numRows = jsonNode.get("numRows").intValue()
+        val numCols = jsonNode.get("numCols").intValue()
+        val colPtrs = JacksonUtils.treeToValue[Seq[Int]](jsonNode.get("colPtrs")).toArray
+        val rowIndices = JacksonUtils.treeToValue[Seq[Int]](jsonNode.get("rowIndices")).toArray
+        val values = JacksonUtils.treeToValue[Seq[Double]](jsonNode.get("values")).toArray
+        val isTransposed = jsonNode.get("isTransposed").booleanValue()
         new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
       case 1 => // dense
-        val numRows = (jValue \ "numRows").extract[Int]
-        val numCols = (jValue \ "numCols").extract[Int]
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        val isTransposed = (jValue \ "isTransposed").extract[Boolean]
+        val numRows = jsonNode.get("numRows").intValue()
+        val numCols = jsonNode.get("numCols").intValue()
+        val values = JacksonUtils.treeToValue[Seq[Double]](jsonNode.get("values")).toArray
+        val isTransposed = jsonNode.get("isTransposed").booleanValue()
         new DenseMatrix(numRows, numCols, values, isTransposed)
       case _ =>
         throw new IllegalArgumentException(s"Cannot parse $json into a Matrix.")
+
     }
   }
 
@@ -57,23 +55,25 @@ private[ml] object JsonMatrixConverter {
   def toJson(m: Matrix): String = {
     m match {
       case SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed) =>
-        val jValue = ("class" -> className) ~
-          ("type" -> 0) ~
-          ("numRows" -> numRows) ~
-          ("numCols" -> numCols) ~
-          ("colPtrs" -> colPtrs.toSeq) ~
-          ("rowIndices" -> rowIndices.toSeq) ~
-          ("values" -> values.toSeq) ~
-          ("isTransposed" -> isTransposed)
-        compact(render(jValue))
+        val sparse = JacksonUtils.createObjectNode
+        sparse.put("class", className)
+        sparse.put("type", 0)
+        sparse.put("numRows", numRows)
+        sparse.put("numCols", numCols)
+        sparse.putPOJO("colPtrs", colPtrs.toSeq)
+        sparse.putPOJO("rowIndices", rowIndices.toSeq)
+        sparse.putPOJO("values", values.toSeq)
+        sparse.put("isTransposed", isTransposed)
+        JacksonUtils.writeValueAsString(sparse)
       case DenseMatrix(numRows, numCols, values, isTransposed) =>
-        val jValue = ("class" -> className) ~
-          ("type" -> 1) ~
-          ("numRows" -> numRows) ~
-          ("numCols" -> numCols) ~
-          ("values" -> values.toSeq) ~
-          ("isTransposed" -> isTransposed)
-        compact(render(jValue))
+        val dense = JacksonUtils.createObjectNode
+        dense.put("class", className)
+        dense.put("type", 1)
+        dense.put("numRows", numRows)
+        dense.put("numCols", numCols)
+        dense.putPOJO("values", values.toSeq)
+        dense.put("isTransposed", isTransposed)
+        JacksonUtils.writeValueAsString(dense)
       case _ =>
         throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }

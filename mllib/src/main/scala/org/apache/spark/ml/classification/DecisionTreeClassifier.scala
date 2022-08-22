@@ -18,8 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature._
@@ -37,6 +35,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
@@ -290,9 +289,9 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numFeatures", instance.numFeatures)
+      extraMetadata.put("numClasses", instance.numClasses)
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
@@ -308,10 +307,9 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     private val className = classOf[DecisionTreeClassificationModel].getName
 
     override def load(path: String): DecisionTreeClassificationModel = {
-      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val numFeatures = metadata.metadata.get("numFeatures").intValue()
+      val numClasses = metadata.metadata.get("numClasses").intValue()
       val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
       metadata.getAndSetParams(model)

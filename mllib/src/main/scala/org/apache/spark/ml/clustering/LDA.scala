@@ -19,12 +19,12 @@ package org.apache.spark.ml.clustering
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import breeze.linalg.normalize
 import breeze.numerics.exp
+import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.JsonAST.JObject
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -49,6 +49,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -384,14 +385,15 @@ private object LDAParams {
   def getAndSetParams(model: LDAParams, metadata: Metadata): Unit = {
     VersionUtils.majorMinorVersion(metadata.sparkVersion) match {
       case (1, 6) =>
-        implicit val format = DefaultFormats
         metadata.params match {
-          case JObject(pairs) =>
-            pairs.foreach { case (paramName, jsonValue) =>
+          case pairs: ObjectNode =>
+            pairs.fields().asScala.foreach { entry =>
+              val paramName = entry.getKey
+              val jsonNode = entry.getValue
               val origParam =
                 if (paramName == "topicDistribution") "topicDistributionCol" else paramName
               val param = model.getParam(origParam)
-              val value = param.jsonDecode(compact(render(jsonValue)))
+              val value = param.jsonDecode(JacksonUtils.writeValueAsString(jsonNode))
               model.set(param, value)
             }
           case _ =>

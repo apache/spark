@@ -24,11 +24,10 @@ import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -48,8 +47,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
-
-  private implicit val formats = Serialization.formats(NoTypeHints)
 
   /** Needed to serialize type T into JSON when using Jackson */
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
@@ -137,10 +134,10 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   private def serializeEntry(entry: T, out: OutputStream): Unit = {
-    out.write(Serialization.write(entry).getBytes(UTF_8))
+    out.write(JacksonUtils.writeValueAsBytes(entry))
   }
 
-  private def deserializeEntry(line: String): T = Serialization.read[T](line)
+  private def deserializeEntry(line: String): T = JacksonUtils.readValue[T](line)
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller

@@ -17,9 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+import org.apache.spark.util.JacksonUtils
 
 private[ml] object JsonVectorConverter {
 
@@ -27,16 +25,16 @@ private[ml] object JsonVectorConverter {
    * Parses the JSON representation of a vector into a [[Vector]].
    */
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
-    val jValue = parseJson(json)
-    (jValue \ "type").extract[Int] match {
+    val jsonNode = JacksonUtils.readTree(json)
+    val typeNode = jsonNode.get("type")
+    typeNode.intValue() match {
       case 0 => // sparse
-        val size = (jValue \ "size").extract[Int]
-        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        val size = jsonNode.get("size").intValue()
+        val indices = JacksonUtils.treeToValue[Seq[Int]](jsonNode.get("indices")).toArray
+        val values = JacksonUtils.treeToValue[Seq[Double]](jsonNode.get("values")).toArray
         Vectors.sparse(size, indices, values)
       case 1 => // dense
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        val values = JacksonUtils.treeToValue[Seq[Double]](jsonNode.get("values")).toArray
         Vectors.dense(values)
       case _ =>
         throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
@@ -49,14 +47,17 @@ private[ml] object JsonVectorConverter {
   def toJson(v: Vector): String = {
     v match {
       case SparseVector(size, indices, values) =>
-        val jValue = ("type" -> 0) ~
-          ("size" -> size) ~
-          ("indices" -> indices.toSeq) ~
-          ("values" -> values.toSeq)
-        compact(render(jValue))
+        val sparse = JacksonUtils.createObjectNode
+        sparse.put("type", 0)
+        sparse.put("size", size)
+        sparse.putPOJO("indices", indices.toSeq)
+        sparse.putPOJO("values", values.toSeq)
+        JacksonUtils.writeValueAsString(sparse)
       case DenseVector(values) =>
-        val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
-        compact(render(jValue))
+        val dense = JacksonUtils.createObjectNode
+        dense.put("type", 1)
+        dense.putPOJO("values", values.toSeq)
+        JacksonUtils.writeValueAsString(dense)
       case _ =>
         throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }

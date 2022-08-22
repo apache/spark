@@ -18,9 +18,6 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
@@ -29,6 +26,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.JacksonUtils
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
     val pipeline: PipelineModel
@@ -125,7 +123,6 @@ private[r] object MultilayerPerceptronClassifierWrapper
     extends MLReader[MultilayerPerceptronClassifierWrapper]{
 
     override def load(path: String): MultilayerPerceptronClassifierWrapper = {
-      implicit val format = DefaultFormats
       val pipelinePath = new Path(path, "pipeline").toString
 
       val pipeline = PipelineModel.load(pipelinePath)
@@ -140,8 +137,9 @@ private[r] object MultilayerPerceptronClassifierWrapper
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = "class" -> instance.getClass.getName
-      val rMetadataJson: String = compact(render(rMetadata))
+      val rMetadata = JacksonUtils.createObjectNode
+      rMetadata.put("class", instance.getClass.getName)
+      val rMetadataJson: String = JacksonUtils.writeValueAsString(rMetadata)
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)

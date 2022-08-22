@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{BLAS, Vector}
@@ -35,6 +32,7 @@ import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTMod
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
@@ -361,9 +359,9 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
   class GBTRegressionModelWriter(instance: GBTRegressionModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numTrees" -> instance.getNumTrees)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numFeatures", instance.numFeatures)
+      extraMetadata.put("numTrees", instance.getNumTrees)
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
@@ -375,12 +373,11 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
     private val treeClassName = classOf[DecisionTreeRegressionModel].getName
 
     override def load(path: String): GBTRegressionModel = {
-      implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
 
-      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val numTrees = (metadata.metadata \ "numTrees").extract[Int]
+      val numFeatures = metadata.metadata.get("numFeatures").intValue()
+      val numTrees = metadata.metadata.get("numTrees").intValue()
 
       val trees = treesData.map {
         case (treeMetadata, root) =>

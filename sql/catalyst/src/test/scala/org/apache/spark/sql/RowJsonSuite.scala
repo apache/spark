@@ -20,6 +20,7 @@ import java.sql.{Date, Timestamp}
 import java.time.LocalDate
 
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JLong, JNull, JObject, JString, JValue}
+import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
@@ -30,6 +31,7 @@ import org.apache.spark.sql.types._
  * Test suite for [[Row]] JSON serialization.
  */
 class RowJsonSuite extends SparkFunSuite {
+
   private val schema = new StructType()
     .add("c1", "string")
     .add("c2", IntegerType)
@@ -37,7 +39,7 @@ class RowJsonSuite extends SparkFunSuite {
   private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
     test(name) {
       val row = new GenericRowWithSchema(Array(value), new StructType().add("a", dt))
-      assert(row.jsonValue === JObject("a" -> expected))
+      assert(row.json === compact(JObject("a" -> expected)))
     }
   }
 
@@ -122,7 +124,7 @@ class RowJsonSuite extends SparkFunSuite {
 
   test("no schema") {
     val e = intercept[IllegalArgumentException] {
-      Row("a").jsonValue
+      Row("a").jsonNode
     }
     assert(e.getMessage.contains("requires a non-null schema"))
   }
@@ -132,7 +134,7 @@ class RowJsonSuite extends SparkFunSuite {
       val row = new GenericRowWithSchema(
         Array((1, 2)),
         new StructType().add("a", ObjectType(classOf[(Int, Int)])))
-      row.jsonValue
+      row.jsonNode
     }
     assert(e.getMessage.contains("Failed to convert value"))
   }

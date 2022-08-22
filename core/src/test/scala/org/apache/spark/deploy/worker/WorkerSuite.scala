@@ -35,7 +35,8 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.TestUtils.{createTempJsonFile, createTempScriptWithExpectedOutput}
+import org.apache.spark.Json4sUtils.createTempJsonFile
+import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState

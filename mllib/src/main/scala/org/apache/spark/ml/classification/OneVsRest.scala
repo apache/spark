@@ -23,10 +23,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -41,6 +40,7 @@ import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
@@ -94,13 +94,16 @@ private[ml] object OneVsRestParams extends ClassifierTypeTrait {
       path: String,
       instance: OneVsRestParams,
       sc: SparkContext,
-      extraMetadata: Option[JObject] = None): Unit = {
+      extraMetadata: Option[ObjectNode] = None): Unit = {
+    import org.apache.spark.util.JacksonUtils
 
     val params = instance.extractParamMap().toSeq
-    val jsonParams = render(params
-      .filter { case ParamPair(p, v) => p.name != "classifier" }
-      .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
-      .toList)
+    val jsonParams = JacksonUtils.createObjectNode
+    params
+      .filter { case ParamPair(p, _) => p.name != "classifier" }
+      .foreach { case ParamPair(p, v) =>
+        jsonParams.set[JsonNode](p.name, JacksonUtils.readTree(p.jsonEncode(v)))
+      }
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
@@ -278,8 +281,9 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     OneVsRestParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
-      val extraJson = ("labelMetadata" -> instance.labelMetadata.json) ~
-        ("numClasses" -> instance.models.length)
+      val extraJson = JacksonUtils.createObjectNode
+      extraJson.put("labelMetadata", instance.labelMetadata.json)
+      extraJson.put("numClasses", instance.models.length)
       OneVsRestParams.saveImpl(path, instance, sc, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model_$idx").toString
@@ -294,10 +298,9 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     private val className = classOf[OneVsRestModel].getName
 
     override def load(path: String): OneVsRestModel = {
-      implicit val format = DefaultFormats
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
-      val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])
-      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val labelMetadata = Metadata.fromJson(metadata.metadata.get("labelMetadata").textValue())
+      val numClasses = metadata.metadata.get("numClasses").intValue()
       val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
         DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)

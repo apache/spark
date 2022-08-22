@@ -20,9 +20,6 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{argmax, argtopk, normalize, sum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -33,6 +30,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Latent Dirichlet Allocation (LDA) model.
@@ -453,12 +451,15 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         gammaShape: Double): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val k = topicsMatrix.numCols
-      val metadata = compact(render
-        (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("k" -> k) ~ ("vocabSize" -> topicsMatrix.numRows) ~
-          ("docConcentration" -> docConcentration.toArray.toSeq) ~
-          ("topicConcentration" -> topicConcentration) ~
-          ("gammaShape" -> gammaShape)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("k", k)
+      metadataNode.put("vocabSize", topicsMatrix.numRows)
+      metadataNode.putPOJO("docConcentration", docConcentration.toArray.toSeq)
+      metadataNode.put("topicConcentration", topicConcentration)
+      metadataNode.put("gammaShape", gammaShape)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val topicsDenseMatrix = topicsMatrix.asBreeze.toDenseMatrix
@@ -496,13 +497,12 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
   @Since("1.5.0")
   override def load(sc: SparkContext, path: String): LocalLDAModel = {
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
-    val expectedK = (metadata \ "k").extract[Int]
-    val expectedVocabSize = (metadata \ "vocabSize").extract[Int]
+    val expectedK = metadata.get("k").intValue()
+    val expectedVocabSize = metadata.get("vocabSize").intValue()
     val docConcentration =
-      Vectors.dense((metadata \ "docConcentration").extract[Seq[Double]].toArray)
-    val topicConcentration = (metadata \ "topicConcentration").extract[Double]
-    val gammaShape = (metadata \ "gammaShape").extract[Double]
+      Vectors.dense(JacksonUtils.treeToValue[Seq[Double]](metadata.get("docConcentration")).toArray)
+    val topicConcentration = metadata.get("topicConcentration").doubleValue()
+    val gammaShape = metadata.get("gammaShape").doubleValue()
     val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {
@@ -861,13 +861,16 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         gammaShape: Double): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
-      val metadata = compact(render
-        (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("k" -> k) ~ ("vocabSize" -> vocabSize) ~
-          ("docConcentration" -> docConcentration.toArray.toSeq) ~
-          ("topicConcentration" -> topicConcentration) ~
-          ("iterationTimes" -> iterationTimes.toSeq) ~
-          ("gammaShape" -> gammaShape)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("k", k)
+      metadataNode.put("vocabSize", vocabSize)
+      metadataNode.putPOJO("docConcentration", docConcentration.toArray.toSeq)
+      metadataNode.put("topicConcentration", topicConcentration)
+      metadataNode.putPOJO("iterationTimes", iterationTimes.toSeq)
+      metadataNode.put("gammaShape", gammaShape)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
@@ -923,14 +926,13 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
   @Since("1.5.0")
   override def load(sc: SparkContext, path: String): DistributedLDAModel = {
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
-    val expectedK = (metadata \ "k").extract[Int]
-    val vocabSize = (metadata \ "vocabSize").extract[Int]
+    val expectedK = metadata.get("k").intValue()
+    val vocabSize = metadata.get("vocabSize").intValue()
     val docConcentration =
-      Vectors.dense((metadata \ "docConcentration").extract[Seq[Double]].toArray)
-    val topicConcentration = (metadata \ "topicConcentration").extract[Double]
-    val iterationTimes = (metadata \ "iterationTimes").extract[Seq[Double]]
-    val gammaShape = (metadata \ "gammaShape").extract[Double]
+      Vectors.dense(JacksonUtils.treeToValue[Seq[Double]](metadata.get("docConcentration")).toArray)
+    val topicConcentration = metadata.get("topicConcentration").doubleValue()
+    val iterationTimes = JacksonUtils.treeToValue[Seq[Double]](metadata.get("iterationTimes"))
+    val gammaShape = metadata.get("gammaShape").doubleValue()
     val classNameV1_0 = SaveLoadV1_0.thisClassName
 
     val model = (loadedClassName, loadedVersion) match {

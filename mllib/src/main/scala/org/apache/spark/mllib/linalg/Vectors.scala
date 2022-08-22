@@ -25,9 +25,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
@@ -36,6 +33,7 @@ import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -430,16 +428,15 @@ object Vectors {
    */
   @Since("1.6.0")
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
-    val jValue = parseJson(json)
-    (jValue \ "type").extract[Int] match {
+    val jNode = JacksonUtils.readTree(json)
+    jNode.get("type").intValue() match {
       case 0 => // sparse
-        val size = (jValue \ "size").extract[Int]
-        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        val size = jNode.get("size").intValue()
+        val indices = JacksonUtils.treeToValue[Seq[Int]](jNode.get("indices")).toArray
+        val values = JacksonUtils.treeToValue[Seq[Double]](jNode.get("values")).toArray
         sparse(size, indices, values)
       case 1 => // dense
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        val values = JacksonUtils.treeToValue[Seq[Double]](jNode.get("values")).toArray
         dense(values)
       case _ =>
         throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
@@ -757,8 +754,10 @@ class DenseVector @Since("1.0.0") (
 
   @Since("1.6.0")
   override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
-    compact(render(jValue))
+    val jNode = JacksonUtils.createObjectNode
+    jNode.put("type", 1)
+    jNode.putPOJO("values", values.toSeq)
+    JacksonUtils.writeValueAsString(jNode)
   }
 
   @Since("2.0.0")
@@ -968,11 +967,12 @@ class SparseVector @Since("1.0.0") (
 
   @Since("1.6.0")
   override def toJson: String = {
-    val jValue = ("type" -> 0) ~
-      ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
-    compact(render(jValue))
+    val jsonNode = JacksonUtils.createObjectNode
+    jsonNode.put("type", 0)
+    jsonNode.put("size", size)
+    jsonNode.putPOJO("indices", indices.toSeq)
+    jsonNode.putPOJO("values", values.toSeq)
+    JacksonUtils.writeValueAsString(jsonNode)
   }
 
   @Since("2.0.0")

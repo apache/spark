@@ -23,12 +23,10 @@ import java.nio.file.Files
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.json4s.{DefaultFormats, Extraction}
-import org.json4s.jackson.JsonMethods.{compact, render}
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.{ResourceAllocation, ResourceID, ResourceInformation, ResourceRequirement}
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 private[spark] object StandaloneResourceUtils extends Logging {
@@ -114,9 +112,8 @@ private[spark] object StandaloneResourceUtils extends Logging {
   private def writeResourceAllocationJson[T](
       allocations: Seq[T],
       jsonFile: File): Unit = {
-    implicit val formats = DefaultFormats
-    val allocationJson = Extraction.decompose(allocations)
-    Files.write(jsonFile.toPath, compact(render(allocationJson)).getBytes())
+    val allocationJson = JacksonUtils.writeValueAsBytes(allocations)
+    Files.write(jsonFile.toPath, allocationJson)
   }
 
   def toMutable(immutableResources: Map[String, ResourceInformation])

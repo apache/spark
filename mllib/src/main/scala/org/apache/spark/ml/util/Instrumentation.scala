@@ -23,15 +23,14 @@ import java.util.UUID
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -101,14 +100,14 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
    * Logs the value of the given parameters for the estimator being used in this session.
    */
   def logParams(hasParams: Params, params: Param[_]*): Unit = {
-    val pairs: Seq[(String, JValue)] = for {
+    val pairs: Seq[(String, JsonNode)] = for {
       p <- params
       value <- hasParams.get(p)
     } yield {
       val cast = p.asInstanceOf[Param[Any]]
-      p.name -> parse(cast.jsonEncode(value))
+      p.name -> JacksonUtils.readTree(cast.jsonEncode(value))
     }
-    logInfo(compact(render(map2jvalue(pairs.toMap))))
+    logInfo(JacksonUtils.writeValueAsString(pairs.toMap))
   }
 
   def logNumFeatures(num: Long): Unit = {
@@ -131,27 +130,27 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
    * Logs the value with customized name field.
    */
   def logNamedValue(name: String, value: String): Unit = {
-    logInfo(compact(render(name -> value)))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value)))
   }
 
   def logNamedValue(name: String, value: Long): Unit = {
-    logInfo(compact(render(name -> value)))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value)))
   }
 
   def logNamedValue(name: String, value: Double): Unit = {
-    logInfo(compact(render(name -> value)))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value)))
   }
 
   def logNamedValue(name: String, value: Array[String]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value.toSeq)))
   }
 
   def logNamedValue(name: String, value: Array[Long]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value.toSeq)))
   }
 
   def logNamedValue(name: String, value: Array[Double]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(JacksonUtils.writeValueAsString(Map(name -> value.toSeq)))
   }
 
 

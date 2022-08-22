@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.util.Date
 
 import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.databind.JsonNode
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
@@ -95,6 +96,18 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     } catch {
       case e: JsonParseException => fail("Invalid Json detected", e)
     }
+  }
+
+  def assertValidJson(json: String): Unit = {
+    try {
+      JsonMethods.parse(json)
+    } catch {
+      case e: JsonParseException => fail("Invalid Json detected", e)
+    }
+  }
+
+  def assertValidJson(json: JsonNode): Unit = {
+    assertValidJson(json.toPrettyString)
   }
 }
 

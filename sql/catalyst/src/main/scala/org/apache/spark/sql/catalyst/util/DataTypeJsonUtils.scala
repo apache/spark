@@ -18,9 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
-import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.{JValueDeserializer, JValueSerializer}
+import com.fasterxml.jackson.databind._
 
 import org.apache.spark.sql.types.DataType
 
@@ -29,12 +27,11 @@ object DataTypeJsonUtils {
    * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
    */
   class DataTypeJsonSerializer extends JsonSerializer[DataType] {
-    private val delegate = new JValueSerializer
     override def serialize(
       value: DataType,
       gen: JsonGenerator,
       provider: SerializerProvider): Unit = {
-      delegate.serialize(value.jsonValue, gen, provider)
+      gen.writeObject(value.jsonNode)
     }
   }
 
@@ -43,13 +40,11 @@ object DataTypeJsonUtils {
    * deserialization.
    */
   class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
-    private val delegate = new JValueDeserializer(classOf[Any])
 
     override def deserialize(
       jsonParser: JsonParser,
       deserializationContext: DeserializationContext): DataType = {
-      val json = delegate.deserialize(jsonParser, deserializationContext)
-      DataType.parseDataType(json.asInstanceOf[JValue])
+      DataType.parseDataType(jsonParser.readValueAsTree.asInstanceOf[JsonNode])
     }
   }
 }

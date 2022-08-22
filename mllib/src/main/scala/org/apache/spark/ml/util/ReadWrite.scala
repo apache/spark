@@ -24,11 +24,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
@@ -40,6 +38,7 @@ import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Trait for `MLWriter` and `MLReader`.
@@ -406,8 +405,8 @@ private[ml] object DefaultParamsWriter {
       instance: Params,
       path: String,
       sc: SparkContext,
-      extraMetadata: Option[JObject] = None,
-      paramMap: Option[JValue] = None): Unit = {
+      extraMetadata: Option[ObjectNode] = None,
+      paramMap: Option[JsonNode] = None): Unit = {
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -422,31 +421,38 @@ private[ml] object DefaultParamsWriter {
   def getMetadataToSave(
       instance: Params,
       sc: SparkContext,
-      extraMetadata: Option[JObject] = None,
-      paramMap: Option[JValue] = None): String = {
+      extraMetadata: Option[ObjectNode] = None,
+      paramMap: Option[JsonNode] = None): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.paramMap.toSeq
     val defaultParams = instance.defaultParamMap.toSeq
-    val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
-      p.name -> parse(p.jsonEncode(v))
-    }.toList))
-    val jsonDefaultParams = render(defaultParams.map { case ParamPair(p, v) =>
-      p.name -> parse(p.jsonEncode(v))
-    }.toList)
-    val basicMetadata = ("class" -> cls) ~
-      ("timestamp" -> System.currentTimeMillis()) ~
-      ("sparkVersion" -> sc.version) ~
-      ("uid" -> uid) ~
-      ("paramMap" -> jsonParams) ~
-      ("defaultParamMap" -> jsonDefaultParams)
+
+    val jsonParams = paramMap.getOrElse{
+      val node = JacksonUtils.createObjectNode
+      params.foreach { case ParamPair(p, v) =>
+        node.set[JsonNode](p.name, JacksonUtils.readTree(p.jsonEncode(v)))
+      }
+      node
+    }
+    val jsonDefaultParams = JacksonUtils.createObjectNode
+    defaultParams.foreach { case ParamPair(p, v) =>
+      jsonDefaultParams.set[JsonNode](p.name, JacksonUtils.readTree(p.jsonEncode(v)))
+    }
+    val basicMetadata = JacksonUtils.createObjectNode
+    basicMetadata.put("class", cls)
+    basicMetadata.put("timestamp", System.currentTimeMillis())
+    basicMetadata.put("sparkVersion", sc.version)
+    basicMetadata.put("uid", uid)
+    basicMetadata.set[JsonNode]("paramMap", jsonParams)
+    basicMetadata.set[JsonNode]("defaultParamMap", jsonDefaultParams)
     val metadata = extraMetadata match {
-      case Some(jObject) =>
-        basicMetadata ~ jObject
+      case Some(obj) =>
+        basicMetadata.setAll[JsonNode](obj)
       case None =>
         basicMetadata
     }
-    val metadataJson: String = compact(render(metadata))
+    val metadataJson: String = JacksonUtils.writeValueAsString(metadata)
     metadataJson
   }
 }
@@ -487,15 +493,15 @@ private[ml] object DefaultParamsReader {
       uid: String,
       timestamp: Long,
       sparkVersion: String,
-      params: JValue,
-      defaultParams: JValue,
-      metadata: JValue,
+      params: JsonNode,
+      defaultParams: JsonNode,
+      metadata: JsonNode,
       metadataJson: String) {
 
 
-    private def getValueFromParams(params: JValue): Seq[(String, JValue)] = {
+    private def getValueFromParams(params: JsonNode): Seq[(String, JsonNode)] = {
       params match {
-        case JObject(pairs) => pairs
+        case o: ObjectNode => o.fields().asScala.map(e => (e.getKey, e.getValue)).toSeq
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot recognize JSON metadata: $metadataJson.")
@@ -508,18 +514,16 @@ private[ml] object DefaultParamsReader {
      * is available. This will look up `params` first, if not existing then looking up
      * `defaultParams`.
      */
-    def getParamValue(paramName: String): JValue = {
-      implicit val format = DefaultFormats
-
+    def getParamValue(paramName: String): JsonNode = {
       // Looking up for `params` first.
       var pairs = getValueFromParams(params)
-      var foundPairs = pairs.filter { case (pName, jsonValue) =>
+      var foundPairs = pairs.filter { case (pName, _) =>
         pName == paramName
       }
-      if (foundPairs.length == 0) {
+      if (foundPairs.isEmpty) {
         // Looking up for `defaultParams` then.
         pairs = getValueFromParams(defaultParams)
-        foundPairs = pairs.filter { case (pName, jsonValue) =>
+        foundPairs = pairs.filter { case (pName, _) =>
           pName == paramName
         }
       }
@@ -554,14 +558,15 @@ private[ml] object DefaultParamsReader {
         instance: Params,
         skipParams: Option[List[String]],
         isDefault: Boolean): Unit = {
-      implicit val format = DefaultFormats
       val paramsToSet = if (isDefault) defaultParams else params
       paramsToSet match {
-        case JObject(pairs) =>
-          pairs.foreach { case (paramName, jsonValue) =>
-            if (skipParams == None || !skipParams.get.contains(paramName)) {
+        case pairs: ObjectNode =>
+          pairs.fields().asScala.foreach { entry =>
+            val paramName = entry.getKey
+            val jsonNode = entry.getValue
+            if (skipParams.isEmpty || !skipParams.get.contains(paramName)) {
               val param = instance.getParam(paramName)
-              val value = param.jsonDecode(compact(render(jsonValue)))
+              val value = param.jsonDecode(JacksonUtils.writeValueAsString(jsonNode))
               if (isDefault) {
                 Params.setDefault(instance, param, value)
               } else {
@@ -597,15 +602,14 @@ private[ml] object DefaultParamsReader {
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
   def parseMetadata(metadataStr: String, expectedClassName: String = ""): Metadata = {
-    val metadata = parse(metadataStr)
+    val metadata = JacksonUtils.readTree(metadataStr)
 
-    implicit val format = DefaultFormats
-    val className = (metadata \ "class").extract[String]
-    val uid = (metadata \ "uid").extract[String]
-    val timestamp = (metadata \ "timestamp").extract[Long]
-    val sparkVersion = (metadata \ "sparkVersion").extract[String]
-    val defaultParams = metadata \ "defaultParamMap"
-    val params = metadata \ "paramMap"
+    val className = metadata.get("class").textValue()
+    val uid = metadata.get("uid").textValue()
+    val timestamp = metadata.get("timestamp").longValue()
+    val sparkVersion = metadata.get("sparkVersion").textValue()
+    val defaultParams = metadata.get("defaultParamMap")
+    val params = metadata.get("paramMap")
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")

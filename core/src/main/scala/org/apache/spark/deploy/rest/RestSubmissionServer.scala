@@ -19,17 +19,17 @@ package org.apache.spark.deploy.rest
 
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.collection.JavaConverters._
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -148,12 +148,14 @@ private[rest] abstract class RestServlet extends HttpServlet with Logging {
   protected def findUnknownFields(
       requestJson: String,
       requestMessage: SubmitRestProtocolMessage): Array[String] = {
-    val clientSideJson = parse(requestJson)
-    val serverSideJson = parse(requestMessage.toJson)
-    val Diff(_, _, unknown) = clientSideJson.diff(serverSideJson)
-    unknown match {
-      case j: JObject => j.obj.map { case (k, _) => k }.toArray
-      case _ => Array.empty[String] // No difference
+    val requestJsonNode = JacksonUtils.readTree(requestJson)
+    val requestMessageNode = JacksonUtils.readTree(requestMessage.toJson)
+    val diff = requestJsonNode.fields().asScala.toSeq
+      .diff(requestMessageNode.fields().asScala.toSeq)
+    if (diff.nonEmpty) {
+      diff.map(_.getKey).toArray
+    } else {
+      Array.empty[String]
     }
   }
 

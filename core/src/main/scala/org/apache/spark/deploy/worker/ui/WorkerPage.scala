@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.json4s.JValue
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
@@ -33,9 +33,10 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
+
   private val workerEndpoint = parent.worker.self
 
-  override def renderJson(request: HttpServletRequest): JValue = {
+  override def renderJson(request: HttpServletRequest): JsonNode = {
     val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
   }

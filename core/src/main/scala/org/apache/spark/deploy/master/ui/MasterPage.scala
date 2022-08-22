@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.json4s.JValue
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
@@ -31,13 +31,15 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+
+
   private val master = parent.masterEndpointRef
 
   def getMasterState: MasterStateResponse = {
     master.askSync[MasterStateResponse](RequestMasterState)
   }
 
-  override def renderJson(request: HttpServletRequest): JValue = {
+  override def renderJson(request: HttpServletRequest): JsonNode = {
     JsonProtocol.writeMasterState(getMasterState)
   }
 

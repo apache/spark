@@ -25,8 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
+import com.fasterxml.jackson.databind.JsonNode
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
-import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
@@ -214,8 +214,14 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
  * to form a relative path. The prefix must not contain slashes.
  */
 private[spark] abstract class WebUIPage(var prefix: String) {
+
+  import org.apache.spark.util.JacksonUtils
+
   def render(request: HttpServletRequest): Seq[Node]
-  def renderJson(request: HttpServletRequest): JValue = JNothing
+  def renderJson(request: HttpServletRequest): JsonNode = {
+    // TODO: Missing node?
+    JacksonUtils.defaultNodeFactory.missingNode()
+  }
 }
 
 private[spark] class DelegatingServletContextHandler(handler: ServletContextHandler) {

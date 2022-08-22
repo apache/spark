@@ -17,11 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.json4s._
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -30,6 +25,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Clustering model produced by [[BisectingKMeans]].
@@ -119,7 +115,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
 
   @Since("2.0.0")
   override def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-    val (loadedClassName, formatVersion, __) = Loader.loadMetadata(sc, path)
+    val (loadedClassName, formatVersion, _) = Loader.loadMetadata(sc, path)
     (loadedClassName, formatVersion) match {
       case (SaveLoadV1_0.thisClassName, SaveLoadV1_0.thisFormatVersion) =>
         val model = SaveLoadV1_0.load(sc, path)
@@ -175,9 +171,11 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
 
     def save(sc: SparkContext, model: BisectingKMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
-          ~ ("rootId" -> model.root.index)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("rootId", model.root.index)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
@@ -187,11 +185,10 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-      implicit val formats: DefaultFormats = DefaultFormats
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rootId = (metadata \ "rootId").extract[Int]
+      val rootId = metadata.get("rootId").intValue()
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val rows = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)
@@ -211,9 +208,12 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
 
     def save(sc: SparkContext, model: BisectingKMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
-          ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("rootId", model.root.index)
+      metadataNode.put("distanceMeasure", model.distanceMeasure)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
@@ -223,12 +223,11 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-      implicit val formats: DefaultFormats = DefaultFormats
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rootId = (metadata \ "rootId").extract[Int]
-      val distanceMeasure = (metadata \ "distanceMeasure").extract[String]
+      val rootId = metadata.get("rootId").intValue()
+      val distanceMeasure = metadata.get("distanceMeasure").textValue()
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val rows = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)
@@ -248,10 +247,13 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
 
     def save(sc: SparkContext, model: BisectingKMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
-          ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)
-          ~ ("trainingCost" -> model.trainingCost)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("rootId", model.root.index)
+      metadataNode.put("distanceMeasure", model.distanceMeasure)
+      metadataNode.put("trainingCost", model.trainingCost)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
@@ -261,13 +263,12 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     }
 
     def load(sc: SparkContext, path: String): BisectingKMeansModel = {
-      implicit val formats: DefaultFormats = DefaultFormats
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-      val rootId = (metadata \ "rootId").extract[Int]
-      val distanceMeasure = (metadata \ "distanceMeasure").extract[String]
-      val trainingCost = (metadata \ "trainingCost").extract[Double]
+      val rootId = metadata.get("rootId").intValue()
+      val distanceMeasure = metadata.get("distanceMeasure").textValue()
+      val trainingCost = metadata.get("trainingCost").doubleValue()
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val rows = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)

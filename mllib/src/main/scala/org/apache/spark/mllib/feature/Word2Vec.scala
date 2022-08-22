@@ -23,9 +23,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -38,6 +35,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -679,9 +677,12 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
       val vectorSize = model.values.head.length
       val numWords = model.size
-      val metadata = compact(render(
-        ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
-        ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", classNameV1_0)
+      metadataNode.put("version", formatVersionV1_0)
+      metadataNode.put("vectorSize", vectorSize)
+      metadataNode.put("numWords", numWords)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // We want to partition the model in partitions smaller than
@@ -703,12 +704,11 @@ object Word2VecModel extends Loader[Word2VecModel] {
   override def load(sc: SparkContext, path: String): Word2VecModel = {
 
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
-    val expectedVectorSize = (metadata \ "vectorSize").extract[Int]
-    val expectedNumWords = (metadata \ "numWords").extract[Int]
+    val expectedVectorSize = metadata.get("vectorSize").intValue()
+    val expectedNumWords = metadata.get("numWords").intValue()
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
     (loadedClassName, loadedVersion) match {
-      case (classNameV1_0, "1.0") =>
+      case (_, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
         val vectorSize = model.getVectors.values.head.length
         val numWords = model.getVectors.size

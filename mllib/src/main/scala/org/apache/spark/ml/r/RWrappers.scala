@@ -18,11 +18,10 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.util.MLReader
+import org.apache.spark.util.JacksonUtils
 
 /**
  * This is the Scala stub of SparkR read.ml. It will dispatch the call to corresponding
@@ -31,11 +30,10 @@ import org.apache.spark.ml.util.MLReader
 private[r] object RWrappers extends MLReader[Object] {
 
   override def load(path: String): Object = {
-    implicit val format = DefaultFormats
     val rMetadataPath = new Path(path, "rMetadata").toString
     val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-    val rMetadata = parse(rMetadataStr)
-    val className = (rMetadata \ "class").extract[String]
+    val rMetadata = JacksonUtils.readTree(rMetadataStr)
+    val className = rMetadata.get("class").textValue()
     className match {
       case "org.apache.spark.ml.r.NaiveBayesWrapper" => NaiveBayesWrapper.load(path)
       case "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper" =>

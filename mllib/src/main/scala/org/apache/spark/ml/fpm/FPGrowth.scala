@@ -20,8 +20,6 @@ package org.apache.spark.ml.fpm
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
@@ -36,6 +34,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.VersionUtils
 
 /**
@@ -334,7 +333,8 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
+      val extraMetadata = JacksonUtils.createObjectNode
+      extraMetadata.put("numTrainingRecords", instance.numTrainingRecords)
       DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
       instance.freqItemsets.write.parquet(dataPath)
@@ -347,7 +347,6 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     private val className = classOf[FPGrowthModel].getName
 
     override def load(path: String): FPGrowthModel = {
-      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
       val numTrainingRecords = if (major < 2 || (major == 2 && minor < 4)) {
@@ -355,7 +354,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         0L
       } else {
         // 2.4+
-        (metadata.metadata \ "numTrainingRecords").extract[Long]
+        metadata.metadata.get("numTrainingRecords").longValue()
       }
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)

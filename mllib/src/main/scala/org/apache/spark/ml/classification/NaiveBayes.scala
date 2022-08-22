@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
@@ -612,7 +611,6 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     private val className = classOf[NaiveBayesModel].getName
 
     override def load(path: String): NaiveBayesModel = {
-      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 

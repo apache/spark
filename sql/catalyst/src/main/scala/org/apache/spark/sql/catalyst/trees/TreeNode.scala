@@ -23,10 +23,9 @@ import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import org.apache.commons.lang3.ClassUtils
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -46,6 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.JacksonUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -982,25 +982,34 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     s"$nodeName(${args.mkString(",")})"
   }
 
-  def toJSON: String = compact(render(jsonValue))
+  def toJSON: String = JacksonUtils.writeValueAsString(jsonNode)
 
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.writeValuePrettyAsString(jsonNode)
 
-  private def jsonValue: JValue = {
-    val jsonValues = scala.collection.mutable.ArrayBuffer.empty[JValue]
+  // TODO: lazy?
+  private val nodeFactory = JsonNodeFactory.instance
+
+  private def jsonNode: JsonNode = {
+    val jsonNodes = scala.collection.mutable.ArrayBuffer.empty[JsonNode]
 
     def collectJsonValue(tn: BaseType): Unit = {
-      val jsonFields = ("class" -> JString(tn.getClass.getName)) ::
-        ("num-children" -> JInt(tn.children.length)) :: tn.jsonFields
-      jsonValues += JObject(jsonFields)
+      val node = nodeFactory.objectNode()
+      node.put("class", tn.getClass.getName)
+      node.put("num-children", tn.children.length)
+      tn.jsonFields.foreach {
+        case (name, jsonNode) =>
+          // TODO: how to ignore missing node using config?
+          if (!jsonNode.isMissingNode) node.set[JsonNode](name, jsonNode)
+      }
+      jsonNodes += node
       tn.children.foreach(collectJsonValue)
     }
 
     collectJsonValue(this)
-    jsonValues
+    nodeFactory.pojoNode(jsonNodes)
   }
 
-  protected def jsonFields: List[JField] = {
+  protected def jsonFields: List[(String, JsonNode)] = {
     val fieldNames = getConstructorParameterNames(getClass)
     val fieldValues = productIterator.toSeq ++ otherCopyArgs
     assert(fieldNames.length == fieldValues.length, s"$simpleClassName fields: " +
@@ -1010,50 +1019,66 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       // If the field value is a child, then use an int to encode it, represents the index of
       // this child in all children.
       case (name, value: TreeNode[_]) if containsChild(value) =>
-        name -> JInt(children.indexOf(value))
+        name -> nodeFactory.numberNode(children.indexOf(value))
       case (name, value: Seq[BaseType]) if value.forall(containsChild) =>
-        name -> JArray(
-          value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
-        )
-      case (name, value) => name -> parseToJson(value)
+        val values = value
+          .map(v => nodeFactory.numberNode(children.indexOf(v.asInstanceOf[TreeNode[_]])))
+        val node = nodeFactory.arrayNode(values.size)
+        node.addAll(values.asJava)
+        name -> node
+      case (name, value) => name -> parseToJsonNode(value)
     }.toList
   }
 
-  private def parseToJson(obj: Any): JValue = obj match {
-    case b: Boolean => JBool(b)
-    case b: Byte => JInt(b.toInt)
-    case s: Short => JInt(s.toInt)
-    case i: Int => JInt(i)
-    case l: Long => JInt(l)
-    case f: Float => JDouble(f)
-    case d: Double => JDouble(d)
-    case b: BigInt => JInt(b)
-    case null => JNull
-    case s: String => JString(s)
-    case u: UUID => JString(u.toString)
-    case dt: DataType => dt.jsonValue
+  private def parseToJsonNode(obj: Any): JsonNode = obj match {
+    case b: Boolean => nodeFactory.booleanNode(b)
+    case b: Byte => nodeFactory.numberNode(b.toInt)
+    case s: Short => nodeFactory.numberNode(s.toInt)
+    case i: Int => nodeFactory.numberNode(i)
+    case l: Long => nodeFactory.numberNode(l)
+    case f: Float => nodeFactory.numberNode(f.doubleValue())
+    case d: Double => nodeFactory.numberNode(d)
+    case b: BigInt => nodeFactory.numberNode(b.bigInteger)
+    case null => nodeFactory.nullNode()
+    case s: String => nodeFactory.textNode(s)
+    case u: UUID => nodeFactory.textNode(u.toString)
+    case dt: DataType => dt.jsonNode
     // SPARK-17356: In usage of mllib, Metadata may store a huge vector of data, transforming
     // it to JSON may trigger OutOfMemoryError.
-    case m: Metadata => Metadata.empty.jsonValue
-    case clazz: Class[_] => JString(clazz.getName)
+    case m: Metadata => Metadata.empty.jsonNode
+    case clazz: Class[_] => nodeFactory.textNode(clazz.getName)
     case s: StorageLevel =>
-      ("useDisk" -> s.useDisk) ~ ("useMemory" -> s.useMemory) ~ ("useOffHeap" -> s.useOffHeap) ~
-        ("deserialized" -> s.deserialized) ~ ("replication" -> s.replication)
-    case n: TreeNode[_] => n.jsonValue
-    case o: Option[_] => o.map(parseToJson)
+      val node = nodeFactory.objectNode()
+      node.put("useDisk", s.useDisk)
+      node.put("useMemory", s.useMemory)
+      node.put("useOffHeap", s.useOffHeap)
+      node.put("deserialized", s.deserialized)
+      node.put("replication", s.replication)
+      node
+    case n: TreeNode[_] => n.jsonNode
+    case o: Option[_] => o match {
+      case Some(v) => parseToJsonNode(v)
+      case _ => nodeFactory.missingNode()
+    }
     // Recursive scan Seq[Partitioning], Seq[DataType], Seq[Product]
     case t: Seq[_] if t.forall(_.isInstanceOf[Partitioning]) ||
       t.forall(_.isInstanceOf[DataType]) ||
       t.forall(_.isInstanceOf[Product]) =>
-      JArray(t.map(parseToJson).toList)
-    case t: Seq[_] if t.length > 0 && t.head.isInstanceOf[String] =>
-      JString(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
-    case t: Seq[_] => JNull
-    case m: Map[_, _] => JNull
+      val a = t.map(parseToJsonNode).toList.asJava
+      val node = nodeFactory.arrayNode(a.size())
+      node.addAll(a)
+      node
+    case t: Seq[_] if t.nonEmpty && t.head.isInstanceOf[String] =>
+      nodeFactory.textNode(truncatedString(t, "[", ", ", "]", SQLConf.get.maxToStringFields))
+    case _: Seq[_] => nodeFactory.nullNode()
+    case _: Map[_, _] => nodeFactory.nullNode()
     // if it's a scala object, we can simply keep the full class path.
     // TODO: currently if the class name ends with "$", we think it's a scala object, there is
     // probably a better way to check it.
-    case obj if obj.getClass.getName.endsWith("$") => "object" -> obj.getClass.getName
+    case obj if obj.getClass.getName.endsWith("$") =>
+      val node = nodeFactory.objectNode()
+      node.put("object", obj.getClass.getName)
+      node
     case p: Product if shouldConvertToJson(p) =>
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
@@ -1073,14 +1098,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         }
         assert(fieldNames.length == fieldValues.length, s"$simpleClassName fields: " +
           fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
-        ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
-          case (name, value) => name -> parseToJson(value)
-        }.toList
+        val node = nodeFactory.objectNode()
+        node.put("product-class", p.getClass.getName)
+        fieldNames.zip(fieldValues).foreach {
+          case (name, value) =>
+            val jsonNode = parseToJsonNode(value)
+            if (!jsonNode.isMissingNode) {
+              node.set[JsonNode](name, jsonNode)
+            }
+        }
+        node
       } catch {
         case _: RuntimeException => null
         case _: ReflectiveOperationException => null
       }
-    case _ => JNull
+    case _ => nodeFactory.nullNode()
   }
 
   private def shouldConvertToJson(product: Product): Boolean = product match {

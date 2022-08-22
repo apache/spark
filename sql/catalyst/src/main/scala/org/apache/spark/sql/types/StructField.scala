@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
@@ -60,11 +59,13 @@ case class StructField(
   // override the default toString to be compatible with legacy parquet files.
   override def toString: String = s"StructField($name,$dataType,$nullable)"
 
-  private[sql] def jsonValue: JValue = {
-    ("name" -> name) ~
-      ("type" -> dataType.jsonValue) ~
-      ("nullable" -> nullable) ~
-      ("metadata" -> metadata.jsonValue)
+  private[sql] def jsonNode: JsonNode = {
+    val node = org.apache.spark.util.JacksonUtils.createObjectNode
+    node.put("name", name)
+    node.set[JsonNode]("type", dataType.jsonNode)
+    node.put("nullable", nullable)
+    node.set[JsonNode]("metadata", metadata.jsonNode)
+    node
   }
 
   /**

@@ -21,9 +21,6 @@ import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConverters._
 
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -33,6 +30,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -195,9 +193,12 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("numFeatures", data.theta(0).length)
+      metadataNode.put("numClasses", data.pi.length)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
@@ -240,9 +241,12 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
-      val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
-          ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", thisClassName)
+      metadataNode.put("version", thisFormatVersion)
+      metadataNode.put("numFeatures", data.theta(0).length)
+      metadataNode.put("numClasses", data.pi.length)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.

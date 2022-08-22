@@ -25,8 +25,6 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
@@ -41,6 +39,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.JacksonUtils
 
 
 /**
@@ -344,9 +343,7 @@ case class CatalogTable(
   def viewReferredTempViewNames: Seq[Seq[String]] = {
     try {
       properties.get(VIEW_REFERRED_TEMP_VIEW_NAMES).map { json =>
-        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
-          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
-        }
+        JacksonUtils.readValue[Seq[Seq[String]]](json)
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>
@@ -361,7 +358,7 @@ case class CatalogTable(
   def viewReferredTempFunctionNames: Seq[String] = {
     try {
       properties.get(VIEW_REFERRED_TEMP_FUNCTION_NAMES).map { json =>
-        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        JacksonUtils.readValue[Seq[String]](json)
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>

@@ -18,9 +18,6 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -30,6 +27,7 @@ import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
@@ -144,8 +142,11 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
-      val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~ ("k" -> weights.length)))
+      val metadataNode = JacksonUtils.createObjectNode
+      metadataNode.put("class", classNameV1_0)
+      metadataNode.put("version", formatVersionV1_0)
+      metadataNode.put("k", weights.length)
+      val metadata = JacksonUtils.writeValueAsString(metadataNode)
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
@@ -175,11 +176,10 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
-    val k = (metadata \ "k").extract[Int]
+    val k = metadata.get("k").intValue()
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
     (loadedClassName, version) match {
-      case (classNameV1_0, "1.0") =>
+      case (_, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
         require(model.weights.length == k,
           s"GaussianMixtureModel requires weights of length $k " +

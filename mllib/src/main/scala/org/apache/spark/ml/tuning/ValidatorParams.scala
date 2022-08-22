@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.tuning
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
@@ -29,6 +29,7 @@ import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -88,6 +89,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 }
 
 private[ml] object ValidatorParams {
+
   /**
    * Check that [[ValidatorParams.evaluator]] and [[ValidatorParams.estimator]] are Writable.
    * This does not check [[ValidatorParams.estimatorParamMaps]].
@@ -123,11 +125,11 @@ private[ml] object ValidatorParams {
       path: String,
       instance: ValidatorParams,
       sc: SparkContext,
-      extraMetadata: Option[JObject] = None): Unit = {
-    import org.json4s.JsonDSL._
+      extraMetadata: Option[ObjectNode] = None): Unit = {
 
+    val factory = JacksonUtils.defaultNodeFactory
     var numParamsNotJson = 0
-    val estimatorParamMapsJson = compact(render(
+    val estimatorParamMapsJson = JacksonUtils.writeValueAsString(
       instance.getEstimatorParamMaps.map { case paramMap =>
         paramMap.toSeq.map { case ParamPair(p, v) =>
           v match {
@@ -137,27 +139,29 @@ private[ml] object ValidatorParams {
               numParamsNotJson += 1
               writeableObj.save(paramPath)
               Map("parent" -> p.parent, "name" -> p.name,
-                "value" -> compact(render(JString(relativePath))),
-                "isJson" -> compact(render(JBool(false))))
+                "value" -> JacksonUtils.writeValueAsString(factory.textNode(relativePath)),
+                "isJson" -> JacksonUtils.writeValueAsString(factory.booleanNode(false)))
             case _: MLWritable =>
               throw new UnsupportedOperationException("ValidatorParams.saveImpl does not handle" +
                 " parameters of type: MLWritable that are not DefaultParamsWritable")
             case _ =>
               Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
-                "isJson" -> compact(render(JBool(true))))
+                "isJson" -> JacksonUtils.writeValueAsString(factory.booleanNode(true)))
           }
         }
       }.toSeq
-    ))
+    )
 
     val params = instance.extractParamMap().toSeq
     val skipParams = List("estimator", "evaluator", "estimatorParamMaps")
-    val jsonParams = render(params
-      .filter { case ParamPair(p, v) => !skipParams.contains(p.name)}
-      .map { case ParamPair(p, v) =>
-        p.name -> parse(p.jsonEncode(v))
-      }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
-    )
+    val jsonParams = factory.objectNode()
+    params
+      .filter { case ParamPair(p, _) => !skipParams.contains(p.name)}
+      .foreach { case ParamPair(p, v) =>
+        jsonParams.set[JsonNode](p.name, JacksonUtils.readTree(p.jsonEncode(v)))
+      }
+    jsonParams.set[JsonNode]("estimatorParamMaps",
+      JacksonUtils.readTree(estimatorParamMapsJson))
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
@@ -179,7 +183,6 @@ private[ml] object ValidatorParams {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
 
-    implicit val format = DefaultFormats
     val evaluatorPath = new Path(path, "evaluator").toString
     val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
     val estimatorPath = new Path(path, "estimator").toString
@@ -187,8 +190,9 @@ private[ml] object ValidatorParams {
 
     val uidToParams = Map(evaluator.uid -> evaluator) ++ MetaAlgorithmReadWrite.getUidMap(estimator)
 
-    val estimatorParamMaps: Array[ParamMap] =
-      (metadata.params \ "estimatorParamMaps").extract[Seq[Seq[Map[String, String]]]].map {
+    val estimatorParamMaps: Array[ParamMap] = {
+      JacksonUtils
+        .treeToValue[Seq[Seq[Map[String, String]]]](metadata.params.get("estimatorParamMaps")).map {
         pMap =>
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
@@ -207,6 +211,7 @@ private[ml] object ValidatorParams {
           }
           ParamMap(paramPairs: _*)
       }.toArray
+    }
 
     (metadata, estimator, evaluator, estimatorParamMaps)
   }

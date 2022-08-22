@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark
 
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
-import org.apache.spark.util.JacksonUtils
+import java.io.File
+import java.nio.file.{Files => JavaFiles}
 
-case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, ValueRunTimeMsPair])
-  extends OffsetV2 {
-  override val json = JacksonUtils.writeValueAsString(partitionToValueAndRunTimeMs)
+import org.json4s._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
+object Json4sUtils {
+
+  /** Creates a temp JSON file that contains the input JSON record. */
+  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
+    val file = File.createTempFile(prefix, ".json", dir)
+    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    file.getPath
+  }
 }
-
-case class ValueRunTimeMsPair(value: Long, runTimeMs: Long)
