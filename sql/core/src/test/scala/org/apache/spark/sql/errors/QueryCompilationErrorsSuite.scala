@@ -24,6 +24,7 @@ import org.apache.spark.SparkFileNotFoundException
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
@@ -626,8 +627,11 @@ class QueryCompilationErrorsSuite
     var srcPath: Path = null
     val e = intercept[SparkFileNotFoundException](
       withTempPath { p =>
+        val conf = new Configuration()
+        conf.set("fs.fake.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "fake:///")
         val basePath = new Path(p.getAbsolutePath)
-        val fm = new FileSystemBasedCheckpointFileManager(basePath, new Configuration())
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
         srcPath = new Path(s"$basePath/file")
         assert(!fm.exists(srcPath))
         fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
