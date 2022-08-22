@@ -81,8 +81,25 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReturnAnswer(Project(projectList, child)) =>
+        planCommon(child) match {
+          case collectLimit @ CollectLimitExec(_, child, _) =>
+            val newChildren = Seq(execution.ProjectExec(projectList, child))
+            collectLimit.withNewChildren(newChildren) :: Nil
+          case takeOrdered @ TakeOrderedAndProjectExec(_, _, _, child, _) =>
+            val newChildren = Seq(execution.ProjectExec(projectList, child))
+            takeOrdered.withNewChildren(newChildren) :: Nil
+          case other => other :: Nil
+        }
+
+      case ReturnAnswer(rootPlan) => planCommon(rootPlan) :: Nil
+
+      case other => planTakeOrdered(other).toSeq
+    }
+
+    def planCommon(plan: LogicalPlan): SparkPlan = {
       // Call `planTakeOrdered` first which matches a larger plan.
-      case ReturnAnswer(rootPlan) => planTakeOrdered(rootPlan).getOrElse(rootPlan match {
+      planTakeOrdered(plan).getOrElse(plan match {
         // We should match the combination of limit and offset first, to get the optimal physical
         // plan, instead of planning limit and offset separately.
         case LimitAndOffset(limit, offset, child) =>
@@ -97,9 +114,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child))
         case other => planLater(other)
-      })  :: Nil
-
-      case other => planTakeOrdered(other).toSeq
+      })
     }
 
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
