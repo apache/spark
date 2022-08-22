@@ -73,9 +73,9 @@ public class RocksDBProvider {
               throw new IOException("Unable to create state store", dbExc);
             }
           } else {
-            // the RocksDB file seems to be corrupt somehow.  Let's just blow it away and create a new
-            // one, so we can keep processing new apps
-            logger.error("error opening rocksdb file {}.  Creating new file, will not be able to " +
+            // the RocksDB file seems to be corrupt somehow.  Let's just blow it away and create
+            // a new one, so we can keep processing new apps
+            logger.error("error opening rocksdb file {}. Creating new file, will not be able to " +
               "recover state for existing applications", dbFile, e);
             if (dbFile.isDirectory()) {
               for (File f : Objects.requireNonNull(dbFile.listFiles())) {
@@ -96,7 +96,8 @@ public class RocksDBProvider {
           }
         }
         try {
-          // if there is a version mismatch, we throw an exception, which means the service is unusable
+          // if there is a version mismatch, we throw an exception, which means the service
+          // is unusable
           checkVersion(tmpDb, version, mapper);
         } catch (RocksDBException e) {
           throw new IOException(e.getMessage(), e);
@@ -130,7 +131,7 @@ public class RocksDBProvider {
     private static class RocksDBLogger extends org.rocksdb.Logger {
         private static final Logger LOG = LoggerFactory.getLogger(RocksDBLogger.class);
 
-        public RocksDBLogger(Options options) {
+        RocksDBLogger(Options options) {
           super(options);
         }
 
