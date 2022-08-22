@@ -1604,6 +1604,16 @@ test_that("column functions", {
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- collect(select(
+    df,
+    array_sort(
+      df[[1]],
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
+    )
+  ))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
