@@ -436,19 +436,18 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = InternalFrame(spark_frame=data, index_spark_columns=None)
-        elif isinstance(data, DataFrame):
+        elif isinstance(data, ps.DataFrame):
             assert columns is None
             assert dtype is None
             assert not copy
             if index is None:
-                internal = data._internal
+                internal = data._internal.resolved_copy
         elif isinstance(data, ps.Series):
             assert columns is None
             assert dtype is None
             assert not copy
             if index is None:
-                data = data.to_frame()
-                internal = data._internal
+                internal = data.to_frame()._internal.resolved_copy
         else:
             from pyspark.pandas.indexes.base import Index
 
