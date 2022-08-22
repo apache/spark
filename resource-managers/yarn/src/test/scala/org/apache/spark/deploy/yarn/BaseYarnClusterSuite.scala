@@ -206,7 +206,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(3.minutes), interval(1.second)) {
+      eventually(timeout(5.minutes), interval(1.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {
