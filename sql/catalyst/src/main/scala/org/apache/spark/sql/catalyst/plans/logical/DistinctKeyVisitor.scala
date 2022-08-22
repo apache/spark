@@ -84,15 +84,14 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] with Pr
     }
     val (candidates, _) = splitConjunctivePredicates(p.condition).partition(_.deterministic)
     candidates.collect {
-        case EqualTo(expr, IntegerLiteral(_)) => expr
-        case EqualTo(IntegerLiteral(_), expr) => expr
-      }.map {
-        case expr =>
-          rowNumbers.map {
-            case w if expr.references.subsetOf(w.windowOutputSet) =>
-              distinctKeys = addDistinctKey(distinctKeys, ExpressionSet(w.partitionSpec))
-          }
-      }
+      case EqualTo(expr, IntegerLiteral(_)) => expr
+      case EqualTo(IntegerLiteral(_), expr) => expr
+    }.foreach { expr =>
+      rowNumbers.filter(w => expr.references.subsetOf(w.windowOutputSet))
+        .foreach { w =>
+          distinctKeys = addDistinctKey(distinctKeys, ExpressionSet(w.partitionSpec))
+        }
+    }
     distinctKeys
   }
 
