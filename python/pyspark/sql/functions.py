@@ -1212,6 +1212,7 @@ def log1p(col: "ColumnOrName") -> Column:
     Row(LOG1P(2.71828...)=1.31326...)
 
     Same as:
+
     >>> df.select(log(lit(math.e+1))).first()  # doctest: +ELLIPSIS
     Row(ln(3.71828...)=1.31326...)
     """
@@ -1664,12 +1665,8 @@ def stddev(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev(df.id)).show()
-    +------------------+
-    |   stddev_samp(id)|
-    +------------------+
-    |1.8708286933869707|
-    +------------------+
+    >>> df.select(stddev(df.id)).first()  # doctest: +ELLIPSIS
+    Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev", col)
 
@@ -1694,12 +1691,8 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev_samp(df.id)).show()
-    +------------------+
-    |   stddev_samp(id)|
-    +------------------+
-    |1.8708286933869707|
-    +------------------+
+    >>> df.select(stddev_samp(df.id)).first()  # doctest: +ELLIPSIS
+    Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev_samp", col)
 
@@ -1724,12 +1717,8 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev_pop(df.id)).show()
-    +-----------------+
-    |   stddev_pop(id)|
-    +-----------------+
-    |1.707825127659933|
-    +-----------------+
+    >>> df.select(stddev_pop(df.id)).first()  # doctest: +ELLIPSIS
+    Row(stddev_pop(id)=1.70782...)
     """
     return _invoke_function_over_columns("stddev_pop", col)
 
@@ -1812,12 +1801,8 @@ def var_pop(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(var_pop(df.id)).show()
-    +------------------+
-    |       var_pop(id)|
-    +------------------+
-    |2.9166666666666665|
-    +------------------+
+    >>> df.select(var_pop(df.id)).first()  # doctest: +ELLIPSIS
+    Row(var_pop(id)=2.91666...)
     """
     return _invoke_function_over_columns("var_pop", col)
 
@@ -1841,12 +1826,8 @@ def skewness(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(skewness(df.c)).show()
-    +------------------+
-    |       skewness(c)|
-    +------------------+
-    |0.7071067811865475|
-    +------------------+
+    >>> df.select(skewness(df.c)).first()  # doctest: +ELLIPSIS
+    Row(skewness(c)=0.70710...)
     """
     return _invoke_function_over_columns("skewness", col)
 
