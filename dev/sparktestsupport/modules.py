@@ -382,6 +382,7 @@ pyspark_core = Module(
         "pyspark.conf",
         "pyspark.broadcast",
         "pyspark.accumulators",
+        "pyspark.files",
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
