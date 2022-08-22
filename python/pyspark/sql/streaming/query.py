@@ -201,7 +201,7 @@ class StreamingQuery:
 
         Returns
         -------
-        str or dict
+        dict
             The current status of the specified query.
 
         Examples
@@ -228,8 +228,9 @@ class StreamingQuery:
 
         Returns
         -------
-        str or dict or list
-            An array of the most recent :class:`StreamingQueryProgress` updates for this query.
+        list
+            List of dict which is the most recent :class:`StreamingQueryProgress` updates
+            for this query.
 
         Examples
         --------
@@ -255,7 +256,7 @@ class StreamingQuery:
 
         Returns
         -------
-        str or dict or optional
+        dict, optional
             The most recent :class:`StreamingQueryProgress` update of this streaming query or
             None if there were no progress updates.
 
@@ -406,7 +407,7 @@ class StreamingQueryManager:
 
         Returns
         -------
-        :class:`StreamingQuery` or list
+        list
             The active queries associated with this SparkSession.
 
         Examples
@@ -430,8 +431,7 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> StreamingQuery:
         """
-        Returns an active query from this SparkSession or throws exception if an active query
-        with this id doesn't exist.
+        Returns an active query from this SparkSession.
 
         .. versionadded:: 2.0.0
 
@@ -447,7 +447,7 @@ class StreamingQueryManager:
 
         Notes
         -----
-        Exception will be thrown if an active query with this id doesn't exist.
+        Exception will be thrown if an active query with this id does not exist.
 
         Examples
         --------
