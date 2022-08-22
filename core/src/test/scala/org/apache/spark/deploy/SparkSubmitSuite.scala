@@ -734,8 +734,7 @@ class SparkSubmitSuite
     }
   }
 
-  // TODO: SPARK-40101, ignore this and revert after fix.
-  ignore("include an external JAR in SparkR") {
+  test("include an external JAR in SparkR") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
