@@ -129,20 +129,20 @@ object ArrayBasedMapData {
   def toScalaMap(map: ArrayBasedMapData): Map[Any, Any] = {
     val keys = map.keyArray.asInstanceOf[GenericArrayData].array
     val values = map.valueArray.asInstanceOf[GenericArrayData].array
-    keys.zip(values).toMap
+    keys.zip(values)(collection.breakOut)
   }
 
   def toScalaMap(keys: Array[Any], values: Array[Any]): Map[Any, Any] = {
-    keys.zip(values).toMap
+    keys.zip(values)(collection.breakOut)
   }
 
   def toScalaMap(keys: scala.collection.Seq[Any],
       values: scala.collection.Seq[Any]): Map[Any, Any] = {
-    keys.zip(values).toMap
+    keys.zip(values)(collection.breakOut)
   }
 
   def toJavaMap(keys: Array[Any], values: Array[Any]): java.util.Map[Any, Any] = {
     import scala.collection.JavaConverters._
-    keys.zip(values).toMap.asJava
+    keys.zip(values)(collection.breakOut).asInstanceOf[Map[Any, Any]].asJava
   }
 }
