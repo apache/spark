@@ -86,10 +86,11 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "11",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select($"c1")) { partitions =>
-        // 5 byte files should be laid out [(5, 5), (5)]
-        assert(partitions.size == 2, "when checking partitions")
-        assert(partitions(0).files.size == 2, "when checking partition 1")
+        // 5 byte files should be laid out [(5), (5), (5)]
+        assert(partitions.size == 3, "when checking partitions")
+        assert(partitions(0).files.size == 1, "when checking partition 1")
         assert(partitions(1).files.size == 1, "when checking partition 2")
+        assert(partitions(2).files.size == 1, "when checking partition 3")
 
         // 5 byte files are too small to split so we should read the whole thing.
         assert(partitions.head.files.head.start == 0)
@@ -534,7 +535,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
-    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
       val table =
         createTable(files = Seq(
           "file1" -> 1,
@@ -544,7 +546,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       assert(table.rdd.partitions.length == 1)
     }
 
-    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10",
+      SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "3") {
       val table =
         createTable(files = Seq(
           "file1" -> 1,
@@ -574,33 +577,35 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
-    val table =
-      createTable(
-        files = Seq(
-          "p1=1/file1" -> 10,
-          "p1=2/file2" -> 10,
-          "p1=3/file3" -> 10,
-          "p1=4/file4" -> 10))
+    withSQLConf(SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 10,
+            "p1=2/file2" -> 10,
+            "p1=3/file3" -> 10,
+            "p1=4/file4" -> 10))
 
-    checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
-      assert(partitions.size == 1, "when checking partitions")
-    }
-    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+      checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+      }
+      checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
 
-    checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
-      assert(partitions.size == 1, "when checking partitions")
-    }
-    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+      checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+      }
+      checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
 
-    checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
-      assert(partitions.size == 1, "when checking partitions")
-    }
-    checkDataFilters(Set.empty)
+      checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+      }
+      checkDataFilters(Set.empty)
 
-    checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
-      assert(partitions.size == 1, "when checking partitions")
+      checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+      }
+      checkDataFilters(Set.empty)
     }
-    checkDataFilters(Set.empty)
   }
 
   // Helpers for checking the arguments passed to the FileFormat.

@@ -82,7 +82,7 @@ object FilePartition extends Logging {
       sqlConf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
     var maxPartitionBytes = sqlConf.filesMaxPartitionBytes
     if (partitionedFiles.size < expectedFilePartitionNum) {
-      openCostInBytes = maxSplitBytes
+      openCostInBytes = maxPartitionBytes
     } else {
       val totalSize = partitionedFiles.foldLeft(0L) {
         (totalSize, file) => totalSize + file.length + openCostInBytes
