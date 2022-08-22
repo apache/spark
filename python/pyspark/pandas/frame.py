@@ -360,7 +360,7 @@ class DataFrame(Frame, Generic[T]):
     Parameters
     ----------
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
-        \ pandas-on-Spark Series or pandas-on-Spark DataFrame
+        pandas-on-Spark DataFrame or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
     index : Index or array-like
         Index to use for resulting frame. Will default to RangeIndex if
