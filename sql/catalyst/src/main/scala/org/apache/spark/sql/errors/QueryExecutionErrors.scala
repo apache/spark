@@ -190,13 +190,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidFormatInConversion(
       argName: String,
       funcName: String,
-      invalidValue: UTF8String,
-      hint: String,
+      expected: String,
       context: SQLQueryContext): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "CONVERSION_INVALID_FORMAT",
+      errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters =
-        Array(toSQLId(argName), toSQLId(funcName), toSQLValue(invalidValue, StringType), hint),
+        Array(toSQLId(argName), toSQLId(funcName), expected),
       context = getQueryContext(context),
       summary = getSummary(context)
     )

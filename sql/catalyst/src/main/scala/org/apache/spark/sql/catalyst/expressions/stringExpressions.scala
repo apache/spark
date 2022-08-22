@@ -2591,9 +2591,8 @@ case class ToBinary(left: Expression, right: Expression)
         throw QueryExecutionErrors.invalidFormatInConversion(
           "format",
           "to_binary",
-          fmtString,
-          hint = "The value has to be a case-insensitive string literal of " +
-            "'hex', 'utf-8', 'utf8', or 'base64'.",
+          expected = s"expects a case-insensitive string literal of 'hex', 'utf-8', 'utf8', " +
+            s"or 'base64' but got '${fmtString.toString}'",
           getContextOrNull()
         )
     }
@@ -2643,7 +2642,6 @@ case class ToBinary(left: Expression, right: Expression)
          |    throw QueryExecutionErrors.invalidFormatInConversion(
          |            "format",
          |            "to_binary",
-         |            $fmtString,
          |            "The value has to be a case-insensitive string literal of " +
          |              "'hex', 'utf-8', 'utf8', or 'base64'.",
          |            $errorContext);

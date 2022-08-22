@@ -70,11 +70,6 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
-  "CONVERSION_INVALID_FORMAT" : {
-    "message" : [
-      "Invalid value for the <fmt> parameter of function <function>: <value>.<hint>"
-    ]
-  },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format.<hint>"

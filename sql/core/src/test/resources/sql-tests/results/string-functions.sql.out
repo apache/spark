@@ -1473,12 +1473,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_FORMAT",
+  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "fmt" : "`format`",
-    "function" : "`to_binary`",
-    "value" : "'1'",
-    "hint" : "The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'."
+    "parameter" : "`format`",
+    "functionName" : "`to_binary`",
+    "expected" : "expects a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64' but got '1'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1497,12 +1497,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "CONVERSION_INVALID_FORMAT",
+  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "fmt" : "`format`",
-    "function" : "`to_binary`",
-    "value" : "'invalidFormat'",
-    "hint" : "The value has to be a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64'."
+    "parameter" : "`format`",
+    "functionName" : "`to_binary`",
+    "expected" : "expects a case-insensitive string literal of 'hex', 'utf-8', 'utf8', or 'base64' but got 'invalidFormat'"
   },
   "queryContext" : [ {
     "objectType" : "",

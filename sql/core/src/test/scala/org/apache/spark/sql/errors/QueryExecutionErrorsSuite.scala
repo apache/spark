@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -49,6 +49,35 @@ class QueryExecutionErrorsSuite
   with QueryErrorsSuiteBase {
 
   import testImplicits._
+
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("select to_binary('???', 'base64')").collect()
+      },
+      errorClass = "CONVERSION_INVALID_INPUT",
+      parameters = Map(
+        "str" -> "'???'",
+        "fmt" -> "'base64'",
+        "targetType" -> "\"BINARY\"",
+        "hint" -> " Use 'try_to_binary' to tolerate malformed input and return NULL instead."),
+      context = ExpectedContext(fragment = "to_binary('???', 'base64')", start = 7, stop = 32))
+  }
+
+  test("INVALID_PARAMETER_VALUE: to_binary conversion function") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("select to_binary('string', 'base32')").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE",
+      parameters = Map(
+        "parameter" -> "`format`",
+        "functionName" -> "`to_binary`",
+        "expected" -> ("expects a case-insensitive string " +
+          "literal of 'hex', 'utf-8', 'utf8', or 'base64' but got 'base32'")),
+      sqlState = "22023",
+      context = ExpectedContext(fragment = "to_binary('string', 'base32')", start = 7, stop = 35))
+  }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="

@@ -529,7 +529,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // Invalid format
-    val errMsg = "[CONVERSION_INVALID_FORMAT]"
+    val errMsg = "[INVALID_PARAMETER_VALUE]"
     checkExceptionInExpression[Exception](
       ToBinary(Literal("abc"), Literal("invalidFormat")),
       errMsg
