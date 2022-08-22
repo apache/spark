@@ -1087,3 +1087,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 class YarnShuffleServiceWithLevelDBBackendSuite extends YarnShuffleServiceSuite {
   override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
 }
+
+class YarnShuffleServiceWithRocksDBBackendSuite extends YarnShuffleServiceSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.ROCKSDB
+}
