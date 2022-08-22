@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.dsl.expressions
+import org.apache.spark.sql.catalyst.dsl.expressions.DslExpression
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate, Complete}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalOperation}
@@ -28,8 +30,8 @@ import org.apache.spark.sql.types._
 
 /**
  * Insert a filter on one side of the join if the other side has a selective predicate.
- * The filter could be an IN subquery (converted to a semi join), a bloom filter, or something
- * else in the future.
+ * The filter could be an IN subquery (converted to a semi join), a bloom filter,
+ * a bloom and range filter, or something else in the future.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
@@ -47,8 +49,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
-    if (conf.runtimeFilterBloomFilterEnabled) {
+    require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled
+      || conf.runtimeFilterBloomFilterWithSegmentPruneEnabled)
+    if (conf.runtimeFilterBloomFilterEnabled
+      || conf.runtimeFilterBloomFilterWithSegmentPruneEnabled) {
       injectBloomFilter(
         filterApplicationSideExp,
         filterApplicationSidePlan,
@@ -82,14 +86,30 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       } else {
         new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)))
       }
-    val aggExp = AggregateExpression(bloomFilterAgg, Complete, isDistinct = false, None)
-    val alias = Alias(aggExp, "bloomFilter")()
-    val aggregate =
-      ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-    val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideExp)))
-    Filter(filter, filterApplicationSidePlan)
+    val bloomAggExp = AggregateExpression(bloomFilterAgg, Complete, isDistinct = false, None)
+    if(conf.runtimeFilterBloomFilterWithSegmentPruneEnabled) {
+      val minAggExp = expressions.min(filterCreationSideExp)
+      val maxAggExp = expressions.max(filterCreationSideExp)
+      val aggStruct = CreateStruct(Seq(
+        minAggExp.as("min"),
+        maxAggExp.as("max"),
+        bloomAggExp.as("bloomFilter")))
+      val aggStructAlias = Alias(aggStruct, "columnAgg")()
+      val aggregate = Aggregate(Nil, Seq(aggStructAlias), filterCreationSidePlan)
+      val aggregatePlan = ConstantFolding(ColumnPruning(aggregate))
+      val bloomFilterSubquery = ScalarSubquery(aggregatePlan, Nil)
+      val filter = BloomAndRangeFilterExpression(bloomFilterSubquery, filterApplicationSideExp,
+        filterApplicationSideExp.asInstanceOf[AttributeReference])
+      Filter(filter, filterApplicationSidePlan)
+    } else {
+      val alias = Alias(bloomAggExp, "bloomFilter")()
+      val aggregate =
+        ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
+      val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+      val filter = BloomFilterMightContain(bloomFilterSubquery,
+        new XxHash64(Seq(filterApplicationSideExp)))
+      Filter(filter, filterApplicationSidePlan)
+    }
   }
 
   private def injectInSubqueryFilter(
@@ -185,14 +205,23 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       hint: JoinHint): Boolean = {
     findExpressionAndTrackLineageDown(filterApplicationSideExp,
       filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
-      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
-        probablyHasShuffle(filterApplicationSide)) &&
+      satisfyJoinConditionRequirement(filterApplicationSide, filterCreationSide, hint) &&
       satisfyByteSizeRequirement(filterApplicationSide)
+  }
+
+  private def satisfyJoinConditionRequirement(
+    filterApplicationSide: LogicalPlan,
+    filterCreationSide: LogicalPlan,
+    hint: JoinHint): Boolean = {
+    conf.runtimeFilterBroadcastJoinConditionIgnored ||
+      (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
+      probablyHasShuffle(filterApplicationSide))
   }
 
   def hasRuntimeFilter(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
       rightKey: Expression): Boolean = {
-    if (conf.runtimeFilterBloomFilterEnabled) {
+    if (conf.runtimeFilterBloomFilterEnabled
+      || conf.runtimeFilterBloomFilterWithSegmentPruneEnabled) {
       hasBloomFilter(left, right, leftKey, rightKey)
     } else {
       hasInSubquery(left, right, leftKey, rightKey)
@@ -228,6 +257,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
           case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
+            if valueExpression.fastEquals(key) => true
+          case BloomAndRangeFilterExpression(_, valueExpression, _)
             if valueExpression.fastEquals(key) => true
           case _ => false
         }
@@ -286,7 +317,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case s: Subquery if s.correlated => plan
     case _ if !conf.runtimeFilterSemiJoinReductionEnabled &&
-      !conf.runtimeFilterBloomFilterEnabled => plan
+      !conf.runtimeFilterBloomFilterEnabled &&
+      !conf.runtimeFilterBloomFilterWithSegmentPruneEnabled => plan
     case _ => tryInjectRuntimeFilter(plan)
   }
 
