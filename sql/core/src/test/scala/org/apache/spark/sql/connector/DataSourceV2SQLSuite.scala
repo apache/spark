@@ -2553,42 +2553,50 @@ class DataSourceV2SQLSuite
 
   test("SPARK-40045: Move the post-Scan Filters to the far right") {
     val t1 = s"${catalogAndNamespace}table"
-    withTable(t1) {
-      spark.udf.register("udfStrLen", (str: String) => str.length)
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+    withUserDefinedFunction("udfStrLen" -> true) {
+      withTable(t1) {
+        spark.udf.register("udfStrLen", (str: String) => str.length)
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
-      val filterBefore = spark.sql(
-        s"""
-           |SELECT id, data FROM $t1
-           |where udfStrLen(data) = 1
-           |and trim(data) = 'a'
-           |and id =2
-           |""".stripMargin
-      )
-      val filtersBefore = find(filterBefore.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
-        .head.asInstanceOf[FilterExec]
-        .condition.toString
-        .split("AND")
-      assert(filtersBefore.length == 5
-        && filtersBefore(3).trim.startsWith("(udfStrLen(data")
-        && filtersBefore(4).trim.startsWith("(trim(data"))
+        val filterBefore = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |where udfStrLen(data) = 1
+             |and trim(data) = 'a'
+             |and id =2
+             |""".stripMargin
+        )
+        val conditionBefore =
+          find(filterBefore.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+          .head.asInstanceOf[FilterExec]
+          .condition
+        val expressionsBefore = splitConjunctivePredicates(conditionBefore)
+        assert(expressionsBefore.length == 4
+          && expressionsBefore(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsBefore(1).toString.trim.startsWith("(id")
+          && expressionsBefore(2).toString.trim.startsWith("(udfStrLen(data")
+          && expressionsBefore(3).toString.trim.startsWith("(trim(data"))
 
-      val filterAfter = spark.sql(
-        s"""
-           |SELECT id, data FROM $t1
-           |where id =2
-           |and udfStrLen(data) = 1
-           |and trim(data) = 'a'
-           |""".stripMargin
-      )
-      val filtersAfter = find(filterAfter.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
-        .head.asInstanceOf[FilterExec]
-        .condition.toString
-        .split("AND")
-      assert(filtersAfter.length == 5
-        && filtersAfter(3).trim.startsWith("(udfStrLen(data")
-        && filtersAfter(4).trim.startsWith("(trim(data"))
+        val filterAfter = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |where id =2
+             |and udfStrLen(data) = 1
+             |and trim(data) = 'a'
+             |""".stripMargin
+        )
+        val conditionAfter =
+          find(filterAfter.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+          .head.asInstanceOf[FilterExec]
+          .condition
+        val expressionsAfter = splitConjunctivePredicates(conditionAfter)
+        assert(expressionsAfter.length == 4
+          && expressionsAfter(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsAfter(1).toString.trim.startsWith("(id")
+          && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data")
+          && expressionsAfter(3).toString.trim.startsWith("(trim(data"))
+      }
     }
   }
 
