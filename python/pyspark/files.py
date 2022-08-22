@@ -136,9 +136,8 @@ class SparkFiles:
         Examples
         --------
         >>> from pyspark.files import SparkFiles
-        >>> SparkFiles.getRootDirectory()  # doctest :+SKIP
-        '/private/var/folders/4q/svxtvbs94sv3w6n9nk_6ws1m0000gp/T/
-        spark-a904728e-08d3-400c-a872-cfd82fd6dcd2/userFiles-648cf6d6-bb2c-4f53-82bd-e658aba0c5de'
+        >>> SparkFiles.getRootDirectory()  # doctest: +SKIP
+        '.../spark-a904728e-08d3-400c-a872-cfd82fd6dcd2/userFiles-648cf6d6-bb2c-4f53-82bd-e658aba0c5de'
         """
         if cls._is_running_on_worker:
             return cast(str, cls._root_directory)
@@ -147,3 +146,20 @@ class SparkFiles:
             assert cls._sc is not None
             assert cls._sc._jvm is not None
             return cls._sc._jvm.org.apache.spark.SparkFiles.getRootDirectory()
+
+
+def _test() -> None:
+    import doctest
+    import sys
+    from pyspark import SparkContext
+
+    globs = globals().copy()
+    globs["sc"] = SparkContext("local[2]", "files tests")
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs["sc"].stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
