@@ -112,14 +112,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val onlySqlFunctions = sqlFunctions.diff(dataFrameFunctions)
 
     // Check that we did not incorrectly exclude any functions leading to false positives
-    assert(onlyDataFrameFunctions.intersect(excludedSqlFunctions) === Set.empty)
-    assert(onlySqlFunctions.intersect(excludedDataFrameFunctions) === Set.empty)
-
-    def symmDiff[T](a: Set[T], b: Set[T]): Set[T] = a.union(b).diff(a.intersect(b))
+    assert(onlyDataFrameFunctions.intersect(excludedSqlFunctions).isEmpty)
+    assert(onlySqlFunctions.intersect(excludedDataFrameFunctions).isEmpty)
 
     // Check that only expected functions are left
     assert(onlyDataFrameFunctions === expectedOnlyDataFrameFunctions, "symmetric difference is: "
-        + symmDiff(onlyDataFrameFunctions, expectedOnlyDataFrameFunctions))
+      + onlyDataFrameFunctions.union(expectedOnlyDataFrameFunctions)
+      .diff(onlyDataFrameFunctions.intersect(expectedOnlyDataFrameFunctions))
+    )
 
     // scalastyle:off println
     println("Report: DataFrame function and SQL functon parity")
