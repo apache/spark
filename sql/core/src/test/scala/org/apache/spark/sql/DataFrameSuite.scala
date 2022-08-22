@@ -3430,16 +3430,15 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-XXXXX Projecting NULLs from non-nullable input should throw NPE with helpful msg") {
+  test("SPARK-40199 Projecting NULLs from non-nullable input should throw NPE with helpful msg") {
     // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
     // that the column/field identifiers are populated as expected in a "real" plan
     val valueType = new StructType().add("f", StringType, nullable = false)
     for (topLevelNullable <- Seq(false, true)) {
       val df = spark.createDataFrame(List(Row(Row(null))).asJava,
         new StructType().add("nest", valueType, nullable = topLevelNullable))
-      val e = intercept[NullPointerException](df.collect())
-      assert(e.getMessage.contains("top-level column (pos 0)"))
-      assert(e.getCause.asInstanceOf[NullPointerException].getMessage.contains("nested field 'f'"))
+      val e = intercept[RuntimeException](df.collect())
+      assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
     }
   }
 }

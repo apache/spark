@@ -33,7 +33,15 @@ import org.apache.spark.sql.types._
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
-  case class Schema(dataType: DataType, nullable: Boolean, desc: String)
+  /**
+   * @param dataType The data type being projected
+   * @param nullable Whether or not it is nullable
+   * @param descPath The "path" to this projection, with all descriptors along the way. For example
+   *                 with a schema like `f1: STRUCT<f2: ARRAY<STRUCT<f3: INT>>>`, when projecting
+   *                 `f3` this path would be like `Seq("<pos 0>", "<array element>", "`f3`")`
+   *                 (names aren't available at the top level so a position is used instead).
+   */
+  case class Schema(dataType: DataType, nullable: Boolean, descPath: Seq[String])
 
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
@@ -104,7 +112,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val writeFields = inputs.zip(schemas).zipWithIndex.map {
-      case ((input, Schema(dataType, nullable, name)), index) =>
+      case ((input, Schema(dataType, nullable, descPath)), index) =>
         val dt = UserDefinedType.sqlType(dataType)
 
         val setNull = dt match {
@@ -115,12 +123,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
-        val writeField =
-          wrapWithNpeHandling(writeElement(ctx, input.value, index.toString, dt, rowWriter), name)
+        val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter, descPath)
         if (!nullable) {
           s"""
              |${input.code}
-             |${writeField.trim}
+             |${wrapWithNpeHandling(writeField, descPath).trim}
            """.stripMargin
         } else {
           s"""
@@ -156,7 +163,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       elementType: DataType,
       containsNull: Boolean,
       rowWriter: String,
-      elementDesc: String = "array element"): String = {
+      descPath: Seq[String]): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
     val numElements = ctx.freshName("numElements")
@@ -178,8 +185,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
 
-    val writeElem =
-      wrapWithNpeHandling(writeElement(ctx, element, index, et, arrayWriter), elementDesc)
+    val writeElem = writeElement(ctx, element, index, et, arrayWriter, descPath)
     val elementAssignment = if (containsNull) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
@@ -189,7 +195,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |}
        """.stripMargin
     } else {
-      writeElem
+      wrapWithNpeHandling(writeElem, descPath)
     }
 
     s"""
@@ -214,7 +220,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       keyType: DataType,
       valueType: DataType,
       valueContainsNull: Boolean,
-      rowWriter: String): String = {
+      rowWriter: String,
+      descPath: Seq[String]): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
     val tmpCursor = ctx.freshName("tmpCursor")
@@ -222,9 +229,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
     val keyArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter, "map key")
+      ctx, s"$tmpInput.keyArray()", keyType, false, rowWriter, descPath :+ "<MAP_KEY>")
     val valueArray = writeArrayToBuffer(
-      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter, "map value")
+      ctx, s"$tmpInput.valueArray()", valueType, valueContainsNull, rowWriter,
+      descPath :+ "<MAP_VALUE>")
 
     s"""
        |final MapData $tmpInput = $input;
@@ -256,34 +264,30 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
      """.stripMargin
   }
 
-  private def wrapWithNpeHandling(inputExpr: String, desc: String): String = {
-    val firstNpeMsg = "This is typically caused by the presence of a NULL value when the " +
-      "schema indicates the value should be non-nullable. Check that the data matches the " +
-      "schema and/or that UDFs which can return null have a nullable return schema."
-    val otherNpeMsg = "Check caused-by exceptions in the stack trace for more information."
+  /**
+   * Wrap `inputExpr` in a try-catch block that will catch any [[NullPointerException]] that is
+   * thrown, instead throwing a (more helpful) error message as provided by
+   * [[org.apache.spark.sql.errors.QueryExecutionErrors.valueCannotBeNullError]].
+   */
+  private def wrapWithNpeHandling(inputExpr: String, descPath: Seq[String]): String =
     s"""
        |try {
        |  ${inputExpr.trim}
        |} catch (NullPointerException npe) {
-       |  NullPointerException wrapperNPE = new NullPointerException(
-       |      "Unexpected NULL value found while projecting $desc. " +
-       |      (npe.getMessage() == null ? "$firstNpeMsg" : "$otherNpeMsg")
-       |  );
-       |  wrapperNPE.initCause(npe);
-       |  throw wrapperNPE;
+       |  throw QueryExecutionErrors.valueCannotBeNullError("${descPath.mkString(".")}");
        |}
     """.stripMargin
-  }
 
   private def writeElement(
       ctx: CodegenContext,
       input: String,
       index: String,
       dt: DataType,
-      writer: String): String = dt match {
+      writer: String,
+      descPath: Seq[String]): String = dt match {
     case t: StructType =>
-      writeStructToBuffer(
-        ctx, input, index, t.map(e => Schema(e.dataType, e.nullable, s"field '${e.name}'")), writer)
+      val schemas = t.map(e => Schema(e.dataType, e.nullable, descPath :+ s"`${e.name}`"))
+      writeStructToBuffer(ctx, input, index, schemas, writer)
 
     case ArrayType(et, en) =>
       val previousCursor = ctx.freshName("previousCursor")
@@ -291,12 +295,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |// Remember the current cursor so that we can calculate how many bytes are
          |// written later.
          |final int $previousCursor = $writer.cursor();
-         |${writeArrayToBuffer(ctx, input, et, en, writer)}
+         |${writeArrayToBuffer(ctx, input, et, en, writer, descPath :+ "<ARRAY_ELEMENT>")}
          |$writer.setOffsetAndSizeFromPreviousCursor($index, $previousCursor);
        """.stripMargin
 
     case MapType(kt, vt, vn) =>
-      writeMapToBuffer(ctx, input, index, kt, vt, vn, writer)
+      writeMapToBuffer(ctx, input, index, kt, vt, vn, writer, descPath)
 
     case DecimalType.Fixed(precision, scale) =>
       s"$writer.write($index, $input, $precision, $scale);"
@@ -312,7 +316,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       useSubexprElimination: Boolean = false): ExprCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprSchemas = expressions.zipWithIndex.map { case (e, idx) =>
-      Schema(e.dataType, e.nullable, s"top-level column pos $idx")
+      Schema(e.dataType, e.nullable, Seq(s"<POS_$idx>"))
     }
 
     val numVarLenFields = exprSchemas.count {

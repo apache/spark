@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.nio.charset.StandardCharsets
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -296,82 +294,57 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  /**
-   * Tests handling of a NULL value where the schema indicates non-null (SPARK-XXXXX).
-   *
-   * @param inputType The schema to use for field in question.
-   * @param inputDatum The value to provide; should match `inputType` and contain a null value.
-   * @param expectedNestedDescriptors Expected descriptors to find in the nested exception messages;
-   *                                  does not include the top-level message.
-   */
   private[this] def testUnexpectedNullHandling(
       inputType: DataType,
       inputDatum: Any,
-      expectedNestedDescriptors: String*): Unit = {
+      expectedFieldDescriptor: String): Unit = {
     for (topLevelNullable <- Seq(false, true)) {
       val proj = UnsafeProjection.create(BoundReference(0, inputType, nullable = topLevelNullable))
-      val baseNpe = intercept[NullPointerException](proj(InternalRow(inputDatum)))
+      val e = intercept[RuntimeException](proj(InternalRow(inputDatum)))
 
-      val npes = ExceptionUtils.getThrowables(baseNpe)
-      npes.foreach(e => assert(e.isInstanceOf[NullPointerException]))
-      val actualMsgs = npes.map(_.getMessage)
-
-      // last message is the "real" NPE so it doesn't have a message
-      assert(actualMsgs.last === null)
-      // penultimate message should provide guidance to users on potential causes
-      assert(actualMsgs.dropRight(1).last.contains(
-        "This is typically caused by the presence of a NULL value"))
-      // all other messages should direct users to caused-by exceptions
-      actualMsgs.dropRight(2).foreach(m => assert(m.contains("Check caused-by exceptions")))
-      // top-level message should always refer to the same column
-      assert(actualMsgs.head.contains("top-level column pos 0"))
-
-      assert(actualMsgs.length === expectedNestedDescriptors.length + 2)
-      expectedNestedDescriptors.zip(actualMsgs.drop(1))
-        .foreach { case (expect, actual) => assert(actual.contains(expect)) }
+      assert(e.getMessage.contains(
+        s"The value at $expectedFieldDescriptor cannot be null, but a NULL was found."))
     }
   }
 
-  test("SPARK-XXXXX Projecting NULLs from non-nullable input should throw NPE with helpful msg") {
-    testUnexpectedNullHandling(StringType, null)
-
+  test("SPARK-40199 Projecting NULLs from non-nullable input should throw a helpful msg") {
     testUnexpectedNullHandling(
       new StructType().add("middle", new StructType().add("bottom", StringType, nullable = false)),
       InternalRow(InternalRow(null)),
-      "field 'middle'", "field 'bottom'")
+      "<POS_0>.`middle`.`bottom`")
   }
 
-  test("SPARK-XXXXX Projecting NULLs from non-nullable array should throw NPE with helpful msg") {
+  test("SPARK-40199 Projecting NULLs from non-nullable array should throw a helpful msg") {
     testUnexpectedNullHandling(
       ArrayType(StringType, containsNull = false),
       ArrayData.toArrayData(Array(null)),
-      "array element")
+      "<POS_0>.<ARRAY_ELEMENT>")
 
     Seq(true, false).foreach { containsNull =>
       testUnexpectedNullHandling(
         ArrayType(new StructType().add("f", StringType, nullable = false), containsNull),
         ArrayData.toArrayData(Array(InternalRow(null))),
-        "array element", "field 'f'")
+        "<POS_0>.<ARRAY_ELEMENT>.`f`")
     }
   }
 
-  test("SPARK-XXXXX Projecting NULLs from non-nullable map should throw NPE with helpful msg") {
+  test("SPARK-40199 Projecting NULLs from non-nullable map should throw a helpful msg") {
     val foo = UTF8String.fromString("foo")
+    def map(key: Any, value: Any): ArrayBasedMapData = ArrayBasedMapData(Array(key), Array(value))
+
     val mapType = MapType(StringType, StringType, valueContainsNull = false)
-    testUnexpectedNullHandling(mapType, ArrayBasedMapData(Map(foo -> null)), "map value")
-    testUnexpectedNullHandling(mapType, ArrayBasedMapData(Array(null), Array(foo)), "map key")
+    testUnexpectedNullHandling(mapType, map(null, foo), "<POS_0>.<MAP_KEY>")
+    testUnexpectedNullHandling(mapType, map(foo, null), "<POS_0>.<MAP_VALUE>")
 
     val nestType = new StructType().add("f", StringType, nullable = false)
     testUnexpectedNullHandling(
-      MapType(nestType, StringType),
-      ArrayBasedMapData(Array(InternalRow(null)), Array(foo)),
-      "map key", "field 'f'")
+      MapType(nestType, StringType), map(InternalRow(null), foo), "<POS_0>.<MAP_KEY>.`f`")
 
     Seq(true, false).foreach { containsNull =>
       testUnexpectedNullHandling(
         MapType(StringType, nestType, containsNull),
-        ArrayBasedMapData(Map(foo -> InternalRow(null))),
-        "map value", "field 'f'")
+        map(foo, InternalRow(null)),
+        "<POS_0>.<MAP_VALUE>.`f`")
     }
   }
 }
