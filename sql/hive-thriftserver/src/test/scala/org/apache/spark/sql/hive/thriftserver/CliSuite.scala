@@ -700,11 +700,12 @@ class CliSuite extends SparkFunSuite {
 
   // scalastyle:off line.size.limit
   test("formats of error messages") {
-    def check(format: ErrorMessageFormat.Value, errorMessage: String): Unit = {
-      val expected = errorMessage.lines.map("" -> _).toSeq
+    def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
+      val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
       runCliWithin(
         1.minute,
         extraArgs = Seq(
+          "--conf", s"spark.hive.session.silent=$silent",
           "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
           "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
           "-e", "select 1 / 0"),
@@ -717,42 +718,58 @@ class CliSuite extends SparkFunSuite {
           |== SQL(line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
-          |""".stripMargin)
+          |""".stripMargin,
+      silent = true)
     check(
-      format = ErrorMessageFormat.MINIMAL,
+      format = ErrorMessageFormat.PRETTY,
       errorMessage =
-        """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
-          |  "sqlState" : "22012",
-          |  "messageParameters" : {
-          |    "config" : "\"spark.sql.ansi.enabled\""
-          |  },
-          |  "queryContext" : [ {
-          |    "objectType" : "",
-          |    "objectName" : "",
-          |    "startIndex" : 8,
-          |    "stopIndex" : 12,
-          |    "fragment" : "1 / 0"
-          |  } ]
-          |}""".stripMargin)
-    check(
-      format = ErrorMessageFormat.STANDARD,
-      errorMessage =
-        """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
-          |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
-          |  "sqlState" : "22012",
-          |  "messageParameters" : {
-          |    "config" : "\"spark.sql.ansi.enabled\""
-          |  },
-          |  "queryContext" : [ {
-          |    "objectType" : "",
-          |    "objectName" : "",
-          |    "startIndex" : 8,
-          |    "stopIndex" : 12,
-          |    "fragment" : "1 / 0"
-          |  } ]
-          |}""".stripMargin)
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |
+          |org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |""".stripMargin,
+      silent = false)
+    Seq(true, false).foreach { silent =>
+      check(
+        format = ErrorMessageFormat.MINIMAL,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+      check(
+        format = ErrorMessageFormat.STANDARD,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+    }
   }
   // scalastyle:on line.size.limit
 }
