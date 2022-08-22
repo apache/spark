@@ -1608,7 +1608,9 @@ test_that("column functions", {
     df,
     array_sort(
       df[[1]],
-      function(x, y) otherwise(when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer")))
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
     )
   ))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
