@@ -454,11 +454,11 @@ class DataFrame(Frame, Generic[T]):
                 internal = InternalFrame.from_pandas(pdf)
         else:
             from pyspark.pandas.indexes.base import Index
-
-            if not isinstance(index, Index):
-                pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
-                internal = InternalFrame.from_pandas(pdf)
-                index_assigned = True
+            if isinstance(index, Index):
+                index = index.to_pandas()
+            pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
+            internal = InternalFrame.from_pandas(pdf)
+            index_assigned = True
 
         if index is not None and not index_assigned:
             data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)

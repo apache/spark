@@ -109,11 +109,15 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
     def test_creation_index(self):
         err_msg = (
-            "The given index cannot be a pandas-on-Spark index. Try pandas index or array-like."
+            "Cannot combine the series or dataframe because it comes from a different dataframe."
         )
-        with self.assertRaisesRegex(TypeError, err_msg):
+        with self.assertRaisesRegex(ValueError, err_msg):
             ps.DataFrame([1, 2], index=ps.Index([1, 2]))
-        with self.assertRaisesRegex(TypeError, err_msg):
+        with self.assertRaisesRegex(ValueError, err_msg):
+            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            ps.DataFrame([1, 2], index=ps.Index([1, 2]))
             ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
 
     def _check_extension(self, psdf, pdf):
