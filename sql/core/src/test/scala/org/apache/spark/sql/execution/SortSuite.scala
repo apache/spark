@@ -114,6 +114,25 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
       sortAnswers = false)
   }
 
+  test("SPARK-40089: decimal values sort correctly") {
+    val input = Seq(
+      BigDecimal("999999999999999999.50"),
+      BigDecimal("1.11"),
+      BigDecimal("999999999999999999.49")
+    )
+    // The range partitioner does the right thing. If there are too many
+    // shuffle partitions the error might not always show up.
+    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
+      val inputDf = spark.createDataFrame(sparkContext.parallelize(input.map(v => Row(v)), 1),
+        StructType(StructField("a", DecimalType(20, 2)) :: Nil))
+      checkAnswer(
+        inputDf,
+        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
+        input.sorted.map(Row(_)),
+        sortAnswers = false)
+    }
+  }
+
   // Test sorting on different data types
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
