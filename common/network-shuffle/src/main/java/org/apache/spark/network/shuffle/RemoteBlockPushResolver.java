@@ -802,7 +802,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (db != null) {
       try {
         db.close();
-        // db = null;
+        db = null;
       } catch (IOException e) {
         logger.error("Exception closing leveldb with registered app paths info and "
             + "shuffle partition info", e);
