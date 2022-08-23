@@ -967,7 +967,7 @@ def cos(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(cos(lit(math.pi))).first()  # doctest: +ELLIPSIS
+    >>> df.select(cos(lit(math.pi))).first()
     Row(COS(3.14159...)=-1.0)
     """
     return _invoke_function_over_columns("cos", col)
@@ -992,7 +992,7 @@ def cosh(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(cosh(lit(1))).first()  # doctest: +ELLIPSIS
+    >>> df.select(cosh(lit(1))).first()
     Row(COSH(1)=1.54308...)
     """
     return _invoke_function_over_columns("cosh", col)
@@ -1018,7 +1018,7 @@ def cot(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(cot(lit(math.radians(45)))).first()  # doctest: +ELLIPSIS
+    >>> df.select(cot(lit(math.radians(45)))).first()
     Row(COT(0.78539...)=1.00000...)
     """
     return _invoke_function_over_columns("cot", col)
@@ -1044,7 +1044,7 @@ def csc(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(csc(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    >>> df.select(csc(lit(math.radians(90)))).first()
     Row(CSC(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("csc", col)
@@ -1098,7 +1098,7 @@ def expm1(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(expm1(lit(1))).first()  # doctest: +ELLIPSIS
+    >>> df.select(expm1(lit(1))).first()
     Row(EXPM1(1)=1.71828...)
     """
     return _invoke_function_over_columns("expm1", col)
@@ -1153,7 +1153,7 @@ def log(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(log(lit(math.e))).first()  # doctest: +ELLIPSIS
+    >>> df.select(log(lit(math.e))).first()
     Row(ln(2.71828...)=1.0)
     """
     return _invoke_function_over_columns("log", col)
@@ -1208,12 +1208,12 @@ def log1p(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(log1p(lit(math.e))).first()  # doctest: +ELLIPSIS
+    >>> df.select(log1p(lit(math.e))).first()
     Row(LOG1P(2.71828...)=1.31326...)
 
     Same as:
 
-    >>> df.select(log(lit(math.e+1))).first()  # doctest: +ELLIPSIS
+    >>> df.select(log(lit(math.e+1))).first()
     Row(ln(3.71828...)=1.31326...)
     """
     return _invoke_function_over_columns("log1p", col)
@@ -1275,7 +1275,7 @@ def sec(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(sec(lit(1.5))).first()  # doctest: +ELLIPSIS
+    >>> df.select(sec(lit(1.5))).first()
     Row(SEC(1.5)=14.13683...)
     """
     return _invoke_function_over_columns("sec", col)
@@ -1337,7 +1337,7 @@ def sin(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(sin(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    >>> df.select(sin(lit(math.radians(90)))).first()
     Row(SIN(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("sin", col)
@@ -1363,7 +1363,7 @@ def sinh(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(1)
-    >>> df.select(sinh(lit(1.1))).first()  # doctest: +ELLIPSIS
+    >>> df.select(sinh(lit(1.1))).first()
     Row(SINH(1.1)=1.33564...)
     """
     return _invoke_function_over_columns("sinh", col)
@@ -1389,7 +1389,7 @@ def tan(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(tan(lit(math.radians(45)))).first()  # doctest: +ELLIPSIS
+    >>> df.select(tan(lit(math.radians(45)))).first()
     Row(TAN(0.78539...)=0.99999...)
     """
     return _invoke_function_over_columns("tan", col)
@@ -1416,7 +1416,7 @@ def tanh(col: "ColumnOrName") -> Column:
     --------
     >>> import math
     >>> df = spark.range(1)
-    >>> df.select(tanh(lit(math.radians(90)))).first()  # doctest: +ELLIPSIS
+    >>> df.select(tanh(lit(math.radians(90)))).first()
     Row(TANH(1.57079...)=0.91715...)
     """
     return _invoke_function_over_columns("tanh", col)
@@ -1665,7 +1665,7 @@ def stddev(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev(df.id)).first()  # doctest: +ELLIPSIS
+    >>> df.select(stddev(df.id)).first()
     Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev", col)
@@ -1691,7 +1691,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev_samp(df.id)).first()  # doctest: +ELLIPSIS
+    >>> df.select(stddev_samp(df.id)).first()
     Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev_samp", col)
@@ -1717,7 +1717,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(stddev_pop(df.id)).first()  # doctest: +ELLIPSIS
+    >>> df.select(stddev_pop(df.id)).first()
     Row(stddev_pop(id)=1.70782...)
     """
     return _invoke_function_over_columns("stddev_pop", col)
@@ -1801,7 +1801,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.range(6)
-    >>> df.select(var_pop(df.id)).first()  # doctest: +ELLIPSIS
+    >>> df.select(var_pop(df.id)).first()
     Row(var_pop(id)=2.91666...)
     """
     return _invoke_function_over_columns("var_pop", col)
@@ -1826,7 +1826,7 @@ def skewness(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(skewness(df.c)).first()  # doctest: +ELLIPSIS
+    >>> df.select(skewness(df.c)).first()
     Row(skewness(c)=0.70710...)
     """
     return _invoke_function_over_columns("skewness", col)
