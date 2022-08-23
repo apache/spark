@@ -36,7 +36,6 @@ import org.apache.spark.util.Utils
  * Note that failures in this suite may arise when#spark.shuffle.service.db.enabled = false
  */
 abstract class ExternalShuffleServiceDbSuite extends SparkFunSuite {
-
   val sortBlock0 = "Hello!"
   val sortBlock1 = "World!"
   val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
