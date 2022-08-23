@@ -363,7 +363,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -579,7 +580,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -818,7 +820,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -827,7 +830,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
-
         >>> df.count()
         3
         """
@@ -892,7 +894,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -917,7 +920,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1227,7 +1231,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (23, "Alice")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (23, "Alice")], ["age", "name"]) 
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1236,7 +1241,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 23|Alice|
         +---+-----+
-
         >>> df.distinct().count()
         2
         """
@@ -1433,7 +1437,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"),
+        ... (23, "Alice")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1441,7 +1446,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 14|  Tom|
         | 23|Alice|
         +---+-----+
-
         >>> df.dtypes
         [('age', 'bigint'), ('name', 'string')]
         """
@@ -2810,7 +2814,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        Fill all null values with 50 when the data type of the column is an integer
+
+	>>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
+        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -2830,7 +2837,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|    50| null|
         +---+------+-----+
 
-        >>> df = spark.createDataFrame([(10, "Alice", None), (5, "Bob", None), (None, "Mallory", True)], ["age", "name", "spy"])
+	Fill all null values with False when the data type of the column is a boolean
+
+        >>> df = spark.createDataFrame([(10, "Alice", None), (5, "Bob", None),
+        ... (None, "Mallory", True)], ["age", "name", "spy"])
         >>> df.show()
         +----+-------+----+
         | age|   name| spy|
@@ -2848,7 +2858,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |null|Mallory| true|
         +----+-------+-----+
 
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+	Fill all null values in the 'age' column to 50 and "unknown" in the 'name' column
+	
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
+        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -2965,7 +2978,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
+        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -2987,7 +3001,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Replace all instances of Alice to null
 
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), 
+        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -3009,7 +3024,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Replace all instances of Alice to 'A' and Bob to 'B' under the name column
         
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
+        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -3476,7 +3492,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -3488,7 +3505,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.drop('age').collect()
         [Row(name='Tom'), Row(name='Alice'), Row(name='Bob')]
 
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -3535,7 +3553,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
+        ... (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
