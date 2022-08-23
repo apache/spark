@@ -127,6 +127,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantAggregates,
+        SimplifyJoinCondition,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
         OptimizeUpdateFields,

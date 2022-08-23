@@ -96,6 +96,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       // Catalyst Optimizer rules
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyJoinCondition" ::
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::

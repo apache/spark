@@ -306,6 +306,47 @@ object OptimizeIn extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * SimplifyJoinCondition:
+ * Changes the join condition of type (key1=key2) || (isnull(key1)&&isnull(key2))
+ * to key1 <=> key2 to prevent join from converting to BNLJ in physical planning
+ * which is costly implementation of join.
+ */
+object SimplifyJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(JOIN), ruleId) {
+    case join@Join(_, _, _, Some(joinCondition), _) =>
+      val predicates = splitConjunctivePredicates(joinCondition)
+      val newPreds = predicates.map {
+        _.transformUp {
+          case or@Or(left, right) =>
+            val pattern1 = getNewPattern(left, right)
+            val pattern2 = getNewPattern(right, left)
+            if (pattern1.isDefined) {
+              pattern1.get
+            } else if (pattern2.isDefined) {
+              pattern2.get
+            } else {
+              or
+            }
+        }
+      }
+      join.copy(condition = Some(newPreds.reduce(And)))
+    }
+
+  private def getNewPattern(left: Expression, right: Expression): Option[Expression] = {
+    left match {
+      case And(IsNull(attrO1), IsNull(attrO2)) =>
+        right match {
+          case EqualTo(attrI1, attrI2) if (attrO1 == attrI1 && attrO2 == attrI2) ||
+            (attrO1 == attrI2 && attrO2 == attrI1) =>
+            Some(EqualNullSafe(attrI1, attrI2))
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+}
 
 /**
  * Simplifies boolean expressions:
