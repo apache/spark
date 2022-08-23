@@ -1454,7 +1454,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-40159: Aggregate should be group only after collapse project to aggregate") {
-    val df = testData.distinct().select('key + 1, ('key + 1).cast("long"))
+    val df = testData.distinct().select('key.cast("string"), 'value)
     df.queryExecution.optimizedPlan.collect {
       case a: Aggregate => a
     }.foreach(agg => assert(agg.groupOnly === true))
