@@ -164,35 +164,52 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         s"side of the join. The $side-side columns: [${plan.output.map(_.name).mkString(", ")}]")
   }
 
+  private def unresolvedAttributeSuggestion(errorClass: String, candidates: Seq[String]): String = {
+    if (candidates.isEmpty) {
+      ""
+    } else {
+      val candidateIds = candidates.map(toSQLId).mkString(", ")
+      if (errorClass == "UNRESOLVED_MAP_KEY") {
+        s" Otherwise did you mean one of the following column(s)? [$candidateIds]"
+      } else {
+        s" Did you mean one of the following? [$candidateIds]"
+      }
+    }
+  }
+
   def unresolvedAttributeError(
       errorClass: String,
       colName: String,
       candidates: Seq[String],
       origin: Origin): Throwable = {
-    val candidateIds = candidates.map(candidate => toSQLId(candidate))
     new AnalysisException(
       errorClass = errorClass,
-      messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
-      origin = origin)
+      messageParameters =
+        Array(toSQLId(colName), unresolvedAttributeSuggestion(errorClass, candidates)),
+      origin = origin
+    )
   }
 
-  def unresolvedColumnError(
-      columnName: String,
-      proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
+  def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      messageParameters = Array(toSQLId(columnName), proposalStr))
+      messageParameters =
+        Array(toSQLId(columnName), unresolvedAttributeSuggestion("UNRESOLVED_COLUMN", proposal))
+    )
   }
 
   def unresolvedFieldError(
       fieldName: String,
       columnPath: Seq[String],
       proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
+      messageParameters = Array(
+        toSQLId(fieldName),
+        toSQLId(columnPath),
+        unresolvedAttributeSuggestion("UNRESOLVED_FIELD", proposal)
+      )
+    )
   }
 
   def dataTypeMismatchForDeserializerError(

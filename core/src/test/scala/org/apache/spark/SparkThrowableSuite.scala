@@ -171,9 +171,15 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Error message is formatted") {
-    assert(getMessage("UNRESOLVED_COLUMN", null, Array("`foo`", "`bar`, `baz`")) ==
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN",
+        null,
+        Array("`foo`", "Did you mean one of the following? [`bar`, `baz`]")
+      ) ==
       "[UNRESOLVED_COLUMN] A column or function parameter with name `foo` cannot be resolved. " +
-        "Did you mean one of the following? [`bar`, `baz`]")
+      "Did you mean one of the following? [`bar`, `baz`]"
+    )
   }
 
   test("Try catching legacy SparkError") {

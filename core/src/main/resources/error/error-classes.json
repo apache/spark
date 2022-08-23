@@ -408,19 +408,19 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved. Did you mean one of the following? [<objectList>]"
+      "A column or function parameter with name <objectName> cannot be resolved.<suggestion>"
     ],
     "sqlState" : "42000"
   },
   "UNRESOLVED_FIELD" : {
     "message" : [
-      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>. Did you mean one of the following? [<proposal>]"
+      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>.<suggestion>"
     ],
     "sqlState" : "42000"
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it.<suggestion>"
     ],
     "sqlState" : "42000"
   },
