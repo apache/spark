@@ -2261,21 +2261,8 @@ class DayTimeIntervalTypeConverter:
 
 
 class NumpyScalarConverter:
-    @property
-    def _has_numpy(self) -> bool:
-        if not hasattr(self, "_has_np"):
-            try:
-                global np  # Cache the import of NumPy
-                import numpy as np
-
-                has_np = True
-            except Exception:
-                has_np = False
-            object.__setattr__(self, "_has_np", has_np)
-        return self._has_np
-
     def can_convert(self, obj: Any) -> bool:
-        return self._has_numpy and isinstance(obj, np.generic)
+        return has_numpy and isinstance(obj, np.generic)
 
     def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
         return obj.item()
