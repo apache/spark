@@ -2599,7 +2599,7 @@ class TaskSetManagerSuite
 
     val executorMonitor = sc.executorAllocationManager.get.executorMonitor
 
-    // reflection to mock ExecutorMonitor.onTaskStart
+    // mock ExecutorMonitor.onTaskStart
     val executorTracker1 = executorMonitor.ensureExecutorIsTracked("exec1",
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     executorTracker1.updateRunningTasks(1)
@@ -2624,7 +2624,7 @@ class TaskSetManagerSuite
 
     Thread.sleep(1200)
 
-    // executor is idle because task has removed by TaskEnd
+    // executor are idle because task has removed by TaskEnd
     assert(executorMonitor.isExecutorIdle("exec1"))
     assert(executorMonitor.isExecutorIdle("exec2"))
   }
