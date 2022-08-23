@@ -271,7 +271,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`c1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -396,7 +396,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -412,7 +412,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`c2`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -446,7 +446,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
-    "objectList" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
+    "suggestion" : " Did you mean one of the following? [`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`]"
   }
 }
 

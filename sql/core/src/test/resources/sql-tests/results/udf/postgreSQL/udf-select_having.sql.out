@@ -154,7 +154,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`",
-    "objectList" : "`one`"
+    "suggestion" : " Did you mean one of the following? [`one`]"
   }
 }
 

@@ -38,7 +38,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "suggestion" : " Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]"
   }
 }
 
@@ -54,7 +54,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t`.`(a)?+.+`",
-    "objectList" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
+    "suggestion" : " Did you mean one of the following? [`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`]"
   }
 }
 
@@ -70,7 +70,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "suggestion" : " Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]"
   }
 }
 
@@ -86,7 +86,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "suggestion" : " Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]"
   }
 }
 
@@ -102,7 +102,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "suggestion" : " Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]"
   }
 }
 
@@ -118,7 +118,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "objectList" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "suggestion" : " Did you mean one of the following? [`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`]"
   }
 }
 
@@ -345,7 +345,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "objectList" : "`testdata3`.`a`, `testdata3`.`b`"
+    "suggestion" : " Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]"
   }
 }
 
@@ -361,6 +361,6 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "objectList" : "`testdata3`.`a`, `testdata3`.`b`"
+    "suggestion" : " Did you mean one of the following? [`testdata3`.`a`, `testdata3`.`b`]"
   }
 }

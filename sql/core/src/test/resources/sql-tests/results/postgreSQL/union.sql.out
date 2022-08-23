@@ -586,7 +586,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`q2`",
-    "objectList" : "`int8_tbl`.`q1`"
+    "suggestion" : " Did you mean one of the following? [`int8_tbl`.`q1`]"
   }
 }
 

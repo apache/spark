@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`count(1)`"
+    "suggestion" : " Did you mean one of the following? [`count(1)`]"
   }
 }
 
@@ -336,7 +336,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`count(a)`"
+    "suggestion" : " Did you mean one of the following? [`count(a)`]"
   }
 }
 

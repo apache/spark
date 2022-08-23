@@ -163,7 +163,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`db1`.`t1`.`i1`",
-    "objectList" : "`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`"
+    "suggestion" : " Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`]"
   }
 }
 
@@ -195,7 +195,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
-    "objectList" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "suggestion" : " Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]"
   }
 }
 
@@ -220,7 +220,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`",
-    "objectList" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "suggestion" : " Did you mean one of the following? [`spark_catalog`.`mydb1`.`t1`.`i1`]"
   }
 }
 
@@ -244,7 +244,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`.`i1`",
-    "objectList" : "`spark_catalog`.`mydb2`.`t1`.`i1`"
+    "suggestion" : " Did you mean one of the following? [`spark_catalog`.`mydb2`.`t1`.`i1`]"
   }
 }
 

@@ -68,7 +68,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`FROM`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 

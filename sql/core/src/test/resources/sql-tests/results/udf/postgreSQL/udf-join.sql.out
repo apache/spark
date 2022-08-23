@@ -3278,7 +3278,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`y`.`f1`",
-    "objectList" : "`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"
+    "suggestion" : " Did you mean one of the following? [`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`]"
   }
 }
 
@@ -3304,7 +3304,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
-    "objectList" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`stringu1`, `t1`.`even`, `t1`.`four`, `t1`.`string4`, `t2`.`stringu1`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`even`, `t2`.`four`, `t1`.`odd`, `t2`.`string4`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`odd`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"
+    "suggestion" : " Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`stringu1`, `t1`.`even`, `t1`.`four`, `t1`.`string4`]"
   }
 }
 
@@ -3321,7 +3321,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
-    "objectList" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`, `t1`.`hundred`, `t2`.`stringu1`, `t2`.`even`, `t2`.`four`, `t2`.`string4`, `t1`.`stringu1`, `t2`.`stringu2`, `t2`.`ten`, `t2`.`tenthous`, `t1`.`even`, `t1`.`four`, `t2`.`odd`, `t1`.`string4`, `t1`.`stringu2`, `t1`.`ten`, `t1`.`tenthous`, `t2`.`thousand`, `t2`.`twenty`, `t2`.`two`, `t2`.`fivethous`, `t1`.`odd`, `t1`.`thousand`, `t1`.`twenty`, `t1`.`two`, `t1`.`fivethous`, `t2`.`twothousand`, `t1`.`twothousand`"
+    "suggestion" : " Did you mean one of the following? [`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`, `t1`.`hundred`, `t2`.`stringu1`, `t2`.`even`, `t2`.`four`, `t2`.`string4`]"
   }
 }
 
@@ -3338,7 +3338,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`uunique1`",
-    "objectList" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`, `t2`.`even`, `t1`.`four`, `t2`.`four`, `t1`.`ten`, `t2`.`ten`, `t1`.`hundred`, `t2`.`hundred`, `t1`.`odd`, `t2`.`odd`, `t1`.`two`, `t2`.`two`, `t1`.`stringu1`, `t2`.`stringu1`, `t1`.`twenty`, `t2`.`twenty`, `t1`.`string4`, `t2`.`string4`, `t1`.`stringu2`, `t2`.`stringu2`, `t1`.`tenthous`, `t2`.`tenthous`, `t1`.`thousand`, `t2`.`thousand`, `t1`.`fivethous`, `t2`.`fivethous`, `t1`.`twothousand`, `t2`.`twothousand`"
+    "suggestion" : " Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`, `t2`.`even`, `t1`.`four`, `t2`.`four`, `t1`.`ten`, `t2`.`ten`]"
   }
 }
 
@@ -3545,7 +3545,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -3561,7 +3561,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -3577,7 +3577,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 
@@ -3593,7 +3593,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`",
-    "objectList" : ""
+    "suggestion" : ""
   }
 }
 

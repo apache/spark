@@ -234,7 +234,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`year`",
-    "objectList" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+    "suggestion" : " Did you mean one of the following? [`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`]"
   }
 }
 
@@ -343,7 +343,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`s`",
-    "objectList" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+    "suggestion" : " Did you mean one of the following? [`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`]"
   }
 }
 

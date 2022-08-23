@@ -139,6 +139,6 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1a`",
-    "objectList" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
+    "suggestion" : " Did you mean one of the following? [`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`]"
   }
 }

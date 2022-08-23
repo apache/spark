@@ -169,7 +169,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`non_existing`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+    "suggestion" : " Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]"
   }
 }
 
@@ -220,7 +220,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`k`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+    "suggestion" : " Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]"
   }
 }
 

@@ -175,7 +175,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       getMessage(
         "UNRESOLVED_COLUMN",
         null,
-        Array("`foo`", "Did you mean one of the following? [`bar`, `baz`]")
+        Array("`foo`", " Did you mean one of the following? [`bar`, `baz`]")
       ) ==
       "[UNRESOLVED_COLUMN] A column or function parameter with name `foo` cannot be resolved. " +
       "Did you mean one of the following? [`bar`, `baz`]"

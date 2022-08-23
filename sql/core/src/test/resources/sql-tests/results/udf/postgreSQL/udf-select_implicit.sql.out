@@ -127,7 +127,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`udf(count(1))`"
+    "suggestion" : " Did you mean one of the following? [`udf(count(1))`]"
   }
 }
 
@@ -339,7 +339,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`udf(count(udf(a)))`"
+    "suggestion" : " Did you mean one of the following? [`udf(count(udf(a)))`]"
   }
 }
 
