@@ -162,11 +162,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
             //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
             // Due to `cast(lit, fromExp.dataType) == null` we simply return
             // `falseIfNotNull(fromExp)`.
-            case None =>
+            case None | Some(And(IsNull(_), Literal(null, BooleanType))) =>
               cannotCastList += falseIfNotNull(fromExp)
             case Some(EqualTo(_, unwrapLit: Literal)) =>
               canCastList += unwrapLit
-            case Some(e @ And(IsNull(_), Literal(null, BooleanType))) => cannotCastList += e
             case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
           }
         case _ => throw new IllegalStateException("Illegal value found in in.list.")
@@ -210,11 +209,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
             unwrapCast(EqualTo(inSet.child, lit)) match {
               // The same with `In`, when the lit cast to from.dataType failed, we simply return
               // `falseIfNotNull(fromExp)`.
-              case None =>
+              case None | Some(And(IsNull(_), Literal(null, BooleanType))) =>
                 cannotCastSet += falseIfNotNull(fromExp)
               case Some(EqualTo(_, unwrapLit: Literal)) =>
                 canCastSet += unwrapLit.value
-              case Some(e @ And(IsNull(_), Literal(null, BooleanType))) => cannotCastSet += e
               case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
             }
           case _ => throw new IllegalStateException("Illegal value found in hset.")
