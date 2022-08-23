@@ -408,7 +408,7 @@ class StreamingQueryManager:
         Returns
         -------
         list
-            The active queries associated with this SparkSession.
+            The active queries associated with this :class:`SparkSession`.
 
         Examples
         --------
