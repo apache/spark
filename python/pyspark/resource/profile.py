@@ -42,7 +42,7 @@ class ResourceProfile:
 
     Examples
     --------
-    Create Executoe resource requests.
+    Create Executor resource requests.
 
     >>> executor_requests = (
     ...     ExecutorResourceRequests()
