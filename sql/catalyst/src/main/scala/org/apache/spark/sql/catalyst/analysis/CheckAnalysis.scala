@@ -107,7 +107,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       errorClass: String): Nothing = {
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates).take(10)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates).take(5)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
   }

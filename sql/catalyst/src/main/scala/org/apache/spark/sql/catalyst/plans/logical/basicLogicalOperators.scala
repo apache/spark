@@ -180,7 +180,7 @@ object Project {
           if (columnPath.isEmpty) {
             val candidates = fields.map(_._1)
             val orderedCandidates =
-              StringUtils.orderStringsBySimilarity(f.name, candidates).take(10)
+              StringUtils.orderStringsBySimilarity(f.name, candidates).take(5)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
           } else {
             throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
