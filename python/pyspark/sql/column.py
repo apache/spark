@@ -71,6 +71,18 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
     return jcol
 
 
+def _to_java_expr(col: "ColumnOrName") -> JavaObject:
+    if isinstance(col, (Column, str)):
+        return _to_java_column(col).expr()
+    else:
+        raise TypeError(
+            "Invalid argument, not a string or column: "
+            "{0} of type {1}. "
+            "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
+            "function.".format(col, type(col))
+        )
+
+
 def _to_seq(
     sc: SparkContext,
     cols: Iterable["ColumnOrName"],

@@ -53,6 +53,37 @@ from pyspark.testing.utils import QuietTest
 
 
 class DataFrameTests(ReusedSQLTestCase):
+    def test_partitioning_hints(self):
+        # Disable coalescePartitions so # of partitions specified is respected for testing.
+        self.spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "false")
+        df = self.spark.createDataFrame(
+            zip(['A', 'B'] * 2 ** 9, range(2 ** 10)),
+            StructType([StructField('a', StringType()), StructField('n', IntegerType())])
+        )
+        # COALESCE
+        coalesce = df.hint("coalesce", 2)
+        self.assertEqual(coalesce.rdd.getNumPartitions(), 2)
+        # REPARTITION_BY_RANGE
+        range_partitioned = df.hint("REPARTITION_BY_RANGE", 2, "a")
+        self.assertEqual(range_partitioned.rdd.getNumPartitions(), 2)
+        # REPARTITION
+        repartitioned1 = df.hint("REPARTITION", "a")
+        self.assertEqual(repartitioned1.rdd.getNumPartitions(),
+                         int(self.spark.conf.get("spark.sql.shuffle.partitions")))
+        repartitioned2 = df.hint("REPARTITION", 2)
+        self.assertEqual(repartitioned2.rdd.getNumPartitions(), 2)
+        repartitioned3 = df.hint("REPARTITION",  2, "a")
+        self.assertEqual(repartitioned3.rdd.getNumPartitions(), 2)
+        # REBALANCE
+        rebalanced1 = df.hint("REBALANCE", "a")  # just check this doesn't error
+        self.assertEqual(rebalanced1.rdd.getNumPartitions(),
+                         int(self.spark.conf.get("spark.sql.shuffle.partitions")))
+        rebalanced2 = df.hint("REBALANCE", 2)
+        self.assertEqual(rebalanced2.rdd.getNumPartitions(), 2)
+        rebalanced3 = df.hint("REBALANCE", 2, "a")
+        self.assertEqual(rebalanced3.rdd.getNumPartitions(), 2)
+        self.spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)

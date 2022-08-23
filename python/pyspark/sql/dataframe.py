@@ -52,7 +52,7 @@ from pyspark.rdd import (
 from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column, _to_java_expr
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
@@ -977,7 +977,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     )
                 )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters))
+        jdf = self._jdf.hint(name, self._jseq(parameters,
+                                              converter=lambda x: _to_java_expr(x) if isinstance(x, (Column, str)) else x))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:
