@@ -769,6 +769,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
+
+    case GlobalLimit(l, Project(projectList, child)) =>
+      Project(projectList, GlobalLimit(l, child))
+    case LocalLimit(l, Project(projectList, child)) =>
+      Project(projectList, LocalLimit(l, child))
+    case Limit(l, Project(projectList, child)) =>
+      Project(projectList, Limit(l, child))
   }
 }
 
@@ -1994,13 +2001,6 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
-
-    case GlobalLimit(l, Project(projectList, child)) =>
-      Project(projectList, GlobalLimit(l, child))
-    case LocalLimit(l, Project(projectList, child)) =>
-      Project(projectList, LocalLimit(l, child))
-    case Limit(l, Project(projectList, child)) =>
-      Project(projectList, Limit(l, child))
   }
 }
 

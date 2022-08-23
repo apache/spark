@@ -84,12 +84,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ReturnAnswer(proj @ Project(projectList, child)) =>
         planCommon(child) match {
           case collectLimit @ CollectLimitExec(_, child, _) =>
-            val newChildren = Seq(execution.ProjectExec(projectList, child))
-            collectLimit.withNewChildren(newChildren) :: Nil
-          case takeOrdered @ TakeOrderedAndProjectExec(_, _, _, child, _) =>
-            val newChildren = Seq(execution.ProjectExec(projectList, child))
-            takeOrdered.withNewChildren(newChildren) :: Nil
-          case other => planLater(proj) :: Nil
+            val newChild = execution.ProjectExec(projectList, child)
+            collectLimit.copy(child = newChild) :: Nil
+          case takeOrdered @ TakeOrderedAndProjectExec(_, _, takeOrderedProj, child, _) =>
+            val updatedResult = if (takeOrderedProj == child.output) {
+              takeOrdered.copy(projectList = projectList)
+            } else {
+              // Project(Limit(Project(Sort(child)))). The top project is not same as the
+              // inner project, fall back to normal planning
+              planLater(proj)
+            }
+            updatedResult :: Nil
+          case _ => planLater(proj) :: Nil
         }
 
       case ReturnAnswer(rootPlan) => planCommon(rootPlan) :: Nil
