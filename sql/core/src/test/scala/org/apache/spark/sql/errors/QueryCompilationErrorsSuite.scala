@@ -628,8 +628,8 @@ class QueryCompilationErrorsSuite
     val e = intercept[SparkFileNotFoundException](
       withTempPath { p =>
         val conf = new Configuration()
-        conf.set("fs.fake.impl", classOf[RenameReturnsFalseFileSystem].getName)
-        conf.set("fs.defaultFS", "fake:///")
+        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
         val basePath = new Path(p.getAbsolutePath)
         val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
         srcPath = new Path(s"$basePath/file")
