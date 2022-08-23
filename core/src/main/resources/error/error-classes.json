@@ -17,12 +17,6 @@
     ],
     "sqlState" : "22005"
   },
-  "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "22005"
-  },
   "CANNOT_INFER_DATE" : {
     "message" : [
       "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
@@ -75,6 +69,12 @@
       "Datetime operation overflow: <operation>."
     ],
     "sqlState" : "22008"
+  },
+  "DECIMAL_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22005"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
