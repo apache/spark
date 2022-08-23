@@ -1853,7 +1853,7 @@ Apache YuniKorn supports 2 types of resource queues:
 The static queues are predefined in YuniKorn configmap, and the dynamic queues are automatically created by the scheduler
 based on [placement rules](https://yunikorn.apache.org/docs/next/user_guide/placement_rules). Spark supports to run with
 both queue setup. Refer to this [doc](https://yunikorn.apache.org/docs/next/user_guide/resource_quota_management) for more
-information how to run Spark with different queue setup.
+information about how to run Spark with different queue setup.
 
 ### Stage Level Scheduling Overview
 
