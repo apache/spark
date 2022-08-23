@@ -121,7 +121,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
-  private ExecutorService mergedShuffleCleaner;
+  private final ExecutorService mergedShuffleCleaner;
   private final TransportConf conf;
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
@@ -800,14 +800,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   @Override
   public void close() {
-    if (mergedShuffleCleaner != null && !mergedShuffleCleaner.isShutdown()) {
+    if (!mergedShuffleCleaner.isShutdown()) {
       try {
         mergedShuffleCleaner.shutdown();
         boolean isTermination = mergedShuffleCleaner.awaitTermination(60L, TimeUnit.SECONDS);
         if (!isTermination) {
           mergedShuffleCleaner.shutdownNow();
         }
-        mergedShuffleCleaner = null;
       } catch (InterruptedException ignored) {
         // ignore InterruptedException.
       }
@@ -1049,7 +1048,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   @VisibleForTesting
   boolean isCleanerShutdown() {
-    return mergedShuffleCleaner == null || mergedShuffleCleaner.isShutdown();
+    return mergedShuffleCleaner.isShutdown();
   }
 
   /**

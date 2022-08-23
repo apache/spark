@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
+import java.util.concurrent.RejectedExecutionException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -768,8 +769,40 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
 
     s1.stop()
-    assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(mergeManager1))
-    assert(ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1) == null)
+  }
+
+  test("SPARK-40186: shuffleMergeManager should have been shutdown before db closed") {
+    val maxId = 100
+    s1 = createYarnShuffleService()
+    val resolver = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    (0 to maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      val appInfo = makeAppInfo("user", appId)
+      s1.initializeApplication(appInfo)
+      val mergedShuffleInfo =
+        new ExecutorShuffleInfo(
+          Array(new File(tempDir, "foo/foo").getAbsolutePath,
+            new File(tempDir, "bar/bar").getAbsolutePath), 3,
+          SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+      resolver.registerExecutor(appId.toString, mergedShuffleInfo)
+    }
+
+    (0 until maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      resolver.applicationRemoved(appId.toString, false)
+    }
+
+    s1.stop()
+
+    assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(resolver))
+    assert(ShuffleTestAccessor.mergeManagerLevelDB(resolver) == null)
+
+    val message = intercept[RejectedExecutionException] {
+      val appId = ApplicationId.newInstance(0, maxId)
+      resolver.applicationRemoved(appId.toString, false)
+    }.getMessage
+    assert(message.contains("Terminated, pool size = 0, " +
+      s"active threads = 0, queued tasks = 0, completed tasks = $maxId"))
   }
 
   test("Dangling finalized merged partition info in DB will be removed during restart") {
