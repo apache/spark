@@ -157,15 +157,17 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case lit @ NonNullLiteral(_, _) =>
           val originalEqualTo = EqualTo(in.value, lit)
           unwrapCast(originalEqualTo) match {
-            // the function `unwrapCast` may returns original expression when the literal can not
-            // cast to fromType, for instance: (the boundreference is of type DECIMAL(5,2))
-            //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
-            // Due to `cast(lit, fromExp.dataType) == null` we simply return
-            // `falseIfNotNull(fromExp)`.
-            case equalTo: EqualTo if equalTo == originalEqualTo &&
-              Cast(lit, fromExp.dataType).eval() == null =>
-              cannotCastList += falseIfNotNull(fromExp)
-            case EqualTo(_, unwrapLit: Literal) => canCastList += unwrapLit
+            case equalTo @ EqualTo(_, unwrapLit: Literal) =>
+              // the function `unwrapCast` may returns original expression when the literal can not
+              // cast to fromType, for instance: (the boundreference is of type DECIMAL(5,2))
+              //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
+              // Due to `cast(lit, fromExp.dataType) == null` we simply return
+              // `falseIfNotNull(fromExp)`.
+              if (equalTo == originalEqualTo && Cast(lit, fromExp.dataType).eval() == null) {
+                cannotCastList += falseIfNotNull(fromExp)
+              } else {
+                canCastList += unwrapLit
+              }
             case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastList += e
             case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
           }
@@ -209,12 +211,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           case lit @ NonNullLiteral(_, _) =>
             val originalEqualTo = EqualTo(inSet.child, lit)
             unwrapCast(originalEqualTo) match {
-              // The same with `In`, when the lit cast to from.dataType failed, we simply return
-              // `falseIfNotNull(fromExp)`.
-              case equalTo: EqualTo if equalTo == originalEqualTo &&
-                Cast(lit, fromExp.dataType).eval() == null =>
-                cannotCastSet += falseIfNotNull(fromExp)
-              case EqualTo(_, unwrapLit: Literal) => canCastSet += unwrapLit.value
+              case equalTo @ EqualTo(_, unwrapLit: Literal) =>
+                // The same with `In`, when the lit cast to from.dataType failed, we simply return
+                // `falseIfNotNull(fromExp)`.
+                if (equalTo == originalEqualTo && Cast(lit, fromExp.dataType).eval() == null) {
+                  cannotCastSet += falseIfNotNull(fromExp)
+                } else {
+                  canCastSet += unwrapLit.value
+                }
               case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastSet += e
               case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
             }
