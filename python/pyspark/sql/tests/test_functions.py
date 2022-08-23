@@ -989,6 +989,12 @@ class FunctionsTests(ReusedSQLTestCase):
             res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
             self.assertEqual([Row(c=1), Row(c=0)], res)
 
+        # java.lang.Integer max: 2147483647
+        max_int = 2147483647
+        # Convert int to bigint automatically
+        self.assertEqual(df.select(lit(np.int32(max_int))).dtypes, [("2147483647", "int")])
+        self.assertEqual(df.select(lit(np.int64(max_int + 1))).dtypes, [("2147483648", "bigint")])
+
         df = self.spark.createDataFrame([([1.0, 2.0, 3.0],), ([],)], ["data"])
         for dtype in [np.float32, np.float64]:
             self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1.0", "double")])
