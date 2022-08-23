@@ -2225,7 +2225,7 @@ case class ElementAt(
               case Some(value) =>
                 val defaultValueEval = value.genCode(ctx)
                 s"""
-                  ${defaultValueEval.code};
+                  ${defaultValueEval.code}
                   ${ev.isNull} = ${defaultValueEval.isNull};
                   ${ev.value} = ${defaultValueEval.value};
                 """.stripMargin
