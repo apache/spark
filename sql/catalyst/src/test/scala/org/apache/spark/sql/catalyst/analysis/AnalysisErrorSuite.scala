@@ -292,7 +292,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved attributes",
     testRelation.select($"abcd"),
     "UNRESOLVED_COLUMN",
-    Array("`abcd`", "`a`"))
+    Array("`abcd`", " Did you mean one of the following? [`a`]"))
 
   errorClassTest(
     "unresolved attributes with a generated name",
@@ -300,7 +300,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "UNRESOLVED_COLUMN",
-    Array("`havingCondition`", "`max(b)`"))
+    Array("`havingCondition`", " Did you mean one of the following? [`max(b)`]"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -316,7 +316,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "UNRESOLVED_COLUMN",
-    Array("`b`", "`a`, `c`, `a3`"))
+    Array("`b`", " Did you mean one of the following? [`a`, `c`, `a3`]"))
 
   errorTest(
     "non-boolean filters",
@@ -410,7 +410,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN",
-    Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
+    Array("`bad_column`", " Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"))
 
   errorTest(
     "slide duration greater than window in time window",

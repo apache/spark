@@ -148,7 +148,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN",
-      Array("`d`", "`b`, `c`")
+      Array("`d`", " Did you mean one of the following? [`b`, `c`]")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(

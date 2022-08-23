@@ -104,7 +104,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       "UNRESOLVED_COLUMN",
-      Array("`tBl`.`a`", "`TbL`.`a`"))
+      Array("`tBl`.`a`", " Did you mean one of the following? [`TbL`.`a`]"))
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -712,7 +712,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN",
-      Array("`y`", "`t`.`x`"))
+      Array("`y`", " Did you mean one of the following? [`t`.`x`]"))
   }
 
   test("CTE with non-matching column alias") {
@@ -1150,7 +1150,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |ORDER BY c.x + c.y
         |""".stripMargin),
       "UNRESOLVED_COLUMN",
-      Array("`c`.`y`", "`x`"))
+      Array("`c`.`y`", " Did you mean one of the following? [`x`]"))
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
