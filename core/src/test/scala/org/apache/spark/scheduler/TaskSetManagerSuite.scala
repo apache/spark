@@ -42,7 +42,6 @@ import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
@@ -2601,26 +2600,16 @@ class TaskSetManagerSuite
     val executorMonitor = sc.executorAllocationManager.get.executorMonitor
 
     // reflection to mock ExecutorMonitor.onTaskStart
-    val ensureExecutorIsTracked = classOf[ExecutorMonitor]
-      .getDeclaredMethod("ensureExecutorIsTracked",
-        classOf[String], classOf[Int])
-    ensureExecutorIsTracked.setAccessible(true)
+    val executorTracker1 = executorMonitor.ensureExecutorIsTracked("exec1",
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    executorTracker1.updateRunningTasks(1)
+    val executorTracker2 = executorMonitor.ensureExecutorIsTracked("exec2",
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    executorTracker2.updateRunningTasks(1)
 
-    val executorTracker1 = ensureExecutorIsTracked.invoke(executorMonitor,
-      "exec1".asInstanceOf[AnyRef],
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID.asInstanceOf[AnyRef])
-    executorTracker1.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
-    val executorTracker2 = ensureExecutorIsTracked.invoke(executorMonitor,
-      "exec2".asInstanceOf[AnyRef],
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID.asInstanceOf[AnyRef])
-    executorTracker2.asInstanceOf[executorMonitor.Tracker].updateRunningTasks(1)
-
-    // assert exec1 and exec2 is not idle
-    val method = classOf[ExecutorMonitor].getDeclaredMethod("isExecutorIdle",
-      classOf[String])
-    method.setAccessible(true)
-    assert(!method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
-    assert(!method.invoke(executorMonitor, "exec2").asInstanceOf[Boolean])
+    // assert exec1 and exec2 are not idle
+    assert(!executorMonitor.isExecutorIdle("exec1"))
+    assert(!executorMonitor.isExecutorIdle("exec2"))
 
     // handle failed task and send TaskEnd
     val reason1 = new ExceptionFailure(
@@ -2636,8 +2625,8 @@ class TaskSetManagerSuite
     Thread.sleep(1200)
 
     // executor is idle because task has removed by TaskEnd
-    assert(method.invoke(executorMonitor, "exec1").asInstanceOf[Boolean])
-    assert(method.invoke(executorMonitor, "exec2").asInstanceOf[Boolean])
+    assert(executorMonitor.isExecutorIdle("exec1"))
+    assert(executorMonitor.isExecutorIdle("exec2"))
   }
 
 }
