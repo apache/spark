@@ -108,54 +108,116 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             self.assert_eq(pdf, psdf)
 
     def test_creation_index(self):
+        data = np.random.randn(5, 3)
+
+        # test local data with pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
+            pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
+        )
 
         # test local data with ps.Index
         self.assert_eq(
-            ps.DataFrame([1, 2], index=ps.Index([1, 2])),
-            pd.DataFrame([1, 2], index=pd.Index([1, 2])),
+            ps.DataFrame(data=[1, 2], index=ps.Index([1, 2])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([1, 2])),
         )
         self.assert_eq(
-            ps.DataFrame([1, 2], index=ps.Index([2, 3])),
-            pd.DataFrame([1, 2], index=pd.Index([2, 3])),
+            ps.DataFrame(data=[1, 2], index=ps.Index([2, 3])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([2, 3])),
         )
         self.assert_eq(
-            ps.DataFrame([1, 2], index=ps.Index([3, 4])),
-            pd.DataFrame([1, 2], index=pd.Index([3, 4])),
+            ps.DataFrame(data=[1, 2], index=ps.Index([3, 4])),
+            pd.DataFrame(data=[1, 2], index=pd.Index([3, 4])),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=data, index=ps.Index([1, 2, 3, 5, 6])),
+            pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
         )
 
         # test local data with ps.MultiIndex
         self.assert_eq(
-            ps.DataFrame([1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
-            pd.DataFrame([1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+            ps.DataFrame(data=[1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+            pd.DataFrame(data=[1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
         )
 
         err_msg = "Cannot combine the series or dataframe"
         with self.assertRaisesRegex(ValueError, err_msg):
             # test ps.DataFrame with ps.Index
-            ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
+            ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
         with self.assertRaisesRegex(ValueError, err_msg):
             # test ps.DataFrame with pd.Index
-            ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
+            ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
 
         with ps.option_context("compute.ops_on_diff_frames", True):
-            # test ps.DataFrame with ps.Index
+            # test pd.DataFrame with pd.Index
             self.assert_eq(
-                ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([0, 1])),
-                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                ps.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
             )
             self.assert_eq(
-                ps.DataFrame(ps.DataFrame([1, 2]), index=ps.Index([1, 2])),
-                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                ps.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+            # test ps.DataFrame with ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+            )
+            self.assert_eq(
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
             )
 
             # test ps.DataFrame with pd.Index
             self.assert_eq(
-                ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([0, 1])),
-                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([0, 1])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([0, 1])),
             )
             self.assert_eq(
-                ps.DataFrame(ps.DataFrame([1, 2]), index=pd.Index([1, 2])),
-                pd.DataFrame(pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([1, 2])),
+                pd.DataFrame(data=pd.DataFrame([1, 2]), index=pd.Index([1, 2])),
+            )
+
+        # test with multi data columns
+        pdf = pd.DataFrame(data=data, columns=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+            pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+        )
+
+        # test with pd.DataFrame and ps.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=ps.Index([2, 3, 4, 5, 6])),
+            pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+            )
+
+            # test with ps.DataFrame and ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
             )
 
     def _check_extension(self, psdf, pdf):
