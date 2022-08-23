@@ -409,6 +409,15 @@ public class UTF8StringSuite {
     assertArrayEquals(
       new UTF8String[]{fromString("ab"), fromString("def,ghi,")},
       fromString("ab,def,ghi,").split(fromString(","), 2));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b")},
+      fromString("ab").split(fromString(""), 0));
+    assertArrayEquals(
+      new UTF8String[]{fromString("a"), fromString("b"), fromString("")},
+      fromString("ab").split(fromString(""), -1));
+    assertArrayEquals(
+      new UTF8String[]{fromString("")},
+      fromString("").split(fromString(""), 0));
   }
 
   @Test
