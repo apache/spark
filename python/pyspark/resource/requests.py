@@ -238,7 +238,7 @@ class ExecutorResourceRequests:
     def pysparkMemory(self, amount: str) -> "ExecutorResourceRequests":
         """
         Specify pyspark memory. The value specified will be converted to MiB.
-        This is a convenient API to add :class:`xecutorResourceRequest` for "pyspark.memory"
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "pyspark.memory"
         resource.
 
         Parameters
