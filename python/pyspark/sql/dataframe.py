@@ -968,7 +968,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
-        allowed_types = (str, list, float, int)
+        allowed_types = (str, Column, int)
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise TypeError(
@@ -977,8 +977,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     )
                 )
 
-        jdf = self._jdf.hint(name, self._jseq(parameters,
-                                              converter=lambda x: _to_java_expr(x) if isinstance(x, (Column, str)) else x))
+        def _convert_hint_parameter(parameter: Union[str, int, Column]) -> Any:
+            if isinstance(parameter, (Column, str)):
+                return _to_java_expr(parameter)
+            else:
+                return parameter
+
+        jdf = self._jdf.hint(name, self._jseq(parameters, converter=_convert_hint_parameter))
         return DataFrame(jdf, self.sparkSession)
 
     def count(self) -> int:
