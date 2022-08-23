@@ -70,12 +70,6 @@
     ],
     "sqlState" : "22008"
   },
-  "DECIMAL_VALUE_OUT_OF_RANGE" : {
-    "message" : [
-      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "22005"
-  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
@@ -341,6 +335,12 @@
     "message" : [
       "The comparison result is null. If you want to handle null as 0 (equal), you can set \"spark.sql.legacy.allowNullComparisonResultInArraySort\" to \"true\"."
     ]
+  },
+  "NUMERIC_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "<value> cannot be represented as Decimal(<precision>, <scale>). If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22005"
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [

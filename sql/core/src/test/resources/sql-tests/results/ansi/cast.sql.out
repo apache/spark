@@ -1027,7 +1027,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DECIMAL_VALUE_OUT_OF_RANGE",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
     "value" : "123.45",
@@ -1492,7 +1492,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DECIMAL_VALUE_OUT_OF_RANGE",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
     "value" : "0.000010",
