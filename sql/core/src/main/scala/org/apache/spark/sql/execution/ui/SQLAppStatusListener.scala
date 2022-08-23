@@ -550,6 +550,8 @@ class SQLAppStatusListener(
     toDelete.foreach { e =>
       kvstore.delete(e.getClass(), e.executionId)
       kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
+      kvstore.delete(classOf[GraphNodeToStages], e.executionId)
+      kvstore.delete(classOf[StageAttempt], e.executionId)
     }
   }
 

@@ -62,6 +62,14 @@ class SQLAppStatusStore(
     store.count(classOf[SparkPlanGraphWrapper])
   }
 
+  def graphNodeToStagesCount(): Long = {
+    store.count(classOf[GraphNodeToStages])
+  }
+
+  def stageAttemptCount(): Long = {
+    store.count(classOf[StageAttempt])
+  }
+
   def executionMetrics(executionId: Long): Map[Long, String] = {
     def metricsFromStore(): Option[Map[Long, String]] = {
       val exec = store.read(classOf[SQLExecutionUIData], executionId)
