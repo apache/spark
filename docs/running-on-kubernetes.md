@@ -1815,7 +1815,7 @@ spec:
 
 [Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
 capabilities, such as job queuing, resource fairness, min/max queue capacity and flexible job ordering policies.
-For available Apache YuniKorn features, please refer to [this doc](https://yunikorn.apache.org/docs/next/get_started/core_features).
+For available Apache YuniKorn features, please refer to [core features](https://yunikorn.apache.org/docs/get_started/core_features).
 
 ##### Prerequisites
 
@@ -1828,7 +1828,7 @@ kubectl create namespace yunikorn
 helm install yunikorn yunikorn/yunikorn --namespace yunikorn
 ```
 
-the above steps will install the latest version of YuniKorn on an existing Kubernetes cluster.
+The above steps will install the latest version of YuniKorn on an existing Kubernetes cluster.
 
 ##### Get started
 
@@ -1840,7 +1840,7 @@ Submit Spark jobs with the following extra options:
 --conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
 ```
 
-Note, `{{APP_ID}}` is the builtin variable that will be substituted with Spark job ID automatically.
+Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
 With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
 
 ##### Work with YuniKorn queues
@@ -1851,9 +1851,13 @@ Apache YuniKorn supports 2 types of resource queues:
 - Dynamic
 
 The static queues are predefined in YuniKorn configmap, and the dynamic queues are automatically created by the scheduler
-based on [placement rules](https://yunikorn.apache.org/docs/next/user_guide/placement_rules). Spark supports to run with
-both queue setup. Refer to this [doc](https://yunikorn.apache.org/docs/next/user_guide/resource_quota_management) for more
+based on [placement rules](https://yunikorn.apache.org/docs/user_guide/placement_rules). Spark supports to run with
+both queue setup. Refer to this [resource quota management](https://yunikorn.apache.org/docs/user_guide/resource_quota_management) for more
 information about how to run Spark with different queue setup.
+
+##### Limitations
+
+- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 with Apache YuniKorn is not supported at present.
 
 ### Stage Level Scheduling Overview
 
