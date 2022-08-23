@@ -606,30 +606,23 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("MULTI_VALUE_SUBQUERY_ERROR: " +
-    "more than one row returned by a subquery used as an expression") {
+  test(
+    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "More than one row returned by a subquery used as an expression"
+  ) {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      parameters = Map("plan" ->
-          """Subquery subquery#\w+, \[id=#\w+\]
-            |\+\- AdaptiveSparkPlan isFinalPlan=true
-            |   \+\- == Final Plan ==
-            |      Union
-            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
-            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
-            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
-            |         \+\- \*\(2\) Scan OneRowRelation\[\]
-            |   \+\- == Initial Plan ==
-            |      Union
-            |      :\- Project \[\w+ AS a#\w+\]
-            |      :  \+\- Scan OneRowRelation\[\]
-            |      \+\- Project \[\w+ AS a#\w+\]
-            |         \+\- Scan OneRowRelation\[\]
-            |""".stripMargin),
-      matchPVals = true)
+      queryContext = Array(
+        ExpectedContext(
+          fragment = "(select a from (select 1 as a union all select 2 as a) t)",
+          start = 7,
+          stop = 63
+        )
+      )
+    )
   }
 
   test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
