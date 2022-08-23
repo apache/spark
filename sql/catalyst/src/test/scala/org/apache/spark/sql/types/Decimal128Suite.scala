@@ -64,11 +64,11 @@ class Decimal128Suite extends SparkFunSuite {
   }
 
   test("hash code") {
-    assert(Decimal128(123).hashCode() === (-460565894).##)
-    assert(Decimal128(-123).hashCode() === (1655510596).##)
-    assert(Decimal128(Int.MaxValue).hashCode() === (-217723243).##)
+    assert(Decimal128(123).hashCode() === (123).##)
+    assert(Decimal128(-123).hashCode() === (122).##)
+    assert(Decimal128(Int.MaxValue).hashCode() === (2147483647).##)
     assert(Decimal128(Long.MaxValue).hashCode() === (-237151917).##)
-    assert(Decimal128(BigDecimal(123)).hashCode() === (-460565894).##)
+    assert(Decimal128(BigDecimal(123)).hashCode() === (123).##)
   }
 
   test("equals") {
@@ -95,21 +95,50 @@ class Decimal128Suite extends SparkFunSuite {
 
   test("arithmetic") {
     assert(Decimal128(100) + Decimal128(-100) === Decimal128(0))
-    assert(Decimal128(100, 0) + Decimal128(-100, 0) === Decimal128(0))
     assert(Decimal128(100, 1) + Decimal128(-100, 1) === Decimal128(0))
     assert(Decimal128(100, 1) + Decimal128(-100, 2) === Decimal128(900, 2))
+    assert(Decimal128(100, 2) + Decimal128(-100, 1) === Decimal128(-900, 2))
     assert(Decimal128(100, 1) + Decimal128(-100, 2) === Decimal128("9.00"))
     assert(Decimal128("10.0") + Decimal128("-1.00") === Decimal128(BigDecimal("9.00")))
     assert(Decimal128("15432.21543600787131") + Decimal128("57832.21543600787313") ===
       Decimal128(BigDecimal("73264.43087201574444")))
-//    assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
-//    assert(Decimal(1e13) * Decimal(1e13) === Decimal(1e26))
-//    assert(Decimal(100) / Decimal(-100) === Decimal(-1))
-//    assert(Decimal(100) / Decimal(0) === null)
-//    assert(Decimal(100) % Decimal(-100) === Decimal(0))
-//    assert(Decimal(100) % Decimal(3) === Decimal(1))
-//    assert(Decimal(-100) % Decimal(3) === Decimal(-1))
-//    assert(Decimal(100) % Decimal(0) === null)
+    assert(Decimal128(100) - Decimal128(-100) === Decimal128(200))
+    assert(Decimal128(100, 1) - Decimal128(-100, 1) === Decimal128(200, 1))
+    assert(Decimal128(100, 1) - Decimal128(-100, 2) === Decimal128(1100, 2))
+    assert(Decimal128(100, 2) - Decimal128(-100, 1) === Decimal128(1100, 2))
+    assert(Decimal128(100, 1) - Decimal128(-100, 2) === Decimal128("11.00"))
+    assert(Decimal128("10.0") - Decimal128("-1.00") === Decimal128(BigDecimal("11.00")))
+    assert(Decimal128("15432.21543600787131") - Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("-42400.00000000000182")))
+    assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
+    assert(Decimal128(100, 1) * Decimal128(-100, 1) === Decimal128(-10000, 2))
+    assert(Decimal128(100, 1) * Decimal128(-100, 2) === Decimal128(-10000, 3))
+    assert(Decimal128(100, 2) * Decimal128(-100, 1) === Decimal128(-10000, 3))
+    assert(Decimal128(100, 1) * Decimal128(-100, 2) === Decimal128("-10.00"))
+    assert(Decimal128("10.0") * Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
+    assert(Decimal128("15432.21543600787131") * Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("892479207.7500933852299992378118469003")))
+    assert(Decimal128(1e13) * Decimal128(1e13) === Decimal128(1e26))
+    assert(Decimal128(100) / Decimal128(-100) === Decimal128(-1))
+    assert(Decimal128(100, 1) / Decimal128(-100, 1) === Decimal128(-1, 0))
+    assert(Decimal128(100, 1) / Decimal128(-100, 2) === Decimal128(-10, 0))
+    assert(Decimal128(100, 2) / Decimal128(-100, 1) === Decimal128(-10, 2))
+    assert(Decimal128(100, 1) / Decimal128(-100, 2) === Decimal128("-10.00"))
+    assert(Decimal128("10.0") / Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
+    assert(Decimal128("15432.21543600") / Decimal128("57832.21543") ===
+      Decimal128(BigDecimal("0.26684462")))
+    assert(Decimal128("15432.21543600787131") / Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("0.26684461799814")))
+    assert(Decimal128(100) / Decimal128(0) === null)
+    assert(Decimal128(100) % Decimal128(-100) === Decimal128(0))
+    assert(Decimal128(100, 1) % Decimal128(-100, 1) === Decimal128(0))
+    assert(Decimal128(100, 1) % Decimal128(-100, 2) === Decimal128(0))
+    assert(Decimal128(100, 2) % Decimal128(-100, 1) === Decimal128(100, 2))
+    assert(Decimal128(100, 1) % Decimal128(-100, 2) === Decimal128("0.0"))
+    assert(Decimal128("10.0") % Decimal128("-1.00") === Decimal128(BigDecimal("0.0")))
+    assert(Decimal128(100) % Decimal128(3) === Decimal128(1))
+    assert(Decimal128(-100) % Decimal128(3) === Decimal128(-1))
+    assert(Decimal128(100) % Decimal128(0) === null)
   }
 
 }

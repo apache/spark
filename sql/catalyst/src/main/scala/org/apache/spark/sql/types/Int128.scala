@@ -20,11 +20,9 @@ package org.apache.spark.sql.types
 import java.lang.{Long => JLong}
 import java.math.BigInteger
 import java.nio.{ByteBuffer, ByteOrder}
-
 import scala.util.Try
-
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.util.{Int128Holder, Int128Math, MoreMath}
+import org.apache.spark.sql.util.Int128Math
 
 /**
  * A mutable implementation of Int128 that hold two Long values to represent the high and low bits
@@ -35,7 +33,6 @@ import org.apache.spark.sql.util.{Int128Holder, Int128Math, MoreMath}
  */
 @Unstable
 final class Int128 extends Ordered[Int128] with Serializable {
-  import org.apache.spark.sql.types.Int128._
 
   private var _high: Long = 0L
   private var _low: Long = 0L
@@ -96,56 +93,35 @@ final class Int128 extends Ordered[Int128] with Serializable {
   }
 
   def + (that: Int128): Int128 = {
-    val newHigh = Int128Math.addHighExact(_high, _low, that._high, that._low)
-    val newLow = Int128Math.addLow(_low, that._low)
+    val (newHigh, newLow) = Int128Math.add(this, that)
     new Int128().set(newHigh, newLow)
   }
 
   def - (that: Int128): Int128 = {
-    val newHigh = Int128Math.subtractHighExact(_high, _low, that.high, that._low)
-    val newLow = Int128Math.subtractLow(_low, that._low)
+    val (newHigh, newLow) = Int128Math.subtract(this, that)
     new Int128().set(newHigh, newLow)
   }
 
   def * (that: Int128): Int128 = {
-    val z1High = MoreMath.unsignedMultiplyHigh(_low, that._low)
-    val z1Low = _low * that._low
-
-    val z2High = MoreMath.unsignedMultiplyHigh(that._high, this._low)
-    val z2Low = this._low * that._high
-
-    val z3High = MoreMath.unsignedMultiplyHigh(this._high, that._low)
-    val z3Low = this._high * that._low
-
-    val resultLow = z1Low
-    val resultHigh = z1High + z2Low + z3Low
-
-    if (MoreMath.productOverflows(this._high, this._low, that._high, that._low,
-      z1High, z2High, z2Low, z3High, z3Low, resultHigh)) {
-      throw new ArithmeticException("overflow");
-    }
-
-    Int128(resultHigh, resultLow)
+    val (newHigh, newLow) = Int128Math.multiply(this, that)
+    new Int128().set(newHigh, newLow)
   }
 
   def / (that: Int128): Int128 = if (that.isZero) {
     null
   } else {
-    val quotient = new Int128Holder()
-    val remainder = new Int128Holder()
-    divide(this, that, quotient, remainder)
+    val (newHigh, newLow) =
+      Int128Math.divideRoundUp(this._high, this._low, that.high, that.low, 0, 0)
 
-    quotient.get()
+    Int128(newHigh, newLow)
   }
 
   def % (that: Int128): Int128 = if (that.isZero) {
     null
   } else {
-    val quotient = new Int128Holder()
-    val remainder = new Int128Holder()
-    divide(this, that, quotient, remainder)
+    val (newHigh, newLow) = Int128Math.remainder(this._high, this._low, that.high, that.low, 0, 0)
 
-    remainder.get()
+    Int128(newHigh, newLow)
   }
 
   def quot (that: Int128): Int128 = this / that
@@ -203,11 +179,6 @@ object Int128 {
     }
 
     comparison
-  }
-
-  def divide(
-      dividend: Int128, divisor: Int128, quotient: Int128Holder, remainder: Int128Holder): Unit = {
-    Int128Math.divide(dividend.high, dividend.low, divisor.high, divisor.low, quotient, remainder)
   }
 
   def overflows(high: Long, low: Long): Boolean = {

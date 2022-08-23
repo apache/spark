@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util;
+package org.apache.spark.sql.types;
 
-import org.apache.spark.sql.types.Int128;
+import org.apache.spark.sql.util.Int128Holder;
+import org.apache.spark.sql.util.Int128Math;
+import org.apache.spark.sql.util.MoreMath;
 
 import java.math.BigInteger;
 import java.util.concurrent.ThreadLocalRandom;
@@ -25,7 +27,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static java.lang.Math.pow;
 import static java.lang.Math.round;
 
-public final class Int128Math {
+public final class Int128MathTest {
 
   // 1..10^38 (largest value < Int128.MAX_VALUE)
   private static final Int128[] POWERS_OF_TEN = new Int128[39];
@@ -616,8 +618,8 @@ public final class Int128Math {
   }
 
   public static void divide(
-    long dividendHigh, long dividendLow, long divisorHigh, long divisorLow,
-    Int128Holder quotient, Int128Holder remainder) {
+          long dividendHigh, long dividendLow, long divisorHigh, long divisorLow,
+          Int128Holder quotient, Int128Holder remainder) {
     boolean dividendNegative = dividendHigh < 0;
     boolean divisorNegative = divisorHigh < 0;
 
@@ -926,8 +928,7 @@ public final class Int128Math {
 
   public static void divide(
     Int128 dividend, Int128 divisor, Int128Holder quotient, Int128Holder remainder) {
-    Int128Math.divide(
-      dividend.high(), dividend.low(), divisor.high(), divisor.low(), quotient, remainder);
+    divide(dividend.high(), dividend.low(), divisor.high(), divisor.low(), quotient, remainder);
   }
 
   public static Int128 remainder(Int128 dividend, Int128 divisor) {

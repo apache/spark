@@ -27,8 +27,6 @@ import org.junit.Test;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.runner.RunnerException;
 
-import org.apache.spark.sql.util.Int128Math;
-
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @Fork(value = 1, jvmArgsAppend = {
@@ -137,8 +135,8 @@ public class BenchmarkAdd {
     public void setup() {
       int count = 0;
       while (count < COUNT) {
-        Int128 dividend = Int128Math.random(dividendMagnitude);
-        Int128 divisor = Int128Math.random(divisorMagnitude);
+        Int128 dividend = Int128MathTest.random(dividendMagnitude);
+        Int128 divisor = Int128MathTest.random(divisorMagnitude);
 
 //        int dividendScale = RANDOM.nextInt(10);
 //        int divisorScale = RANDOM.nextInt(10);
