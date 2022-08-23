@@ -49,6 +49,10 @@ from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.utils import has_numpy
+
+if has_numpy:
+    import numpy as np
 
 T = TypeVar("T")
 U = TypeVar("U")
