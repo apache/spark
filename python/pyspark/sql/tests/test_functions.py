@@ -972,7 +972,7 @@ class FunctionsTests(ReusedSQLTestCase):
                 df.select(
                     regexp_replace("str", r"(\d+)", "--") == "-----",
                     regexp_replace("str", col("pattern"), col("replacement")) == "-----",
-                    ).first()
+                ).first()
             )
         )
 
