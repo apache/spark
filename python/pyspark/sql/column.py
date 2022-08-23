@@ -504,6 +504,8 @@ class Column:
         fieldName : str
             a literal value.
             The result will only be true at a location if any field matches in the Column.
+        col : :class:`Column`
+            A :class:`Column` expression for the column with `fieldName`.
 
         Returns
         -------
@@ -546,8 +548,8 @@ class Column:
 
         Parameters
         ----------
-        fieldNames : str or list
-            Literal values.
+        fieldNames : str
+            Desired field names (collects all positional arguments passed)
             The result will drop at a location if any field matches in the Column.
 
         Returns
