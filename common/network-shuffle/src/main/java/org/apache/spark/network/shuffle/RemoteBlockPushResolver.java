@@ -33,11 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -120,7 +116,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
-  private final Executor mergedShuffleCleaner;
+  private ExecutorService mergedShuffleCleaner;
   private final TransportConf conf;
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
@@ -132,7 +128,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final File recoveryFile;
 
   @VisibleForTesting
-  final DB db;
+  DB db;
 
   @SuppressWarnings("UnstableApiUsage")
   public RemoteBlockPushResolver(TransportConf conf, File recoveryFile) throws IOException {
@@ -795,13 +791,26 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Close the DB during shutdown
+   * Shutdown mergedShuffleCleaner and close the DB during shutdown
    */
   @Override
   public void close() {
+    if (mergedShuffleCleaner != null && !mergedShuffleCleaner.isShutdown()) {
+      try {
+        mergedShuffleCleaner.shutdown();
+        boolean isTermination = mergedShuffleCleaner.awaitTermination(60L, TimeUnit.SECONDS);
+        if (!isTermination) {
+          mergedShuffleCleaner.shutdownNow();
+        }
+        mergedShuffleCleaner = null;
+      } catch (InterruptedException ignored) {
+        // ignore InterruptedException.
+      }
+    }
     if (db != null) {
       try {
         db.close();
+        db = null;
       } catch (IOException e) {
         logger.error("Exception closing leveldb with registered app paths info and "
             + "shuffle partition info", e);
@@ -1028,6 +1037,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void submitCleanupTask(Runnable task) {
     mergedShuffleCleaner.execute(task);
+  }
+
+  /**
+   * Check `mergedShuffleCleaner` is null or already shutdown.
+   */
+  @VisibleForTesting
+  boolean isCleanerShutdown() {
+    return mergedShuffleCleaner == null || mergedShuffleCleaner.isShutdown();
   }
 
   /**

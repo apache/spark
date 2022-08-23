@@ -768,6 +768,8 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     assert(appShuffleInfoAfterReload.get(app2Attempt1Id.toString).getShuffles.get(2).isFinalized)
 
     s1.stop()
+    assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(mergeManager1))
+    assert(ShuffleTestAccessor.mergeManagerLevelDB(mergeManager1) == null)
   }
 
   test("Dangling finalized merged partition info in DB will be removed during restart") {
