@@ -74,7 +74,6 @@ object DriverWrapper extends Logging {
 
   private def setupDependencies(loader: MutableURLClassLoader, userJar: String): Unit = {
     val sparkConf = new SparkConf()
-    val secMgr = new SecurityManager(sparkConf)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
     val ivyProperties = DependencyUtils.getIvyProperties()

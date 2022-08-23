@@ -70,6 +70,27 @@ RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
+RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
+ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
+RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
+ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
+SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_date
+RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
+ORDER BY cate, val_date;
+SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_date
+RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
+ORDER BY cate, val_date;
 
 -- RangeBetween with reverse OrderBy
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val DESC
@@ -102,6 +123,9 @@ stddev(val) OVER w AS stddev,
 first_value(val) OVER w AS first_value,
 first_value(val, true) OVER w AS first_value_ignore_null,
 first_value(val, false) OVER w AS first_value_contain_null,
+any_value(val) OVER w AS any_value,
+any_value(val, true) OVER w AS any_value_ignore_null,
+any_value(val, false) OVER w AS any_value_contain_null,
 last_value(val) OVER w AS last_value,
 last_value(val, true) OVER w AS last_value_ignore_null,
 last_value(val, false) OVER w AS last_value_contain_null,
@@ -135,11 +159,14 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 -- Over clause is empty
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
 
--- first_value()/last_value() over ()
+-- first_value()/last_value()/any_value() over ()
 SELECT val, cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null
@@ -158,11 +185,12 @@ SELECT val, cate,
 count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
 FROM testData ORDER BY cate, val;
 
--- nth_value()/first_value() over ()
+-- nth_value()/first_value()/any_value() over ()
 SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -173,6 +201,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -183,6 +212,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -193,6 +223,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -203,6 +234,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -213,6 +245,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -223,6 +256,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -233,6 +267,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -243,6 +278,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -268,6 +304,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -292,6 +329,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -306,6 +344,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -320,6 +359,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -334,6 +374,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -348,6 +389,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -362,6 +404,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -376,6 +419,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -390,6 +434,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -404,8 +449,19 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id;
+
+SELECT
+	nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+	basic_pays;
+
+SELECT
+	SUM(salary) OVER w sum_salary
+FROM
+	basic_pays;

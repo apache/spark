@@ -17,38 +17,126 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import com.google.common.base.Objects
+
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.util.InternalRowSet
+import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient scan: Scan) extends DataSourceV2ScanExecBase {
+    @transient scan: Scan,
+    runtimeFilters: Seq[Expression],
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None,
+    @transient table: Table) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: BatchScanExec => this.batch == other.batch
-    case _ => false
+    case other: BatchScanExec =>
+      this.batch == other.batch && this.runtimeFilters == other.runtimeFilters
+    case _ =>
+      false
   }
 
-  override def hashCode(): Int = batch.hashCode()
+  override def hashCode(): Int = Objects.hashCode(batch, runtimeFilters)
 
-  @transient override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
+  @transient override lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions()
+
+  @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
+    val dataSourceFilters = runtimeFilters.flatMap {
+      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+      case _ => None
+    }
+
+    if (dataSourceFilters.nonEmpty) {
+      val originalPartitioning = outputPartitioning
+
+      // the cast is safe as runtime filters are only assigned if the scan can be filtered
+      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
+      filterableScan.filter(dataSourceFilters.toArray)
+
+      // call toBatch again to get filtered partitions
+      val newPartitions = scan.toBatch.planInputPartitions()
+
+      originalPartitioning match {
+        case p: KeyGroupedPartitioning =>
+          if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: not all partitions implement HasPartitionKey after " +
+                "filtering")
+          }
+
+          val newRows = new InternalRowSet(p.expressions.map(_.dataType))
+          newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          val oldRows = p.partitionValuesOpt.get
+
+          if (oldRows.size != newRows.size) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: the number of unique partition values obtained " +
+                s"through HasPartitionKey changed: before ${oldRows.size}, after ${newRows.size}")
+          }
+
+          if (!oldRows.forall(newRows.contains)) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: the number of unique partition values obtained " +
+                s"through HasPartitionKey remain the same but do not exactly match")
+          }
+
+          groupPartitions(newPartitions).get.map(_._2)
+
+        case _ =>
+          // no validation is needed as the data source did not report any specific partitioning
+        newPartitions.map(Seq(_))
+      }
+
+    } else {
+      partitions
+    }
+  }
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
+    val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
+      // return an empty RDD with 1 partition if dynamic filtering removed the only split
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
+    } else {
+      new DataSourceRDD(
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+    }
+    postDriverMetrics()
+    rdd
   }
 
   override def doCanonicalize(): BatchScanExec = {
-    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)))
+    this.copy(
+      output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      runtimeFilters = QueryPlan.normalizePredicates(
+        runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
+        output))
+  }
+
+  override def simpleString(maxFields: Int): String = {
+    val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
+    val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
+    redact(result)
+  }
+
+  override def nodeName: String = {
+    s"BatchScan ${table.name()}".trim
   }
 }

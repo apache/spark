@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Integer
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_HINT
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -119,7 +120,7 @@ object ResolveHints {
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
-          case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
+          case _: ResolvedHint | _: View | _: UnresolvedWith | _: SubqueryAlias =>
             // Don't traverse down these nodes.
             // For an existing strategy hint, there is no chance for a match from this point down.
             // The rest (view, with, subquery) indicates different scopes that we shouldn't traverse
@@ -143,7 +144,8 @@ object ResolveHints {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
@@ -173,7 +175,8 @@ object ResolveHints {
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
 
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
+    val COALESCE_HINT_NAMES: Set[String] =
+      Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REBALANCE")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -246,7 +249,32 @@ object ResolveHints {
       }
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
+      def createRebalancePartitions(
+          partitionExprs: Seq[Any], initialNumPartitions: Option[Int]): RebalancePartitions = {
+        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        if (invalidParams.nonEmpty) {
+          val hintName = hint.name.toUpperCase(Locale.ROOT)
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
+        }
+        RebalancePartitions(
+          partitionExprs.map(_.asInstanceOf[Expression]),
+          hint.child,
+          initialNumPartitions)
+      }
+
+      hint.parameters match {
+        case param @ Seq(IntegerLiteral(numPartitions), _*) =>
+          createRebalancePartitions(param.tail, Some(numPartitions))
+        case param @ Seq(numPartitions: Int, _*) =>
+          createRebalancePartitions(param.tail, Some(numPartitions))
+        case partitionExprs @ Seq(_*) =>
+          createRebalancePartitions(partitionExprs, None)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
             createRepartition(shuffle = true, hint)
@@ -254,6 +282,8 @@ object ResolveHints {
             createRepartition(shuffle = false, hint)
           case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
+          case "REBALANCE" if conf.adaptiveExecutionEnabled =>
+            createRebalance(hint)
           case _ => hint
         }
     }
@@ -267,7 +297,8 @@ object ResolveHints {
 
     private def hintErrorHandler = conf.hintErrorHandler
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_HINT)) {
       case h: UnresolvedHint =>
         hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child

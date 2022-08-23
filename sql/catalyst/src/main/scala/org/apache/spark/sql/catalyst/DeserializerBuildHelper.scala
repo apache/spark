@@ -118,6 +118,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForLocalDateTime(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalDateTime]),
+      "microsToLocalDateTime",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {
@@ -148,6 +157,15 @@ object DeserializerBuildHelper {
       IntervalUtils.getClass,
       ObjectType(classOf[java.time.Duration]),
       "microsToDuration",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForPeriod(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Period]),
+      "monthsToPeriod",
       path :: Nil,
       returnNullable = false)
   }

@@ -142,7 +142,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       solverType = WeightedLeastSquares.Cholesky)
     val wlsModelWithIntercept = wlsWithIntercept.fit(instances)
     val wls = new WeightedLeastSquares(false, 0.0, 0.0, true, true,
-      solverType = WeightedLeastSquares.Cholesky)
+      solverType = WeightedLeastSquares.Cholesky, tol = 1e-14, maxIter = 100000)
     val wlsModel = wls.fit(instances)
 
     assert(expectedWithIntercept ~== wlsModelWithIntercept.diagInvAtWA relTol 1e-4)
@@ -169,7 +169,8 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
          solver <- Seq(WeightedLeastSquares.Auto, WeightedLeastSquares.QuasiNewton)) {
       val singularModel = new WeightedLeastSquares(fitIntercept, regParam = 0.0,
         elasticNetParam = 0.0, standardizeFeatures = standardization,
-        standardizeLabel = standardization, solverType = solver).fit(collinearInstances)
+        standardizeLabel = standardization, solverType = solver,
+        tol = 1e-14, maxIter = 100000).fit(collinearInstances)
 
       collinearInstances.collect().foreach { case Instance(l, w, f) =>
         val pred = BLAS.dot(singularModel.coefficients, f) + singularModel.intercept
@@ -202,6 +203,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
         for (solver <- WeightedLeastSquares.supportedSolvers) {
           val wls = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
             standardizeFeatures = standardization, standardizeLabel = standardization,
+            tol = 1e-14, maxIter = 100000,
             solverType = solver).fit(instances)
           val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
           assert(actual ~== expected(idx) absTol 1e-4)
@@ -305,7 +307,8 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     for (fitIntercept <- Seq(false, true)) {
       val wls = new WeightedLeastSquares(fitIntercept = fitIntercept, regParam = 0.5,
         elasticNetParam = 0.0, standardizeFeatures = true,
-        standardizeLabel = true, solverType = WeightedLeastSquares.Cholesky)
+        standardizeLabel = true, solverType = WeightedLeastSquares.Cholesky,
+        tol = 1e-14, maxIter = 100000)
         .fit(constantFeaturesInstances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
       assert(actual ~== expectedCholesky(idx) absTol 1e-6)
@@ -363,7 +366,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
          (lambda, alpha) <- Seq((0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.5, 1.0))) {
       val wls = new WeightedLeastSquares(fitIntercept, regParam = lambda, elasticNetParam = alpha,
         standardizeFeatures = standardization, standardizeLabel = true,
-        solverType = WeightedLeastSquares.QuasiNewton)
+        solverType = WeightedLeastSquares.QuasiNewton, tol = 1e-14, maxIter = 100000)
       val model = wls.fit(constantFeaturesInstances)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~== expectedQuasiNewton(idx) absTol 1e-6)
@@ -473,7 +476,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
          elasticNetParam <- Seq(0.1, 0.5, 1.0)) {
       val wls = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam,
         standardizeFeatures = standardization, standardizeLabel = true,
-        solverType = WeightedLeastSquares.Auto)
+        solverType = WeightedLeastSquares.Auto, tol = 1e-14, maxIter = 100000)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
@@ -531,7 +534,8 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
          standardization <- Seq(false, true)) {
       for (solver <- WeightedLeastSquares.supportedSolvers) {
         val wls = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
-          standardizeFeatures = standardization, standardizeLabel = true, solverType = solver)
+          standardizeFeatures = standardization, standardizeLabel = true, solverType = solver,
+          tol = 1e-14, maxIter = 100000)
           .fit(instances)
         val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
         assert(actual ~== expected(idx) absTol 1e-4)

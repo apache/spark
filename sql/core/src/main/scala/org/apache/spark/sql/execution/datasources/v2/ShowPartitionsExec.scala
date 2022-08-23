@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.connector.catalog.{SupportsPartitionManagement, TableCatalog}
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,7 +47,7 @@ case class ShowPartitionsExec(
     val schema = table.partitionSchema()
     val len = schema.length
     val partitions = new Array[String](len)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
+    val timeZoneId = conf.sessionLocalTimeZone
     val output = partitionIdentifiers.map { row =>
       var i = 0
       while (i < len) {

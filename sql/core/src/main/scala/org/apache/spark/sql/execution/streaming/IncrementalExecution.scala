@@ -26,8 +26,11 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -75,8 +78,15 @@ class IncrementalExecution(
    */
   override
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
-      tracker) transformAllExpressions {
+    // Performing streaming specific pre-optimization.
+    val preOptimized = withCachedData.transform {
+      // We eliminate the "marker" node for writer on DSv1 as it's only used as representation
+      // of sink information.
+      case w: WriteToMicroBatchDataSourceV1 => w.child
+    }
+    sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
+      tracker).transformAllExpressionsWithPruning(
+      _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
@@ -130,6 +140,22 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
+      // NOTE: we should include all aggregate execs here which are used in streaming aggregations
+      case a: SortAggregateExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: HashAggregateExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: ObjectHashAggregateExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: MergingSessionsExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: UpdatingSessionsExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>
@@ -147,6 +173,26 @@ class IncrementalExecution(
               stateFormatVersion,
               child) :: Nil))
 
+      case SessionWindowStateStoreSaveExec(keys, session, None, None, None, stateFormatVersion,
+        UnaryExecNode(agg,
+        SessionWindowStateStoreRestoreExec(_, _, None, None, _, child))) =>
+          val aggStateInfo = nextStatefulOperationStateInfo
+          SessionWindowStateStoreSaveExec(
+            keys,
+            session,
+            Some(aggStateInfo),
+            Some(outputMode),
+            Some(offsetSeqMetadata.batchWatermarkMs),
+            stateFormatVersion,
+            agg.withNewChildren(
+              SessionWindowStateStoreRestoreExec(
+                keys,
+                session,
+                Some(aggStateInfo),
+                Some(offsetSeqMetadata.batchWatermarkMs),
+                stateFormatVersion,
+                child) :: Nil))
+
       case StreamingDeduplicateExec(keys, child, None, None) =>
         StreamingDeduplicateExec(
           keys,
@@ -155,10 +201,14 @@ class IncrementalExecution(
           Some(offsetSeqMetadata.batchWatermarkMs))
 
       case m: FlatMapGroupsWithStateExec =>
+        // We set this to true only for the first batch of the streaming query.
+        val hasInitialState = (currentBatchId == 0L && m.hasInitialState)
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          hasInitialState = hasInitialState
+        )
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(

@@ -20,16 +20,17 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class GroupTests(ReusedSQLTestCase):
-
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
-        self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
+        self.assertEqual([99, 100], sorted(g.agg({"key": "max", "value": "count"}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
 
         from pyspark.sql import functions
-        self.assertEqual((0, u'99'),
-                         tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
+
+        self.assertEqual(
+            (0, "99"), tuple(g.agg(functions.first(df.key), functions.last(df.value)).first())
+        )
         self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
         # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
@@ -41,7 +42,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

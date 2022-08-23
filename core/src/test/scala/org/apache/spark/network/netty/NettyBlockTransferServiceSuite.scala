@@ -114,7 +114,7 @@ class NettyBlockTransferServiceSuite
 
     val listener = mock(classOf[BlockFetchingListener])
     var hitExecutorDeadException = false
-    when(listener.onBlockFetchFailure(any(), any(classOf[ExecutorDeadException])))
+    when(listener.onBlockTransferFailure(any(), any(classOf[ExecutorDeadException])))
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)

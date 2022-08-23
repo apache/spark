@@ -20,10 +20,13 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -42,7 +45,7 @@ import org.apache.spark.sql.types.StructType
  * }}}
  */
 case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
@@ -53,7 +56,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(table.identifier.unquotedString)
       }
     }
 
@@ -140,7 +143,21 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1WriteCommand {
+
+  override lazy val partitionColumns: Seq[Attribute] = {
+    val unresolvedPartitionColumns = table.partitionColumnNames.map(UnresolvedAttribute.quoted)
+    DataSource.resolvePartitionColumns(
+      unresolvedPartitionColumns,
+      outputColumns,
+      query,
+      SparkSession.active.sessionState.conf.resolver)
+  }
+
+  override def requiredOrdering: Seq[SortOrder] = {
+    val options = table.storage.properties
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+  }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
@@ -156,7 +173,8 @@ case class CreateDataSourceTableAsSelectCommand(
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw new AnalysisException(s"Table $tableName already exists. You need to drop it first.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          tableName, " You need to drop it first.")
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.
@@ -166,6 +184,9 @@ case class CreateDataSourceTableAsSelectCommand(
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
     } else {
+      table.storage.locationUri.foreach { p =>
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+      }
       assert(table.schema.isEmpty)
       sparkSession.sessionState.catalog.validateTableLocation(table)
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
@@ -175,7 +196,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
-      val tableSchema = CharVarcharUtils.getRawSchema(result.schema)
+      val tableSchema = CharVarcharUtils.getRawSchema(result.schema, sessionState.conf)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -192,7 +213,7 @@ case class CreateDataSourceTableAsSelectCommand(
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
             enableAddPartitions = true,
-            enableDropPartitions = false)).toRdd
+            enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
         case _ =>
       }
     }
@@ -227,4 +248,7 @@ case class CreateDataSourceTableAsSelectCommand(
         throw ex
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(query = newChild)
 }

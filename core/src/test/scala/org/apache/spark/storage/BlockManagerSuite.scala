@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
 
@@ -29,10 +29,11 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import com.esotericsoftware.kryo.KryoException
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
@@ -43,8 +44,9 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kryo.{KRYO_USE_POOL, KRYO_USE_UNSAFE}
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.memory.UnifiedMemoryManager
+import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
@@ -52,20 +54,20 @@ import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransport
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
+import org.apache.spark.network.util.{MapConfigProvider, TransportConf}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
-import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBlockUpdated}
+import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, SparkListenerBlockUpdated}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoDeserializationStream, KryoSerializer, KryoSerializerInstance, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
-class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
-  with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
-  with EncryptionFunSuite with TimeLimits with BeforeAndAfterAll {
+class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTester
+  with LocalSparkContext with ResetSystemProperties with EncryptionFunSuite with TimeLimits {
 
   import BlockManagerSuite._
 
@@ -97,6 +99,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(IS_TESTING, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(MEMORY_STORAGE_FRACTION, 0.999)
+      .set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
@@ -184,7 +187,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     liveListenerBus = spy(new LiveListenerBus(conf))
     master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker)),
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
   }
@@ -302,6 +306,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // locations to BlockManagerMaster)
     master.updateBlockInfo(bm1Id, RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100, 0)
     master.updateBlockInfo(bm2Id, RDDBlockId(0, 1), StorageLevel.MEMORY_ONLY, 100, 0)
+  }
+
+  test("SPARK-36036: make sure temporary download files are deleted") {
+    val store = makeBlockManager(8000, "executor")
+
+    def createAndRegisterTempFileForDeletion(): String = {
+      val transportConf = new TransportConf("test", MapConfigProvider.EMPTY)
+      val tempDownloadFile = store.remoteBlockTempFileManager.createTempFile(transportConf)
+
+      tempDownloadFile.openForWriting().close()
+      assert(new File(tempDownloadFile.path()).exists(), "The file has been created")
+
+      val registered = store.remoteBlockTempFileManager.registerTempFileToClean(tempDownloadFile)
+      assert(registered, "The file has been successfully registered for auto clean up")
+
+      // tempDownloadFile and the channel for writing are local to the function so the references
+      // are going to be eliminated on exit
+      tempDownloadFile.path()
+    }
+
+    val filePath = createAndRegisterTempFileForDeletion()
+
+    val numberOfTries = 100 // try increasing if the test starts to behave flaky
+    val fileHasBeenDeleted = (1 to numberOfTries).exists { tryNo =>
+      // Unless -XX:-DisableExplicitGC is set it works in Hotspot JVM
+      System.gc()
+      Thread.sleep(tryNo)
+      val fileStillExists = new File(filePath).exists()
+      !fileStillExists
+    }
+
+    assert(fileHasBeenDeleted,
+      s"The file was supposed to be auto deleted (GC hinted $numberOfTries times)")
   }
 
   test("SPARK-32091: count failures from active executors when remove rdd/broadcast/shuffle") {
@@ -849,7 +886,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         val blockSize = inv.getArguments()(2).asInstanceOf[Long]
         val res = store1.readDiskBlockFromSameHostExecutor(blockId, localDirs, blockSize)
         assert(res.isDefined)
-        val file = ExecutorDiskUtils.getFile(localDirs, store1.subDirsPerLocalDir, blockId.name)
+        val file = new File(
+          ExecutorDiskUtils.getFilePath(localDirs, store1.subDirsPerLocalDir, blockId.name))
         // delete the file behind the blockId
         assert(file.delete())
         sameHostExecutorTried = true
@@ -1526,7 +1564,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
-    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, ClassTag.Any)
+    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, MemoryMode.ON_HEAP,
+      ClassTag.Any)
     assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
@@ -1542,7 +1581,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
     // out, so the memory store should contain only b3, while the disk store should contain
     // b1, b2 and b4.
-    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, ClassTag.Any)
+    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, MemoryMode.ON_HEAP,
+      ClassTag.Any)
     assert(result4.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
@@ -1892,7 +1932,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec2))
   }
 
-  test("test decommissionRddCacheBlocks should offload all cached blocks") {
+  test("test decommissionRddCacheBlocks should migrate all cached blocks") {
     val store1 = makeBlockManager(1000, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
     val store3 = makeBlockManager(1000, "exec3")
@@ -1910,7 +1950,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store3.blockManagerId))
   }
 
-  test("test decommissionRddCacheBlocks should keep the block if it is not able to offload") {
+  test("test decommissionRddCacheBlocks should keep the block if it is not able to migrate") {
     val store1 = makeBlockManager(3500, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
 
@@ -1926,9 +1966,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val decomManager = new BlockManagerDecommissioner(conf, store1)
     decomManager.decommissionRddCacheBlocks()
-    // Smaller block offloaded to store2
+    // Smaller block migrated to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
-    // Larger block still present in store1 as it can't be offloaded
+    // Larger block still present in store1 as it can't be migrated
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
@@ -1952,25 +1992,31 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     Files.write(bm2.diskBlockManager.getFile(shuffleData2).toPath(), shuffleDataBlockContent)
     val shuffleIndexBlockContent = Array[Byte](5, 6, 7, 8, 9)
     val shuffleIndex = ShuffleIndexBlockId(0, 0, 0)
+    val shuffleIndexOnly = ShuffleIndexBlockId(0, 1, 0)
     val shuffleIndex2 = ShuffleIndexBlockId(1, 0, 0)
     Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
+    Files.write(bm1.diskBlockManager.getFile(shuffleIndexOnly).toPath(), shuffleIndexBlockContent)
     Files.write(bm2.diskBlockManager.getFile(shuffleIndex2).toPath(), shuffleIndexBlockContent)
 
-    mapOutputTracker.registerShuffle(0, 1)
-    val decomManager = new BlockManagerDecommissioner(conf, bm1)
+    mapOutputTracker.registerShuffle(0, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    val decomManager = new BlockManagerDecommissioner(
+      conf.set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true), bm1)
     try {
       mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
+      mapOutputTracker.registerMapOutput(0, 1, MapStatus(bm1.blockManagerId, Array(blockSize), 1))
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
+      assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(1).location === bm1.blockManagerId)
 
       val env = mock(classOf[SparkEnv])
       when(env.conf).thenReturn(conf)
       SparkEnv.set(env)
 
-      decomManager.refreshOffloadingShuffleBlocks()
+      decomManager.refreshMigratableShuffleBlocks()
 
       if (willReject) {
         eventually(timeout(1.second), interval(10.milliseconds)) {
           assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+          assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(1).location === bm2.blockManagerId)
         }
         assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
           === shuffleDataBlockContent)
@@ -1983,7 +2029,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } finally {
       mapOutputTracker.unregisterShuffle(0)
       // Avoid thread leak
-      decomManager.stopOffloadingShuffleBlocks()
+      decomManager.stopMigratingShuffleBlocks()
     }
   }
 
@@ -2030,7 +2076,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
-
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isEmpty)
+    makeBlockManager(100, SparkContext.DRIVER_IDENTIFIER,
+      transferService = Some(new MockBlockTransferService(10, "host-driver")))
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isDefined)
     master.removeExecutor("execA")
     master.removeExecutor("execE")
 
@@ -2039,6 +2088,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       Seq("hostC", "hostB", "hostD").sorted)
     assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
       Seq("hostB", "hostA", "hostC", "hostD").sorted)
+    master.removeShufflePushMergerLocation("hostA")
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {
@@ -2057,7 +2109,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bm.getPeers(mc.any())).thenReturn(Seq.empty)
 
     val decomManager = new BlockManagerDecommissioner(conf, bm)
-    decomManager.refreshOffloadingShuffleBlocks()
+    decomManager.refreshMigratableShuffleBlocks()
 
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }
@@ -2072,6 +2124,118 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Put a broadcast block, no exception
     val broadcast0BlockId = BroadcastBlockId(0)
     store.putSingle(broadcast0BlockId, a, StorageLevel.DISK_ONLY)
+  }
+
+  test("check KryoException when getting disk blocks and 'Input/output error' is occurred") {
+    val kryoSerializerWithDiskCorruptedInputStream
+      = createKryoSerializerWithDiskCorruptedInputStream()
+
+    case class User(id: Long, name: String)
+
+    conf.set(TEST_MEMORY, 1200L)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+    val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+      serializerManager, conf, memoryManager, mapOutputTracker,
+      shuffleManager, transfer, securityMgr, None)
+    allStores += store
+    store.initialize("app-id")
+    store.putSingle("my-block-id", new Array[User](300), StorageLevel.MEMORY_AND_DISK)
+
+    val kryoException = intercept[KryoException] {
+      store.getOrElseUpdate("my-block-id", StorageLevel.MEMORY_AND_DISK, ClassTag.Object,
+        () => List(new Array[User](1)).iterator)
+    }
+    assert(kryoException.getMessage === "java.io.IOException: Input/output error")
+    assertUpdateBlockInfoReportedForRemovingBlock(store, "my-block-id",
+      removedFromMemory = false, removedFromDisk = true)
+  }
+
+  test("check KryoException when saving blocks into memory and 'Input/output error' is occurred") {
+    val kryoSerializerWithDiskCorruptedInputStream
+      = createKryoSerializerWithDiskCorruptedInputStream()
+
+    conf.set(TEST_MEMORY, 1200L)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+    val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+      serializerManager, conf, memoryManager, mapOutputTracker,
+      shuffleManager, transfer, securityMgr, None)
+    allStores += store
+    store.initialize("app-id")
+
+    val blockId = RDDBlockId(0, 0)
+    val bytes = Array.tabulate[Byte](1000)(_.toByte)
+    val byteBuffer = new ChunkedByteBuffer(ByteBuffer.wrap(bytes))
+
+    val kryoException = intercept[KryoException] {
+      store.putBytes(blockId, byteBuffer, StorageLevel.MEMORY_AND_DISK)
+    }
+    assert(kryoException.getMessage === "java.io.IOException: Input/output error")
+  }
+
+  test("SPARK-39647: Failure to register with ESS should prevent registering the BM") {
+    val handler = new NoOpRpcHandler {
+      override def receive(
+          client: TransportClient,
+          message: ByteBuffer,
+          callback: RpcResponseCallback): Unit = {
+        val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
+        msgObj match {
+          case _: RegisterExecutor => () // No reply to generate client-side timeout
+        }
+      }
+    }
+    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+    Utils.tryWithResource(new TransportContext(transConf, handler, true)) { transCtx =>
+      def newShuffleServer(port: Int): (TransportServer, Int) = {
+        (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
+      }
+
+      val candidatePort = RandomUtils.nextInt(1024, 65536)
+      val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
+        newShuffleServer, conf, "ShuffleServer")
+
+      conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+      conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
+      conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
+      conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+      val e = intercept[SparkException] {
+        makeBlockManager(8000, "timeoutExec")
+      }.getMessage
+      assert(e.contains("TimeoutException"))
+      verify(master, times(0))
+        .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+      server.close()
+    }
+  }
+
+  private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
+    class TestDiskCorruptedInputStream extends InputStream {
+      override def read(): Int = throw new IOException("Input/output error")
+    }
+
+    class TestKryoDeserializationStream(serInstance: KryoSerializerInstance,
+                                        inStream: InputStream,
+                                        useUnsafe: Boolean)
+      extends KryoDeserializationStream(serInstance, inStream, useUnsafe)
+
+    class TestKryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean, usePool: Boolean)
+      extends KryoSerializerInstance(ks, useUnsafe, usePool) {
+      override def deserializeStream(s: InputStream): DeserializationStream = {
+        new TestKryoDeserializationStream(this, new TestDiskCorruptedInputStream(), false)
+      }
+    }
+
+    class TestKryoSerializer(conf: SparkConf) extends KryoSerializer(conf) {
+      override def newInstance(): SerializerInstance = {
+        new TestKryoSerializerInstance(this, conf.get(KRYO_USE_UNSAFE), conf.get(KRYO_USE_POOL))
+      }
+    }
+
+    new TestKryoSerializer(conf)
   }
 
   class MockBlockTransferService(
@@ -2104,7 +2268,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         blockData: ManagedBuffer,
         level: StorageLevel,
         classTag: ClassTag[_]): Future[Unit] = {
+      // scalastyle:off executioncontextglobal
       import scala.concurrent.ExecutionContext.Implicits.global
+      // scalastyle:on executioncontextglobal
       Future {}
     }
 

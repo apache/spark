@@ -53,7 +53,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
   }
 
   override def afterAll(): Unit = {
@@ -181,7 +181,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   allFileBasedDataSources.foreach { format =>
     testQuietly(s"Enabling/disabling ignoreMissingFiles using $format") {
-      def testIgnoreMissingFiles(): Unit = {
+      def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
 
@@ -197,7 +197,7 @@ class FileBasedDataSourceSuite extends QueryTest
             fs.listStatus(p).filter(_.isFile).map(_.getPath)
           }
 
-          val df = spark.read.format(format).load(
+          val df = spark.read.options(options).format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
             new Path(basePath, "third").toString,
@@ -214,20 +214,27 @@ class FileBasedDataSourceSuite extends QueryTest
         }
       }
 
+      // Test set ignoreMissingFiles via SQL Conf and Data Source reader options
       for {
-        ignore <- Seq("true", "false")
+        (ignore, options, sqlConf) <- Seq(
+          // Set via SQL Conf: leave options empty
+          ("true", Map.empty[String, String], "true"),
+          ("false", Map.empty[String, String], "false"),
+          // Set via reader options: explicitly set SQL Conf to opposite
+          ("true", Map("ignoreMissingFiles" -> "true"), "false"),
+          ("false", Map("ignoreMissingFiles" -> "false"), "true"))
         sources <- Seq("", format)
       } {
-        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
-          SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
-            if (ignore.toBoolean) {
-              testIgnoreMissingFiles()
-            } else {
-              val exception = intercept[SparkException] {
-                testIgnoreMissingFiles()
-              }
-              assert(exception.getMessage().contains("does not exist"))
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> sources,
+          SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+          if (ignore.toBoolean) {
+            testIgnoreMissingFiles(options)
+          } else {
+            val exception = intercept[SparkException] {
+              testIgnoreMissingFiles(options)
             }
+            assert(exception.getMessage().contains("does not exist"))
+          }
         }
       }
     }
@@ -382,7 +389,9 @@ class FileBasedDataSourceSuite extends QueryTest
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
@@ -421,7 +430,7 @@ class FileBasedDataSourceSuite extends QueryTest
         ""
       }
       def errorMessage(format: String): String = {
-        s"$format data source does not support null data type."
+        s"$format data source does not support void data type."
       }
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
@@ -527,6 +536,64 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(bytesReads.sum === 7860)
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
+        }
+      }
+    }
+  }
+
+  test("SPARK-30362: test input metrics for DSV2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 10).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum == 10)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37585: test input metrics for DSV2 with output limits") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 100).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.limit(10).collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum > 0)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
         }
       }
     }
@@ -695,9 +762,9 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "457") {
         withTempPath { workDir =>
-          // the file size is 486 bytes
+          // the file size is 504 bytes
           val workDirPath = workDir.getAbsolutePath
           val data1 = Seq(100, 200, 300, 400).toDF("count")
           data1.write.orc(workDirPath + "/data1")
@@ -731,6 +798,28 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempDir { dir =>
+        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
+          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
+        val dfAll = spark.read.orc(dir.toString)
+        val dfK = dfAll.select("k")
+        val dfV1 = dfAll.select("v1")
+        val dfV2 = dfAll.select("v2")
+        val dfV1V2 = dfAll.select("v1", "v2")
+
+        def sizeInBytes(df: DataFrame): BigInt = df.queryExecution.optimizedPlan.stats.sizeInBytes
+
+        assert(sizeInBytes(dfAll) === BigInt(getLocalDirSize(dir)))
+        assert(sizeInBytes(dfK) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV1) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV2) === sizeInBytes(dfV1))
+        assert(sizeInBytes(dfV1V2) < sizeInBytes(dfAll))
+      }
+    }
+  }
+
   test("File source v2: support partition pruning") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>
@@ -754,12 +843,13 @@ class FileBasedDataSourceSuite extends QueryTest
           }
           assert(filterCondition.isDefined)
           // The partitions filters should be pushed down and no need to be reevaluated.
-          assert(filterCondition.get.collectFirst {
-            case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
-          }.isEmpty)
+          assert(!filterCondition.get.exists {
+            case a: AttributeReference => a.name == "p1" || a.name == "p2"
+            case _ => false
+          })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -799,7 +889,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)
@@ -885,52 +975,57 @@ class FileBasedDataSourceSuite extends QueryTest
 
           // cases when value == MAX
           var v = Short.MaxValue
-          checkPushedFilters(format, df.where('id > v.toInt), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id >= v.toInt), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where('id === v.toInt), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where('id <=> v.toInt),
+          checkPushedFilters(format, df.where($"id" > v.toInt), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v.toInt),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where($"id" === v.toInt),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where($"id" <=> v.toInt),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where('id <= v.toInt), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where('id < v.toInt), Array(sources.IsNotNull("id"),
-            sources.Not(sources.EqualTo("id", v))))
+          checkPushedFilters(format, df.where($"id" <= v.toInt),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v.toInt),
+            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
 
           // cases when value > MAX
           var v1: Int = positiveInt
-          checkPushedFilters(format, df.where('id > v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id >= v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id === v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id <=> v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where('id <= v1), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where('id < v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" > v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" === v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <=> v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <= v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v1), Array(sources.IsNotNull("id")))
 
           // cases when value = MIN
           v = Short.MinValue
-          checkPushedFilters(format, df.where(lit(v.toInt) < 'id), Array(sources.IsNotNull("id"),
-            sources.Not(sources.EqualTo("id", v))))
-          checkPushedFilters(format, df.where(lit(v.toInt) <= 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v.toInt) === 'id), Array(sources.IsNotNull("id"),
+          checkPushedFilters(format, df.where(lit(v.toInt) < $"id"),
+            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
+          checkPushedFilters(format, df.where(lit(v.toInt) <= $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v.toInt) === $"id"),
+            Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) <=> 'id),
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> $"id"),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) >= 'id), Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) > 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v.toInt) >= $"id"),
+            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) > $"id"), Array(), noScan = true)
 
           // cases when value < MIN
           v1 = negativeInt
-          checkPushedFilters(format, df.where(lit(v1) < 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) <= 'id), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) === 'id), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) >= 'id), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) > 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) < $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) <= $"id"),
+            Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) === $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) >= $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) > $"id"), Array(), noScan = true)
 
           // cases when value is within range (MIN, MAX)
-          checkPushedFilters(format, df.where('id > 30), Array(sources.IsNotNull("id"),
+          checkPushedFilters(format, df.where($"id" > 30), Array(sources.IsNotNull("id"),
             sources.GreaterThan("id", 30)))
-          checkPushedFilters(format, df.where(lit(100) >= 'id), Array(sources.IsNotNull("id"),
-            sources.LessThanOrEqual("id", 100)))
+          checkPushedFilters(format, df.where(lit(100) >= $"id"),
+            Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
         }
       }
     }
@@ -955,6 +1050,16 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(!explain.contains("..."))
         }
       }
+    }
+  }
+
+  test("SPARK-35669: special char in CSV header with filter pushdown") {
+    withTempPath { path =>
+      val pathStr = path.getCanonicalPath
+      Seq("a / b,a`b", "v1,v2").toDF().coalesce(1).write.text(pathStr)
+      val df = spark.read.option("header", true).csv(pathStr)
+        .where($"a / b".isNotNull and $"`a``b`".isNotNull)
+      checkAnswer(df, Row("v1", "v2"))
     }
   }
 }

@@ -22,10 +22,12 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
+import com.google.common.io.ByteStreams
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StringType}
+import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -48,42 +50,22 @@ package object util extends Logging {
 
   def fileToString(file: File, encoding: Charset = UTF_8): String = {
     val inStream = new FileInputStream(file)
-    val outStream = new ByteArrayOutputStream
     try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
+      new String(ByteStreams.toByteArray(inStream), encoding)
+    } finally {
       inStream.close()
     }
-    new String(outStream.toByteArray, encoding)
   }
 
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
-    val outStream = new ByteArrayOutputStream
     try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
+      ByteStreams.toByteArray(inStream)
+    } finally {
       inStream.close()
     }
-    outStream.toByteArray
   }
 
   def resourceToString(
@@ -135,10 +117,11 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
-    case r: RuntimeReplaceable =>
-      PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL)), r.dataType)
-    case c: CastBase if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
+    case r: InheritAnalysisRules =>
+      PrettyAttribute(r.makeSQLString(r.parameters.map(toPrettySQL)), r.dataType)
+    case c: Cast if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
+    case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
 
   def quoteIdentifier(name: String): String = {
@@ -147,10 +130,18 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
+  def quoteIfNeeded(part: String): String = {
+    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
+      part
+    } else {
+      s"`${part.replace("`", "``")}`"
+    }
+  }
+
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
 
     str.foreach {
       case '\'' => builder ++= s"\\\'"
@@ -192,5 +183,29 @@ package object util extends Logging {
   /** Shorthand for calling truncatedString() without start or end strings. */
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
+  }
+
+  val METADATA_COL_ATTR_KEY = "__metadata_col"
+
+  implicit class MetadataColumnHelper(attr: Attribute) {
+    /**
+     * If set, this metadata column is a candidate during qualified star expansions.
+     */
+    val SUPPORTS_QUALIFIED_STAR = "__supports_qualified_star"
+
+    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
+      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
+
+    def supportsQualifiedStar: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(SUPPORTS_QUALIFIED_STAR) &&
+      attr.metadata.getBoolean(SUPPORTS_QUALIFIED_STAR)
+
+    def markAsSupportsQualifiedStar(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putBoolean(METADATA_COL_ATTR_KEY, true)
+        .putBoolean(SUPPORTS_QUALIFIED_STAR, true)
+        .build()
+    )
   }
 }

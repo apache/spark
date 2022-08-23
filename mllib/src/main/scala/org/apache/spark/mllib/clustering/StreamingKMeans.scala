@@ -82,14 +82,22 @@ class StreamingKMeansModel @Since("1.2.0") (
     val closest = data.map(point => (this.predict(point), (point, 1L)))
 
     // get sums and counts for updating each cluster
-    val mergeContribs: ((Vector, Long), (Vector, Long)) => (Vector, Long) = (p1, p2) => {
-      BLAS.axpy(1.0, p2._1, p1._1)
-      (p1._1, p1._2 + p2._2)
+    def mergeContribs(p1: (Vector, Long), p2: (Vector, Long)): (Vector, Long) = {
+      val sum =
+        if (p1._1 == null) {
+          p2._1
+        } else if (p2._1 == null) {
+          p1._1
+        } else {
+          BLAS.axpy(1.0, p2._1, p1._1)
+          p1._1
+        }
+      (sum, p1._2 + p2._2)
     }
     val dim = clusterCenters(0).size
 
     val pointStats: Array[(Int, (Vector, Long))] = closest
-      .aggregateByKey((Vectors.zeros(dim), 0L))(mergeContribs, mergeContribs)
+      .aggregateByKey((null.asInstanceOf[Vector], 0L))(mergeContribs, mergeContribs)
       .collect()
 
     val discount = timeUnit match {

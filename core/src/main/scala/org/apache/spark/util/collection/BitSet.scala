@@ -236,6 +236,18 @@ class BitSet(numBits: Int) extends Serializable {
     -1
   }
 
+  /**
+   * Compute bit-wise union with another BitSet and overwrite bits in this BitSet with the result.
+   */
+  def union(other: BitSet): Unit = {
+    require(this.numWords <= other.numWords)
+    var ind = 0
+    while( ind < this.numWords ) {
+      this.words(ind) = this.words(ind) | other.words(ind)
+      ind += 1
+    }
+  }
+
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
 }

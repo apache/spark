@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class DateType private() extends AtomicType {
+class DateType private() extends DatetimeType {
   /**
    * Internally, a date is stored as a simple incrementing count of days
    * where day 0 is 1970-01-01. Negative numbers represent earlier days.

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
@@ -62,7 +61,7 @@ import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPl
  *   An offset indicates the number of rows above or below the current row, the frame for the
  *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
  *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
- *   index 4 to index 6.
+ *   index 4 to index 7.
  * - Range based: A range based boundary is based on the actual value of the ORDER BY
  *   expression(s). An offset is used to alter the value of the ORDER BY expression, for
  *   instance if the current order by expression has a value of 10 and the lower bound offset
@@ -91,31 +90,12 @@ case class WindowExec(
     child: SparkPlan)
   extends WindowExecBase {
 
-  override def output: Seq[Attribute] =
-    child.output ++ windowExpression.map(_.toAttribute)
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MiB?
-      logWarning("No Partition Defined for Window operation! Moving all data to a single "
-        + "partition, this can cause serious performance degradation.")
-      AllTuples :: Nil
-    } else ClusteredDistribution(partitionSpec) :: Nil
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = conf.windowExecBufferSpillThreshold
 
     // Start processing.
     child.execute().mapPartitions { stream =>
@@ -178,8 +158,14 @@ case class WindowExec(
         // Iteration
         var rowIndex = 0
 
-        override final def hasNext: Boolean =
-          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+        override final def hasNext: Boolean = {
+          val found = (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
+          if (!found) {
+            // clear final partition
+            buffer.clear()
+          }
+          found
+        }
 
         val join = new JoinedRow
         override final def next(): InternalRow = {
@@ -211,4 +197,7 @@ case class WindowExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WindowExec =
+    copy(child = newChild)
 }

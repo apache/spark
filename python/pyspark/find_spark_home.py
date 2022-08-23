@@ -32,9 +32,10 @@ def _find_spark_home():
 
     def is_spark_home(path):
         """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
-        return (os.path.isfile(os.path.join(path, "bin/spark-submit")) and
-                (os.path.isdir(os.path.join(path, "jars")) or
-                 os.path.isdir(os.path.join(path, "assembly"))))
+        return os.path.isfile(os.path.join(path, "bin/spark-submit")) and (
+            os.path.isdir(os.path.join(path, "jars"))
+            or os.path.isdir(os.path.join(path, "assembly"))
+        )
 
     # Spark distribution can be downloaded when PYSPARK_HADOOP_VERSION environment variable is set.
     # We should look up this directory first, see also SPARK-32017.
@@ -43,11 +44,13 @@ def _find_spark_home():
         "../",  # When we're in spark/python.
         # Two case belows are valid when the current script is called as a library.
         os.path.join(os.path.dirname(os.path.realpath(__file__)), spark_dist_dir),
-        os.path.dirname(os.path.realpath(__file__))]
+        os.path.dirname(os.path.realpath(__file__)),
+    ]
 
     # Add the path of the PySpark module if it exists
     import_error_raised = False
     from importlib.util import find_spec
+
     try:
         module_home = os.path.dirname(find_spec("pyspark").origin)
         paths.append(os.path.join(module_home, spark_dist_dir))
@@ -78,7 +81,9 @@ def _find_spark_home():
                 "for example, 'python -m pip install pyspark [--user]'. Otherwise, you can also\n"
                 "explicitly set the Python executable, that has PySpark installed, to\n"
                 "PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON environment variables, for example,\n"
-                "'PYSPARK_PYTHON=python3 pyspark'.\n", file=sys.stderr)
+                "'PYSPARK_PYTHON=python3 pyspark'.\n",
+                file=sys.stderr,
+            )
         sys.exit(-1)
 
 

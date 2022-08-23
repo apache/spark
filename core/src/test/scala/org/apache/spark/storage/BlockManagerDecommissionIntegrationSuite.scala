@@ -48,6 +48,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         .setMaster("local-cluster[2, 1, 1024]")
         .set(config.DECOMMISSION_ENABLED, true)
         .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
+        .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, isEnabled)
       sc = new SparkContext(conf)
       TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       val executors = sc.getExecutorIds().toArray
@@ -80,30 +81,40 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
   }
 
-  testRetry(s"verify that an already running task which is going to cache data succeeds " +
-    s"on a decommissioned executor after task start") {
+  testRetry("verify that an already running task which is going to cache data succeeds " +
+    "on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)
   }
 
-  test(s"verify that an already running task which is going to cache data succeeds " +
-    s"on a decommissioned executor after one task ends but before job ends") {
+  test("verify that an already running task which is going to cache data succeeds " +
+    "on a decommissioned executor after one task ends but before job ends") {
     runDecomTest(true, false, TaskEnded)
   }
 
-  test(s"verify that shuffle blocks are migrated") {
+  test("verify that shuffle blocks are migrated") {
     runDecomTest(false, true, JobEnded)
   }
 
-  test(s"verify that both migrations can work at the same time") {
+  test("verify that both migrations can work at the same time") {
     runDecomTest(true, true, JobEnded)
+  }
+
+  test("SPARK-36782 not deadlock if MapOutput uses broadcast") {
+    runDecomTest(false, true, JobEnded, forceMapOutputBroadcast = true)
   }
 
   private def runDecomTest(
       persist: Boolean,
       shuffle: Boolean,
-      whenToDecom: String): Unit = {
+      whenToDecom: String,
+      forceMapOutputBroadcast: Boolean = false): Unit = {
     val migrateDuring = whenToDecom != JobEnded
     val master = s"local-cluster[${numExecs}, 1, 1024]"
+    val minBroadcastSize = if (forceMapOutputBroadcast) {
+      0
+    } else {
+      config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.defaultValue.get
+    }
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
@@ -114,6 +125,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
+      .set(config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, minBroadcastSize)
 
     if (whenToDecom == TaskStarted) {
       // We are using accumulators below, make sure those are reported frequently.
@@ -129,33 +141,34 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val input = sc.parallelize(1 to numParts, numParts)
     val accum = sc.longAccumulator("mapperRunAccumulator")
 
-    val sleepIntervalMs = whenToDecom match {
-      // Increase the window of time b/w task started and ended so that we can decom within that.
-      case TaskStarted => 10000
-      // Make one task take a really short time so that we can decommission right after it is
-      // done but before its peers are done.
-      case TaskEnded =>
-        if (TaskContext.getPartitionId() == 0) {
-          100
-        } else {
-          1000
-        }
-      // No sleep otherwise
-      case _ => 0
-    }
-
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
     val baseRdd = input.mapPartitions { x =>
       accum.add(1)
+
+      val sleepIntervalMs = whenToDecom match {
+        // Increase the window of time b/w task started and ended so that we can decom within that.
+        case "TASK_STARTED" => 10000
+        // Make one task take a really short time so that we can decommission right after it is
+        // done but before its peers are done.
+        case "TASK_ENDED" =>
+          if (TaskContext.getPartitionId() == 0) {
+            100
+          } else {
+            1000
+          }
+        // No sleep otherwise
+        case _ => 0
+      }
       if (sleepIntervalMs > 0) {
         Thread.sleep(sleepIntervalMs)
       }
       x.map(y => (y, y))
     }
-    val testRdd = shuffle match {
-      case true => baseRdd.reduceByKey(_ + _)
-      case false => baseRdd
+    val testRdd = if (shuffle) {
+      baseRdd.reduceByKey(_ + _)
+    } else {
+      baseRdd
     }
 
     // Listen for the job & block updates

@@ -103,4 +103,8 @@ case class FlatMapCoGroupsInPandasExec(
       }
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapCoGroupsInPandasExec =
+    copy(left = newLeft, right = newRight)
 }

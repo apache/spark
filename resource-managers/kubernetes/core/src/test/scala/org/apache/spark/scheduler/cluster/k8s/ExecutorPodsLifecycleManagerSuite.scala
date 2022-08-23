@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
@@ -37,7 +37,7 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
+  private var namedExecutorPods: mutable.Map[String, PodResource[Pod]] = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -54,7 +54,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   before {
     MockitoAnnotations.openMocks(this).close()
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
-    namedExecutorPods = mutable.Map.empty[String, PodResource[Pod, DoneablePod]]
+    namedExecutorPods = mutable.Map.empty[String, PodResource[Pod]]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
@@ -69,7 +69,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val failedPod = failedExecutorWithoutDeletion(1)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    val msg = exitReasonMessage(1, failedPod)
+    val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName)).delete()
@@ -81,7 +81,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     snapshotsStore.notifySubscribers()
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    val msg = exitReasonMessage(1, failedPod)
+    val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
@@ -114,7 +114,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     eventHandlerUnderTest.conf.set(Config.KUBERNETES_DELETE_EXECUTORS, false)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    val msg = exitReasonMessage(1, failedPod)
+    val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), never()).delete()
@@ -126,23 +126,30 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     assert(pod.getMetadata().getLabels().get(SPARK_EXECUTOR_INACTIVE_LABEL) === "true")
   }
 
-  private def exitReasonMessage(failedExecutorId: Int, failedPod: Pod): String = {
+  private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {
     val reason = Option(failedPod.getStatus.getReason)
     val message = Option(failedPod.getStatus.getMessage)
+    val explained = ExecutorPodsLifecycleManager.describeExitCode(exitCode)
+    val exitMsg = s"The executor with id $execId exited with exit code $explained."
+    val reasonStr = reason.map(r => s"The API gave the following brief reason: ${r}")
+    val msgStr = message.map(m => s"The API gave the following message: ${m}")
+
+
     s"""
-       |The executor with id $failedExecutorId exited with exit code 1.
-       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
-       |The API gave the following message: ${message.getOrElse("N/A")}
+       |${exitMsg}
+       |${reasonStr.getOrElse("")}
+       |${msgStr.getOrElse("")}
+       |
        |The API gave the following container statuses:
        |
        |${containersDescription(failedPod)}
       """.stripMargin
   }
 
-  private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] =
+  private def namedPodsAnswer(): Answer[PodResource[Pod]] =
     (invocation: InvocationOnMock) => {
       val podName: String = invocation.getArgument(0)
       namedExecutorPods.getOrElseUpdate(
-        podName, mock(classOf[PodResource[Pod, DoneablePod]]))
+        podName, mock(classOf[PodResource[Pod]]))
     }
 }

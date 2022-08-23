@@ -48,7 +48,6 @@ public class KVTypeInfo {
         checkIndex(idx, indices);
         f.setAccessible(true);
         indices.put(idx.value(), idx);
-        f.setAccessible(true);
         accessors.put(idx.value(), new FieldAccessor(f));
       }
     }
@@ -61,7 +60,6 @@ public class KVTypeInfo {
           "Annotated method %s::%s should not have any parameters.", type.getName(), m.getName());
         m.setAccessible(true);
         indices.put(idx.value(), idx);
-        m.setAccessible(true);
         accessors.put(idx.value(), new MethodAccessor(m));
       }
     }
@@ -130,7 +128,7 @@ public class KVTypeInfo {
     Class<?> getType();
   }
 
-  private class FieldAccessor implements Accessor {
+  private static class FieldAccessor implements Accessor {
 
     private final Field field;
 
@@ -149,7 +147,7 @@ public class KVTypeInfo {
     }
   }
 
-  private class MethodAccessor implements Accessor {
+  private static class MethodAccessor implements Accessor {
 
     private final Method method;
 

@@ -17,11 +17,18 @@
 # under the License.
 #
 
-name: "Pull Request Labeler"
+# Intentionally has a general name.
+# because the test status check created in GitHub Actions
+# currently randomly picks any associated workflow.
+# So, the name was changed to make sense in that context too.
+# See also https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380/10
+
+name: "On pull requests"
 on: pull_request_target
 
 jobs:
   label:
+    name: Label pull requests
     runs-on: ubuntu-latest
     steps:
     # In order to get back the negated matches like in the old config,
@@ -37,7 +44,7 @@ jobs:
     #
     # However, these are not in a published release and the current `main` branch
     # has some issues upon testing.
-    - uses: actions/labeler@2.2.0
+    - uses: actions/labeler@5f867a63be70efff62b767459b009290364495eb # pin@2.2.0
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
         sync-labels: true

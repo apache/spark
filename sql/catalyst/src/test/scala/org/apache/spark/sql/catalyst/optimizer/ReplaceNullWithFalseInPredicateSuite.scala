@@ -21,10 +21,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, In, InSet, LambdaFunction, Literal, MapFilter, NamedExpression, Not, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, InsertStarAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
@@ -42,8 +42,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
-  private val anotherTestRelation = LocalRelation('d.int)
+    LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType),
+      Symbol("m").map(IntegerType, IntegerType))
+  private val anotherTestRelation = LocalRelation($"d".int)
 
   test("replace null inside filter and join conditions") {
     testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
@@ -245,8 +246,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   test("inability to replace null in non-boolean values of CaseWhen") {
     val nestedCaseWhen = CaseWhen(
-      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)),
-      Literal(null, IntegerType))
+      Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)))
     val branchValue = If(
       Literal(2) === nestedCaseWhen,
       TrueLiteral,
@@ -368,33 +368,33 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("replace nulls in lambda function of ArrayFilter") {
-    testHigherOrderFunc('a, ArrayFilter, Seq(lv('e)))
+    testHigherOrderFunc($"a", ArrayFilter, Seq(lv(Symbol("e"))))
   }
 
   test("replace nulls in lambda function of ArrayExists") {
     withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "true") {
-      val lambdaArgs = Seq(lv('e))
+      val lambdaArgs = Seq(lv(Symbol("e")))
       val cond = GreaterThan(lambdaArgs.last, Literal(0))
       val lambda = LambdaFunction(
         function = If(cond, Literal(null, BooleanType), TrueLiteral),
         arguments = lambdaArgs)
-      val expr = ArrayExists('a, lambda)
+      val expr = ArrayExists($"a", lambda)
       testProjection(originalExpr = expr, expectedExpr = expr)
     }
     withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
-      testHigherOrderFunc('a, ArrayExists.apply, Seq(lv('e)))
+      testHigherOrderFunc($"a", ArrayExists.apply, Seq(lv(Symbol("e"))))
     }
   }
 
   test("replace nulls in lambda function of MapFilter") {
-    testHigherOrderFunc('m, MapFilter, Seq(lv('k), lv('v)))
+    testHigherOrderFunc($"m", MapFilter, Seq(lv(Symbol("k")), lv(Symbol("v"))))
   }
 
   test("inability to replace nulls in arbitrary higher-order function") {
     val lambdaFunc = LambdaFunction(
-      function = If(lv('e) > 0, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq[NamedExpression](lv('e)))
-    val column = ArrayTransform('a, lambdaFunc)
+      function = If(lv(Symbol("e")) > 0, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq[NamedExpression](lv(Symbol("e"))))
+    val column = ArrayTransform($"a", lambdaFunc)
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
@@ -434,6 +434,21 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testMerge(allFalseCond, FalseLiteral)
   }
 
+  test("SPARK-34692: Support Not(Int) and Not(InSet) propagate null") {
+    Seq(
+      Not(In("i".attr, Seq(Literal(1), Literal(2), Literal(null)))),
+      Not(In(Literal(null), Seq(Literal(1), Literal(2)))),
+      Not(InSet("i".attr, Set(1, 2, null))),
+      Not(InSet(Literal(null), Set(1, 2)))
+    ).foreach { condition =>
+      testFilter(condition, FalseLiteral)
+      testJoin(condition, FalseLiteral)
+      testDelete(condition, FalseLiteral)
+      testUpdate(condition, FalseLiteral)
+      testMerge(condition, FalseLiteral)
+    }
+  }
+
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }
@@ -447,7 +462,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testDelete(originalCond: Expression, expectedCond: Expression): Unit = {
-    test((rel, expr) => DeleteFromTable(rel, Some(expr)), originalCond, expectedCond)
+    test((rel, expr) => DeleteFromTable(rel, expr), originalCond, expectedCond)
   }
 
   private def testUpdate(originalCond: Expression, expectedCond: Expression): Unit = {
@@ -455,18 +470,41 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {
-    val func = (rel: LogicalPlan, expr: Expression) => {
-      val assignments = Seq(
-        Assignment('i, 'i),
-        Assignment('b, 'b),
-        Assignment('a, 'a),
-        Assignment('m, 'm)
+    val func = (target: LogicalPlan, source: LogicalPlan, expr: Expression) => {
+      val matchedAssignments = Seq(
+        Assignment($"i", $"i"),
+        Assignment($"b", $"b"),
+        Assignment($"a", $"a"),
+        Assignment($"m", $"m")
       )
-      val matchedActions = UpdateAction(Some(expr), assignments) :: DeleteAction(Some(expr)) :: Nil
-      val notMatchedActions = InsertAction(Some(expr), assignments) :: Nil
-      MergeIntoTable(rel, rel, mergeCondition = expr, matchedActions, notMatchedActions)
+      val notMatchedAssignments = Seq(
+        Assignment($"i", $"d")
+      )
+      val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }
-    test(func, originalCond, expectedCond)
+    val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
+    val optimizedPlan = Optimize.execute(originalPlan)
+    val expectedPlan = func(testRelation, anotherTestRelation, expectedCond).analyze
+    comparePlans(optimizedPlan, expectedPlan)
+
+    // Test with star actions
+    def mergePlanWithStar(expr: Expression): MergeIntoTable = {
+      val matchedActions = UpdateStarAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertStarAction(Some(expr)) :: Nil
+      // Between source and target only one should have i and b as those are used for
+      // test expressions and both, source and target, having those columns is ambiguous  .
+      // However, the source must have all the columns present in target for star resolution.
+      val source = LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType))
+      val target = LocalRelation($"a".array(IntegerType))
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+    }
+    val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
+    val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)
+    val expectedPlanWithStar = mergePlanWithStar(expectedCond).analyze
+    comparePlans(optimizedPlanWithStar, expectedPlanWithStar)
   }
 
   private def testHigherOrderFunc(
@@ -484,8 +522,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       function = !(cond <=> TrueLiteral),
       arguments = lambdaArgs)
     testProjection(
-      originalExpr = createExpr(argument, lambda1) as 'x,
-      expectedExpr = createExpr(argument, lambda2) as 'x)
+      originalExpr = createExpr(argument, lambda1) as "x",
+      expectedExpr = createExpr(argument, lambda2) as "x")
   }
 
   private def test(

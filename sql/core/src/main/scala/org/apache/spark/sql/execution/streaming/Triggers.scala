@@ -47,10 +47,14 @@ private object Triggers {
 }
 
 /**
- * A [[Trigger]] that processes only one batch of data in a streaming query then terminates
- * the query.
+ * A [[Trigger]] that processes all available data in one batch then terminates the query.
  */
 case object OneTimeTrigger extends Trigger
+
+/**
+ * A [[Trigger]] that processes all available data in multiple batches then terminates the query.
+ */
+case object AvailableNowTrigger extends Trigger
 
 /**
  * A [[Trigger]] that runs a query periodically based on the processing time. If `interval` is 0,

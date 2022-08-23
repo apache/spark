@@ -97,6 +97,12 @@
     [ "user.name", "jose" ],
     [ "user.timezone", "America/Chicago" ]
   ],
+  "metricsProperties" : [
+    [ "*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet" ],
+    [ "*.sink.servlet.path", "/metrics/json" ],
+    [ "applications.sink.servlet.path", "/metrics/applications/json" ],
+    [ "master.sink.servlet.path", "/metrics/master/json" ]
+  ],
   "classpathEntries" : [
     [ "/Users/Jose/IdeaProjects/spark/assembly/target/scala-2.11/jars/RoaringBitmap-0.5.11.jar", "System Classpath" ],
     [ "/Users/Jose/IdeaProjects/spark/assembly/target/scala-2.11/jars/antlr4-runtime-4.5.3.jar", "System Classpath" ],

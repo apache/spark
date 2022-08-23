@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.InMemoryTable
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -52,7 +52,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
-      testRelation.select('b).analyze
+      testRelation.select($"b").analyze
     }
   }
 
@@ -100,10 +100,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Seq("cannot resolve"))
+      "UNRESOLVED_COLUMN",
+      Array("`tBl`.`a`", "`TbL`.`a`"))
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -170,10 +171,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val alias_a3 = count(a).as("a3")
-    val alias_b = b.as("aggOrder")
 
     // Case 1: when the child of Sort is not Aggregate,
-    //   the sort reference is handled by the rule ResolveSortReferences
+    //   the sort reference is handled by the rule ResolveMissingReferences
     val plan1 = testRelation2
       .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
       .select($"a", $"c", $"a3")
@@ -194,8 +194,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .orderBy($"b".asc)
 
     val expected2 = testRelation2
-      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
-      .orderBy(alias_b.toAttribute.asc)
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .orderBy(b.asc)
       .select(a, c, alias_a3.toAttribute)
 
     checkAnalysis(plan2, expected2)
@@ -221,7 +221,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val pl = plan.asInstanceOf[Project].projectList
 
     assert(pl(0).dataType == DoubleType)
-    assert(pl(1).dataType == DoubleType)
+    if (!SQLConf.get.ansiEnabled) {
+      assert(pl(1).dataType == DoubleType)
+    }
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
@@ -285,7 +287,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
           Literal("a_plus_1"), (att1 + 1))),
-          Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+          $"col".struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -415,7 +417,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected = testRelation2
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
-      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
     checkAnalysis(plan, expected)
   }
 
@@ -426,15 +427,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-12102: Ignore nullability when comparing two sides of case") {
-    val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
-      Symbol("b").struct(Symbol("x").int.withNullability(false)))
+    val relation = LocalRelation($"a".struct($"x".int),
+      $"b".struct($"x".int.withNullability(false)))
     val plan = relation.select(
-      CaseWhen(Seq((Literal(true), Symbol("a").attr)), Symbol("b")).as("val"))
+      CaseWhen(Seq((Literal(true), $"a".attr)), $"b").as("val"))
     assertAnalysisSuccess(plan)
   }
 
   test("Keep attribute qualifiers after dedup") {
-    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
+    val input = LocalRelation($"key".int, $"value".string)
 
     val query =
       Project(Seq($"x.key", $"y.key"),
@@ -561,13 +562,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
     def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      val src1 = LocalRelation(Symbol("id").int, Symbol("v1").string).as("s1")
-      val src2 = LocalRelation(Symbol("id").int, Symbol("v2").string).as("s2")
+      val src1 = LocalRelation($"id".int, $"v1".string).as("s1")
+      val src2 = LocalRelation($"id".int, $"v2".string).as("s2")
       UnresolvedSubqueryColumnAliases(
         outputNames,
         SubqueryAlias(
           "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+          src1.join(src2, Inner, Option($"s1.id" === $"s2.id")))
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
@@ -591,12 +592,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
     checkPartitioning[HashPartitioning](numPartitions = 10,
-      exprs = Symbol("a").attr, Symbol("b").attr)
+      exprs = $"a".attr, $"b".attr)
 
     checkPartitioning[RangePartitioning](numPartitions = 10,
       exprs = SortOrder(Literal(10), Ascending))
     checkPartitioning[RangePartitioning](numPartitions = 10,
-      exprs = SortOrder(Symbol("a").attr, Ascending), SortOrder(Symbol("b").attr, Descending))
+      exprs = SortOrder($"a".attr, Ascending), SortOrder($"b".attr, Descending))
 
     checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
 
@@ -608,7 +609,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs =
-        SortOrder(Symbol("a").attr, Ascending), Symbol("b").attr)
+        SortOrder($"a".attr, Ascending), $"b".attr)
     }
   }
 
@@ -639,8 +640,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
     val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
     val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
-      Seq(UnresolvedAttribute("a")),
-      Seq(UnresolvedAttribute("a")),
+      1,
+      1,
       pythonUdf,
       output,
       project1,
@@ -671,6 +672,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
+    val cond = $"a" > 1
+    assertAnalysisError(
+      MergeIntoTable(
+        testRelation,
+        testRelation,
+        cond,
+        UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
+        Nil
+      ),
+      "Reference 'a' is ambiguous" :: Nil)
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -696,8 +710,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-existing column alias") {
-    assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve '`y`' given input columns: [x]"))
+    assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+      "UNRESOLVED_COLUMN",
+      Array("`y`", "`t`.`x`"))
   }
 
   test("CTE with non-matching column alias") {
@@ -779,7 +794,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "Multiple definitions of observed metrics" :: "evt1" :: Nil)
 
     // Different children, same metrics - fail
-    val b = Symbol("b").string
+    val b = $"b".string
     val tblB = LocalRelation(b)
     assertAnalysisError(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::
@@ -833,7 +848,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         assert(logAppender.loggingEvents.size == count)
         assert(logAppender.loggingEvents.exists(
           e => e.getLevel == Level.WARN &&
-            e.getRenderedMessage.contains(message)))
+            e.getMessage.getFormattedMessage.contains(message)))
       }
 
       withLogAppender(logAppender) {
@@ -910,23 +925,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     assertAnalysisError(r1,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r2,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> int at the third column of the second table"))
+        "The third column of the second table is timestamp type which is not compatible " +
+        "with int at same column of first table"))
 
     assertAnalysisError(r3,
       Seq("Union can only be performed on tables with the compatible column types. " +
-        "timestamp <> float at the 4th column of the second table"))
+        "The 4th column of the second table is timestamp type which is not compatible " +
+        "with float at same column of first table"))
 
     assertAnalysisError(r4,
       Seq("Except can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
 
     assertAnalysisError(r5,
       Seq("Intersect can only be performed on tables with the compatible column types. " +
-        "timestamp <> double at the second column of the second table"))
+        "The second column of the second table is timestamp type which is not compatible " +
+        "with double at same column of first table"))
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
@@ -941,7 +961,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-32237: Hint in CTE") {
-    val plan = With(
+    val plan = UnresolvedWith(
       Project(
         Seq(UnresolvedAttribute("cte.a")),
         UnresolvedRelation(TableIdentifier("cte"))
@@ -1074,7 +1094,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1) FROM TaBlE2
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) WHERE grouping__id > 0
       """.stripMargin), false)
@@ -1082,7 +1102,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1) FROM TaBlE2
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) ORDER BY grouping__id > 0
       """.stripMargin), false)
@@ -1103,5 +1123,107 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       """.stripMargin),
       Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
       false)
+  }
+
+  test("SPARK-36275: Resolve aggregate functions should work with nested fields") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |HAVING c.x > 1
+        |""".stripMargin))
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x
+        |""".stripMargin))
+
+    assertAnalysisErrorClass(parsePlan(
+     """
+        |SELECT c.x
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x + c.y
+        |""".stripMargin),
+      "UNRESOLVED_COLUMN",
+      Array("`c`.`y`", "`x`"))
+  }
+
+  test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
+    Seq("mean", "abs").foreach { func =>
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c)
+           |SELECT t.c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING ${func}(t.c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c, false d)
+           |SELECT (t.c AND t.d) c
+           |FROM t
+           |GROUP BY t.c, t.d
+           |HAVING ${func}(c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+    }
+  }
+
+  test("SPARK-39354: should be `Table or view not found`") {
+    assertAnalysisError(parsePlan(
+      s"""
+         |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
+         |SELECT *
+         |FROM t1
+         |JOIN t2 ON t1.user_id = t2.user_id
+         |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
+      Seq(s"Table or view not found: t2"),
+      false)
+  }
+
+  test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {
+    val innerRelation = SubqueryAlias("src1", testRelation)
+    val outerRelation = SubqueryAlias("src2", testRelation)
+    val ref1 = testRelation.output.head
+
+    val subPlan = getAnalyzer.execute(
+      Project(
+        Seq(UnresolvedStar(None)),
+        Filter.apply(
+          Exists(
+            Filter.apply(
+              EqualTo(
+                OuterReference(ref1),
+                ref1),
+              innerRelation
+            )
+          ),
+          outerRelation
+        )))
+
+    val finalPlan = {
+      Union.apply(
+        Project(
+          Seq(UnresolvedStar(None)),
+          subPlan
+        ),
+        Filter.apply(
+          Exists(
+            subPlan
+          ),
+          subPlan
+        )
+      )
+    }
+
+    assertAnalysisSuccess(finalPlan)
   }
 }

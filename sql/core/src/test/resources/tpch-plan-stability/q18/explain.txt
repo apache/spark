@@ -1,0 +1,179 @@
+== Physical Plan ==
+TakeOrderedAndProject (30)
++- * HashAggregate (29)
+   +- Exchange (28)
+      +- * HashAggregate (27)
+         +- * Project (26)
+            +- * BroadcastHashJoin Inner BuildRight (25)
+               :- * Project (18)
+               :  +- * BroadcastHashJoin Inner BuildRight (17)
+               :     :- * Filter (3)
+               :     :  +- * ColumnarToRow (2)
+               :     :     +- Scan parquet spark_catalog.default.customer (1)
+               :     +- BroadcastExchange (16)
+               :        +- * BroadcastHashJoin LeftSemi BuildRight (15)
+               :           :- * Filter (6)
+               :           :  +- * ColumnarToRow (5)
+               :           :     +- Scan parquet spark_catalog.default.orders (4)
+               :           +- BroadcastExchange (14)
+               :              +- * Project (13)
+               :                 +- * Filter (12)
+               :                    +- * HashAggregate (11)
+               :                       +- Exchange (10)
+               :                          +- * HashAggregate (9)
+               :                             +- * ColumnarToRow (8)
+               :                                +- Scan parquet spark_catalog.default.lineitem (7)
+               +- BroadcastExchange (24)
+                  +- * BroadcastHashJoin LeftSemi BuildRight (23)
+                     :- * Filter (21)
+                     :  +- * ColumnarToRow (20)
+                     :     +- Scan parquet spark_catalog.default.lineitem (19)
+                     +- ReusedExchange (22)
+
+
+(1) Scan parquet spark_catalog.default.customer
+Output [2]: [c_custkey#1, c_name#2]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_custkey)]
+ReadSchema: struct<c_custkey:bigint,c_name:string>
+
+(2) ColumnarToRow [codegen id : 7]
+Input [2]: [c_custkey#1, c_name#2]
+
+(3) Filter [codegen id : 7]
+Input [2]: [c_custkey#1, c_name#2]
+Condition : isnotnull(c_custkey#1)
+
+(4) Scan parquet spark_catalog.default.orders
+Output [4]: [o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+PushedFilters: [IsNotNull(o_custkey), IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_totalprice:decimal(10,0),o_orderdate:date>
+
+(5) ColumnarToRow [codegen id : 3]
+Input [4]: [o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
+
+(6) Filter [codegen id : 3]
+Input [4]: [o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
+Condition : (isnotnull(o_custkey#4) AND isnotnull(o_orderkey#3))
+
+(7) Scan parquet spark_catalog.default.lineitem
+Output [2]: [l_orderkey#7, l_quantity#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+ReadSchema: struct<l_orderkey:bigint,l_quantity:decimal(10,0)>
+
+(8) ColumnarToRow [codegen id : 1]
+Input [2]: [l_orderkey#7, l_quantity#8]
+
+(9) HashAggregate [codegen id : 1]
+Input [2]: [l_orderkey#7, l_quantity#8]
+Keys [1]: [l_orderkey#7]
+Functions [1]: [partial_sum(l_quantity#8)]
+Aggregate Attributes [2]: [sum#9, isEmpty#10]
+Results [3]: [l_orderkey#7, sum#11, isEmpty#12]
+
+(10) Exchange
+Input [3]: [l_orderkey#7, sum#11, isEmpty#12]
+Arguments: hashpartitioning(l_orderkey#7, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(11) HashAggregate [codegen id : 2]
+Input [3]: [l_orderkey#7, sum#11, isEmpty#12]
+Keys [1]: [l_orderkey#7]
+Functions [1]: [sum(l_quantity#8)]
+Aggregate Attributes [1]: [sum(l_quantity#8)#13]
+Results [2]: [l_orderkey#7, sum(l_quantity#8)#13 AS sum(l_quantity#14)#15]
+
+(12) Filter [codegen id : 2]
+Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
+Condition : (isnotnull(sum(l_quantity#14)#15) AND (sum(l_quantity#14)#15 > 300))
+
+(13) Project [codegen id : 2]
+Output [1]: [l_orderkey#7]
+Input [2]: [l_orderkey#7, sum(l_quantity#14)#15]
+
+(14) BroadcastExchange
+Input [1]: [l_orderkey#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [o_orderkey#3]
+Right keys [1]: [l_orderkey#7]
+Join type: LeftSemi
+Join condition: None
+
+(16) BroadcastExchange
+Input [4]: [o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [plan_id=3]
+
+(17) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#4]
+Join type: Inner
+Join condition: None
+
+(18) Project [codegen id : 7]
+Output [5]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6]
+Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_custkey#4, o_totalprice#5, o_orderdate#6]
+
+(19) Scan parquet spark_catalog.default.lineitem
+Output [2]: [l_orderkey#16, l_quantity#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_quantity:decimal(10,0)>
+
+(20) ColumnarToRow [codegen id : 6]
+Input [2]: [l_orderkey#16, l_quantity#14]
+
+(21) Filter [codegen id : 6]
+Input [2]: [l_orderkey#16, l_quantity#14]
+Condition : isnotnull(l_orderkey#16)
+
+(22) ReusedExchange [Reuses operator id: 14]
+Output [1]: [l_orderkey#7]
+
+(23) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [l_orderkey#16]
+Right keys [1]: [l_orderkey#7]
+Join type: LeftSemi
+Join condition: None
+
+(24) BroadcastExchange
+Input [2]: [l_orderkey#16, l_quantity#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
+
+(25) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [o_orderkey#3]
+Right keys [1]: [l_orderkey#16]
+Join type: Inner
+Join condition: None
+
+(26) Project [codegen id : 7]
+Output [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#14]
+Input [7]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_orderkey#16, l_quantity#14]
+
+(27) HashAggregate [codegen id : 7]
+Input [6]: [c_custkey#1, c_name#2, o_orderkey#3, o_totalprice#5, o_orderdate#6, l_quantity#14]
+Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
+Functions [1]: [partial_sum(l_quantity#14)]
+Aggregate Attributes [2]: [sum#17, isEmpty#18]
+Results [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
+
+(28) Exchange
+Input [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
+Arguments: hashpartitioning(c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(29) HashAggregate [codegen id : 8]
+Input [7]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum#19, isEmpty#20]
+Keys [5]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5]
+Functions [1]: [sum(l_quantity#14)]
+Aggregate Attributes [1]: [sum(l_quantity#14)#21]
+Results [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity#14)#21 AS sum(l_quantity)#22]
+
+(30) TakeOrderedAndProject
+Input [6]: [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#22]
+Arguments: 100, [o_totalprice#5 DESC NULLS LAST, o_orderdate#6 ASC NULLS FIRST], [c_name#2, c_custkey#1, o_orderkey#3, o_orderdate#6, o_totalprice#5, sum(l_quantity)#22]
+

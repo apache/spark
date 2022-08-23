@@ -82,6 +82,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 3.0.0 */
   implicit def newLocalDateEncoder: Encoder[java.time.LocalDate] = Encoders.LOCALDATE
 
+  /** @since 3.4.0 */
+  implicit def newLocalDateTimeEncoder: Encoder[java.time.LocalDateTime] = Encoders.LOCALDATETIME
+
   /** @since 2.2.0 */
   implicit def newTimeStampEncoder: Encoder[java.sql.Timestamp] = Encoders.TIMESTAMP
 
@@ -90,6 +93,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   /** @since 3.2.0 */
   implicit def newDurationEncoder: Encoder[java.time.Duration] = Encoders.DURATION
+
+  /** @since 3.2.0 */
+  implicit def newPeriodEncoder: Encoder[java.time.Period] = Encoders.PERIOD
 
   /** @since 3.2.0 */
   implicit def newJavaEnumEncoder[A <: java.lang.Enum[_] : TypeTag]: Encoder[A] =

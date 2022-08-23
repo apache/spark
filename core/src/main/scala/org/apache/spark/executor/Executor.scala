@@ -55,7 +55,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 /**
  * Spark executor, backed by a threadpool to run tasks.
  *
- * This can be used with Mesos, YARN, and the standalone scheduler.
+ * This can be used with Mesos, YARN, kubernetes and the standalone scheduler.
  * An internal RPC interface is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
  */
@@ -72,7 +72,7 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   private val executorShutdown = new AtomicBoolean(false)
-  ShutdownHookManager.addShutdownHook(
+  val stopHookReference = ShutdownHookManager.addShutdownHook(
     () => stop()
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -83,7 +83,7 @@ private[spark] class Executor(
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
-  private val conf = env.conf
+  private[executor] val conf = env.conf
 
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
@@ -104,7 +104,7 @@ private[spark] class Executor(
   // Use UninterruptibleThread to run tasks so that we can allow running codes without being
   // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
   // will hang forever if some methods are interrupted.
-  private val threadPool = {
+  private[executor] val threadPool = {
     val threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
       .setNameFormat("Executor task launch worker-%d")
@@ -174,7 +174,33 @@ private[spark] class Executor(
   private val maxResultSize = conf.get(MAX_RESULT_SIZE)
 
   // Maintains the list of running tasks.
-  private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
+  private[executor] val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
+
+  // Kill mark TTL in milliseconds - 10 seconds.
+  private val KILL_MARK_TTL_MS = 10000L
+
+  // Kill marks with interruptThread flag, kill reason and timestamp.
+  // This is to avoid dropping the kill event when killTask() is called before launchTask().
+  private[executor] val killMarks = new ConcurrentHashMap[Long, (Boolean, String, Long)]
+
+  private val killMarkCleanupTask = new Runnable {
+    override def run(): Unit = {
+      val oldest = System.currentTimeMillis() - KILL_MARK_TTL_MS
+      val iter = killMarks.entrySet().iterator()
+      while (iter.hasNext) {
+        if (iter.next().getValue._3 < oldest) {
+          iter.remove()
+        }
+      }
+    }
+  }
+
+  // Kill mark cleanup thread executor.
+  private val killMarkCleanupService =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-kill-mark-cleanup")
+
+  killMarkCleanupService.scheduleAtFixedRate(
+    killMarkCleanupTask, KILL_MARK_TTL_MS, KILL_MARK_TTL_MS, TimeUnit.MILLISECONDS)
 
   /**
    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
@@ -264,9 +290,18 @@ private[spark] class Executor(
     decommissioned = true
   }
 
+  private[executor] def createTaskRunner(context: ExecutorBackend,
+    taskDescription: TaskDescription) = new TaskRunner(context, taskDescription, plugins)
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
-    val tr = new TaskRunner(context, taskDescription, plugins)
-    runningTasks.put(taskDescription.taskId, tr)
+    val taskId = taskDescription.taskId
+    val tr = createTaskRunner(context, taskDescription)
+    runningTasks.put(taskId, tr)
+    val killMark = killMarks.get(taskId)
+    if (killMark != null) {
+      tr.kill(killMark._1, killMark._2)
+      killMarks.remove(taskId)
+    }
     threadPool.execute(tr)
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
@@ -274,6 +309,7 @@ private[spark] class Executor(
   }
 
   def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
+    killMarks.put(taskId, (interruptThread, reason, System.currentTimeMillis()))
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
@@ -296,6 +332,8 @@ private[spark] class Executor(
       } else {
         taskRunner.kill(interruptThread = interruptThread, reason = reason)
       }
+      // Safe to remove kill mark as we got a chance with the TaskRunner.
+      killMarks.remove(taskId)
     }
   }
 
@@ -312,25 +350,36 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     if (!executorShutdown.getAndSet(true)) {
+      ShutdownHookManager.removeShutdownHook(stopHookReference)
       env.metricsSystem.report()
       try {
-        metricsPoller.stop()
+        if (metricsPoller != null) {
+          metricsPoller.stop()
+        }
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop executor metrics poller", e)
       }
       try {
-        heartbeater.stop()
+        if (heartbeater != null) {
+          heartbeater.stop()
+        }
       } catch {
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
       ShuffleBlockPusher.stop()
-      threadPool.shutdown()
-
-      // Notify plugins that executor is shutting down so they can terminate cleanly
-      Utils.withContextClassLoader(replClassLoader) {
-        plugins.foreach(_.shutdown())
+      if (threadPool != null) {
+        threadPool.shutdown()
+      }
+      if (killMarkCleanupService != null) {
+        killMarkCleanupService.shutdown()
+      }
+      if (replClassLoader != null && plugins != null) {
+        // Notify plugins that executor is shutting down so they can terminate cleanly
+        Utils.withContextClassLoader(replClassLoader) {
+          plugins.foreach(_.shutdown())
+        }
       }
       if (!isLocal) {
         env.stop()
@@ -494,6 +543,7 @@ private[spark] class Executor(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
+            cpus = taskDescription.cpus,
             resources = taskDescription.resources,
             plugins = plugins)
           threwException = false
@@ -737,11 +787,15 @@ private[spark] class Executor(
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    // make sure we run the task with the user-specified mdc properties only
-    MDC.clear()
-    mdc.foreach { case (key, value) => MDC.put(key, value) }
-    // avoid overriding the takName by the user
-    MDC.put("mdc.taskName", taskName)
+    try {
+      // make sure we run the task with the user-specified mdc properties only
+      MDC.clear()
+      mdc.foreach { case (key, value) => MDC.put(key, value) }
+      // avoid overriding the takName by the user
+      MDC.put("mdc.taskName", taskName)
+    } catch {
+      case _: NoSuchFieldError => logInfo("MDC is not supported.")
+    }
   }
 
   /**
@@ -877,6 +931,8 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
+    logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
+        urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
@@ -996,7 +1052,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
         message, new RpcTimeout(HEARTBEAT_INTERVAL_MS.millis, EXECUTOR_HEARTBEAT_INTERVAL.key))
-      if (response.reregisterBlockManager) {
+      if (!executorShutdown.get && response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
@@ -1032,6 +1088,7 @@ private[spark] object Executor {
    *                     checking only the exception but not the cause, and so on. This is to avoid
    *                     `StackOverflowError` when hitting a cycle in the exception chain.
    */
+  @scala.annotation.tailrec
   def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
     if (depthToCheck <= 0) {
       false

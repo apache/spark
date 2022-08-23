@@ -23,6 +23,7 @@ import java.nio.ByteOrder
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -386,7 +387,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     private var count = 0
 
     // The reverse mapping of _dictionary, i.e. mapping encoded integer to the value itself.
-    private var values = new mutable.ArrayBuffer[T#InternalType](1024)
+    private val values = new mutable.ArrayBuffer[T#InternalType](1024)
 
     // The dictionary that maps a value to the encoded short integer.
     private val dictionary = mutable.HashMap.empty[Any, Short]
@@ -420,8 +421,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
 
     override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
       if (overflow) {
-        throw new IllegalStateException(
-          "Dictionary encoding should not be used because of dictionary overflow.")
+        throw QueryExecutionErrors.useDictionaryEncodingWhenDictionaryOverflowError()
       }
 
       to.putInt(DictionaryEncoding.typeId)

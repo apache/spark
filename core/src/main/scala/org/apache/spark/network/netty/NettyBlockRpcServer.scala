@@ -50,7 +50,23 @@ class NettyBlockRpcServer(
       client: TransportClient,
       rpcMessage: ByteBuffer,
       responseContext: RpcResponseCallback): Unit = {
-    val message = BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
+    val message = try {
+      BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
+    } catch {
+      case e: IllegalArgumentException if e.getMessage.startsWith("Unknown message type") =>
+        logWarning(s"This could be a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
+          s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
+          "in case of security incidents.")
+        throw e
+
+      case _: IndexOutOfBoundsException | _: NegativeArraySizeException =>
+        // Netty may throw non-'IOException's for corrupted buffers. In this case,
+        // we ignore the entire message with warnings because we cannot trust any contents.
+        logWarning(s"Ignored a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
+          s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
+          "in case of security incidents.")
+        return
+    }
     logTrace(s"Received request: $message")
 
     message match {
@@ -133,6 +149,13 @@ class NettyBlockRpcServer(
               Map(actualExecId -> blockManager.getLocalDiskDirs).asJava).toByteBuffer)
           }
         }
+
+      case diagnose: DiagnoseCorruption =>
+        val cause = blockManager.diagnoseShuffleBlockCorruption(
+          ShuffleBlockId(diagnose.shuffleId, diagnose.mapId, diagnose.reduceId ),
+          diagnose.checksum,
+          diagnose.algorithm)
+        responseContext.onSuccess(new CorruptionCause(cause).toByteBuffer)
     }
   }
 

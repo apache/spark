@@ -41,7 +41,7 @@ Public Classes
     BarrierTaskContext
     BarrierTaskInfo
     InheritableThread
-
+    util.VersionUtils
 
 Spark Context APIs
 ------------------
@@ -53,6 +53,7 @@ Spark Context APIs
 
     SparkContext.PACKAGE_EXTENSIONS
     SparkContext.accumulator
+    SparkContext.addArchive
     SparkContext.addFile
     SparkContext.addPyFile
     SparkContext.applicationId
@@ -71,6 +72,8 @@ Spark Context APIs
     SparkContext.getOrCreate
     SparkContext.hadoopFile
     SparkContext.hadoopRDD
+    SparkContext.listArchives
+    SparkContext.listFiles
     SparkContext.newAPIHadoopFile
     SparkContext.newAPIHadoopRDD
     SparkContext.parallelize
@@ -111,6 +114,7 @@ RDD APIs
     RDD.cache
     RDD.cartesian
     RDD.checkpoint
+    RDD.cleanShuffleDependencies
     RDD.coalesce
     RDD.cogroup
     RDD.collect
@@ -239,6 +243,7 @@ Management
 .. autosummary::
     :toctree: api/
 
+    inheritable_thread_target
     SparkConf.contains
     SparkConf.get
     SparkConf.getAll
@@ -279,3 +284,5 @@ Management
     BarrierTaskContext.resources
     BarrierTaskContext.stageId
     BarrierTaskContext.taskAttemptId
+    util.VersionUtils.majorMinorVersion
+

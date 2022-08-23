@@ -1,0 +1,35 @@
+WholeStageCodegen (5)
+  HashAggregate [sum,isEmpty] [sum(l_extendedprice),avg_yearly,sum,isEmpty]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (4)
+          HashAggregate [l_extendedprice] [sum,isEmpty,sum,isEmpty]
+            Project [l_extendedprice]
+              BroadcastHashJoin [p_partkey,l_partkey,l_quantity,(0.2 * avg(l_quantity))]
+                Project [l_quantity,l_extendedprice,p_partkey]
+                  BroadcastHashJoin [l_partkey,p_partkey]
+                    Filter [l_partkey,l_quantity]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity,l_extendedprice]
+                    InputAdapter
+                      BroadcastExchange #2
+                        WholeStageCodegen (1)
+                          Project [p_partkey]
+                            Filter [p_brand,p_container,p_partkey]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.part [p_partkey,p_brand,p_container]
+                InputAdapter
+                  BroadcastExchange #3
+                    WholeStageCodegen (3)
+                      Filter [(0.2 * avg(l_quantity))]
+                        HashAggregate [l_partkey,sum,count] [avg(UnscaledValue(l_quantity)),(0.2 * avg(l_quantity)),sum,count]
+                          InputAdapter
+                            Exchange [l_partkey] #4
+                              WholeStageCodegen (2)
+                                HashAggregate [l_partkey,l_quantity] [sum,count,sum,count]
+                                  Filter [l_partkey]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity]

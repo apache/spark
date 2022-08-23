@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Physical plan node for table partition truncation.
@@ -28,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 case class TruncatePartitionExec(
     table: SupportsPartitionManagement,
     partSpec: ResolvedPartitionSpec,
-    refreshCache: () => Unit) extends V2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -40,8 +41,7 @@ case class TruncatePartitionExec(
             partSpec.names.toArray, partSpec.ident)
           atomicPartTable.truncatePartitions(partitionIdentifiers)
         case _ =>
-          throw new UnsupportedOperationException(
-            s"The table ${table.name()} does not support truncation of multiple partition.")
+          throw QueryExecutionErrors.truncateMultiPartitionUnsupportedError(table.name())
       }
     } else {
       table.truncatePartition(partSpec.ident)

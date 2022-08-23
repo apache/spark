@@ -55,6 +55,8 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
 
+  override def supportsRowBased: Boolean = true
+
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
    * If false, get data from UnsafeRow build from CachedBatch
@@ -132,13 +134,13 @@ case class InMemoryTableScanExec(
   override def outputOrdering: Seq[SortOrder] =
     relation.cachedPlan.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
-  lazy val enableAccumulatorsForTest: Boolean = sqlContext.conf.inMemoryTableScanStatisticsEnabled
+  lazy val enableAccumulatorsForTest: Boolean = conf.inMemoryTableScanStatisticsEnabled
 
   // Accumulators used for testing purposes
   lazy val readPartitions = sparkContext.longAccumulator
   lazy val readBatches = sparkContext.longAccumulator
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled = conf.inMemoryPartitionPruning
 
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     val buffers = relation.cacheBuilder.cachedColumnBuffers

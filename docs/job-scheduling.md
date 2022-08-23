@@ -83,6 +83,10 @@ This feature is disabled by default and available on all coarse-grained cluster 
 [Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes) and [K8s mode](running-on-kubernetes.html).
 
 
+### Caveats
+
+- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
+
 ### Configuration and Setup
 
 There are two ways for using this feature.
@@ -142,13 +146,12 @@ an executor should not be idle if there are still pending tasks to be scheduled.
 
 ### Graceful Decommission of Executors
 
-Before dynamic allocation, a Spark executor exits either on failure or when the associated
-application has also exited. In both scenarios, all state associated with the executor is no
-longer needed and can be safely discarded. With dynamic allocation, however, the application
-is still running when an executor is explicitly removed. If the application attempts to access
-state stored in or written by the executor, it will have to perform a recompute the state. Thus,
-Spark needs a mechanism to decommission an executor gracefully by preserving its state before
-removing it.
+Before dynamic allocation, if a Spark executor exits when the associated application has also exited 
+then all state associated with the executor is no longer needed and can be safely discarded. 
+With dynamic allocation, however, the application is still running when an executor is explicitly 
+removed. If the application attempts to access state stored in or written by the executor, it will 
+have to perform a recompute the state. Thus, Spark needs a mechanism to decommission an executor 
+gracefully by preserving its state before removing it.
 
 This requirement is especially important for shuffles. During a shuffle, the Spark executor first
 writes its own map outputs locally to disk, and then acts as the server for those files when other
@@ -165,9 +168,12 @@ shuffle state written by an executor may continue to be served beyond the execut
 In addition to writing shuffle files, executors also cache data either on disk or in memory.
 When an executor is removed, however, all cached data will no longer be accessible.  To mitigate this,
 by default executors containing cached data are never removed.  You can configure this behavior with
-`spark.dynamicAllocation.cachedExecutorIdleTimeout`.  In future releases, the cached data may be
-preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
-the external shuffle service.
+`spark.dynamicAllocation.cachedExecutorIdleTimeout`. When set `spark.shuffle.service.fetch.rdd.enabled`
+to `true`, Spark can use ExternalShuffleService for fetching disk persisted RDD blocks. In case of 
+dynamic allocation if this feature is enabled executors having only disk persisted blocks are considered
+idle after `spark.dynamicAllocation.executorIdleTimeout` and will be released accordingly. In future releases,
+the cached data may be preserved through an off-heap storage similar in spirit to how shuffle files are preserved 
+through the external shuffle service.
 
 # Scheduling Within an Application
 
@@ -252,10 +258,14 @@ properties:
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
-[SparkConf](configuration.html#spark-properties).
+[SparkConf](configuration.html#spark-properties). The file path respects the hadoop configuration and can either be a local file path or HDFS file path.
+
 
 {% highlight scala %}
-conf.set("spark.scheduler.allocation.file", "/path/to/file")
+// scheduler file at local
+conf.set("spark.scheduler.allocation.file", "file:///path/to/file")
+// scheduler file at hdfs
+conf.set("spark.scheduler.allocation.file", "hdfs:///path/to/file")
 {% endhighlight %}
 
 The format of the XML file is simply a `<pool>` element for each pool, with different elements
@@ -297,10 +307,6 @@ in each corresponding JVM thread. Due to this limitation, it is unable to set a 
 via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel the job via `sc.cancelJobGroup`
 later.
 
-In order to synchronize PVM threads with JVM threads, you should set `PYSPARK_PIN_THREAD` environment variable
-to `true`. This pinned thread mode allows one PVM thread has one corresponding JVM thread. With this mode,
 `pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
  such as local properties in a JVM thread.
-
-Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
 

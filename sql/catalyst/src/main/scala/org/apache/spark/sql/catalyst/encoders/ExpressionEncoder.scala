@@ -25,11 +25,10 @@ import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaRefle
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -82,8 +81,7 @@ object ExpressionEncoder {
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
     if (encoders.length > 22) {
-      throw new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
-        "tuple with more than 22 elements are not supported.")
+      throw QueryExecutionErrors.elementsOfTupleExceedLimitError()
     }
 
     encoders.foreach(_.assertUnresolved())
@@ -182,8 +180,7 @@ object ExpressionEncoder {
       constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
     } catch {
       case e: Exception =>
-        throw new RuntimeException(s"Error while decoding: $e\n" +
-          s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+        throw QueryExecutionErrors.expressionDecodingError(e, expressions)
     }
   }
 
@@ -203,14 +200,13 @@ object ExpressionEncoder {
     override def apply(t: T): InternalRow = try {
       if (extractProjection == null) {
         inputRow = new GenericInternalRow(1)
-        extractProjection = GenerateUnsafeProjection.generate(expressions)
+        extractProjection = UnsafeProjection.create(expressions)
       }
       inputRow(0) = t
       extractProjection(inputRow)
     } catch {
       case e: Exception =>
-        throw new RuntimeException(s"Error while encoding: $e\n" +
-          s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+        throw QueryExecutionErrors.expressionEncodingError(e, expressions)
     }
   }
 }
@@ -256,7 +252,7 @@ case class ExpressionEncoder[T](
         case If(_: IsNull, _, s: CreateNamedStruct) => s
         case s: CreateNamedStruct => s
         case _ =>
-          throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
+          throw QueryExecutionErrors.classHasUnexpectedSerializerError(clsName, objSerializer)
       }
     } else {
       // For other input objects like primitive, array, map, etc., we construct a struct to wrap
@@ -404,7 +400,7 @@ case class ExpressionEncoder[T](
   def assertUnresolved(): Unit = {
     (deserializer +:  serializer).foreach(_.foreach {
       case a: AttributeReference if a.name != "loopVar" =>
-        sys.error(s"Unresolved encoder expected, but $a was found.")
+        throw QueryExecutionErrors.notExpectedUnresolvedEncoderError(a)
       case _ =>
     })
   }

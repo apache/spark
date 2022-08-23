@@ -27,7 +27,9 @@ import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
@@ -102,6 +104,9 @@ private[spark] class TaskSchedulerImpl(
   // of tasks that are very short.
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
 
+  private[scheduler] val efficientTaskCalcualtionEnabled = conf.get(SPECULATION_ENABLED) &&
+    conf.get(SPECULATION_EFFICIENCY_ENABLE)
+
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
@@ -128,7 +133,7 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
-  private val starvationTimer = new Timer(true)
+  private val starvationTimer = new Timer("task-starvation-timer", true)
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -152,7 +157,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
-  private val abortTimer = new Timer(true)
+  private val abortTimer = new Timer("task-abort-timer", true)
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -171,7 +176,8 @@ private[spark] class TaskSchedulerImpl(
       SchedulingMode.withName(schedulingModeConf)
     } catch {
       case e: java.util.NoSuchElementException =>
-        throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
+        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
+          schedulingModeConf)
     }
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
@@ -205,7 +211,7 @@ private[spark] class TaskSchedulerImpl(
         case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
-          new FairSchedulableBuilder(rootPool, conf)
+          new FairSchedulableBuilder(rootPool, sc)
         case _ =>
           throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
           s"$schedulingMode")
@@ -378,7 +384,7 @@ private[spark] class TaskSchedulerImpl(
     var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
-    for (i <- 0 until shuffledOffers.size) {
+    for (i <- shuffledOffers.indices) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
@@ -392,7 +398,7 @@ private[spark] class TaskSchedulerImpl(
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               val (locality, resources) = if (task != null) {
@@ -608,7 +614,7 @@ private[spark] class TaskSchedulerImpl(
           taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
-              // schedule a task within the the timeout will abort the taskSet if we were unable to
+              // schedule a task within the timeout will abort the taskSet if we were unable to
               // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
@@ -684,7 +690,7 @@ private[spark] class TaskSchedulerImpl(
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
-              throw new SparkException(errorMsg)
+              throw SparkCoreErrors.sparkError(errorMsg)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
@@ -714,6 +720,7 @@ private[spark] class TaskSchedulerImpl(
                 task.index,
                 task.taskLocality,
                 false,
+                task.assignedCores,
                 task.assignedResources,
                 launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
@@ -798,7 +805,8 @@ private[spark] class TaskSchedulerImpl(
                 val errorMsg =
                   "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"
                 taskSet.abort(errorMsg)
-                throw new SparkException(errorMsg)
+                throw new SparkException(
+                  "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
@@ -816,6 +824,9 @@ private[spark] class TaskSchedulerImpl(
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
+            }
+            if (state == TaskState.RUNNING) {
+              taskSet.taskInfos(tid).launchSucceeded()
             }
           case None =>
             logError(
@@ -849,14 +860,52 @@ private[spark] class TaskSchedulerImpl(
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = {
       accumUpdates.flatMap { case (id, updates) =>
-        val accInfos = updates.map(acc => acc.toInfo(Some(acc.value), None))
         Option(taskIdToTaskSetManager.get(id)).map { taskSetMgr =>
+          val (accInfos, taskProcessRate) = getTaskAccumulableInfosAndProcessRate(updates)
+          if (efficientTaskCalcualtionEnabled && taskProcessRate > 0.0) {
+            taskSetMgr.taskProcessRateCalculator.foreach {
+              _.updateRunningTaskProcessRate(id, taskProcessRate)
+            }
+          }
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }
       }
     }
     dagScheduler.executorHeartbeatReceived(execId, accumUpdatesWithTaskIds, blockManagerId,
       executorUpdates)
+  }
+
+ private def getTaskAccumulableInfosAndProcessRate(
+     updates: Seq[AccumulatorV2[_, _]]): (Seq[AccumulableInfo], Double) = {
+   var recordsRead = 0L
+   var executorRunTime = 0L
+   val accInfos = updates.map { acc =>
+     if (efficientTaskCalcualtionEnabled && acc.name.isDefined) {
+       val name = acc.name.get
+       if (name == shuffleRead.RECORDS_READ || name == input.RECORDS_READ) {
+         recordsRead += acc.value.asInstanceOf[Long]
+       } else if (name == InternalAccumulator.EXECUTOR_RUN_TIME) {
+         executorRunTime = acc.value.asInstanceOf[Long]
+       }
+     }
+     acc.toInfo(Some(acc.value), None)
+   }
+   val taskProcessRate = if (efficientTaskCalcualtionEnabled) {
+     getTaskProcessRate(recordsRead, executorRunTime)
+   } else {
+     0.0D
+   }
+   (accInfos, taskProcessRate)
+ }
+
+  private[scheduler] def getTaskProcessRate(
+      recordsRead: Long,
+      executorRunTime: Long): Double = {
+    if (executorRunTime > 0 && recordsRead > 0) {
+      recordsRead / (executorRunTime / 1000.0)
+    } else {
+      0.0D
+    }
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
@@ -916,7 +965,7 @@ private[spark] class TaskSchedulerImpl(
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
+        throw SparkCoreErrors.clusterSchedulerError(message)
       }
     }
   }
@@ -1014,6 +1063,8 @@ private[spark] class TaskSchedulerImpl(
       logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
+    case _: ExecutorDecommission =>
+      logInfo(s"Executor $executorId on $hostPort is decommissioned.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
   }

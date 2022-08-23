@@ -39,6 +39,8 @@ import org.apache.spark.util.Utils
 private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUIPage("stage") {
   import ApiHelper._
 
+  private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)
+
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
       <svg>
@@ -253,6 +255,9 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       stageId: Int,
       stageAttemptId: Int,
       totalTasks: Int): Seq[Node] = {
+
+    if (!TIMELINE_ENABLED) return Seq.empty[Node]
+
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
@@ -398,8 +403,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       {
         if (MAX_TIMELINE_TASKS < tasks.size) {
           <strong>
-            This page has more than the maximum number of tasks that can be shown in the
-            visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
+            Only the most recent {MAX_TIMELINE_TASKS} tasks
             (of {tasks.size} total) are shown.
           </strong>
         } else {
@@ -534,7 +538,8 @@ private[ui] class TaskPagedTable(
         {if (hasInput(stage)) Seq((HEADER_INPUT_SIZE, "")) else Nil} ++
         {if (hasOutput(stage)) Seq((HEADER_OUTPUT_SIZE, "")) else Nil} ++
         {if (hasShuffleRead(stage)) {
-          Seq((HEADER_SHUFFLE_READ_TIME, TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
+          Seq((HEADER_SHUFFLE_READ_FETCH_WAIT_TIME,
+            TaskDetailsClassNames.SHUFFLE_READ_FETCH_WAIT_TIME),
             (HEADER_SHUFFLE_TOTAL_READS, ""),
             (HEADER_SHUFFLE_REMOTE_READS, TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
         } else {
@@ -657,7 +662,7 @@ private[ui] class TaskPagedTable(
         }</td>
       }}
       {if (hasShuffleRead(stage)) {
-        <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+        <td class={TaskDetailsClassNames.SHUFFLE_READ_FETCH_WAIT_TIME}>
           {formatDuration(task.taskMetrics.map(_.shuffleReadMetrics.fetchWaitTime))}
         </td>
         <td>{
@@ -743,7 +748,7 @@ private[spark] object ApiHelper {
   val HEADER_ACCUMULATORS = "Accumulators"
   val HEADER_INPUT_SIZE = "Input Size / Records"
   val HEADER_OUTPUT_SIZE = "Output Size / Records"
-  val HEADER_SHUFFLE_READ_TIME = "Shuffle Read Blocked Time"
+  val HEADER_SHUFFLE_READ_FETCH_WAIT_TIME = "Shuffle Read Fetch Wait Time"
   val HEADER_SHUFFLE_TOTAL_READS = "Shuffle Read Size / Records"
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
   val HEADER_SHUFFLE_WRITE_TIME = "Shuffle Write Time"
@@ -773,7 +778,7 @@ private[spark] object ApiHelper {
     HEADER_ACCUMULATORS -> TaskIndexNames.ACCUMULATORS,
     HEADER_INPUT_SIZE -> TaskIndexNames.INPUT_SIZE,
     HEADER_OUTPUT_SIZE -> TaskIndexNames.OUTPUT_SIZE,
-    HEADER_SHUFFLE_READ_TIME -> TaskIndexNames.SHUFFLE_READ_TIME,
+    HEADER_SHUFFLE_READ_FETCH_WAIT_TIME -> TaskIndexNames.SHUFFLE_READ_FETCH_WAIT_TIME,
     HEADER_SHUFFLE_TOTAL_READS -> TaskIndexNames.SHUFFLE_TOTAL_READS,
     HEADER_SHUFFLE_REMOTE_READS -> TaskIndexNames.SHUFFLE_REMOTE_READS,
     HEADER_SHUFFLE_WRITE_TIME -> TaskIndexNames.SHUFFLE_WRITE_TIME,

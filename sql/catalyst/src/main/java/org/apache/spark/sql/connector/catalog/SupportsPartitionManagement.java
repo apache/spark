@@ -32,17 +32,15 @@ import org.apache.spark.sql.types.StructType;
  * <p>
  * These APIs are used to modify table partition identifier or partition metadata.
  * In some cases, they will change the table data as well.
- * ${@link #createPartition}:
- *     add a partition and any data it contains to the table
- * ${@link #dropPartition}:
- *     remove a partition and any data it contains from the table
- * ${@link #purgePartition}:
- *     remove a partition and any data it contains from the table by skipping a trash
- *     even if it is supported.
- * ${@link #replacePartitionMetadata}:
- *     point a partition to a new location, which will swap one location's data for the other
- * ${@link #truncatePartition}:
- *     remove partition data from the table
+ * <ul>
+ *   <li>{@link #createPartition}: add a partition and any data it contains to the table</li>
+ *   <li>{@link #dropPartition}: remove a partition and any data it contains from the table</li>
+ *   <li>{@link #purgePartition}: remove a partition and any data it contains from the table by
+ *   skipping a trash even if it is supported.</li>
+ *   <li>{@link #replacePartitionMetadata}: point a partition to a new location, which will swap
+ *   one location's data for the other</li>
+ *   <li>{@link #truncatePartition}: remove partition data from the table</li>
+ * </ul>
  *
  * @since 3.1.0
  */

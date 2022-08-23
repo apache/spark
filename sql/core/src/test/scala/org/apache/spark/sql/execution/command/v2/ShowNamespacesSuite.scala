@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.BasicInMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -52,21 +52,5 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
       sql("SHOW NAMESPACES in testcat_no_namespace")
     }.getMessage
     assert(errMsg.contains("does not support namespaces"))
-  }
-
-  test("case sensitivity") {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
-          sql(s"CREATE NAMESPACE $catalog.AAA")
-          sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(
-            s"SHOW NAMESPACES IN $catalog",
-            Seq("AAA", "bbb") ++ builtinTopNamespaces)
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("AAA"))
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("AAA"))
-        }
-      }
-    }
   }
 }

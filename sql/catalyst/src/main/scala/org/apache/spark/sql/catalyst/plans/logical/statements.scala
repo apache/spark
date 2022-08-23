@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.ViewType
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.DataType
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -47,10 +46,11 @@ abstract class ParsedStatement extends LogicalPlan {
 
   override def output: Seq[Attribute] = Seq.empty
 
-  override def children: Seq[LogicalPlan] = Seq.empty
-
   final override lazy val resolved = false
 }
+
+trait LeafParsedStatement extends ParsedStatement with LeafLike[LogicalPlan]
+trait UnaryParsedStatement extends ParsedStatement with UnaryLike[LogicalPlan]
 
 /**
  * Type to keep track of Hive serde info
@@ -116,160 +116,26 @@ object SerdeInfo {
       props1: Map[String, String], props2: Map[String, String]): Unit = {
     val conflictKeys = props1.keySet.intersect(props2.keySet)
     if (conflictKeys.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"""
-          |Cannot safely merge SERDEPROPERTIES:
-          |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |The conflict keys: ${conflictKeys.mkString(", ")}
-          |""".stripMargin)
+      throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(props1, props2, conflictKeys)
     }
   }
 }
 
 /**
- * A CREATE TABLE command, as parsed from SQL.
- *
- * This is a metadata-only command and is not used to write data to the created table.
- */
-case class CreateTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends ParsedStatement
-
-/**
- * A CREATE TABLE AS SELECT command, as parsed from SQL.
- */
-case class CreateTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends ParsedStatement {
-
-  override def children: Seq[LogicalPlan] = Seq(asSelect)
-}
-
-/**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends ParsedStatement {
-
-  override def children: Seq[LogicalPlan] = Seq(child)
-}
-
-/**
- * A REPLACE TABLE command, as parsed from SQL.
- *
- * If the table exists prior to running this command, executing this statement
- * will replace the table's metadata and clear the underlying rows from the table.
- */
-case class ReplaceTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends ParsedStatement
-
-/**
- * A REPLACE TABLE AS SELECT command, as parsed from SQL.
- */
-case class ReplaceTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends ParsedStatement {
-
-  override def children: Seq[LogicalPlan] = Seq(asSelect)
-}
-
-
-/**
- * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
+ * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
-    name: Seq[String],
+    path: Option[FieldName],
+    colName: String,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[ColumnPosition])
+    position: Option[FieldPosition],
+    default: Option[String]) {
+  def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
-/**
- * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
- */
-case class AlterTableAddColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
-
-case class AlterTableReplaceColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
- */
-case class AlterTableAlterColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[ColumnPosition]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
- */
-case class AlterTableRenameColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    newName: String) extends ParsedStatement
-
-/**
- * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
- */
-case class AlterTableDropColumnsStatement(
-    tableName: Seq[String],
-    columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
+  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+}
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -293,41 +159,14 @@ case class InsertIntoStatement(
     userSpecifiedCols: Seq[String],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends ParsedStatement {
+    ifPartitionNotExists: Boolean) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
   require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid with static partitions")
 
-  override def children: Seq[LogicalPlan] = query :: Nil
+  override def child: LogicalPlan = query
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
+    copy(query = newChild)
 }
-
-/**
- * A CREATE NAMESPACE statement, as parsed from SQL.
- */
-case class CreateNamespaceStatement(
-    namespace: Seq[String],
-    ifNotExists: Boolean,
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * A USE statement, as parsed from SQL.
- */
-case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
-
-/**
- * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
- */
-case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- *  CREATE FUNCTION statement, as parsed from SQL
- */
-case class CreateFunctionStatement(
-    functionName: Seq[String],
-    className: String,
-    resources: Seq[FunctionResource],
-    isTemp: Boolean,
-    ignoreIfExists: Boolean,
-    replace: Boolean) extends ParsedStatement

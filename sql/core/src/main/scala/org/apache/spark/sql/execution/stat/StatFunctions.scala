@@ -22,10 +22,11 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EvalMode, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, QuantileSummaries}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -101,7 +102,12 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.treeAggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => probabilities.flatMap(summary.query) }
+    summaries.map {
+      summary => summary.query(probabilities) match {
+        case Some(q) => q
+        case None => Seq()
+      }
+    }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
@@ -235,11 +241,16 @@ object StatFunctions extends Logging {
         p.stripSuffix("%").toDouble / 100.0
       } catch {
         case e: NumberFormatException =>
-          throw new IllegalArgumentException(s"Unable to parse $p as a percentile", e)
+          throw QueryExecutionErrors.cannotParseStatisticAsPercentileError(p, e)
       }
     }
     require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
+    def castAsDoubleIfNecessary(e: Expression): Expression = if (e.dataType == StringType) {
+      Cast(e, DoubleType, evalMode = EvalMode.TRY)
+    } else {
+      e
+    }
     var percentileIndex = 0
     val statisticFns = selectedStatistics.map { stats =>
       if (stats.endsWith("%")) {
@@ -247,7 +258,7 @@ object StatFunctions extends Logging {
         percentileIndex += 1
         (child: Expression) =>
           GetArrayItem(
-            new ApproximatePercentile(child,
+            new ApproximatePercentile(castAsDoubleIfNecessary(child),
               Literal(new GenericArrayData(percentiles), ArrayType(DoubleType, false)))
               .toAggregateExpression(),
             Literal(index))
@@ -258,11 +269,13 @@ object StatFunctions extends Logging {
             Count(child).toAggregateExpression(isDistinct = true)
           case "approx_count_distinct" => (child: Expression) =>
             HyperLogLogPlusPlus(child).toAggregateExpression()
-          case "mean" => (child: Expression) => Average(child).toAggregateExpression()
-          case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
+          case "mean" => (child: Expression) =>
+            Average(castAsDoubleIfNecessary(child)).toAggregateExpression()
+          case "stddev" => (child: Expression) =>
+            StddevSamp(castAsDoubleIfNecessary(child)).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
           case "max" => (child: Expression) => Max(child).toAggregateExpression()
-          case _ => throw new IllegalArgumentException(s"$stats is not a recognised statistic")
+          case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
         }
       }
     }

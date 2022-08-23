@@ -16,13 +16,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, TypeVar, Union
+from typing import Any, Dict, List, TypeVar, Tuple, Union
 from typing_extensions import Literal
+
+from numpy import ndarray
 
 import pyspark.ml.base
 import pyspark.ml.param
 import pyspark.ml.util
+from pyspark.ml.linalg import Vector
 import pyspark.ml.wrapper
+from py4j.java_gateway import JavaObject
 
 ParamMap = Dict[pyspark.ml.param.Param, Any]
 PipelineStage = Union[pyspark.ml.base.Estimator, pyspark.ml.base.Transformer]
@@ -31,10 +35,10 @@ T = TypeVar("T")
 P = TypeVar("P", bound=pyspark.ml.param.Params)
 M = TypeVar("M", bound=pyspark.ml.base.Transformer)
 JM = TypeVar("JM", bound=pyspark.ml.wrapper.JavaTransformer)
+C = TypeVar("C", bound=type)
 
-BinaryClassificationEvaluatorMetricType = Union[
-    Literal["areaUnderROC"], Literal["areaUnderPR"]
-]
+JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]
+BinaryClassificationEvaluatorMetricType = Union[Literal["areaUnderROC"], Literal["areaUnderPR"]]
 RegressionEvaluatorMetricType = Union[
     Literal["rmse"], Literal["mse"], Literal["r2"], Literal["mae"], Literal["var"]
 ]
@@ -66,7 +70,9 @@ MultilabelClassificationEvaluatorMetricType = Union[
     Literal["microRecall"],
     Literal["microF1Measure"],
 ]
-ClusteringEvaluatorMetricType = Union[Literal["silhouette"]]
+ClusteringEvaluatorMetricType = Literal["silhouette"]
+ClusteringEvaluatorDistanceMeasureType = Union[Literal["squaredEuclidean"], Literal["cosine"]]
+
 RankingEvaluatorMetricType = Union[
     Literal["meanAveragePrecision"],
     Literal["meanAveragePrecisionAtK"],
@@ -74,3 +80,5 @@ RankingEvaluatorMetricType = Union[
     Literal["ndcgAtK"],
     Literal["recallAtK"],
 ]
+
+VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]

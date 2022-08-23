@@ -18,13 +18,11 @@ package org.apache.spark.sql.execution
 
 import java.io.File
 
-import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
@@ -184,14 +182,14 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // Respect SparkConf and replace file:/
       assert(isIncluded(df.queryExecution, replacement))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
+      assert(isIncluded(df.queryExecution, s"BatchScan orc"))
       assert(!isIncluded(df.queryExecution, "file:/"))
 
-      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)BatchScan") {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> s"(?i)BatchScan orc file:$basePath") {
         // Respect SQLConf and replace FileScan
         assert(isIncluded(df.queryExecution, replacement))
 
-        assert(!isIncluded(df.queryExecution, "BatchScan"))
+        assert(!isIncluded(df.queryExecution, s"BatchScan orc file:$basePath"))
         assert(isIncluded(df.queryExecution, "file:/"))
       }
     }
@@ -203,43 +201,14 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
         val dir = path.getCanonicalPath
         spark.range(0, 10).write.format(format).save(dir)
         val df = spark.read.format(format).load(dir)
-
         withClue(s"Source '$format':") {
+          logError(s"${df.queryExecution}")
           assert(isIncluded(df.queryExecution, "ReadSchema"))
-          assert(isIncluded(df.queryExecution, "BatchScan"))
+          assert(isIncluded(df.queryExecution, s"BatchScan $format"))
           if (Seq("orc", "parquet").contains(format)) {
             assert(isIncluded(df.queryExecution, "PushedFilters"))
           }
           assert(isIncluded(df.queryExecution, "Location"))
-        }
-      }
-    }
-  }
-
-  test("SPARK-30362: test input metrics for DSV2") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      Seq("json", "orc", "parquet").foreach { format =>
-        withTempPath { path =>
-          val dir = path.getCanonicalPath
-          spark.range(0, 10).write.format(format).save(dir)
-          val df = spark.read.format(format).load(dir)
-          val bytesReads = new mutable.ArrayBuffer[Long]()
-          val recordsRead = new mutable.ArrayBuffer[Long]()
-          val bytesReadListener = new SparkListener() {
-            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
-              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
-            }
-          }
-          sparkContext.addSparkListener(bytesReadListener)
-          try {
-            df.collect()
-            sparkContext.listenerBus.waitUntilEmpty()
-            assert(bytesReads.sum > 0)
-            assert(recordsRead.sum == 10)
-          } finally {
-            sparkContext.removeSparkListener(bytesReadListener)
-          }
         }
       }
     }

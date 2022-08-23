@@ -47,7 +47,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
 
   // Schedule a refresh thread to run periodically
   private val timer = new Timer("refresh progress", true)
-  timer.schedule(new TimerTask{
+  timer.schedule(new TimerTask {
     override def run(): Unit = {
       refresh()
     }

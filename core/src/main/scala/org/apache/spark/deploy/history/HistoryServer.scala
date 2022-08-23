@@ -52,7 +52,12 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"), port, conf)
+  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"),
+    port, conf, name = "HistoryServerUI",
+    // Usually, a History Server stores plenty of event logs for various applications and users
+    // Comparing to Spark LiveUI which is generally for per application usage, it needs more
+    // threads to increase concurrency to handle request from different users and clients.
+    poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain

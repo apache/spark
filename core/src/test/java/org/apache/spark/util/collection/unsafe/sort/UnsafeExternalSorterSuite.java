@@ -45,8 +45,6 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
@@ -224,7 +222,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
     prevSortTime = sorter.getSortTimeNanos();
 
     sorter.spill();  // no sort needed
@@ -232,7 +230,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -251,7 +249,7 @@ public class UnsafeExternalSorterSuite {
     // The insertion of this record should trigger a spill:
     insertNumber(sorter, 0);
     // Ensure that spill files were created
-    assertThat(tempDir.listFiles().length, greaterThanOrEqualTo(1));
+    assertTrue(tempDir.listFiles().length >= 1);
     // Read back the sorted data:
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -342,12 +340,12 @@ public class UnsafeExternalSorterSuite {
     for (int i = 0; i < n / 3; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
       lastv = i;
     }
     assertTrue(iter.spill() > 0);
     assertEquals(0, iter.spill());
-    assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
+    assertEquals(lastv, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     for (int i = n / 3; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
@@ -491,7 +489,7 @@ public class UnsafeExternalSorterSuite {
     // We will have at-least 2 memory pages allocated because of rounding happening due to
     // integer division of pageSizeBytes and recordSize.
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
-    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
+    assertEquals(0, taskContext.taskMetrics().diskBytesSpilled());
     UnsafeExternalSorter.SpillableIterator iter =
             (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
     assertTrue(iter.spill() > 0);
@@ -604,9 +602,9 @@ public class UnsafeExternalSorterSuite {
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
-      assert (iter.hasNext());
+      assertTrue(iter.hasNext());
       iter.loadNext();
-      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()), i);
     }
   }
 }

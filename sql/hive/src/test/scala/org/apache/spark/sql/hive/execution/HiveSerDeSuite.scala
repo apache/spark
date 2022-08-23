@@ -29,10 +29,12 @@ import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A set of tests that validates support for Hive SerDe.
  */
+@SlowHiveTest
 class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     import TestHive._

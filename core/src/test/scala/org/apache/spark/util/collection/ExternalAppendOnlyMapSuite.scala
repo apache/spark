@@ -34,7 +34,7 @@ import org.apache.spark.util.CompletionIterator
 class ExternalAppendOnlyMapSuite extends SparkFunSuite
   with LocalSparkContext
   with Eventually
-  with Matchers{
+  with Matchers {
   import TestUtils.{assertNotSpilled, assertSpilled}
 
   private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
@@ -220,7 +220,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     testSimpleSpilling()
   }
 
-  private def testSimpleSpillingForAllCodecs(encrypt: Boolean) {
+  private def testSimpleSpillingForAllCodecs(encrypt: Boolean): Unit = {
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {

@@ -48,7 +48,7 @@ private[spark] object SerDeUtil extends Logging {
   // This should be called before trying to unpickle array.array from Python
   // In cluster mode, this should be put in closure
   def initialize(): Unit = {
-    synchronized{
+    synchronized {
       if (!initialized) {
         Unpickler.registerConstructor("__builtin__", "bytearray", new ByteArrayConstructor())
         Unpickler.registerConstructor("builtins", "bytearray", new ByteArrayConstructor())
@@ -78,7 +78,8 @@ private[spark] object SerDeUtil extends Logging {
    * Choose batch size based on size of objects
    */
   private[spark] class AutoBatchedPickler(iter: Iterator[Any]) extends Iterator[Array[Byte]] {
-    private val pickle = new Pickler()
+    private val pickle = new Pickler(/* useMemo = */ true,
+      /* valueCompare = */ false)
     private var batch = 1
     private val buffer = new mutable.ArrayBuffer[Any]
 
@@ -131,7 +132,8 @@ private[spark] object SerDeUtil extends Logging {
   }
 
   private def checkPickle(t: (Any, Any)): (Boolean, Boolean) = {
-    val pickle = new Pickler
+    val pickle = new Pickler(/* useMemo = */ true,
+      /* valueCompare = */ false)
     val kt = Try {
       pickle.dumps(t._1)
     }
@@ -182,7 +184,8 @@ private[spark] object SerDeUtil extends Logging {
       if (batchSize == 0) {
         new AutoBatchedPickler(cleaned)
       } else {
-        val pickle = new Pickler
+        val pickle = new Pickler(/* useMemo = */ true,
+          /* valueCompare = */ false)
         cleaned.grouped(batchSize).map(batched => pickle.dumps(batched.asJava))
       }
     }

@@ -20,16 +20,16 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.SQLException
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hive.service.cli.HiveSQLException
+import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
 
-import org.apache.spark.TaskKilled
+import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.internal.SQLConf
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
-  test("the scratch dir will be deleted during server start but recreated with new operation") {
-    assert(tempScratchDir.exists())
+  test("the scratch dir will not be exist") {
+    assert(!tempScratchDir.exists())
   }
 
   test("SPARK-29911: Uncache cached tables when session closed") {
@@ -56,8 +56,8 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   }
 
   test("Full stack traces as error message for jdbc or thrift client") {
-    val sql = "select date_sub(date'2011-11-11', '1.2')"
-    withCLIServiceClient { client =>
+    val sql = "select from_json('a', 'a INT', map('mode', 'FAILFAST'))"
+    withCLIServiceClient() { client =>
       val sessionHandle = client.openSession(user, "")
 
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
@@ -67,21 +67,18 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           sql,
           confOverlay)
       }
-
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(!e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(!e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
 
     withJdbcStatement { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery(sql)
       }
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
   }
 
@@ -117,8 +114,100 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
     }
   }
-}
 
+  test("SPARK-21957: get current_user through thrift server") {
+    val clientUser = "storm_earth_fire_heed_my_call"
+    val sql = "select current_user()"
+
+    withCLIServiceClient(clientUser) { client =>
+      val sessionHandle = client.openSession(clientUser, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+
+      val userFuncs = Seq("user", "current_user")
+      userFuncs.foreach { func =>
+        val opHandle1 = exec(s"select $func(), $func")
+        val rowSet1 = client.fetchResults(opHandle1)
+        rowSet1.getColumns.forEach { col =>
+          assert(col.getStringVal.getValues.get(0) === clientUser)
+        }
+      }
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      exec(s"set ${SQLConf.ENFORCE_RESERVED_KEYWORDS.key}=true")
+      userFuncs.foreach { func =>
+        val opHandle2 = exec(s"select $func")
+        assert(client.fetchResults(opHandle2)
+          .getColumns.get(0).getStringVal.getValues.get(0) === clientUser)
+      }
+
+      userFuncs.foreach { func =>
+        val e = intercept[HiveSQLException](exec(s"select $func()"))
+        assert(e.getMessage.contains(func))
+      }
+    }
+  }
+
+  test("formats of error messages") {
+    val sql = "select 1 / 0"
+    withCLIServiceClient() { client =>
+      val sessionHandle = client.openSession(user, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.PRETTY}")
+      val e1 = intercept[HiveSQLException](exec(sql))
+      // scalastyle:off line.size.limit
+      assert(e1.getMessage ===
+        """Error running query: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin)
+
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.MINIMAL}")
+      val e2 = intercept[HiveSQLException](exec(sql))
+      assert(e2.getMessage ===
+        """Error running query: {
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "\"spark.sql.ansi.enabled\""
+          |  },
+          |  "queryContext" : [ {
+          |    "objectType" : "",
+          |    "objectName" : "",
+          |    "startIndex" : 8,
+          |    "stopIndex" : 12,
+          |    "fragment" : "1 / 0"
+          |  } ]
+          |}""".stripMargin)
+
+      exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.STANDARD}")
+      val e3 = intercept[HiveSQLException](exec(sql))
+      assert(e3.getMessage ===
+        """Error running query: {
+          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+          |  "sqlState" : "22012",
+          |  "messageParameters" : {
+          |    "config" : "\"spark.sql.ansi.enabled\""
+          |  },
+          |  "queryContext" : [ {
+          |    "objectType" : "",
+          |    "objectName" : "",
+          |    "startIndex" : 8,
+          |    "stopIndex" : 12,
+          |    "fragment" : "1 / 0"
+          |  } ]
+          |}""".stripMargin)
+      // scalastyle:on line.size.limit
+    }
+  }
+}
 
 class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
   override def mode: ServerMode.Value = ServerMode.binary

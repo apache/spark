@@ -27,22 +27,27 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table}
 case class ShowTablePropertiesExec(
     output: Seq[Attribute],
     catalogTable: Table,
-    propertyKey: Option[String]) extends V2CommandExec {
+    tableName: String,
+    propertyKey: Option[String]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._
 
     // The reserved properties are accessible through DESCRIBE
-    val properties = catalogTable.properties.asScala
+    val properties = conf.redactOptions(catalogTable.properties.asScala.toMap)
       .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     propertyKey match {
       case Some(p) =>
         val propValue = properties
-          .getOrElse(p, s"Table ${catalogTable.name} does not have property: $p")
-        Seq(toCatalystRow(p, propValue))
+          .getOrElse(p, s"Table $tableName does not have property: $p")
+        if (output.length == 1) {
+          Seq(toCatalystRow(propValue))
+        } else {
+          Seq(toCatalystRow(p, propValue))
+        }
       case None =>
-        properties.keys.map(k =>
-          toCatalystRow(k, properties(k))).toSeq
+        properties.toSeq.sortBy(_._1).map(kv =>
+          toCatalystRow(kv._1, kv._2)).toSeq
     }
   }
 }

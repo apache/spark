@@ -1,0 +1,105 @@
+== Physical Plan ==
+* Sort (17)
++- Exchange (16)
+   +- * HashAggregate (15)
+      +- Exchange (14)
+         +- * HashAggregate (13)
+            +- * HashAggregate (12)
+               +- Exchange (11)
+                  +- * HashAggregate (10)
+                     +- * Project (9)
+                        +- * BroadcastHashJoin LeftOuter BuildRight (8)
+                           :- * ColumnarToRow (2)
+                           :  +- Scan parquet spark_catalog.default.customer (1)
+                           +- BroadcastExchange (7)
+                              +- * Project (6)
+                                 +- * Filter (5)
+                                    +- * ColumnarToRow (4)
+                                       +- Scan parquet spark_catalog.default.orders (3)
+
+
+(1) Scan parquet spark_catalog.default.customer
+Output [1]: [c_custkey#1]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+ReadSchema: struct<c_custkey:bigint>
+
+(2) ColumnarToRow [codegen id : 2]
+Input [1]: [c_custkey#1]
+
+(3) Scan parquet spark_catalog.default.orders
+Output [3]: [o_orderkey#2, o_custkey#3, o_comment#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+PushedFilters: [IsNotNull(o_comment), IsNotNull(o_custkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_comment:string>
+
+(4) ColumnarToRow [codegen id : 1]
+Input [3]: [o_orderkey#2, o_custkey#3, o_comment#4]
+
+(5) Filter [codegen id : 1]
+Input [3]: [o_orderkey#2, o_custkey#3, o_comment#4]
+Condition : ((isnotnull(o_comment#4) AND NOT o_comment#4 LIKE %special%requests%) AND isnotnull(o_custkey#3))
+
+(6) Project [codegen id : 1]
+Output [2]: [o_orderkey#2, o_custkey#3]
+Input [3]: [o_orderkey#2, o_custkey#3, o_comment#4]
+
+(7) BroadcastExchange
+Input [2]: [o_orderkey#2, o_custkey#3]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=1]
+
+(8) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#3]
+Join type: LeftOuter
+Join condition: None
+
+(9) Project [codegen id : 2]
+Output [2]: [c_custkey#1, o_orderkey#2]
+Input [3]: [c_custkey#1, o_orderkey#2, o_custkey#3]
+
+(10) HashAggregate [codegen id : 2]
+Input [2]: [c_custkey#1, o_orderkey#2]
+Keys [1]: [c_custkey#1]
+Functions [1]: [partial_count(o_orderkey#2)]
+Aggregate Attributes [1]: [count#5]
+Results [2]: [c_custkey#1, count#6]
+
+(11) Exchange
+Input [2]: [c_custkey#1, count#6]
+Arguments: hashpartitioning(c_custkey#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(12) HashAggregate [codegen id : 3]
+Input [2]: [c_custkey#1, count#6]
+Keys [1]: [c_custkey#1]
+Functions [1]: [count(o_orderkey#2)]
+Aggregate Attributes [1]: [count(o_orderkey#2)#7]
+Results [1]: [count(o_orderkey#2)#7 AS c_count#8]
+
+(13) HashAggregate [codegen id : 3]
+Input [1]: [c_count#8]
+Keys [1]: [c_count#8]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#9]
+Results [2]: [c_count#8, count#10]
+
+(14) Exchange
+Input [2]: [c_count#8, count#10]
+Arguments: hashpartitioning(c_count#8, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(15) HashAggregate [codegen id : 4]
+Input [2]: [c_count#8, count#10]
+Keys [1]: [c_count#8]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [c_count#8, count(1)#11 AS custdist#12]
+
+(16) Exchange
+Input [2]: [c_count#8, custdist#12]
+Arguments: rangepartitioning(custdist#12 DESC NULLS LAST, c_count#8 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(17) Sort [codegen id : 5]
+Input [2]: [c_count#8, custdist#12]
+Arguments: [custdist#12 DESC NULLS LAST, c_count#8 DESC NULLS LAST], true, 0
+

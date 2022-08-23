@@ -72,7 +72,7 @@ E.g., a learning algorithm is an `Estimator` which trains on a `DataFrame` and p
 Machine learning can be applied to a wide variety of data types, such as vectors, text, images, and structured data.
 This API adopts the `DataFrame` from Spark SQL in order to support a variety of data types.
 
-`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-reference.html#data-types) for a list of supported types.
+`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-ref-datatypes.html) for a list of supported types.
 In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](mllib-data-types.html#local-vector) types.
 
 A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
@@ -240,7 +240,7 @@ This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
 ([Scala](api/scala/org/apache/spark/ml/package.html),
 [Java](api/java/org/apache/spark/ml/package-summary.html),
-and [Python](api/python/pyspark.ml.html)).
+and [Python](api/python/reference/pyspark.ml.html)).
 
 ## Example: Estimator, Transformer, and Param
 

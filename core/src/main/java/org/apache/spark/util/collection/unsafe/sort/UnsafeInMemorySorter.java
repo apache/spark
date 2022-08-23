@@ -277,6 +277,7 @@ public final class UnsafeInMemorySorter {
       this.offset = offset;
     }
 
+    @Override
     public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(numRecords, offset);
       iter.position = position;

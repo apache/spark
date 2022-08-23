@@ -19,10 +19,10 @@ package org.apache.spark.sql.connector.catalog
 
 import java.lang.reflect.InvocationTargetException
 import java.util
-import java.util.NoSuchElementException
 import java.util.regex.Pattern
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -38,44 +38,48 @@ private[sql] object Catalogs {
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
    * @throws CatalogNotFoundException if the plugin class cannot be found
-   * @throws org.apache.spark.SparkException           if the plugin class cannot be instantiated
+   * @throws org.apache.spark.SparkException if the plugin class cannot be instantiated
    */
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
     val pluginClassName = try {
-      conf.getConfString("spark.sql.catalog." + name)
+      val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
+      // SPARK-39079 do configuration check first, otherwise some path-based table like
+      // `org.apache.spark.sql.json`.`/path/json_file` may fail on analyze phase
+      if (name.contains(".")) {
+        throw QueryExecutionErrors.invalidCatalogNameError(name)
+      }
+      _pluginClassName
     } catch {
       case _: NoSuchElementException =>
-        throw new CatalogNotFoundException(
-          s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+        throw QueryExecutionErrors.catalogPluginClassNotFoundError(name)
     }
     val loader = Utils.getContextOrSparkClassLoader
     try {
       val pluginClass = loader.loadClass(pluginClassName)
       if (!classOf[CatalogPlugin].isAssignableFrom(pluginClass)) {
-        throw new SparkException(
-          s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+        throw QueryExecutionErrors.catalogPluginClassNotImplementedError(name, pluginClassName)
       }
       val plugin = pluginClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       plugin.initialize(name, catalogOptions(name, conf))
       plugin
     } catch {
-      case _: ClassNotFoundException =>
-        throw new SparkException(
-          s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+      case e: ClassNotFoundException =>
+        throw QueryExecutionErrors.catalogPluginClassNotFoundForCatalogError(
+          name, pluginClassName, e)
       case e: NoSuchMethodException =>
-        throw new SparkException(
-          s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+        throw QueryExecutionErrors.catalogFailToFindPublicNoArgConstructorError(
+          name, pluginClassName, e)
       case e: IllegalAccessException =>
-        throw new SparkException(
-          s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+        throw QueryExecutionErrors.catalogFailToCallPublicNoArgConstructorError(
+          name, pluginClassName, e)
       case e: InstantiationException =>
-        throw new SparkException("Cannot instantiate abstract catalog plugin class for " +
-          s"catalog '$name': $pluginClassName", e.getCause)
+        throw QueryExecutionErrors.cannotInstantiateAbstractCatalogPluginClassError(
+          name, pluginClassName, e)
       case e: InvocationTargetException =>
-        throw new SparkException("Failed during instantiating constructor for catalog " +
-          s"'$name': $pluginClassName", e.getCause)
+        throw QueryExecutionErrors.failedToInstantiateConstructorForCatalogError(
+          name, pluginClassName, e)
     }
   }
 

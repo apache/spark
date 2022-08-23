@@ -107,7 +107,8 @@ class StreamSuite extends StreamTest {
   test("StreamingExecutionRelation.computeStats") {
     val memoryStream = MemoryStream[Int]
     val executionRelation = StreamingExecutionRelation(
-      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+      memoryStream, memoryStream.encoder.schema.toAttributes, None)(
+      memoryStream.sqlContext.sparkSession)
     assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
@@ -216,7 +217,7 @@ class StreamSuite extends StreamTest {
             query.processAllAvailable()
             // Parquet write page-level CRC checksums will change the file size and
             // affect the data order when reading these files. Please see PARQUET-1746 for details.
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort($"a").as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -310,7 +311,7 @@ class StreamSuite extends StreamTest {
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
     def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.lastExecution.asInstanceOf[IncrementalExecution].currentBatchId == expectedId,
+      AssertOnQuery(_.lastExecution.currentBatchId == expectedId,
         s"lastExecution's currentBatchId should be $expectedId")
 
     // For each batch, we would log the sink change after the execution
@@ -1175,8 +1176,18 @@ class StreamSuite extends StreamTest {
     new ClosedByInterruptException,
     new UncheckedIOException("test", new ClosedByInterruptException),
     new ExecutionException("test", new InterruptedException),
-    new UncheckedExecutionException("test", new InterruptedException))) {
-    test(s"view ${e.getClass.getSimpleName} as a normal query stop") {
+    new UncheckedExecutionException("test", new InterruptedException)) ++
+    Seq(
+      classOf[InterruptedException].getName,
+      classOf[InterruptedIOException].getName,
+      classOf[ClosedByInterruptException].getName).map { s =>
+    new py4j.Py4JException(
+      s"""
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
+        |: $s
+        |""".stripMargin)
+    }) {
+    test(s"view ${e.getClass.getSimpleName} [${e.getMessage}] as a normal query stop") {
       ThrowingExceptionInCreateSource.createSourceLatch = new CountDownLatch(1)
       ThrowingExceptionInCreateSource.exception = e
       val query = spark
@@ -1418,7 +1429,7 @@ class TestStateStoreProvider extends StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     throw new Exception("Successfully instantiated")

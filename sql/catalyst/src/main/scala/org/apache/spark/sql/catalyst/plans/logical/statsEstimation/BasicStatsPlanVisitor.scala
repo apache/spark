@@ -43,7 +43,10 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     AggregateEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitDistinct(p: Distinct): Statistics = default(p)
+  override def visitDistinct(p: Distinct): Statistics = {
+    val child = p.child
+    visitAggregate(Aggregate(child.output, child.output, child))
+  }
 
   override def visitExcept(p: Except): Statistics = fallback(p)
 
@@ -56,6 +59,8 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitGenerate(p: Generate): Statistics = default(p)
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
+
+  override def visitOffset(p: Offset): Statistics = fallback(p)
 
   override def visitIntersect(p: Intersect): Statistics = {
     val leftStats = p.left.stats
@@ -81,27 +86,27 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     ProjectEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitRepartition(p: Repartition): Statistics = default(p)
+  override def visitRepartition(p: Repartition): Statistics = fallback(p)
 
-  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
+
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = fallback(p)
 
   override def visitSample(p: Sample): Statistics = fallback(p)
 
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
   override def visitUnion(p: Union): Statistics = {
-    val stats = p.children.map(_.stats)
-    val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
-      None
-    } else {
-      Some(stats.map(_.rowCount.get).sum)
-    }
-    Statistics(sizeInBytes = stats.map(_.sizeInBytes).sum, rowCount = rowCount)
+    UnionEstimation.estimate(p).getOrElse(fallback(p))
   }
 
   override def visitWindow(p: Window): Statistics = fallback(p)
 
+  override def visitSort(p: Sort): Statistics = fallback(p)
+
   override def visitTail(p: Tail): Statistics = {
     fallback(p)
   }
+
+  override def visitWithCTE(p: WithCTE): Statistics = fallback(p)
 }

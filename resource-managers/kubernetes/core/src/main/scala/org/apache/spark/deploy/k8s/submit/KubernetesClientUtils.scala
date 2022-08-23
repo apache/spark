@@ -29,13 +29,17 @@ import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
 
 private[spark] object KubernetesClientUtils extends Logging {
 
-  // Config map name can be 63 chars at max.
-  def configMapName(prefix: String): String = s"${prefix.take(54)}-conf-map"
+  // Config map name can be KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH chars at max.
+  def configMapName(prefix: String): String = {
+    val suffix = "-conf-map"
+    s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
+  }
 
   val configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
 
@@ -85,11 +89,15 @@ private[spark] object KubernetesClientUtils extends Logging {
    */
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
       withLabels: Map[String, String] = Map()): ConfigMap = {
+    val configMapNameSpace =
+      confFileMap.getOrElse(KUBERNETES_NAMESPACE.key, KUBERNETES_NAMESPACE.defaultValueString)
     new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
+        .withNamespace(configMapNameSpace)
         .withLabels(withLabels.asJava)
         .endMetadata()
+      .withImmutable(true)
       .addToData(confFileMap.asJava)
       .build()
   }

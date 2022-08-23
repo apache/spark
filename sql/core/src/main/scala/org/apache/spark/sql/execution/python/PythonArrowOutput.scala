@@ -37,16 +37,20 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  */
 private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatch] =>
 
+  protected def handleMetadataAfterExec(stream: DataInputStream): Unit = { }
+
   protected def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[ColumnarBatch] = {
 
-    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
+    new ReaderIterator(
+      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for $pythonExec", 0, Long.MaxValue)
@@ -64,6 +68,11 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
       }
 
       private var batchLoaded = true
+
+      protected override def handleEndOfDataSection(): Unit = {
+        handleMetadataAfterExec(stream)
+        super.handleEndOfDataSection()
+      }
 
       protected override def read(): ColumnarBatch = {
         if (writerThread.exception.isDefined) {

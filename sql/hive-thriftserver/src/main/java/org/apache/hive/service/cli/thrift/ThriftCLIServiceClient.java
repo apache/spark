@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -363,13 +362,13 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
    * @see org.apache.hive.service.cli.ICLIService#getResultSetMetadata(org.apache.hive.service.cli.OperationHandle)
    */
   @Override
-  public TableSchema getResultSetMetadata(OperationHandle opHandle)
+  public TTableSchema getResultSetMetadata(OperationHandle opHandle)
       throws HiveSQLException {
     try {
       TGetResultSetMetadataReq req = new TGetResultSetMetadataReq(opHandle.toTOperationHandle());
       TGetResultSetMetadataResp resp = cliService.GetResultSetMetadata(req);
       checkStatus(resp.getStatus());
-      return new TableSchema(resp.getSchema());
+      return resp.getSchema();
     } catch (HiveSQLException e) {
       throw e;
     } catch (Exception e) {
@@ -378,7 +377,7 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
   }
 
   @Override
-  public RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation, long maxRows,
+  public TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation, long maxRows,
       FetchType fetchType) throws HiveSQLException {
     try {
       TFetchResultsReq req = new TFetchResultsReq();
@@ -388,7 +387,7 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
       req.setFetchType(fetchType.toTFetchType());
       TFetchResultsResp resp = cliService.FetchResults(req);
       checkStatus(resp.getStatus());
-      return RowSetFactory.create(resp.getResults(), opHandle.getProtocolVersion());
+      return resp.getResults();
     } catch (HiveSQLException e) {
       throw e;
     } catch (Exception e) {
@@ -400,7 +399,7 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
    * @see org.apache.hive.service.cli.ICLIService#fetchResults(org.apache.hive.service.cli.OperationHandle)
    */
   @Override
-  public RowSet fetchResults(OperationHandle opHandle) throws HiveSQLException {
+  public TRowSet fetchResults(OperationHandle opHandle) throws HiveSQLException {
     // TODO: set the correct default fetch size
     return fetchResults(opHandle, FetchOrientation.FETCH_NEXT, 10000, FetchType.QUERY_OUTPUT);
   }

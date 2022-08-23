@@ -46,7 +46,7 @@ trait SQLHelper {
       }
     }
     (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
+      if (SQLConf.isStaticConfigKey(k)) {
         throw new AnalysisException(s"Cannot modify the value of a static config: $k")
       }
       conf.setConfString(k, v)

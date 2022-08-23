@@ -6,9 +6,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -46,6 +46,12 @@ so they can be turned off and can be replaced with custom implementation. All CP
 which must be unique. One can set the following configuration entry in `SparkConf` to turn off CPs:
 `spark.sql.sources.disabledJdbcConnProviderList=name1,name2`.
 
+## How to enforce a specific JDBC connection provider?
+
+When more than one JDBC connection provider can handle a specific driver and options, it is possible to
+disambiguate and enforce a particular CP for the JDBC data source. One can set the DataFrame
+option `connectionProvider` to specify the name of the CP they want to use.
+
 ## How a JDBC connection provider found when new connection initiated?
 
 When a Spark source initiates JDBC connection it looks for a CP which supports the included driver,
@@ -80,5 +86,6 @@ Implementation considerations:
 * CPs are running in heavy multi-threaded environment and adding a state into a CP is not advised.
   If any state added then it must be synchronized properly. It could cause quite some headache to
   hunt down such issues.
-* Some of the CPs are modifying the JVM global security context so `getConnection` method is
-  synchronized by `org.apache.spark.security.SecurityConfigurationLock` to avoid race.
+* Some of the CPs are modifying the JVM global security context so if the CP's
+  `modifiesSecurityContext` method returns `true` then the CP's `getConnection` method will
+  be called synchronized by `org.apache.spark.security.SecurityConfigurationLock` to avoid race.

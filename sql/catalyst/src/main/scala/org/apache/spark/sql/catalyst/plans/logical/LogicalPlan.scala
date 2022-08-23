@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
 
 
@@ -30,14 +31,19 @@ abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
   with LogicalPlanStats
+  with LogicalPlanDistinctKeys
   with QueryPlanConstraints
   with Logging {
 
-  /** Metadata fields that can be projected from this node */
+  /**
+   * Metadata fields that can be projected from this node.
+   * Should be overridden if the plan does not propagate its children's output.
+   */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
-  def isStreaming: Boolean = children.exists(_.isStreaming)
+  def isStreaming: Boolean = _isStreaming
+  private[this] lazy val _isStreaming = children.exists(_.isStreaming)
 
   override def verboseStringWithSuffix(maxFields: Int): String = {
     super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
@@ -81,10 +87,10 @@ abstract class LogicalPlan
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
         case a: AttributeReference => a
-        case _ => sys.error(s"can not handle nested schema yet...  plan $this")
+        case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
-        throw new AnalysisException(
-          s"Unable to resolve ${field.name} given [${output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.cannotResolveAttributeError(
+          field.name, output.map(_.name).mkString(", "))
       }
     }
   }
@@ -158,8 +164,7 @@ abstract class LogicalPlan
 /**
  * A logical plan node with no children.
  */
-abstract class LeafNode extends LogicalPlan {
-  override final def children: Seq[LogicalPlan] = Nil
+trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
@@ -169,11 +174,7 @@ abstract class LeafNode extends LogicalPlan {
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan {
-  def child: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = child :: Nil
-
+trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
   /**
    * Generates all valid constraints including an set of aliased constraints by replacing the
    * original constraint expressions with the corresponding alias
@@ -183,7 +184,7 @@ abstract class UnaryNode extends LogicalPlan {
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
         allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) =>
+      case a @ Alias(e, _) if e.deterministic =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
@@ -202,12 +203,7 @@ abstract class UnaryNode extends LogicalPlan {
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan {
-  def left: LogicalPlan
-  def right: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = Seq(left, right)
-}
+trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
 
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -217,11 +213,12 @@ object LogicalPlanIntegrity {
 
   private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
-      e.collectFirst {
+      e.exists {
         // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
         // so, we filter out them in advance.
-        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
-      }.isDefined
+        case s: ScalarSubquery => s.plan.schema.fields.isEmpty
+        case _ => false
+      }
     }
   }
 
@@ -281,4 +278,11 @@ object LogicalPlanIntegrity {
   def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
     checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
   }
+}
+
+/**
+ * A logical plan node that can generate metadata columns
+ */
+trait ExposesMetadataColumns extends LogicalPlan {
+  def withMetadataColumns(): LogicalPlan
 }

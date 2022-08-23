@@ -41,7 +41,7 @@ public interface DownloadFile {
   DownloadFileWritableChannel openForWriting() throws IOException;
 
   /**
-   * The path of the file, intended only for debug purposes.
+   * The absolute path of the file.
    */
   String path();
 }

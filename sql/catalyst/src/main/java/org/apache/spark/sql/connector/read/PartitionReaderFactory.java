@@ -25,7 +25,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
  * A factory used to create {@link PartitionReader} instances.
- *
+ * <p>
  * If Spark fails to execute any methods in the implementations of this interface or in the returned
  * {@link PartitionReader} (by throwing an exception), corresponding Spark task would fail and
  * get retried until hitting the maximum retry times.
@@ -37,7 +37,7 @@ public interface PartitionReaderFactory extends Serializable {
 
   /**
    * Returns a row-based partition reader to read data from the given {@link InputPartition}.
-   *
+   * <p>
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
    */
@@ -45,7 +45,7 @@ public interface PartitionReaderFactory extends Serializable {
 
   /**
    * Returns a columnar partition reader to read data from the given {@link InputPartition}.
-   *
+   * <p>
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
    */
@@ -57,7 +57,7 @@ public interface PartitionReaderFactory extends Serializable {
    * Returns true if the given {@link InputPartition} should be read by Spark in a columnar way.
    * This means, implementations must also implement {@link #createColumnarReader(InputPartition)}
    * for the input partitions that this method returns true.
-   *
+   * <p>
    * As of Spark 2.4, Spark can only read all input partition in a columnar way, or none of them.
    * Data source can't mix columnar and row-based partitions. This may be relaxed in future
    * versions.

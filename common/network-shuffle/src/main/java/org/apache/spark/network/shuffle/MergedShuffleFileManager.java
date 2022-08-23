@@ -85,21 +85,34 @@ public interface MergedShuffleFileManager {
    *
    * @param appId application ID
    * @param shuffleId shuffle ID
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param reduceId reducer ID
    * @param chunkId merged shuffle file chunk ID
    * @return The {@link ManagedBuffer} for the given merged shuffle chunk
    */
-  ManagedBuffer getMergedBlockData(String appId, int shuffleId, int reduceId, int chunkId);
+  ManagedBuffer getMergedBlockData(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      int chunkId);
 
   /**
    * Get the meta information of a merged block.
    *
    * @param appId application ID
    * @param shuffleId shuffle ID
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param reduceId reducer ID
    * @return meta information of a merged block
    */
-  MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId);
+  MergedBlockMeta getMergedBlockMeta(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId);
 
   /**
    * Get the local directories which stores the merged shuffle files.
@@ -107,4 +120,10 @@ public interface MergedShuffleFileManager {
    * @param appId application ID
    */
   String[] getMergedBlockDirs(String appId);
+
+  /**
+   * Optionally close any resources associated the MergedShuffleFileManager, such as the
+   * leveldb for state persistence.
+   */
+  default void close() {}
 }

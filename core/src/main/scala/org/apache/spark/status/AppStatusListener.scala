@@ -21,7 +21,8 @@ import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -78,6 +79,7 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
+  private[spark] val liveMiscellaneousProcess = new HashMap[String, LiveMiscellaneousProcess]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -107,6 +109,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
+    case processInfoEvent: SparkListenerMiscellaneousProcessAdded =>
+      onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
 
@@ -175,6 +179,7 @@ private[spark] class AppStatusListener(
       details.getOrElse("Spark Properties", Nil),
       details.getOrElse("Hadoop Properties", Nil),
       details.getOrElse("System Properties", Nil),
+      details.getOrElse("Metrics Properties", Nil),
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 
@@ -596,6 +601,12 @@ private[spark] class AppStatusListener(
     liveUpdate(task, now)
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
+      if (event.taskInfo.speculative) {
+        stage.speculationStageSummary.numActiveTasks += 1
+        stage.speculationStageSummary.numTasks += 1
+        update(stage.speculationStageSummary, now)
+      }
+
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
 
@@ -741,6 +752,14 @@ private[spark] class AppStatusListener(
         update(esummary, now)
       } else {
         maybeUpdate(esummary, now)
+      }
+
+      if (event.taskInfo.speculative) {
+        stage.speculationStageSummary.numActiveTasks -= 1
+        stage.speculationStageSummary.numCompletedTasks += completedDelta
+        stage.speculationStageSummary.numFailedTasks += failedDelta
+        stage.speculationStageSummary.numKilledTasks += killedDelta
+        update(stage.speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
@@ -1018,7 +1037,7 @@ private[spark] class AppStatusListener(
    */
   def activeStages(): Seq[v1.StageData] = {
     liveStages.values.asScala
-      .filter(_.info.submissionTime.isDefined)
+      .filter(s => Option(s.info).exists(_.submissionTime.isDefined))
       .map(_.toApi())
       .toList
       .sortBy(_.stageId)
@@ -1124,6 +1143,13 @@ private[spark] class AppStatusListener(
     })
   }
 
+  private def getOrCreateOtherProcess(processId: String,
+      addTime: Long): LiveMiscellaneousProcess = {
+    liveMiscellaneousProcess.getOrElseUpdate(processId, {
+      new LiveMiscellaneousProcess(processId, addTime)
+    })
+  }
+
   private def updateStreamBlock(event: SparkListenerBlockUpdated, stream: StreamBlockId): Unit = {
     val storageLevel = event.blockUpdatedInfo.storageLevel
     if (storageLevel.isValid) {
@@ -1179,7 +1205,7 @@ private[spark] class AppStatusListener(
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
     val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
-      (_: (Int, Int)) => new LiveStage())
+      (_: (Int, Int)) => new LiveStage(info))
     stage.info = info
     stage
   }
@@ -1224,8 +1250,8 @@ private[spark] class AppStatusListener(
 
     if (dead > threshold) {
       val countToDelete = calculateNumberToRemove(dead, threshold)
-      val toDelete = kvstore.view(classOf[ExecutorSummaryWrapper]).index("active")
-        .max(countToDelete).first(false).last(false).asScala.toSeq
+      val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[ExecutorSummaryWrapper]).index("active")
+        .max(countToDelete).first(false).last(false))
       toDelete.foreach { e => kvstore.delete(e.getClass(), e.info.id) }
     }
   }
@@ -1243,12 +1269,47 @@ private[spark] class AppStatusListener(
     toDelete.foreach { j => kvstore.delete(j.getClass(), j.info.jobId) }
   }
 
-  private def cleanupStages(count: Long): Unit = {
-    val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
-    if (countToDelete <= 0L) {
-      return
+  private case class StageCompletionTime(
+      stageId: Int,
+      attemptId: Int,
+      completionTime: Long)
+
+  private def cleanupStagesWithInMemoryStore(countToDelete: Long): Seq[Array[Int]] = {
+    val stageArray = new ArrayBuffer[StageCompletionTime]()
+    val stageDataCount = new mutable.HashMap[Int, Int]()
+    KVUtils.foreach(kvstore.view(classOf[StageDataWrapper])) { s =>
+      // Here we keep track of the total number of StageDataWrapper entries for each stage id.
+      // This will be used in cleaning up the RDDOperationGraphWrapper data.
+      if (stageDataCount.contains(s.info.stageId)) {
+        stageDataCount(s.info.stageId) += 1
+      } else {
+        stageDataCount(s.info.stageId) = 1
+      }
+      if (s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING) {
+        val candidate =
+          StageCompletionTime(s.info.stageId, s.info.attemptId, s.completionTime)
+        stageArray.append(candidate)
+      }
     }
 
+    // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
+    // This is safe since the job itself contains enough information to render skipped stages in the
+    // UI.
+    stageArray.sortBy(_.completionTime).take(countToDelete.toInt).map { s =>
+      val key = Array(s.stageId, s.attemptId)
+      kvstore.delete(classOf[StageDataWrapper], key)
+      stageDataCount(s.stageId) -= 1
+      // Check whether there are remaining attempts for the same stage. If there aren't, then
+      // also delete the RDD graph data.
+      if (stageDataCount(s.stageId) == 0) {
+        kvstore.delete(classOf[RDDOperationGraphWrapper], s.stageId)
+      }
+      cleanupCachedQuantiles(key)
+      key
+    }.toSeq
+  }
+
+  private def cleanupStagesInKVStore(countToDelete: Long): Seq[Array[Int]] = {
     // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
     // This is safe since the job itself contains enough information to render skipped stages in the
     // UI.
@@ -1257,7 +1318,7 @@ private[spark] class AppStatusListener(
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
-    val stageIds = stages.map { s =>
+    stages.map { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
       kvstore.delete(s.getClass(), key)
 
@@ -1283,6 +1344,22 @@ private[spark] class AppStatusListener(
 
       cleanupCachedQuantiles(key)
       key
+    }
+  }
+
+  private def cleanupStages(count: Long): Unit = {
+    val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
+    if (countToDelete <= 0L) {
+      return
+    }
+
+    // SPARK-36827: For better performance and avoiding OOM, here we use a optimized method for
+    //              cleaning the StageDataWrapper and RDDOperationGraphWrapper data if Spark is
+    //              using InMemoryStore.
+    val stageIds = if (kvstore.usingInMemoryStore) {
+      cleanupStagesWithInMemoryStore(countToDelete)
+    } else {
+      cleanupStagesInKVStore(countToDelete)
     }
 
     // Delete summaries in one pass, as deleting them for each stage is slow
@@ -1330,12 +1407,10 @@ private[spark] class AppStatusListener(
   }
 
   private def cleanupCachedQuantiles(stageKey: Array[Int]): Unit = {
-    val cachedQuantiles = kvstore.view(classOf[CachedQuantile])
+    val cachedQuantiles = KVUtils.viewToSeq(kvstore.view(classOf[CachedQuantile])
       .index("stage")
       .first(stageKey)
-      .last(stageKey)
-      .asScala
-      .toList
+      .last(stageKey))
     cachedQuantiles.foreach { q =>
       kvstore.delete(q.getClass(), q.id)
     }
@@ -1351,6 +1426,18 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  private def onMiscellaneousProcessAdded(
+      processInfoEvent: SparkListenerMiscellaneousProcessAdded): Unit = {
+    val processInfo = processInfoEvent.info
+    val miscellaneousProcess =
+      getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
+    miscellaneousProcess.processLogs = processInfo.logUrlInfo
+    miscellaneousProcess.hostPort = processInfo.hostPort
+    miscellaneousProcess.isActive = true
+    miscellaneousProcess.totalCores = processInfo.cores
+    update(miscellaneousProcess, System.nanoTime())
   }
 
 }

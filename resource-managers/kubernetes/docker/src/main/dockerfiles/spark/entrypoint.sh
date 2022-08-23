@@ -30,10 +30,14 @@ set -e
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
     if [ -w /etc/passwd ] ; then
-	echo "$myuid:x:$myuid:$mygid:${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false" >> /etc/passwd
+        echo "$myuid:x:$myuid:$mygid:${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false" >> /etc/passwd
     else
-	echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
+        echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
     fi
+fi
+
+if [ -z "$JAVA_HOME" ]; then
+  JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 > /dev/null | grep 'java.home' | awk '{print $3}')
 fi
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
@@ -85,13 +89,14 @@ case "$1" in
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
-      org.apache.spark.executor.CoarseGrainedExecutorBackend
+      org.apache.spark.scheduler.cluster.k8s.KubernetesExecutorBackend
       --driver-url $SPARK_DRIVER_URL
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
       --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
+      --podName $SPARK_EXECUTOR_POD_NAME
     )
     ;;
 

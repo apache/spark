@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.tags.SlowHiveTest
 
 // Disable AQE because metric info is different with AQE on/off
+@SlowHiveTest
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   with DisableAdaptiveExecutionSuite {
 
@@ -42,9 +45,10 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
       withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
         withTable("t") {
           val df = sql(s"CREATE TABLE t STORED AS PARQUET AS SELECT 1 as a")
+          assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
+          val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
           val dataWritingCommandExec =
-            df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
-          dataWritingCommandExec.executeCollect()
+            commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
           val createTableAsSelect = dataWritingCommandExec.cmd
           if (canOptimized) {
             assert(createTableAsSelect.isInstanceOf[OptimizedCreateHiveTableAsSelectCommand])

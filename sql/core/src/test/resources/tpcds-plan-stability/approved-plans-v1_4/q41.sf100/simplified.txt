@@ -11,13 +11,13 @@ TakeOrderedAndProject [i_product_name]
                     Filter [i_manufact_id,i_manufact]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.item [i_manufact_id,i_manufact,i_product_name]
+                          Scan parquet spark_catalog.default.item [i_manufact_id,i_manufact,i_product_name]
                   InputAdapter
                     BroadcastExchange #2
                       WholeStageCodegen (2)
                         Project [i_manufact]
                           Filter [item_cnt]
-                            HashAggregate [i_manufact,count] [count(1),item_cnt,i_manufact,count]
+                            HashAggregate [i_manufact,count] [count(1),item_cnt,count]
                               InputAdapter
                                 Exchange [i_manufact] #3
                                   WholeStageCodegen (1)
@@ -26,4 +26,4 @@ TakeOrderedAndProject [i_product_name]
                                         Filter [i_category,i_color,i_units,i_size,i_manufact]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.item [i_category,i_manufact,i_size,i_color,i_units]
+                                              Scan parquet spark_catalog.default.item [i_category,i_manufact,i_size,i_color,i_units]

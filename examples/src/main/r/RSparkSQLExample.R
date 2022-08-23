@@ -101,11 +101,19 @@ df <- sql("SELECT * FROM table")
 
 # Ignore corrupt files
 # $example on:ignore_corrupt_files$
-# enable ignore corrupt files
+# enable ignore corrupt files via the data source option
+# dir1/file3.json is corrupt from parquet's view
+testCorruptDF0 <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"), ignoreCorruptFiles = "true")
+head(testCorruptDF0)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+
+# enable ignore corrupt files via the configuration
 sql("set spark.sql.files.ignoreCorruptFiles=true")
 # dir1/file3.json is corrupt from parquet's view
-testCorruptDF <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"))
-head(testCorruptDF)
+testCorruptDF1 <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"))
+head(testCorruptDF1)
 #            file
 # 1 file1.parquet
 # 2 file2.parquet
@@ -156,6 +164,11 @@ afterDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedAfter 
 df <- read.df("examples/src/main/resources/users.orc", "orc")
 write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
 # $example off:manual_save_options_orc$
+
+# $example on:manual_save_options_parquet$
+df <- read.df("examples/src/main/resources/users.parquet", "parquet")
+write.parquet(df, "users_with_options.parquet", parquet.bloom.filter.enabled#favorite_color = true, parquet.bloom.filter.expected.ndv#favorite_color = 1000000, parquet.enable.dictionary = true, parquet.page.write-checksum.enabled = false)
+# $example off:manual_save_options_parquet$
 
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")

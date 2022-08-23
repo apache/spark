@@ -67,14 +67,16 @@ abstract class XPathExtract
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
+case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract with Predicate {
 
   override def prettyName: String = "xpath_boolean"
-  override def dataType: DataType = BooleanType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     xpathUtil.evalBoolean(xml.asInstanceOf[UTF8String].toString, pathString)
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathBoolean = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -96,6 +98,9 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalNumber(xml.asInstanceOf[UTF8String].toString, pathString)
     if (ret eq null) null else ret.shortValue()
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathShort = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -117,6 +122,9 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalNumber(xml.asInstanceOf[UTF8String].toString, pathString)
     if (ret eq null) null else ret.intValue()
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -138,6 +146,9 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalNumber(xml.asInstanceOf[UTF8String].toString, pathString)
     if (ret eq null) null else ret.longValue()
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathLong = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -159,6 +170,9 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalNumber(xml.asInstanceOf[UTF8String].toString, pathString)
     if (ret eq null) null else ret.floatValue()
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathFloat = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -181,6 +195,9 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalNumber(xml.asInstanceOf[UTF8String].toString, pathString)
     if (ret eq null) null else ret.doubleValue()
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathDouble = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -202,6 +219,9 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
     val ret = xpathUtil.evalString(xml.asInstanceOf[UTF8String].toString, pathString)
     UTF8String.fromString(ret)
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(xml = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -233,4 +253,7 @@ case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
       null
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): XPathList = copy(xml = newLeft, path = newRight)
 }

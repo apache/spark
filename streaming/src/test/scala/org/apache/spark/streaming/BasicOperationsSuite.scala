@@ -28,7 +28,7 @@ import org.apache.spark.{HashPartitioner, SparkConf, SparkException}
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.ManualClock
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -742,7 +742,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         }
 
         Thread.sleep(200)
-        for (i <- 0 until input.size) {
+        for (i <- input.indices) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(200)
           val numCompletedBatches = batchCounter.getNumCompletedBatches
@@ -807,7 +807,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         cleanupTestInput.size,
         numExpectedOutput,
         () => assertCleanup(operatedStream))
-      val clock = ssc.scheduler.clock.asInstanceOf[Clock]
+      val clock = ssc.scheduler.clock
       assert(clock.getTimeMillis() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream

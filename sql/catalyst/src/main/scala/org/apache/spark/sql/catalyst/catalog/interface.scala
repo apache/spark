@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 import java.util.Date
 
 import scala.collection.mutable
@@ -31,13 +31,13 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_CREATED_FROM_DATAFRAME
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -119,7 +119,8 @@ case class CatalogTablePartition(
     map.put("Partition Values", s"[$specString]")
     map ++= storage.toLinkedHashMap
     if (parameters.nonEmpty) {
-      map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+      map.put("Partition Parameters", s"{" +
+        s"${SQLConf.get.redactOptions(parameters).map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
     map.put("Created Time", new Date(createTime).toString)
     val lastAccess = {
@@ -383,13 +384,16 @@ case class CatalogTable(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val tableProperties = properties.toSeq.sortBy(_._1)
-      .map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val tableProperties =
+      SQLConf.get.redactOptions(properties.filterKeys(!_.startsWith(VIEW_PREFIX)).toMap)
+        .toSeq.sortBy(_._1)
+        .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val lastAccess = {
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
     }
 
+    identifier.catalog.foreach(map.put("Catalog", _))
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner != null && owner.nonEmpty) map.put("Owner", owner)
@@ -412,7 +416,9 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
+    if (tableProperties.nonEmpty) {
+      map.put("Table Properties", tableProperties.mkString("[", ", ", "]"))
+    }
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
@@ -468,7 +474,7 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
 
-  val VIEW_CREATED_FROM_DATAFRAME = VIEW_PREFIX + "createdFromDataFrame"
+  val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 
   def splitLargeTableProp(
       key: String,
@@ -652,10 +658,13 @@ object CatalogColumnStat extends Logging {
 
   val VERSION = 2
 
-  private def getTimestampFormatter(isParsing: Boolean): TimestampFormatter = {
+  def getTimestampFormatter(
+      isParsing: Boolean,
+      format: String = "yyyy-MM-dd HH:mm:ss.SSSSSS",
+      zoneId: ZoneId = ZoneOffset.UTC): TimestampFormatter = {
     TimestampFormatter(
-      format = "yyyy-MM-dd HH:mm:ss.SSSSSS",
-      zoneId = ZoneOffset.UTC,
+      format = format,
+      zoneId = zoneId,
       isParsing = isParsing)
   }
 
@@ -666,7 +675,7 @@ object CatalogColumnStat extends Logging {
     dataType match {
       case BooleanType => s.toBoolean
       case DateType if version == 1 => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
-      case DateType => DateFormatter(ZoneOffset.UTC).parse(s)
+      case DateType => DateFormatter().parse(s)
       case TimestampType if version == 1 =>
         DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
       case TimestampType => getTimestampFormatter(isParsing = true).parse(s)
@@ -691,7 +700,7 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateFormatter(ZoneOffset.UTC).format(v.asInstanceOf[Int])
+      case DateType => DateFormatter().format(v.asInstanceOf[Int])
       case TimestampType => getTimestampFormatter(isParsing = false).format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
@@ -782,14 +791,14 @@ case class UnresolvedCatalogRelation(
 
 /**
  * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
- * and will be transformed to `View` during analysis. If the temporary view was
- * created from a dataframe, `plan` is set to the analyzed plan for the view.
+ * and will be transformed to `View` during analysis. If the temporary view is
+ * storing an analyzed plan, `plan` is set to the analyzed plan for the view.
  */
 case class TemporaryViewRelation(
     tableMeta: CatalogTable,
     plan: Option[LogicalPlan] = None) extends LeafNode {
   require(plan.isEmpty ||
-    (plan.get.resolved && tableMeta.properties.contains(VIEW_CREATED_FROM_DATAFRAME)))
+    (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)))
 
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
@@ -831,7 +840,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw QueryExecutionErrors.tableStatsNotSpecifiedError
+      throw new IllegalStateException("Table stats must be specified.")
     }
   }
 

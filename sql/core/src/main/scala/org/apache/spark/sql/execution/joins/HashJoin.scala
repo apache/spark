@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -40,7 +39,7 @@ private[joins] case class HashedRelationInfo(
     keyIsUnique: Boolean,
     isEmpty: Boolean)
 
-trait HashJoin extends BaseJoinExec with CodegenSupport {
+trait HashJoin extends JoinCodegenSupport {
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -138,7 +137,13 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     UnsafeProjection.create(streamedBoundKeys)
 
   @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
-    Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+    if (joinType == FullOuter && buildSide == BuildLeft) {
+      // Put join left side before right side. This is to be consistent with
+      // `ShuffledHashJoinExec.fullOuterJoin`.
+      Predicate.create(condition.get, buildPlan.output ++ streamedPlan.output).eval _
+    } else {
+      Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+    }
   } else {
     (r: InternalRow) => true
   }
@@ -379,70 +384,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   /**
-   * Generates the code for variable of build side.
-   */
-  private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
-    ctx.currentVars = null
-    ctx.INPUT_ROW = matched
-    buildPlan.output.zipWithIndex.map { case (a, i) =>
-      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType.isInstanceOf[InnerLike]) {
-        ev
-      } else {
-        // the variables are needed even there is no matched rows
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
-        val javaType = CodeGenerator.javaType(a.dataType)
-        val code = code"""
-          |boolean $isNull = true;
-          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
-          |if ($matched != null) {
-          |  ${ev.code}
-          |  $isNull = ${ev.isNull};
-          |  $value = ${ev.value};
-          |}
-         """.stripMargin
-        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
-      }
-    }
-  }
-
-  /**
-   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left Semi
-   * and Left Anti joins.
-   */
-  protected def getJoinCondition(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
-    val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = s"${ev.isNull} || !${ev.value}"
-      s"""
-         |$eval
-         |${ev.code}
-         |if (!($skipRow))
-       """.stripMargin
-    } else {
-      ""
-    }
-    (matched, checkCondition, buildVars)
-  }
-
-  /**
    * Generates the code for Inner join.
    */
   protected def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val resultVars = buildSide match {
@@ -497,7 +444,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -573,7 +520,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isEmptyHashedRelation) {
@@ -635,7 +582,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
 
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
 
     if (keyIsUnique) {
       val found = ctx.freshName("found")
@@ -699,7 +646,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = false)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
@@ -758,6 +705,13 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
+    // TODO: support BooleanType, DateType and TimestampType
+    keys.forall(_.dataType.isInstanceOf[IntegralType]) &&
+      keys.map(_.dataType.defaultSize).sum <= 8
+  }
+
   /**
    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
    *
@@ -765,9 +719,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
    */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
-    // TODO: support BooleanType, DateType and TimestampType
-    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
-      || keys.map(_.dataType.defaultSize).sum > 8) {
+    if (!canRewriteAsLongType(keys)) {
       return keys
     }
 
@@ -789,18 +741,28 @@ object HashJoin extends CastSupport with SQLConfHelper {
    * determine the number of bits to shift
    */
   def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    assert(canRewriteAsLongType(keys))
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
-      cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+      Cast(
+        child = BoundReference(0, LongType, nullable = false),
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     } else {
       val shiftedBits =
         keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
       val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
       // build the schema for unpacking the required key
-      cast(BitwiseAnd(
+      val castChild = BitwiseAnd(
         ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
-        Literal(mask)), keys(index).dataType)
+        Literal(mask))
+      Cast(
+        child = castChild,
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     }
   }
 }

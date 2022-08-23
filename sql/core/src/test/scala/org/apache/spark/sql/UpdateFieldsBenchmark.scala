@@ -28,11 +28,12 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * {{{
  *   To run this benchmark:
  *   1. without sbt:
- *      bin/spark-submit --class <this class> <spark sql test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. with sbt:
- *      build/sbt "sql/test:runMain <this class>"
+ *      build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *   Results will be written to "benchmarks/UpdateFieldsBenchmark-results.txt".
  * }}}
  */

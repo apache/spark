@@ -48,10 +48,12 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
-    val tsExMsg = intercept[UnsupportedOperationException] {
+    roundtrip(YearMonthIntervalType())
+    roundtrip(DayTimeIntervalType())
+    val tsExMsg = intercept[IllegalStateException] {
       roundtrip(TimestampType)
     }
-    assert(tsExMsg.getMessage.contains("timeZoneId"))
+    assert(tsExMsg.getMessage.contains("timezoneId"))
   }
 
   test("timestamp") {

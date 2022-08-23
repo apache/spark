@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-ADD JAR file_name
+ADD { JAR | JARS } file_name [ ... ]
 ```
 
 ### Parameters
@@ -52,6 +52,7 @@ ADD JAR /tmp/test.jar;
 ADD JAR "/path/to/some.jar";
 ADD JAR '/some/other.jar';
 ADD JAR "/path with space/abc.jar";
+ADD JARS "/path with space/def.jar" '/path with space/ghi.jar';
 ADD JAR "ivy://group:module:version";
 ADD JAR "ivy://group:module:version?transitive=false"
 ADD JAR "ivy://group:module:version?transitive=true"
@@ -63,3 +64,5 @@ ADD JAR "ivy://group:module:version?exclude=group:module&transitive=true"
 * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
 * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
 * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)

@@ -89,6 +89,10 @@ private[scheduler] case class WorkerRemoved(workerId: String, host: String, mess
   extends DAGSchedulerEvent
 
 private[scheduler]
+case class StageFailed(stageId: Int, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
+
+private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 
@@ -105,3 +109,13 @@ private[scheduler]
 case class UnschedulableTaskSetRemoved(stageId: Int, stageAttemptId: Int)
   extends DAGSchedulerEvent
 
+private[scheduler] case class RegisterMergeStatuses(
+    stage: ShuffleMapStage, mergeStatuses: Seq[(Int, MergeStatus)])
+  extends DAGSchedulerEvent
+
+private[scheduler] case class ShuffleMergeFinalized(stage: ShuffleMapStage)
+  extends DAGSchedulerEvent
+
+private[scheduler] case class ShufflePushCompleted(
+    shuffleId: Int, shuffleMergeId: Int, mapIndex: Int)
+  extends DAGSchedulerEvent

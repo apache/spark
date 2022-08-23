@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -135,10 +137,13 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[ExprCode]]
    */
   def genCode(ctx: CodegenContext): ExprCode = {
-    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+    ctx.subExprEliminationExprs.get(ExpressionEquals(this)).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
+      ExprCode(
+        ctx.registerComment(this.toString),
+        subExprState.eval.isNull,
+        subExprState.eval.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
@@ -218,6 +223,34 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
+  // Expression canonicalization is done in 2 phases:
+  //   1. Recursively canonicalize each node in the expression tree. This does not change the tree
+  //      structure and is more like "node-local" canonicalization.
+  //   2. Find adjacent commutative operators in the expression tree, reorder them to get a
+  //      static order and remove cosmetic variations. This may change the tree structure
+  //      dramatically and is more like a "global" canonicalization.
+  //
+  // The first phase is done by `preCanonicalized`. It's a `lazy val` which recursively calls
+  // `preCanonicalized` on the children. This means that almost every node in the expression tree
+  // will instantiate the `preCanonicalized` variable, which is good for performance as you can
+  // reuse the canonicalization result of the children when you construct a new expression node.
+  //
+  // The second phase is done by `canonicalized`, which simply calls `Canonicalize` and is kind of
+  // the actual "user-facing API" of expression canonicalization. Only the root node of the
+  // expression tree will instantiate the `canonicalized` variable. This is different from
+  // `preCanonicalized`, because `canonicalized` does "global" canonicalization and most of the time
+  // you cannot reuse the canonicalization result of the children.
+
+  /**
+   * An internal lazy val to implement expression canonicalization. It should only be called in
+   * `canonicalized`, or in subclass's `preCanonicalized` when the subclass overrides this lazy val
+   * to provide custom canonicalization logic.
+   */
+  lazy val preCanonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.preCanonicalized)
+    withNewChildren(canonicalizedChildren)
+  }
+
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
@@ -226,10 +259,7 @@ abstract class Expression extends TreeNode[Expression] {
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
    */
-  lazy val canonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.canonicalized)
-    Canonicalize.execute(withNewChildren(canonicalizedChildren))
-  }
+  lazy val canonicalized: Expression = Canonicalize.reorderCommutativeOperators(preCanonicalized)
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
@@ -237,7 +267,7 @@ abstract class Expression extends TreeNode[Expression] {
    *
    * See [[Canonicalize]] for more details.
    */
-  def semanticEquals(other: Expression): Boolean =
+  final def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
 
   /**
@@ -286,8 +316,18 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
+    throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
+
+  protected def typeSuffix =
+    if (resolved) {
+      dataType match {
+        case LongType => "L"
+        case _ => ""
+      }
+    } else {
+      ""
+    }
 }
 
 
@@ -313,63 +353,62 @@ trait Unevaluable extends Expression {
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
- *
- * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
- * case class constructor, and define a normal constructor that accepts only the original
- * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
- * works correctly, the implementation should also override flatArguments method and sql method.
  */
-trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
-  override def nullable: Boolean = child.nullable
-  override def dataType: DataType = child.dataType
+trait RuntimeReplaceable extends Expression {
+  def replacement: Expression
+
+  override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+  override def nullable: Boolean = replacement.nullable
+  override def dataType: DataType = replacement.dataType
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val canonicalized: Expression = child.canonicalized
+  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
 
-  /**
-   * Only used to generate SQL representation of this expression.
-   *
-   * Implementations should override this with original parameters
-   */
-  def exprsReplaced: Seq[Expression]
-
-  override def sql: String = mkString(exprsReplaced.map(_.sql))
-
-  def mkString(childrenString: Seq[String]): String = {
-    prettyName + childrenString.mkString("(", ", ", ")")
-  }
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 /**
- * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * An add-on of [[RuntimeReplaceable]]. It makes `replacement` the child of the expression, to
+ * inherit the analysis rules for it, such as type coercion. The implementation should put
+ * `replacement` in the case class constructor, and define a normal constructor that accepts only
+ * the original parameters. For an example, see [[TryAdd]]. To make sure the explain plan and
+ * expression SQL works correctly, the implementation should also implement the `parameters` method.
+ */
+trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplaceable =>
+  override def child: Expression = replacement
+  def parameters: Seq[Expression]
+  override def flatArguments: Iterator[Any] = parameters.iterator
+  // This method is used to generate a SQL string with transformed inputs. This is necessary as
+  // the actual inputs are not the children of this expression.
+  def makeSQLString(childrenSQL: Seq[String]): String = {
+    prettyName + childrenSQL.mkString("(", ", ", ")")
+  }
+  final override def sql: String = makeSQLString(parameters.map(_.sql))
+}
+
+/**
+ * An add-on of [[AggregateFunction]]. This gets rewritten (currently by the optimizer) into a
  * different aggregate expression for evaluation. This is mainly used to provide compatibility
  * with other databases. For example, we use this to support every, any/some aggregates by rewriting
  * them with Min and Max respectively.
  */
-trait UnevaluableAggregate extends DeclarativeAggregate {
-
-  override def nullable: Boolean = true
-
-  override lazy val aggBufferAttributes =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "aggBufferAttributes", this)
-
-  override lazy val initialValues: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "initialValues", this)
-
-  override lazy val updateExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "updateExpressions", this)
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "mergeExpressions", this)
-
-  override lazy val evaluateExpression: Expression =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "evaluateExpression", this)
+trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
+  override def aggBufferSchema: StructType = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  }
+  override def aggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  }
+  override def inputAggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  }
 }
 
 /**
@@ -381,6 +420,7 @@ trait NonSQLExpression extends Expression {
     transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
+      case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
     }.toString
   }
 }
@@ -422,6 +462,25 @@ trait Nondeterministic extends Expression {
 }
 
 /**
+ * An expression that contains conditional expression branches, so not all branches will be hit.
+ * All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  final override def foldable: Boolean = children.forall(_.foldable)
+
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return groups of branches. For each group, at least one branch will be hit at runtime,
+   * so that we can eagerly evaluate the common expressions of a group.
+   */
+  def branchGroups: Seq[Seq[Expression]]
+}
+
+/**
  * An expression that contains mutable state. A stateful expression is always non-deterministic
  * because the results it produces during evaluation are not only dependent on the given input
  * but also on its internal state.
@@ -451,21 +510,14 @@ trait Stateful extends Nondeterministic {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression {
-
-  override final def children: Seq[Expression] = Nil
-}
+abstract class LeafExpression extends Expression with LeafLike[Expression]
 
 
 /**
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression {
-
-  def child: Expression
-
-  override final def children: Seq[Expression] = child :: Nil
+abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -489,7 +541,8 @@ abstract class UnaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input: Any): Any =
-    sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
@@ -542,6 +595,38 @@ abstract class UnaryExpression extends Expression {
   }
 }
 
+/**
+ * An expression with SQL query context. The context string can be serialized from the Driver
+ * to executors. It will also be kept after rule transforms.
+ */
+trait SupportQueryContext extends Expression with Serializable {
+  protected var queryContext: Option[SQLQueryContext] = initQueryContext()
+
+  def initQueryContext(): Option[SQLQueryContext]
+
+  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
+
+  def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
+    if (withErrorContext && queryContext.isDefined) {
+      ctx.addReferenceObj("errCtx", queryContext.get)
+    } else {
+      "null"
+    }
+  }
+
+  // Note: Even though query contexts are serialized to executors, it will be regenerated from an
+  //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
+  //       for better performance. Thus, we need to copy the original query context during
+  //       transforms. The query context string is considered as a "tag" on the expression here.
+  override def copyTagsFrom(other: Expression): Unit = {
+    other match {
+      case s: SupportQueryContext =>
+        queryContext = s.queryContext
+      case _ =>
+    }
+    super.copyTagsFrom(other)
+  }
+}
 
 object UnaryExpression {
   def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)
@@ -552,12 +637,7 @@ object UnaryExpression {
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression {
-
-  def left: Expression
-  def right: Expression
-
-  override final def children: Seq[Expression] = Seq(left, right)
+abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -587,7 +667,8 @@ abstract class BinaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating binary evaluation code.
@@ -701,7 +782,7 @@ object BinaryOperator {
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class TernaryExpression extends Expression {
+abstract class TernaryExpression extends Expression with TernaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -712,12 +793,11 @@ abstract class TernaryExpression extends Expression {
    * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
           return nullSafeEval(value1, value2, value3)
         }
@@ -732,7 +812,8 @@ abstract class TernaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("TernaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.
@@ -799,7 +880,7 @@ abstract class TernaryExpression extends Expression {
  * An expression with four inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class QuaternaryExpression extends Expression {
+abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -810,14 +891,13 @@ abstract class QuaternaryExpression extends Expression {
    * If subclass of QuaternaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
-          val value4 = exprs(3).eval(input)
+          val value4 = fourth.eval(input)
           if (value4 != null) {
             return nullSafeEval(value1, value2, value3, value4)
           }
@@ -833,7 +913,8 @@ abstract class QuaternaryExpression extends Expression {
    *  full control of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
-    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("QuaternaryExpressions",
+      "eval", "nullSafeEval")
 
   /**
    * Short hand for generating quaternary evaluation code.
@@ -958,7 +1039,8 @@ abstract class SeptenaryExpression extends Expression {
       input5: Any,
       input6: Any,
       input7: Option[Any]): Any = {
-    sys.error("SeptenaryExpression must override either eval or nullSafeEval")
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError("SeptenaryExpression",
+      "eval", "nullSafeEval")
   }
 
   /**

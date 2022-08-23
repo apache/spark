@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /**
@@ -44,7 +45,7 @@ private[thriftserver] class ThriftServerTab(
 private[thriftserver] object ThriftServerTab {
   def getSparkUI(sparkContext: SparkContext): SparkUI = {
     sparkContext.ui.getOrElse {
-      throw new SparkException("Parent SparkUI to attach this tab to not found!")
+      throw QueryExecutionErrors.parentSparkUIToAttachTabNotFoundError()
     }
   }
 }

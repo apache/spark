@@ -42,14 +42,12 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  * @param child logical plan whose output is transformed.
  * @param ioschema the class set that defines how to handle input/output data.
  */
 private[hive] case class HiveScriptTransformationExec(
-    input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
@@ -66,7 +64,7 @@ private[hive] case class HiveScriptTransformationExec(
       outputSoi: StructObjectInspector,
       hadoopConf: Configuration): Iterator[InternalRow] = {
     new Iterator[InternalRow] with HiveInspectors {
-      var curLine: String = null
+      private var completed = false
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
@@ -80,6 +78,9 @@ private[hive] case class HiveScriptTransformationExec(
       lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
       override def hasNext: Boolean = {
+        if (completed) {
+          return false
+        }
         try {
           if (scriptOutputWritable == null) {
             scriptOutputWritable = reusedWritableObject
@@ -87,6 +88,7 @@ private[hive] case class HiveScriptTransformationExec(
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                 checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                completed = true
                 return false
               }
             } else {
@@ -99,6 +101,7 @@ private[hive] case class HiveScriptTransformationExec(
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
                   checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                  completed = true
                   return false
               }
             }
@@ -142,14 +145,14 @@ private[hive] case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
+    val (inputSerde, inputSoi) = initInputSerDe(ioschema, child.output).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
     val finalInput = if (inputSerde == null) {
       inputExpressionsWithoutSerde
     } else {
-      input
+      child.output
     }
 
     val outputProjection = new InterpretedProjection(finalInput, child.output)
@@ -184,6 +187,9 @@ private[hive] case class HiveScriptTransformationExec(
 
     outputIterator
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): HiveScriptTransformationExec =
+    copy(child = newChild)
 }
 
 private[hive] case class HiveScriptTransformationWriterThread(

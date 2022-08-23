@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALA_UDF, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 import org.apache.spark.util.Utils
@@ -57,14 +58,16 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
+
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def name: String = udfName.getOrElse("UDF")
 
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
-    Canonicalize.execute(copy(children = children.map(_.canonicalized), inputEncoders = Nil))
+    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil, outputEncoder = None)
   }
 
   /**
@@ -1195,4 +1198,7 @@ case class ScalaUDF(
 
     resultConverter(result)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDF =
+    copy(children = newChildren)
 }

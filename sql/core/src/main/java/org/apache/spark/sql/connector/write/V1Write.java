@@ -26,6 +26,8 @@ import org.apache.spark.sql.sources.InsertableRelation;
  * <p>
  * Tables that have {@link TableCapability#V1_BATCH_WRITE} in the list of their capabilities
  * must build {@link V1Write}.
+ *
+ * @since 3.2.0
  */
 @Unstable
 public interface V1Write extends Write {

@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_names ] [ , ... ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
@@ -84,7 +84,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
      * [Join relation](sql-ref-syntax-qry-select-join.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
-     * Subquery
+     * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      
 * **PIVOT**
@@ -164,6 +164,10 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
      )
      ```
 
+* **TRANSFORM**
+
+     Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
+
 ### Related Statements
 
 * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
@@ -187,3 +191,5 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
+* [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
+* [LATERAL Subquery](sql-ref-syntax-qry-select-lateral-subquery.html)

@@ -71,7 +71,7 @@ case class InsertIntoHiveDirCommand(
       storage = storage,
       schema = outputColumns.toStructType
     )
-    DDLUtils.checkDataColNames(table)
+    DDLUtils.checkTableColumns(table)
 
     val hiveTable = HiveClientImpl.toHiveTable(table)
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
@@ -137,5 +137,8 @@ case class InsertIntoHiveDirCommand(
 
     Seq.empty[Row]
   }
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): InsertIntoHiveDirCommand = copy(query = newChild)
 }
 

@@ -70,7 +70,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](part.numPartitions)
-    for (i <- 0 until array.length) {
+    for (i <- array.indices) {
       // Each CoGroupPartition will depend on rdd1 and rdd2
       array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
         dependencies(j) match {

@@ -15,25 +15,66 @@
 # limitations under the License.
 #
 
+import json
+import os
 import sys
 import random
 import warnings
+from collections.abc import Iterable
 from functools import reduce
 from html import escape as html_escape
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+    overload,
+    TYPE_CHECKING,
+)
+
+from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket
-from pyspark.serializers import BatchedSerializer, PickleSerializer, \
-    UTF8Deserializer
+from pyspark._globals import _NoValueType
+from pyspark.context import SparkContext
+from pyspark.rdd import (
+    RDD,
+    _load_from_socket,
+    _local_iterator_from_socket,
+)
+from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    Row,
+    _parse_datatype_json_string,
+)
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+
+if TYPE_CHECKING:
+    from pyspark._typing import PrimitiveType
+    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+    from pyspark.sql._typing import ColumnOrName, LiteralType, OptionalPrimitiveType
+    from pyspark.sql.context import SQLContext
+    from pyspark.sql.session import SparkSession
+    from pyspark.sql.group import GroupedData
+    from pyspark.sql.observation import Observation
+
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -63,49 +104,159 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. versionadded:: 1.3.0
+
+    .. note: A DataFrame should only be created as described above. It should not be directly
+        created via using the constructor.
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
-        self.sql_ctx = sql_ctx
-        self._sc = sql_ctx and sql_ctx._sc
+    def __init__(
+        self,
+        jdf: JavaObject,
+        sql_ctx: Union["SQLContext", "SparkSession"],
+    ):
+        from pyspark.sql.context import SQLContext
+
+        self._sql_ctx: Optional["SQLContext"] = None
+
+        if isinstance(sql_ctx, SQLContext):
+            assert not os.environ.get("SPARK_TESTING")  # Sanity check for our internal usage.
+            assert isinstance(sql_ctx, SQLContext)
+            # We should remove this if-else branch in the future release, and rename
+            # sql_ctx to session in the constructor. This is an internal code path but
+            # was kept with an warning because it's used intensively by third-party libraries.
+            warnings.warn("DataFrame constructor is internal. Do not directly use it.")
+            self._sql_ctx = sql_ctx
+            session = sql_ctx.sparkSession
+        else:
+            session = sql_ctx
+        self._session: "SparkSession" = session
+
+        self._sc: SparkContext = sql_ctx._sc
+        self._jdf: JavaObject = jdf
         self.is_cached = False
-        self._schema = None  # initialized lazily
-        self._lazy_rdd = None
+        # initialized lazily
+        self._schema: Optional[StructType] = None
+        self._lazy_rdd: Optional[RDD[Row]] = None
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opened.
         self._support_repr_html = False
 
     @property
+    def sql_ctx(self) -> "SQLContext":
+        from pyspark.sql.context import SQLContext
+
+        warnings.warn(
+            "DataFrame.sql_ctx is an internal property, and will be removed "
+            "in future releases. Use DataFrame.sparkSession instead."
+        )
+        if self._sql_ctx is None:
+            self._sql_ctx = SQLContext._get_or_create(self._sc)
+        return self._sql_ctx
+
+    @property
+    def sparkSession(self) -> "SparkSession":
+        """Returns Spark session that created this :class:`DataFrame`.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> type(df.sparkSession)
+        <class 'pyspark.sql.session.SparkSession'>
+        """
+        return self._session
+
+    @property  # type: ignore[misc]
     @since(1.3)
-    def rdd(self):
+    def rdd(self) -> "RDD[Row]":
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
+
+        .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        :class:`RDD`
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> type(df.rdd)
+        <class 'pyspark.rdd.RDD'>
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
+            self._lazy_rdd = RDD(
+                jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
+            )
         return self._lazy_rdd
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.3.1")
-    def na(self):
+    def na(self) -> "DataFrameNaFunctions":
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
+
+        .. versionadded:: 1.3.1
+
+        Returns
+        -------
+        :class:`DataFrameNaFunctions`
+
+        Examples
+        --------
+        >>> df = spark.sql("select 1 as c1, int(null) as c2")
+        >>> type(df.na)
+        <class 'pyspark.sql.dataframe.DataFrameNaFunctions'>
+        >>> df.na.fill(2).show()
+        +---+---+
+        | c1| c2|
+        +---+---+
+        |  1|  2|
+        +---+---+
         """
         return DataFrameNaFunctions(self)
 
-    @property
+    @property  # type: ignore[misc]
     @since(1.4)
-    def stat(self):
+    def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
+
+        .. versionadded:: 1.4.0
+
+        Returns
+        -------
+        :class:`DataFrameStatFunctions`
+
+        Examples
+        --------
+        >>> import pyspark.sql.functions as f
+        >>> df = spark.range(3).withColumn("c", f.expr("id+1"))
+        >>> type(df.stat)
+        <class 'pyspark.sql.dataframe.DataFrameStatFunctions'>
+        >>> df.stat.corr("id", "c")
+        1.0
         """
         return DataFrameStatFunctions(self)
 
-    def toJSON(self, use_unicode=True):
+    def toJSON(self, use_unicode: bool = True) -> RDD[str]:
         """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
         Each row is turned into a JSON document as one element in the returned RDD.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        use_unicode : bool, optional (default: True)
+            Whether to convert to unicode or not.
+
+        Returns
+        -------
+        :class:`RDD`
 
         Examples
         --------
@@ -115,8 +266,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
+    def registerTempTable(self, name: str) -> None:
+        """Registers this :class:`DataFrame` as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -133,14 +284,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
+
         """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.",
-            FutureWarning
-        )
+        warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
         self._jdf.createOrReplaceTempView(name)
 
-    def createTempView(self, name):
+    def createTempView(self, name: str) -> None:
         """Creates a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
@@ -149,6 +299,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         catalog.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -161,17 +320,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createTempView(name)
 
-    def createOrReplaceTempView(self, name):
+    def createOrReplaceTempView(self, name: str) -> None:
         """Creates or replaces a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -182,11 +351,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceTempView(name)
 
-    def createGlobalTempView(self, name):
+    def createGlobalTempView(self, name: str) -> None:
         """Creates a global temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary view is tied to this Spark application.
@@ -194,6 +364,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         catalog.
 
         .. versionadded:: 2.1.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -206,16 +385,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...
         AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createGlobalTempView(name)
 
-    def createOrReplaceGlobalTempView(self, name):
+    def createOrReplaceGlobalTempView(self, name: str) -> None:
         """Creates or replaces a global temporary view using the given name.
 
         The lifetime of this temporary view is tied to this Spark application.
 
         .. versionadded:: 2.2.0
+
+        Parameters
+        ----------
+        name : str
+            Name of the view.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -226,12 +415,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropGlobalTempView("people")
+        True
 
         """
         self._jdf.createOrReplaceGlobalTempView(name)
 
     @property
-    def write(self):
+    def write(self) -> DataFrameWriter:
         """
         Interface for saving the content of the non-streaming :class:`DataFrame` out into external
         storage.
@@ -241,11 +431,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrameWriter`
+
+        Examples
+        --------
+        >>> type(df.write)
+        <class 'pyspark.sql.readwriter.DataFrameWriter'>
+        >>> df.write.saveAsTable("tab2")
         """
         return DataFrameWriter(self)
 
     @property
-    def writeStream(self):
+    def writeStream(self) -> DataStreamWriter:
         """
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
@@ -259,32 +455,49 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataStreamWriter`
+
+        Examples
+        --------
+        >>> df = spark.readStream.format("rate").load()
+        >>> dsw = df.writeStream
+        >>> dsw.option("checkpointLocation", "/tmp/c").toTable("tab3")  # doctest: +ELLIPSIS
+        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
     @property
-    def schema(self):
+    def schema(self) -> StructType:
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         .. versionadded:: 1.3.0
 
+        Returns
+        -------
+        :class:`StructType`
+
         Examples
         --------
         >>> df.schema
-        StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
-                self._schema = _parse_datatype_json_string(self._jdf.schema().json())
-            except AttributeError as e:
-                raise Exception(
-                    "Unable to parse datatype from schema. %s" % e)
+                self._schema = cast(
+                    StructType, _parse_datatype_json_string(self._jdf.schema().json())
+                )
+            except Exception as e:
+                raise ValueError("Unable to parse datatype from schema. %s" % e) from e
         return self._schema
 
-    def printSchema(self):
+    def printSchema(self) -> None:
         """Prints out the schema in the tree format.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -292,16 +505,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: integer (nullable = true)
          |-- name: string (nullable = true)
-        <BLANKLINE>
         """
         print(self._jdf.schema().treeString())
 
-    def explain(self, extended=None, mode=None):
+    def explain(
+        self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
+    ) -> None:
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -319,6 +533,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             .. versionchanged:: 3.0.0
                Added optional argument `mode` to specify the expected output format of plans.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -350,7 +568,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise Exception("extended and mode should not be set together.")
+            raise ValueError("extended and mode should not be set together.")
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -369,11 +587,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         is_mode_case = extended is None and isinstance(mode, str)
 
         if not (is_no_argument or is_extended_case or is_extended_as_mode or is_mode_case):
-            argtypes = [
-                str(type(arg)) for arg in [extended, mode] if arg is not None]
+            argtypes = [str(type(arg)) for arg in [extended, mode] if arg is not None]
             raise TypeError(
                 "extended (optional) and mode (optional) should be a string "
-                "and bool; however, got [%s]." % ", ".join(argtypes))
+                "and bool; however, got [%s]." % ", ".join(argtypes)
+            )
 
         # Sets an explain mode depending on a given argument
         if is_no_argument:
@@ -381,13 +599,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif is_extended_case:
             explain_mode = "extended" if extended else "simple"
         elif is_mode_case:
-            explain_mode = mode
+            explain_mode = cast(str, mode)
         elif is_extended_as_mode:
-            explain_mode = extended
-
+            explain_mode = cast(str, extended)
+        assert self._sc._jvm is not None
         print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
-    def exceptAll(self, other):
+    def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
         not in another :class:`DataFrame` while preserving duplicates.
 
@@ -395,6 +613,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         As standard in SQL, this function resolves columns by position (not by name).
 
         .. versionadded:: 2.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other :class:`DataFrame` to compare to.
+
+        Returns
+        -------
+        :class:`DataFrame`
 
         Examples
         --------
@@ -413,33 +640,75 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+---+
 
         """
-        return DataFrame(self._jdf.exceptAll(other._jdf), self.sql_ctx)
+        return DataFrame(self._jdf.exceptAll(other._jdf), self.sparkSession)
 
     @since(1.3)
-    def isLocal(self):
+    def isLocal(self) -> bool:
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).
+
+        Returns
+        -------
+        bool
+
+        Examples
+        --------
+        >>> df = spark.sql("SHOW TABLES")
+        >>> df.isLocal()
+        True
         """
         return self._jdf.isLocal()
 
     @property
-    def isStreaming(self):
-        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
-        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+    def isStreaming(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
         Notes
         -----
         This API is evolving.
+
+        Returns
+        -------
+        bool
+            Whether it's streaming DataFrame or not.
+
+        Examples
+        --------
+        >>> df = spark.readStream.format("rate").load()
+        >>> df.isStreaming
+        True
         """
         return self._jdf.isStreaming()
 
-    def show(self, n=20, truncate=True, vertical=False):
+    def isEmpty(self) -> bool:
+        """Returns ``True`` if this :class:`DataFrame` is empty.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        bool
+            Whether it's empty DataFrame or not.
+
+        Examples
+        --------
+        >>> df_empty = spark.createDataFrame([], 'a STRING')
+        >>> df_non_empty = spark.createDataFrame([("a")], 'STRING')
+        >>> df_empty.isEmpty()
+        True
+        >>> df_non_empty.isEmpty()
+        False
+        """
+        return self._jdf.isEmpty()
+
+    def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         """Prints the first ``n`` rows to the console.
 
         .. versionadded:: 1.3.0
@@ -448,13 +717,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         n : int, optional
             Number of rows to show.
-        truncate : bool, optional
+        truncate : bool or int, optional
             If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -482,32 +755,50 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          age  | 5
          name | Bob
         """
+
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            try:
+                int_truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate)
+                )
 
-    def __repr__(self):
-        if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
+            print(self._jdf.showString(n, int_truncate, vertical))
+
+    def __repr__(self) -> str:
+        if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
             vertical = False
             return self._jdf.showString(
-                self.sql_ctx._conf.replEagerEvalMaxNumRows(),
-                self.sql_ctx._conf.replEagerEvalTruncate(), vertical)
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
+                self.sparkSession._jconf.replEagerEvalTruncate(),
+                vertical,
+            )
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> Optional[str]:
         """Returns a :class:`DataFrame` with html code when you enabled eager evaluation
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self.sql_ctx._conf.isReplEagerEvalEnabled():
-            max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
+        if self.sparkSession._jconf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
             sock_info = self._jdf.getRowsToPython(
-                max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+                max_num_rows,
+                self.sparkSession._jconf.replEagerEvalTruncate(),
+            )
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
             has_more_data = len(row_data) > max_num_rows
@@ -519,38 +810,52 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             # generate table rows
             for row in row_data:
                 html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: html_escape(x), row))
+                    map(lambda x: html_escape(x), row)
+                )
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (
-                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+                    max_num_rows,
+                    "row" if max_num_rows == 1 else "rows",
+                )
             return html
         else:
             return None
 
-    def checkpoint(self, eager=True):
-        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
-        where the plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with :meth:`SparkContext.setCheckpointDir`.
+    def checkpoint(self, eager: bool = True) -> "DataFrame":
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. It will be saved to files
+        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
 
         .. versionadded:: 2.1.0
 
         Parameters
         ----------
         eager : bool, optional
-            Whether to checkpoint this :class:`DataFrame` immediately
+            Whether to checkpoint this :class:`DataFrame` immediately  (default True)
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
+
+        Examples
+        --------
+        >>> spark.sparkContext.setCheckpointDir("/tmp/bb")
+        >>> df.checkpoint(False)
+        DataFrame[age: int, name: string]
 
         Notes
         -----
         This API is experimental.
         """
         jdf = self._jdf.checkpoint(eager)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def localCheckpoint(self, eager=True):
-        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
         iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
@@ -559,16 +864,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         eager : bool, optional
-            Whether to checkpoint this :class:`DataFrame` immediately
+            Whether to checkpoint this :class:`DataFrame` immediately (default True)
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
+
+        Examples
+        --------
+        >>> df.localCheckpoint(False)
+        DataFrame[age: int, name: string]
 
         Notes
         -----
         This API is experimental.
         """
         jdf = self._jdf.localCheckpoint(eager)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def withWatermark(self, eventTime, delayThreshold):
+    def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
         """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
         in time before which we assume no more late data is going to arrive.
 
@@ -588,31 +903,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        eventTime : str or :class:`Column`
+        eventTime : str
             the name of the column that contains the event time of the row.
         delayThreshold : str
             the minimum delay to wait to data to arrive late, relative to the
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
 
-        Notes
-        -----
-        This API is evolving.
+        Returns
+        -------
+        :class:`DataFrame`
+            Watermarked DataFrame
 
+        Examples
+        --------
         >>> from pyspark.sql.functions import timestamp_seconds
         >>> sdf.select(
         ...    'name',
         ...    timestamp_seconds(sdf.time).alias('time')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
+
+        Notes
+        -----
+        This API is evolving.
         """
         if not eventTime or type(eventTime) is not str:
             raise TypeError("eventTime should be provided as a string")
         if not delayThreshold or type(delayThreshold) is not str:
             raise TypeError("delayThreshold should be provided as a string interval")
         jdf = self._jdf.withWatermark(eventTime, delayThreshold)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def hint(self, name, *parameters):
+    def hint(
+        self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
+    ) -> "DataFrame":
         """Specifies some hint on the current :class:`DataFrame`.
 
         .. versionadded:: 2.2.0
@@ -627,6 +951,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns
         -------
         :class:`DataFrame`
+            Hinted DataFrame
 
         Examples
         --------
@@ -638,7 +963,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+---+------+
         """
         if len(parameters) == 1 and isinstance(parameters[0], list):
-            parameters = parameters[0]
+            parameters = parameters[0]  # type: ignore[assignment]
 
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
@@ -648,15 +973,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if not isinstance(p, allowed_types):
                 raise TypeError(
                     "all parameters should be in {0}, got {1} of type {2}".format(
-                        allowed_types, p, type(p)))
+                        allowed_types, p, type(p)
+                    )
+                )
 
         jdf = self._jdf.hint(name, self._jseq(parameters))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def count(self):
+    def count(self) -> int:
         """Returns the number of rows in this :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        int
+            Number of rows.
 
         Examples
         --------
@@ -665,21 +997,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return int(self._jdf.count())
 
-    def collect(self):
+    def collect(self) -> List[Row]:
         """Returns all the records as a list of :class:`Row`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        list
+            List of rows.
 
         Examples
         --------
         >>> df.collect()
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
-    def toLocalIterator(self, prefetchPartitions=False):
+    def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         """
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
         The iterator will consume as much memory as the largest partition in this
@@ -693,19 +1030,35 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         prefetchPartitions : bool, optional
             If Spark should pre-fetch the next partition  before it is needed.
 
+        Returns
+        -------
+        Iterator
+            Iterator of rows.
+
         Examples
         --------
         >>> list(df.toLocalIterator())
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
-        return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
 
-    def limit(self, num):
+    def limit(self, num: int) -> "DataFrame":
         """Limits the result count to the number specified.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
 
         Examples
         --------
@@ -715,12 +1068,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         []
         """
         jdf = self._jdf.limit(num)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def take(self, num):
+    def take(self, num: int) -> List[Row]:
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
 
         Examples
         --------
@@ -729,7 +1093,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.limit(num).collect()
 
-    def tail(self, num):
+    def tail(self, num: int) -> List[Row]:
         """
         Returns the last ``num`` rows as a :class:`list` of :class:`Row`.
 
@@ -738,6 +1102,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.0.0
 
+        Parameters
+        ----------
+        num : int
+            Number of records to return. Will return this number of records
+            or whataver number is available.
+
+        Returns
+        -------
+        list
+            List of rows
+
         Examples
         --------
         >>> df.tail(1)
@@ -745,14 +1120,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
-    def foreach(self, f):
+    def foreach(self, f: Callable[[Row], None]) -> None:
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
 
         This is a shorthand for ``df.rdd.foreach()``.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        f : function
+            A function that accepts one parameter which will
+            receive each row to process.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -762,12 +1147,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         self.rdd.foreach(f)
 
-    def foreachPartition(self, f):
+    def foreachPartition(self, f: Callable[[Iterator[Row]], None]) -> None:
         """Applies the ``f`` function to each partition of this :class:`DataFrame`.
 
         This a shorthand for ``df.rdd.foreachPartition()``.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        f : function
+            A function that accepts one parameter which will receive
+            each partition to process.
+
+        Returns
+        -------
+        None
 
         Examples
         --------
@@ -776,9 +1171,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...         print(person.name)
         >>> df.foreachPartition(f)
         """
-        self.rdd.foreachPartition(f)
+        self.rdd.foreachPartition(f)  # type: ignore[arg-type]
 
-    def cache(self):
+    def cache(self) -> "DataFrame":
         """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
 
         .. versionadded:: 1.3.0
@@ -786,12 +1181,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Cached DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.cache()
+        DataFrame[id: bigint]
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
-    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK_DESER):
+    def persist(
+        self,
+        storageLevel: StorageLevel = (StorageLevel.MEMORY_AND_DISK_DESER),
+    ) -> "DataFrame":
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
@@ -802,6 +1211,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Parameters
+        ----------
+        storageLevel : :class:`StorageLevel`
+            Storage level to set for persistence. Default is MEMORY_AND_DISK_DESER.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Persisted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.persist()
+        DataFrame[id: bigint]
+        >>> from pyspark.storagelevel import StorageLevel
+        >>> df.persist(StorageLevel.DISK_ONLY)
+        DataFrame[id: bigint]
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -809,10 +1237,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return self
 
     @property
-    def storageLevel(self):
+    def storageLevel(self) -> StorageLevel:
         """Get the :class:`DataFrame`'s current storage level.
 
         .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        :class:`StorageLevel`
+            Currently defined storage level.
 
         Examples
         --------
@@ -824,14 +1257,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         StorageLevel(True, False, False, False, 2)
         """
         java_storage_level = self._jdf.storageLevel()
-        storage_level = StorageLevel(java_storage_level.useDisk(),
-                                     java_storage_level.useMemory(),
-                                     java_storage_level.useOffHeap(),
-                                     java_storage_level.deserialized(),
-                                     java_storage_level.replication())
+        storage_level = StorageLevel(
+            java_storage_level.useDisk(),
+            java_storage_level.useMemory(),
+            java_storage_level.useOffHeap(),
+            java_storage_level.deserialized(),
+            java_storage_level.replication(),
+        )
         return storage_level
 
-    def unpersist(self, blocking=False):
+    def unpersist(self, blocking: bool = False) -> "DataFrame":
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
 
@@ -840,12 +1275,33 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Parameters
+        ----------
+        blocking : bool
+            Whether to block until all blocks are deleted.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Unpersisted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.range(1)
+        >>> df.persist()
+        DataFrame[id: bigint]
+        >>> df.unpersist()
+        DataFrame[id: bigint]
+        >>> df = spark.range(1)
+        >>> df.unpersist(True)
+        DataFrame[id: bigint]
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
         return self
 
-    def coalesce(self, numPartitions):
+    def coalesce(self, numPartitions: int) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
@@ -869,14 +1325,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         numPartitions : int
             specify the target number of partitions
 
+        Returns
+        -------
+        :class:`DataFrame`
+
         Examples
         --------
         >>> df.coalesce(1).rdd.getNumPartitions()
         1
         """
-        return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
+        return DataFrame(self._jdf.coalesce(numPartitions), self.sparkSession)
 
-    def repartition(self, numPartitions, *cols):
+    @overload
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartition(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartition(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting :class:`DataFrame` is hash partitioned.
@@ -896,6 +1366,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                Added optional arguments to specify the partitioning columns. Also made numPartitions
                optional if partitioning columns are specified.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
+
         Examples
         --------
         >>> df.repartition(10).rdd.getNumPartitions()
@@ -905,10 +1380,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
+        |  2|Alice|
         |  5|  Bob|
         |  2|Alice|
-        |  2|Alice|
+        |  5|  Bob|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -922,7 +1397,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
-        >>> data = data.repartition("name", "age")
+        >>> data = data.repartition(3, "name", "age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -935,17 +1410,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
-                return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
+                return DataFrame(self._jdf.repartition(numPartitions), self.sparkSession)
             else:
                 return DataFrame(
-                    self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
+                    self._jdf.repartition(numPartitions, self._jcols(*cols)),
+                    self.sparkSession,
+                )
         elif isinstance(numPartitions, (str, Column)):
-            cols = (numPartitions, ) + cols
-            return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
+            cols = (numPartitions,) + cols
+            return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sparkSession)
         else:
             raise TypeError("numPartitions should be an int or Column")
 
-    def repartitionByRange(self, numPartitions, *cols):
+    @overload
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def repartitionByRange(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    def repartitionByRange(  # type: ignore[misc]
+        self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
+    ) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting :class:`DataFrame` is range partitioned.
@@ -963,6 +1450,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             the default number of partitions is used.
         cols : str or :class:`Column`
             partitioning columns.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
 
         Notes
         -----
@@ -995,29 +1487,54 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
-                return ValueError("At least one partition-by expression must be specified.")
+                raise ValueError("At least one partition-by expression must be specified.")
             else:
                 return DataFrame(
-                    self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
+                    self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)),
+                    self.sparkSession,
+                )
         elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
-            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
+            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sparkSession)
         else:
             raise TypeError("numPartitions should be an int, string or Column")
 
-    def distinct(self):
+    def distinct(self) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with distinct records.
 
         Examples
         --------
         >>> df.distinct().count()
         2
         """
-        return DataFrame(self._jdf.distinct(), self.sql_ctx)
+        return DataFrame(self._jdf.distinct(), self.sparkSession)
 
-    def sample(self, withReplacement=None, fraction=None, seed=None):
+    @overload
+    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame":
+        ...
+
+    @overload
+    def sample(
+        self,
+        withReplacement: Optional[bool],
+        fraction: float,
+        seed: Optional[int] = ...,
+    ) -> "DataFrame":
+        ...
+
+    def sample(  # type: ignore[misc]
+        self,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
+        seed: Optional[int] = None,
+    ) -> "DataFrame":
         """Returns a sampled subset of this :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -1030,6 +1547,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Fraction of rows to generate, range [0.0, 1.0].
         seed : int, optional
             Seed for sampling (default a random seed).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sampled rows from given DataFrame.
 
         Notes
         -----
@@ -1059,40 +1581,44 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         #   sample(True, 0.5 [, seed])
         #   sample(True, fraction=0.5 [, seed])
         #   sample(withReplacement=False, fraction=0.5 [, seed])
-        is_withReplacement_set = \
-            type(withReplacement) == bool and isinstance(fraction, float)
+        is_withReplacement_set = type(withReplacement) == bool and isinstance(fraction, float)
 
         # For the case below:
         #   sample(faction=0.5 [, seed])
-        is_withReplacement_omitted_kwargs = \
-            withReplacement is None and isinstance(fraction, float)
+        is_withReplacement_omitted_kwargs = withReplacement is None and isinstance(fraction, float)
 
         # For the case below:
         #   sample(0.5 [, seed])
         is_withReplacement_omitted_args = isinstance(withReplacement, float)
 
-        if not (is_withReplacement_set
-                or is_withReplacement_omitted_kwargs
-                or is_withReplacement_omitted_args):
+        if not (
+            is_withReplacement_set
+            or is_withReplacement_omitted_kwargs
+            or is_withReplacement_omitted_args
+        ):
             argtypes = [
-                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None]
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None
+            ]
             raise TypeError(
                 "withReplacement (optional), fraction (required) and seed (optional)"
                 " should be a bool, float and number; however, "
-                "got [%s]." % ", ".join(argtypes))
+                "got [%s]." % ", ".join(argtypes)
+            )
 
         if is_withReplacement_omitted_args:
             if fraction is not None:
-                seed = fraction
+                seed = cast(int, fraction)
             fraction = withReplacement
             withReplacement = None
 
         seed = int(seed) if seed is not None else None
         args = [arg for arg in [withReplacement, fraction, seed] if arg is not None]
         jdf = self._jdf.sample(*args)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def sampleBy(self, col, fractions, seed=None):
+    def sampleBy(
+        self, col: "ColumnOrName", fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> "DataFrame":
         """
         Returns a stratified sample without replacement based on the
         fraction given on each stratum.
@@ -1134,18 +1660,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(col, str):
             col = Column(col)
         elif not isinstance(col, Column):
-            raise ValueError("col must be a string or a column, but got %r" % type(col))
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
-            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
-                raise ValueError("key must be float, int, or string, but got %r" % type(k))
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
+        return DataFrame(
+            self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sparkSession
+        )
 
-    def randomSplit(self, weights, seed=None):
+    def randomSplit(self, weights: List[float], seed: Optional[int] = None) -> List["DataFrame"]:
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
         .. versionadded:: 1.4.0
@@ -1157,6 +1685,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Weights will be normalized if they don't sum up to 1.0.
         seed : int, optional
             The seed for sampling.
+
+        Returns
+        -------
+        list
+            List of DataFrames.
 
         Examples
         --------
@@ -1171,14 +1704,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), int(seed))
-        return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
+        df_array = self._jdf.randomSplit(
+            _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], weights)), int(seed)
+        )
+        return [DataFrame(df, self.sparkSession) for df in df_array]
 
     @property
-    def dtypes(self):
+    def dtypes(self) -> List[Tuple[str, str]]:
         """Returns all column names and their data types as a list.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        list
+            List of columns as tuple pairs.
 
         Examples
         --------
@@ -1188,10 +1728,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
     @property
-    def columns(self):
+    def columns(self) -> List[str]:
         """Returns all column names as a list.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        list
+            List of column names.
 
         Examples
         --------
@@ -1200,7 +1745,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return [f.name for f in self.schema.fields]
 
-    def colRegex(self, colName):
+    def colRegex(self, colName: str) -> Column:
         """
         Selects column based on the column name specified as a regex and returns it
         as :class:`Column`.
@@ -1211,6 +1756,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         colName : str
             string, column name specified as a regex.
+
+        Returns
+        -------
+        :class:`Column`
 
         Examples
         --------
@@ -1225,11 +1774,66 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+
         """
         if not isinstance(colName, str):
-            raise ValueError("colName should be provided as string")
+            raise TypeError("colName should be provided as string")
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
-    def alias(self, alias):
+    def to(self, schema: StructType) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` where each row is reconciled to match the specified
+        schema.
+
+        Notes
+        -----
+        1, Reorder columns and/or inner fields by name to match the specified schema.
+
+        2, Project away columns and/or inner fields that are not needed by the specified schema.
+        Missing columns and/or inner fields (present in the specified schema but not input
+        DataFrame) lead to failures.
+
+        3, Cast the columns and/or inner fields to match the data types in the specified schema,
+        if the types are compatible, e.g., numeric to numeric (error if overflows), but not string
+        to int.
+
+        4, Carry over the metadata from the specified schema, while the columns and/or inner fields
+        still keep their own metadata if not overwritten by the specified schema.
+
+        5, Fail if the nullability is not compatible. For example, the column and/or inner field
+        is nullable but the specified schema requires them to be not nullable.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            Specified schema.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Reconciled DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([("a", 1)], ["i", "j"])
+        >>> df.schema
+        StructType([StructField('i', StringType(), True), StructField('j', LongType(), True)])
+        >>> schema = StructType([StructField("j", StringType()), StructField("i", StringType())])
+        >>> df2 = df.to(schema)
+        >>> df2.schema
+        StructType([StructField('j', StringType(), True), StructField('i', StringType(), True)])
+        >>> df2.show()
+        +---+---+
+        |  j|  i|
+        +---+---+
+        |  1|  a|
+        +---+---+
+        """
+        assert schema is not None
+        jschema = self._jdf.sparkSession().parseDataType(schema.json())
+        return DataFrame(self._jdf.to(jschema), self.sparkSession)
+
+    def alias(self, alias: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` with an alias set.
 
         .. versionadded:: 1.3.0
@@ -1238,6 +1842,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         alias : str
             an alias name to be set for the :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Aliased DataFrame.
 
         Examples
         --------
@@ -1250,9 +1859,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(name='Bob', name='Bob', age=5), Row(name='Alice', name='Alice', age=2)]
         """
         assert isinstance(alias, str), "alias should be a string"
-        return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
+        return DataFrame(getattr(self._jdf, "as")(alias), self.sparkSession)
 
-    def crossJoin(self, other):
+    def crossJoin(self, other: "DataFrame") -> "DataFrame":
         """Returns the cartesian product with another :class:`DataFrame`.
 
         .. versionadded:: 2.1.0
@@ -1261,6 +1870,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         other : :class:`DataFrame`
             Right side of the cartesian product.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
 
         Examples
         --------
@@ -1274,9 +1888,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         jdf = self._jdf.crossJoin(other._jdf)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def join(self, other, on=None, how=None):
+    def join(
+        self,
+        other: "DataFrame",
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         .. versionadded:: 1.3.0
@@ -1295,6 +1914,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
             ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
             ``anti``, ``leftanti`` and ``left_anti``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
 
         Examples
         --------
@@ -1320,14 +1944,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if on is not None and not isinstance(on, list):
-            on = [on]
+            on = [on]  # type: ignore[assignment]
 
         if on is not None:
             if isinstance(on[0], str):
-                on = self._jseq(on)
+                on = self._jseq(cast(List[str], on))
             else:
                 assert isinstance(on[0], Column), "on should be Column or list of Column"
-                on = reduce(lambda x, y: x.__and__(y), on)
+                on = reduce(lambda x, y: x.__and__(y), cast(List[Column], on))
                 on = on._jc
 
         if on is None and how is None:
@@ -1339,9 +1963,132 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 on = self._jseq([])
             assert isinstance(how, str), "how should be a string"
             jdf = self._jdf.join(other._jdf, on, how)
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def sortWithinPartitions(self, *cols, **kwargs):
+    # TODO(SPARK-22947): Fix the DataFrame API.
+    def _joinAsOf(
+        self,
+        other: "DataFrame",
+        leftAsOfColumn: Union[str, Column],
+        rightAsOfColumn: Union[str, Column],
+        on: Optional[Union[str, List[str], Column, List[Column]]] = None,
+        how: Optional[str] = None,
+        *,
+        tolerance: Optional[Column] = None,
+        allowExactMatches: bool = True,
+        direction: str = "backward",
+    ) -> "DataFrame":
+        """
+        Perform an as-of join.
+
+        This is similar to a left-join except that we match on nearest
+        key rather than equal keys.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the join
+        leftAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        rightAsOfColumn : str or :class:`Column`
+            a string for the as-of join column name, or a Column
+        on : str, list or :class:`Column`, optional
+            a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an equi-join.
+        how : str, optional
+            default ``inner``. Must be one of: ``inner`` and ``left``.
+        tolerance : :class:`Column`, optional
+            an asof tolerance within this range; must be compatible
+            with the merge index.
+        allowExactMatches : bool, optional
+            default ``True``.
+        direction : str, optional
+            default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
+
+        Examples
+        --------
+        The following performs an as-of join between ``left`` and ``right``.
+
+        >>> left = spark.createDataFrame([(1, "a"), (5, "b"), (10,  "c")], ["a", "left_val"])
+        >>> right = spark.createDataFrame([(1, 1), (2, 2), (3, 3), (6, 6), (7, 7)],
+        ...                               ["a", "right_val"])
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> from pyspark.sql import functions as F
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", how="left", tolerance=F.lit(1)
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=None),
+         Row(a=10, left_val='c', right_val=None)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", allowExactMatches=False
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=5, left_val='b', right_val=3),
+         Row(a=10, left_val='c', right_val=7)]
+
+        >>> left._joinAsOf(
+        ...     right, leftAsOfColumn="a", rightAsOfColumn="a", direction="forward"
+        ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
+        [Row(a=1, left_val='a', right_val=1),
+         Row(a=5, left_val='b', right_val=6)]
+        """
+        if isinstance(leftAsOfColumn, str):
+            leftAsOfColumn = self[leftAsOfColumn]
+        left_as_of_jcol = leftAsOfColumn._jc
+        if isinstance(rightAsOfColumn, str):
+            rightAsOfColumn = other[rightAsOfColumn]
+        right_as_of_jcol = rightAsOfColumn._jc
+
+        if on is not None and not isinstance(on, list):
+            on = [on]  # type: ignore[assignment]
+
+        if on is not None:
+            if isinstance(on[0], str):
+                on = self._jseq(cast(List[str], on))
+            else:
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
+                on = reduce(lambda x, y: x.__and__(y), cast(List[Column], on))
+                on = on._jc
+
+        if how is None:
+            how = "inner"
+        assert isinstance(how, str), "how should be a string"
+
+        if tolerance is not None:
+            assert isinstance(tolerance, Column), "tolerance should be Column"
+            tolerance = tolerance._jc
+
+        jdf = self._jdf.joinAsOf(
+            other._jdf,
+            left_as_of_jcol,
+            right_as_of_jcol,
+            on,
+            how,
+            tolerance,
+            allowExactMatches,
+            direction,
+        )
+        return DataFrame(jdf, self.sparkSession)
+
+    def sortWithinPartitions(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
         .. versionadded:: 1.6.0
@@ -1358,6 +2105,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame sorted by partitions.
+
         Examples
         --------
         >>> df.sortWithinPartitions("age", ascending=False).show()
@@ -1369,9 +2121,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         """
         jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def sort(self, *cols, **kwargs):
+    def sort(
+        self, *cols: Union[str, Column, List[Union[str, Column]]], **kwargs: Any
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         .. versionadded:: 1.3.0
@@ -1387,6 +2141,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Sorted DataFrame.
 
         Examples
         --------
@@ -1405,19 +2164,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         """
         jdf = self._jdf.sort(self._sort_cols(cols, kwargs))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
     orderBy = sort
 
-    def _jseq(self, cols, converter=None):
+    def _jseq(
+        self,
+        cols: Sequence,
+        converter: Optional[Callable[..., Union["PrimitiveType", JavaObject]]] = None,
+    ) -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or names"""
-        return _to_seq(self.sql_ctx._sc, cols, converter)
+        return _to_seq(self.sparkSession._sc, cols, converter)
 
-    def _jmap(self, jm):
+    def _jmap(self, jm: Dict) -> JavaObject:
         """Return a JVM Scala Map from a dict"""
-        return _to_scala_map(self.sql_ctx._sc, jm)
+        return _to_scala_map(self.sparkSession._sc, jm)
 
-    def _jcols(self, *cols):
+    def _jcols(self, *cols: "ColumnOrName") -> JavaObject:
         """Return a JVM Seq of Columns from a list of Column or column names
 
         If `cols` has only one list in it, cols[0] will be used as the list.
@@ -1426,26 +2189,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
 
-    def _sort_cols(self, cols, kwargs):
-        """ Return a JVM Seq of Columns that describes the sort order
-        """
+    def _sort_cols(
+        self, cols: Sequence[Union[str, Column, List[Union[str, Column]]]], kwargs: Dict[str, Any]
+    ) -> JavaObject:
+        """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
             raise ValueError("should sort by at least one column")
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
-        jcols = [_to_java_column(c) for c in cols]
-        ascending = kwargs.get('ascending', True)
+        jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
+        ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
                 jcols = [jc.desc() for jc in jcols]
         elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc()
-                     for asc, jc in zip(ascending, jcols)]
+            jcols = [jc if asc else jc.desc() for asc, jc in zip(ascending, jcols)]
         else:
             raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
         return self._jseq(jcols)
 
-    def describe(self, *cols):
+    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
         """Computes basic statistics for numeric and string columns.
 
         .. versionadded:: 1.3.1
@@ -1461,39 +2224,54 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Use summary for expanded statistics and control over which statistics to compute.
 
+        Parameters
+        ----------
+        cols : str, list, optional
+             Column name or list of column names to describe by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that describes (provides statistics) given DataFrame.
+
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...     [("Bob", 13, 40.3, 150.5), ("Alice", 12, 37.8, 142.3), ("Tom", 11, 44.1, 142.2)],
+        ...     ["name", "age", "weight", "height"],
+        ... )
         >>> df.describe(['age']).show()
-        +-------+------------------+
-        |summary|               age|
-        +-------+------------------+
-        |  count|                 2|
-        |   mean|               3.5|
-        | stddev|2.1213203435596424|
-        |    min|                 2|
-        |    max|                 5|
-        +-------+------------------+
-        >>> df.describe().show()
-        +-------+------------------+-----+
-        |summary|               age| name|
-        +-------+------------------+-----+
-        |  count|                 2|    2|
-        |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
-        |    min|                 2|Alice|
-        |    max|                 5|  Bob|
-        +-------+------------------+-----+
+        +-------+----+
+        |summary| age|
+        +-------+----+
+        |  count|   3|
+        |   mean|12.0|
+        | stddev| 1.0|
+        |    min|  11|
+        |    max|  13|
+        +-------+----+
+
+        >>> df.describe(['age', 'weight', 'height']).show()
+        +-------+----+------------------+-----------------+
+        |summary| age|            weight|           height|
+        +-------+----+------------------+-----------------+
+        |  count|   3|                 3|                3|
+        |   mean|12.0| 40.73333333333333|            145.0|
+        | stddev| 1.0|3.1722757341273704|4.763402145525822|
+        |    min|  11|              37.8|            142.2|
+        |    max|  13|              44.1|            150.5|
+        +-------+----+------------------+-----------------+
 
         See Also
         --------
         DataFrame.summary
         """
         if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
+            cols = cols[0]  # type: ignore[assignment]
         jdf = self._jdf.describe(self._jseq(cols))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def summary(self, *statistics):
+    def summary(self, *statistics: str) -> "DataFrame":
         """Computes specified statistics for numeric and string columns. Available statistics are:
         - count
         - mean
@@ -1513,41 +2291,46 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         guarantee about the backward compatibility of the schema of the resulting
         :class:`DataFrame`.
 
+        Parameters
+        ----------
+        statistics : str, optional
+             Column names to calculate statistics by (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame that provides statistics for the given DataFrame.
+
         Examples
         --------
-        >>> df.summary().show()
-        +-------+------------------+-----+
-        |summary|               age| name|
-        +-------+------------------+-----+
-        |  count|                 2|    2|
-        |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
-        |    min|                 2|Alice|
-        |    25%|                 2| null|
-        |    50%|                 2| null|
-        |    75%|                 5| null|
-        |    max|                 5|  Bob|
-        +-------+------------------+-----+
+        >>> df = spark.createDataFrame(
+        ...     [("Bob", 13, 40.3, 150.5), ("Alice", 12, 37.8, 142.3), ("Tom", 11, 44.1, 142.2)],
+        ...     ["name", "age", "weight", "height"],
+        ... )
+        >>> df.select("age", "weight", "height").summary().show()
+        +-------+----+------------------+-----------------+
+        |summary| age|            weight|           height|
+        +-------+----+------------------+-----------------+
+        |  count|   3|                 3|                3|
+        |   mean|12.0| 40.73333333333333|            145.0|
+        | stddev| 1.0|3.1722757341273704|4.763402145525822|
+        |    min|  11|              37.8|            142.2|
+        |    25%|  11|              37.8|            142.2|
+        |    50%|  12|              40.3|            142.3|
+        |    75%|  13|              44.1|            150.5|
+        |    max|  13|              44.1|            150.5|
+        +-------+----+------------------+-----------------+
 
-        >>> df.summary("count", "min", "25%", "75%", "max").show()
-        +-------+---+-----+
-        |summary|age| name|
-        +-------+---+-----+
-        |  count|  2|    2|
-        |    min|  2|Alice|
-        |    25%|  2| null|
-        |    75%|  5| null|
-        |    max|  5|  Bob|
-        +-------+---+-----+
-
-        To do a summary for specific columns first select them:
-
-        >>> df.select("age", "name").summary("count").show()
-        +-------+---+----+
-        |summary|age|name|
-        +-------+---+----+
-        |  count|  2|   2|
-        +-------+---+----+
+        >>> df.select("age", "weight", "height").summary("count", "min", "25%", "75%", "max").show()
+        +-------+---+------+------+
+        |summary|age|weight|height|
+        +-------+---+------+------+
+        |  count|  3|     3|     3|
+        |    min| 11|  37.8| 142.2|
+        |    25%| 11|  37.8| 142.2|
+        |    75%| 13|  44.1| 150.5|
+        |    max| 13|  44.1| 150.5|
+        +-------+---+------+------+
 
         See Also
         --------
@@ -1556,9 +2339,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if len(statistics) == 1 and isinstance(statistics[0], list):
             statistics = statistics[0]
         jdf = self._jdf.summary(self._jseq(statistics))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def head(self, n=None):
+    @overload
+    def head(self) -> Optional[Row]:
+        ...
+
+    @overload
+    def head(self, n: int) -> List[Row]:
+        ...
+
+    def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
         """Returns the first ``n`` rows.
 
         .. versionadded:: 1.3.0
@@ -1590,10 +2381,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return rs[0] if rs else None
         return self.take(n)
 
-    def first(self):
+    def first(self) -> Optional[Row]:
         """Returns the first row as a :class:`Row`.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        First Row if DataFrame is not empty, otherwise None.
 
         Examples
         --------
@@ -1602,7 +2397,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.head()
 
-    def __getitem__(self, item):
+    @overload
+    def __getitem__(self, item: Union[int, str]) -> Column:
+        ...
+
+    @overload
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> "DataFrame":
+        ...
+
+    def __getitem__(self, item: Union[int, str, Column, List, Tuple]) -> Union[Column, "DataFrame"]:
         """Returns the column as a :class:`Column`.
 
         .. versionadded:: 1.3.0
@@ -1631,23 +2434,44 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             raise TypeError("unexpected item type: %s" % type(item))
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Column:
         """Returns the :class:`Column` denoted by ``name``.
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        name : str
+            Column name to return as :class:`Column`.
+
+        Returns
+        -------
+        :class:`Column`
+            Requested column.
 
         Examples
         --------
         >>> df.select(df.age).collect()
         [Row(age=2), Row(age=5)]
+        >>> df["age"]
+        Column<'age'>
         """
         if name not in self.columns:
             raise AttributeError(
-                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
         jc = self._jdf.apply(name)
         return Column(jc)
 
-    def select(self, *cols):
+    @overload
+    def select(self, *cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def select(self, __cols: Union[List[Column], List[str]]) -> "DataFrame":
+        ...
+
+    def select(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
         """Projects a set of expressions and returns a new :class:`DataFrame`.
 
         .. versionadded:: 1.3.0
@@ -1659,6 +2483,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If one of the column names is '*', that column is expanded to include all columns
             in the current :class:`DataFrame`.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with subset (or all) of columns.
+
         Examples
         --------
         >>> df.select('*').collect()
@@ -1669,14 +2498,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(name='Alice', age=12), Row(name='Bob', age=15)]
         """
         jdf = self._jdf.select(self._jcols(*cols))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def selectExpr(self, *expr):
+    @overload
+    def selectExpr(self, *expr: str) -> "DataFrame":
+        ...
+
+    @overload
+    def selectExpr(self, *expr: List[str]) -> "DataFrame":
+        ...
+
+    def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
         """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
 
         This is a variant of :func:`select` that accepts SQL expressions.
 
         .. versionadded:: 1.3.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame with new/old columns transformed by expressions.
 
         Examples
         --------
@@ -1684,11 +2526,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row((age * 2)=4, abs(age)=2), Row((age * 2)=10, abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
-            expr = expr[0]
+            expr = expr[0]  # type: ignore[assignment]
         jdf = self._jdf.selectExpr(self._jseq(expr))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def filter(self, condition):
+    def filter(self, condition: "ColumnOrName") -> "DataFrame":
         """Filters rows using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
@@ -1700,6 +2542,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         condition : :class:`Column` or str
             a :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expression.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Filtered DataFrame.
 
         Examples
         --------
@@ -1719,9 +2566,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.filter(condition._jc)
         else:
             raise TypeError("condition should be string or Column")
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def groupBy(self, *cols):
+    @overload
+    def groupBy(self, *cols: "ColumnOrName") -> "GroupedData":
+        ...
+
+    @overload
+    def groupBy(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+        ...
+
+    def groupBy(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         """Groups the :class:`DataFrame` using the specified columns,
         so we can run aggregation on them. See :class:`GroupedData`
         for all the available aggregate functions.
@@ -1734,7 +2589,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols : list, str or :class:`Column`
             columns to group by.
-            Each element should be a column name (string) or an expression (:class:`Column`).
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Grouped data by given columns.
 
         Examples
         --------
@@ -1749,14 +2610,35 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
+
         return GroupedData(jgd, self)
 
-    def rollup(self, *cols):
+    @overload
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
+        ...
+
+    @overload
+    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+        ...
+
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : list, str or :class:`Column`
+            Columns to roll-up by.
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Rolled-up data by given columns.
 
         Examples
         --------
@@ -1773,14 +2655,35 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
+
         return GroupedData(jgd, self)
 
-    def cube(self, *cols):
+    @overload
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
+        ...
+
+    @overload
+    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
+        ...
+
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
         the specified columns, so we can run aggregations on them.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : list, str or :class:`Column`
+            columns to create cube by.
+            Each element should be a column name (string) or an expression (:class:`Column`)
+            or list of them.
+
+        Returns
+        -------
+        :class:`GroupedData`
+            Cube of the data by given columns.
 
         Examples
         --------
@@ -1799,13 +2702,160 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
+
         return GroupedData(jgd, self)
 
-    def agg(self, *exprs):
-        """ Aggregate on the entire :class:`DataFrame` without groups
+    def unpivot(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        This function is useful to massage a DataFrame into a format where some
+        columns are identifier columns ("ids"), while all other columns ("values")
+        are "unpivoted" to the rows, leaving just two non-id columns, named as given
+        by `variableColumnName` and `valueColumnName`.
+
+        When no "id" columns are given, the unpivoted DataFrame consists of only the
+        "variable" and "value" columns.
+
+        All "value" columns must share a least common data type. Unless they are the same data type,
+        all "value" columns are cast to the nearest common data type. For instance, types
+        `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+        do not have a common data type and `unpivot` fails.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list or tuple for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Unpivoted DataFrame.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(1, 11, 1.1), (2, 12, 1.2)],
+        ...     ["id", "int", "double"],
+        ... )
+        >>> df.show()
+        +---+---+------+
+        | id|int|double|
+        +---+---+------+
+        |  1| 11|   1.1|
+        |  2| 12|   1.2|
+        +---+---+------+
+
+        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        +---+------+----+
+        | id|   var| val|
+        +---+------+----+
+        |  1|   int|11.0|
+        |  1|double| 1.1|
+        |  2|   int|12.0|
+        |  2|double| 1.2|
+        +---+------+----+
+
+        See Also
+        --------
+        DataFrame.melt
+        """
+
+        def to_jcols(
+            cols: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+        ) -> JavaObject:
+            if cols is None:
+                lst = []
+            elif isinstance(cols, tuple):
+                lst = list(cols)
+            elif isinstance(cols, list):
+                lst = cols
+            else:
+                lst = [cols]
+            return self._jcols(*lst)
+
+        return DataFrame(
+            self._jdf.unpivotWithSeq(
+                to_jcols(ids), to_jcols(values), variableColumnName, valueColumnName
+            ),
+            self.sparkSession,
+        )
+
+    def melt(
+        self,
+        ids: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        values: Optional[Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]],
+        variableColumnName: str,
+        valueColumnName: str,
+    ) -> "DataFrame":
+        """
+        Unpivot a DataFrame from wide format to long format, optionally leaving
+        identifier columns set. This is the reverse to `groupBy(...).pivot(...).agg(...)`,
+        except for the aggregation, which cannot be reversed.
+
+        :func:`melt` is an alias for :func:`unpivot`.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ids : str, Column, tuple, list, optional
+            Column(s) to use as identifiers. Can be a single column or column name,
+            or a list or tuple for multiple columns.
+        values : str, Column, tuple, list, optional
+            Column(s) to unpivot. Can be a single column or column name, or a list or tuple
+            for multiple columns. If not specified or empty, uses all columns that
+            are not set as `ids`.
+        variableColumnName : str
+            Name of the variable column.
+        valueColumnName : str
+            Name of the value column.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Unpivoted DataFrame.
+
+        See Also
+        --------
+        DataFrame.unpivot
+        """
+        return self.unpivot(ids, values, variableColumnName, valueColumnName)
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
+        """Aggregate on the entire :class:`DataFrame` without groups
         (shorthand for ``df.groupBy().agg()``).
 
         .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        exprs : :class:`Column` or dict of key and value strings
+            Columns or expressions to aggreate DataFrame by.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Aggregated DataFrame.
 
         Examples
         --------
@@ -1815,40 +2865,213 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.agg(F.min(df.age)).collect()
         [Row(min(age)=2)]
         """
-        return self.groupBy().agg(*exprs)
+        return self.groupBy().agg(*exprs)  # type: ignore[arg-type]
+
+    def observe(
+        self,
+        observation: Union["Observation", str],
+        *exprs: Column,
+    ) -> "DataFrame":
+        """Define (named) metrics to observe on the DataFrame. This method returns an 'observed'
+        DataFrame that returns the same result as the input, with the following guarantees:
+
+        * It will compute the defined aggregates (metrics) on all the data that is flowing through
+            the Dataset at that point.
+
+        * It will report the value of the defined aggregate columns as soon as we reach a completion
+            point. A completion point is either the end of a query (batch mode) or the end of a
+            streaming epoch. The value of the aggregates only reflects the data processed since
+            the previous completion point.
+
+        The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
+        more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
+        contain references to the input Dataset's columns must always be wrapped in an aggregate
+        function.
+
+        A user can observe these metrics by adding
+        Python's :class:`~pyspark.sql.streaming.StreamingQueryListener`,
+        Scala/Java's ``org.apache.spark.sql.streaming.StreamingQueryListener`` or Scala/Java's
+        ``org.apache.spark.sql.util.QueryExecutionListener`` to the spark session.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation` or str
+            `str` to specify the name, or an :class:`Observation` instance to obtain the metric.
+
+            .. versionchanged:: 3.4.0
+               Added support for `str` in this parameter.
+        exprs : :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        When ``observation`` is :class:`Observation`, this method only supports batch queries.
+        When ``observation`` is a string, this method works for both batch and streaming queries.
+        Continuous execution is currently not supported yet.
+
+        Examples
+        --------
+        When ``observation`` is :class:`Observation`, only batch queries works as below.
+
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df.count()
+        2
+        >>> observation.get
+        {'count': 2, 'max(age)': 5}
+
+        When ``observation`` is a string, streaming queries also work as below.
+
+        >>> from pyspark.sql.streaming import StreamingQueryListener
+        >>> class MyErrorListener(StreamingQueryListener):
+        ...    def onQueryStarted(self, event):
+        ...        pass
+        ...
+        ...    def onQueryProgress(self, event):
+        ...        row = event.progress.observedMetrics.get("my_event")
+        ...        # Trigger if the number of errors exceeds 5 percent
+        ...        num_rows = row.rc
+        ...        num_error_rows = row.erc
+        ...        ratio = num_error_rows / num_rows
+        ...        if ratio > 0.05:
+        ...            # Trigger alert
+        ...            pass
+        ...
+        ...    def onQueryTerminated(self, event):
+        ...        pass
+        ...
+        >>> spark.streams.addListener(MyErrorListener())
+        >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
+        ... observed_ds = df.observe(
+        ...     "my_event",
+        ...     count(lit(1)).alias("rc"),
+        ...     count(col("error")).alias("erc"))  # doctest: +SKIP
+        >>> observed_ds.writeStream.format("console").start()  # doctest: +SKIP
+        """
+        from pyspark.sql import Observation
+
+        if len(exprs) == 0:
+            raise ValueError("'exprs' should not be empty")
+        if not all(isinstance(c, Column) for c in exprs):
+            raise ValueError("all 'exprs' should be Column")
+
+        if isinstance(observation, Observation):
+            return observation._on(self, *exprs)
+        elif isinstance(observation, str):
+            return DataFrame(
+                self._jdf.observe(
+                    observation, exprs[0]._jc, _to_seq(self._sc, [c._jc for c in exprs[1:]])
+                ),
+                self.sparkSession,
+            )
+        else:
+            raise ValueError("'observation' should be either `Observation` or `str`.")
 
     @since(2.0)
-    def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another
+    def union(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        .. versionadded:: 2.0
+
+        See Also
+        --------
+        DataFrame.unionAll
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be unioned
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.union(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   4|   5|   6|
+        +----+----+----+
+        >>> df1.union(df1).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   1|   2|   3|
+        +----+----+----+
+
         """
-        return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
+        return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
     @since(1.3)
-    def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another
+    def unionAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
+
+        .. versionadded:: 1.3.0
+
+        See Also
+        --------
+        DataFrame.union
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame
+
         """
         return self.union(other)
 
-    def unionByName(self, other, allowMissingColumns=False):
-        """ Returns a new :class:`DataFrame` containing union of rows in this and another
+    def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
+        """Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
         union (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
 
         Examples
         --------
@@ -1884,25 +3107,59 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added optional argument `allowMissingColumns` to specify whether to allow
            missing columns.
         """
-        return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sql_ctx)
+        return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
 
     @since(1.3)
-    def intersect(self, other):
-        """ Return a new :class:`DataFrame` containing rows only in
+    def intersect(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows only in
         both this :class:`DataFrame` and another :class:`DataFrame`.
+        Note that any duplicates are removed. To preserve duplicates
+        use :func:`intersectAll`.
 
         This is equivalent to `INTERSECT` in SQL.
-        """
-        return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
-    def intersectAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+        >>> df1.intersect(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  b|  3|
+        |  a|  1|
+        +---+---+
+        """
+        return DataFrame(self._jdf.intersect(other._jdf), self.sparkSession)
+
+    def intersectAll(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
         and another :class:`DataFrame` while preserving duplicates.
 
         This is equivalent to `INTERSECT ALL` in SQL. As standard in SQL, this function
         resolves columns by position (not by name).
 
         .. versionadded:: 2.4.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be combined.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Combined DataFrame.
 
         Examples
         --------
@@ -1917,21 +3174,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  a|  1|
         |  b|  3|
         +---+---+
-
         """
-        return DataFrame(self._jdf.intersectAll(other._jdf), self.sql_ctx)
+        return DataFrame(self._jdf.intersectAll(other._jdf), self.sparkSession)
 
     @since(1.3)
-    def subtract(self, other):
-        """ Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+    def subtract(self, other: "DataFrame") -> "DataFrame":
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
         but not in another :class:`DataFrame`.
 
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
-        """
-        return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Another :class:`DataFrame` that needs to be subtracted.
 
-    def dropDuplicates(self, subset=None):
+        Returns
+        -------
+        :class:`DataFrame`
+            Subtracted DataFrame.
+
+        Examples
+        --------
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.subtract(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  c|  4|
+        +---+---+
+        """
+        return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
+
+    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -1944,6 +3221,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        subset : List of column names, optional
+            List of columns to use for duplicate comparison (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without duplicates.
 
         Examples
         --------
@@ -1967,13 +3254,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def dropna(self, how='any', thresh=None, subset=None):
+    def dropna(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame` omitting rows with null values.
         :func:`DataFrame.dropna` and :func:`DataFrameNaFunctions.drop` are aliases of each other.
 
@@ -1992,6 +3287,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         subset : str, tuple or list, optional
             optional list of column names to consider.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with null only rows excluded.
+
         Examples
         --------
         >>> df4.na.drop().show()
@@ -2001,7 +3301,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 10|    80|Alice|
         +---+------+-----+
         """
-        if how is not None and how not in ['any', 'all']:
+        if how is not None and how not in ["any", "all"]:
             raise ValueError("how ('" + how + "') should be 'any' or 'all'")
 
         if subset is None:
@@ -2009,14 +3309,30 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(subset, str):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
-            raise ValueError("subset should be a list or tuple of column names")
+            raise TypeError("subset should be a list or tuple of column names")
 
         if thresh is None:
-            thresh = len(subset) if how == 'any' else 1
+            thresh = len(subset) if how == "any" else 1
 
-        return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sql_ctx)
+        return DataFrame(self._jdf.na().drop(thresh, self._jseq(subset)), self.sparkSession)
 
-    def fillna(self, value, subset=None):
+    @overload
+    def fillna(
+        self,
+        value: "LiteralType",
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = ...,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def fillna(self, value: Dict[str, "LiteralType"]) -> "DataFrame":
+        ...
+
+    def fillna(
+        self,
+        value: Union["LiteralType", Dict[str, "LiteralType"]],
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> "DataFrame":
         """Replace null values, alias for ``na.fill()``.
         :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
@@ -2034,6 +3350,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced null values.
 
         Examples
         --------
@@ -2067,7 +3388,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
-            raise ValueError("value should be a float, int, string, bool or dict")
+            raise TypeError("value should be a float, int, string, bool or dict")
 
         # Note that bool validates isinstance(int), but we don't want to
         # convert bools to floats
@@ -2076,18 +3397,62 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             value = float(value)
 
         if isinstance(value, dict):
-            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+            return DataFrame(self._jdf.na().fill(value), self.sparkSession)
         elif subset is None:
-            return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
+            return DataFrame(self._jdf.na().fill(value), self.sparkSession)
         else:
             if isinstance(subset, str):
                 subset = [subset]
             elif not isinstance(subset, (list, tuple)):
-                raise ValueError("subset should be a list or tuple of column names")
+                raise TypeError("subset should be a list or tuple of column names")
 
-            return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
+            return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sparkSession)
 
-    def replace(self, to_replace, value=_NoValue, subset=None):
+    @overload
+    def replace(
+        self,
+        to_replace: "LiteralType",
+        value: "OptionalPrimitiveType",
+        subset: Optional[List[str]] = ...,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: List["LiteralType"],
+        value: List["OptionalPrimitiveType"],
+        subset: Optional[List[str]] = ...,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        subset: Optional[List[str]] = ...,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: List["LiteralType"],
+        value: "OptionalPrimitiveType",
+        subset: Optional[List[str]] = ...,
+    ) -> "DataFrame":
+        ...
+
+    def replace(  # type: ignore[misc]
+        self,
+        to_replace: Union[
+            "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
+        ],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
@@ -2116,6 +3481,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
             then the non-string column is simply ignored.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with replaced values.
 
         Examples
         --------
@@ -2166,7 +3536,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise TypeError("value argument is required when to_replace is not a dictionary.")
 
         # Helper functions
-        def all_of(types):
+        def all_of(types: Union[Type, Tuple[Type, ...]]) -> Callable[[Iterable], bool]:
             """Given a type or tuple of types and a sequence of xs
             check if each x is instance of type(s)
 
@@ -2175,8 +3545,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             >>> all_of(str)(["a", 1])
             False
             """
-            def all_of_(xs):
+
+            def all_of_(xs: Iterable) -> bool:
                 return all(isinstance(x, types) for x in xs)
+
             return all_of_
 
         all_of_bool = all_of(bool)
@@ -2185,25 +3557,35 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         # Validate input types
         valid_types = (bool, float, int, str, list, tuple)
-        if not isinstance(to_replace, valid_types + (dict, )):
-            raise ValueError(
+        if not isinstance(to_replace, valid_types + (dict,)):
+            raise TypeError(
                 "to_replace should be a bool, float, int, string, list, tuple, or dict. "
-                "Got {0}".format(type(to_replace)))
+                "Got {0}".format(type(to_replace))
+            )
 
-        if not isinstance(value, valid_types) and value is not None \
-                and not isinstance(to_replace, dict):
-            raise ValueError("If to_replace is not a dict, value should be "
-                             "a bool, float, int, string, list, tuple or None. "
-                             "Got {0}".format(type(value)))
+        if (
+            not isinstance(value, valid_types)
+            and value is not None
+            and not isinstance(to_replace, dict)
+        ):
+            raise TypeError(
+                "If to_replace is not a dict, value should be "
+                "a bool, float, int, string, list, tuple or None. "
+                "Got {0}".format(type(value))
+            )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
             if len(to_replace) != len(value):
-                raise ValueError("to_replace and value lists should be of the same length. "
-                                 "Got {0} and {1}".format(len(to_replace), len(value)))
+                raise ValueError(
+                    "to_replace and value lists should be of the same length. "
+                    "Got {0} and {1}".format(len(to_replace), len(value))
+                )
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
-            raise ValueError("subset should be a list or tuple of column names, "
-                             "column name or None. Got {0}".format(type(subset)))
+            raise TypeError(
+                "subset should be a list or tuple of column names, "
+                "column name or None. Got {0}".format(type(subset))
+            )
 
         # Reshape input arguments if necessary
         if isinstance(to_replace, (float, int, str)):
@@ -2216,24 +3598,51 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]
-            rep_dict = dict(zip(to_replace, value))
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
 
         if isinstance(subset, str):
             subset = [subset]
 
         # Verify we were not passed in mixed type generics.
-        if not any(all_of_type(rep_dict.keys())
-                   and all_of_type(x for x in rep_dict.values() if x is not None)
-                   for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
+        if not any(
+            all_of_type(rep_dict.keys())
+            and all_of_type(x for x in rep_dict.values() if x is not None)
+            for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
+        ):
             raise ValueError("Mixed type replacements are not supported")
 
         if subset is None:
-            return DataFrame(self._jdf.na().replace('*', rep_dict), self.sql_ctx)
+            return DataFrame(self._jdf.na().replace("*", rep_dict), self.sparkSession)
         else:
             return DataFrame(
-                self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
+                self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)),
+                self.sparkSession,
+            )
 
-    def approxQuantile(self, col, probabilities, relativeError):
+    @overload
+    def approxQuantile(
+        self,
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[float]:
+        ...
+
+    @overload
+    def approxQuantile(
+        self,
+        col: Union[List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[List[float]]:
+        ...
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
         """
         Calculates the approximate quantiles of numerical columns of a
         :class:`DataFrame`.
@@ -2285,38 +3694,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if not isinstance(col, (str, list, tuple)):
-            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
 
         isStr = isinstance(col, str)
 
         if isinstance(col, tuple):
             col = list(col)
         elif isStr:
-            col = [col]
+            col = [cast(str, col)]
 
         for c in col:
             if not isinstance(c, str):
-                raise ValueError("columns should be strings, but got %r" % type(c))
-        col = _to_list(self._sc, col)
+                raise TypeError("columns should be strings, but got %r" % type(c))
+        col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
         if not isinstance(probabilities, (list, tuple)):
-            raise ValueError("probabilities should be a list or tuple")
+            raise TypeError("probabilities should be a list or tuple")
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
             if not isinstance(p, (float, int)) or p < 0 or p > 1:
                 raise ValueError("probabilities should be numerical (float, int) in [0,1].")
-        probabilities = _to_list(self._sc, probabilities)
+        probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
-        if not isinstance(relativeError, (float, int)) or relativeError < 0:
-            raise ValueError("relativeError should be numerical (float, int) >= 0.")
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         jaq_list = [list(j) for j in jaq]
         return jaq_list[0] if isStr else jaq_list
 
-    def corr(self, col1, col2, method=None):
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
         """
         Calculates the correlation of two columns of a :class:`DataFrame` as a double value.
         Currently only supports the Pearson Correlation Coefficient.
@@ -2332,19 +3743,36 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the second column
         method : str, optional
             The correlation method. Currently only supports "pearson"
+
+        Returns
+        -------
+        float
+            Pearson Correlation Coefficient of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 12), (10, 1), (19, 8)], ["c1", "c2"])
+        >>> df.corr("c1", "c2")
+        -0.3592106040535498
+        >>> df = spark.createDataFrame([(11, 12), (10, 11), (9, 10)], ["small", "bigger"])
+        >>> df.corr("small", "bigger")
+        1.0
+
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise ValueError("Currently only the calculation of the Pearson Correlation " +
-                             "coefficient is supported.")
+            raise ValueError(
+                "Currently only the calculation of the Pearson Correlation "
+                + "coefficient is supported."
+            )
         return self._jdf.stat().corr(col1, col2, method)
 
-    def cov(self, col1, col2):
+    def cov(self, col1: str, col2: str) -> float:
         """
         Calculate the sample covariance for the given columns, specified by their names, as a
         double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
@@ -2357,14 +3785,29 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the first column
         col2 : str
             The name of the second column
+
+        Returns
+        -------
+        float
+            Covariance of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 12), (10, 1), (19, 8)], ["c1", "c2"])
+        >>> df.cov("c1", "c2")
+        -18.0
+        >>> df = spark.createDataFrame([(11, 12), (10, 11), (9, 10)], ["small", "bigger"])
+        >>> df.cov("small", "bigger")
+        1.0
+
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
-    def crosstab(self, col1, col2):
+    def crosstab(self, col1: str, col2: str) -> "DataFrame":
         """
         Computes a pair-wise frequency table of the given columns. Also known as a contingency
         table. The number of distinct values for each column should be less than 1e4. At most 1e6
@@ -2384,14 +3827,34 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         col2 : str
             The name of the second column. Distinct items will make the column names
             of the :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Frequency matrix of two columns.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
+        >>> df.crosstab("c1", "c2").sort("c1_c2").show()
+        +-----+---+---+---+
+        |c1_c2| 10| 11|  8|
+        +-----+---+---+---+
+        |    1|  0|  2|  0|
+        |    3|  1|  0|  0|
+        |    4|  0|  0|  2|
+        +-----+---+---+---+
+
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
-        return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
+            raise TypeError("col2 should be a string.")
+        return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sparkSession)
 
-    def freqItems(self, cols, support=None):
+    def freqItems(
+        self, cols: Union[List[str], Tuple[str]], support: Optional[float] = None
+    ) -> "DataFrame":
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
@@ -2409,6 +3872,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The frequency with which to consider an item 'frequent'. Default is 1%.
             The support must be greater than 1e-4.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with frequent items.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 11), (1, 11), (3, 10), (4, 8), (4, 8)], ["c1", "c2"])
+        >>> df.freqItems(["c1", "c2"]).show()  # doctest: +SKIP
+        +------------+------------+
+        |c1_freqItems|c2_freqItems|
+        +------------+------------+
+        |   [4, 1, 3]| [8, 11, 10]|
+        +------------+------------+
+
         Notes
         -----
         This function is meant for exploratory data analysis, as we make no
@@ -2418,12 +3896,55 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(cols, tuple):
             cols = list(cols)
         if not isinstance(cols, list):
-            raise ValueError("cols must be a list or tuple of column names as strings.")
+            raise TypeError("cols must be a list or tuple of column names as strings.")
         if not support:
             support = 0.01
-        return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
+        return DataFrame(
+            self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sparkSession
+        )
 
-    def withColumn(self, colName, col):
+    def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that has the same names.
+
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
+
+        .. versionadded:: 3.3.0
+           Added support for multiple columns adding
+
+        Parameters
+        ----------
+        colsMap : dict
+            a dict of column name and :class:`Column`. Currently, only single map is supported.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced columns.
+
+        Examples
+        --------
+        >>> df.withColumns({'age2': df.age + 2, 'age3': df.age + 3}).collect()
+        [Row(age=2, name='Alice', age2=4, age3=5), Row(age=5, name='Bob', age2=7, age3=8)]
+        """
+        # Below code is to help enable kwargs in future.
+        assert len(colsMap) == 1
+        colsMap = colsMap[0]  # type: ignore[assignment]
+
+        if not isinstance(colsMap, dict):
+            raise TypeError("colsMap must be dict of column name and column.")
+
+        col_names = list(colsMap.keys())
+        cols = list(colsMap.values())
+
+        return DataFrame(
+            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(*cols)),
+            self.sparkSession,
+        )
+
+    def withColumn(self, colName: str, col: Column) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
@@ -2440,6 +3961,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         col : :class:`Column`
             a :class:`Column` expression for the new column.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new or replaced column.
+
         Notes
         -----
         This method introduces a projection internally. Therefore, calling it multiple
@@ -2453,10 +3979,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age=2, name='Alice', age2=4), Row(age=5, name='Bob', age2=7)]
 
         """
-        assert isinstance(col, Column), "col should be Column"
-        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
+        if not isinstance(col, Column):
+            raise TypeError("col should be Column")
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sparkSession)
 
-    def withColumnRenamed(self, existing, new):
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrame":
         """Returns a new :class:`DataFrame` by renaming an existing column.
         This is a no-op if schema doesn't contain the given column name.
 
@@ -2469,15 +3996,58 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         new : str
             string, new name of the column.
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with renamed column.
+
         Examples
         --------
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name='Alice'), Row(age2=5, name='Bob')]
         """
-        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
+        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sparkSession)
 
-    def drop(self, *cols):
-        """Returns a new :class:`DataFrame` that drops the specified column.
+    def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> "DataFrame":
+        """Returns a new :class:`DataFrame` by updating an existing column with metadata.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        columnName : str
+            string, name of the existing column to update the metadata.
+        metadata : dict
+            dict, new metadata to be assigned to df.schema[columnName].metadata
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with updated metadata column.
+
+        Examples
+        --------
+        >>> df_meta = df.withMetadata('age', {'foo': 'bar'})
+        >>> df_meta.schema['age'].metadata
+        {'foo': 'bar'}
+        """
+        if not isinstance(metadata, dict):
+            raise TypeError("metadata should be a dict")
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
+        jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
+        return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
+
+    @overload
+    def drop(self, cols: "ColumnOrName") -> "DataFrame":
+        ...
+
+    @overload
+    def drop(self, *cols: str) -> "DataFrame":
+        ...
+
+    def drop(self, *cols: "ColumnOrName") -> "DataFrame":  # type: ignore[misc]
+        """Returns a new :class:`DataFrame` without specified columns.
         This is a no-op if schema doesn't contain the given column name(s).
 
         .. versionadded:: 1.4.0
@@ -2486,6 +4056,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         cols: str or :class:`Column`
             a name of the column, or the :class:`Column` to drop
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without given columns.
 
         Examples
         --------
@@ -2513,14 +4088,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             else:
                 raise TypeError("col should be a string or a Column")
         else:
-            for col in cols:
-                if not isinstance(col, str):
-                    raise TypeError("each col in the param list should be a string")
-            jdf = self._jdf.drop(self._jseq(cols))
+            jcols = [_to_java_column(c) for c in cols]
+            first_column, *remaining_columns = jcols
+            jdf = self._jdf.drop(first_column, self._jseq(remaining_columns))
 
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def toDF(self, *cols):
+    def toDF(self, *cols: "ColumnOrName") -> "DataFrame":
         """Returns a new :class:`DataFrame` that with new specified column names
 
         Parameters
@@ -2528,15 +4102,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols : str
             new column names
 
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame with new column names.
+
         Examples
         --------
         >>> df.toDF('f1', 'f2').collect()
         [Row(f1=2, f2='Alice'), Row(f1=5, f2='Bob')]
         """
         jdf = self._jdf.toDF(self._jseq(cols))
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
-    def transform(self, func):
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
@@ -2545,6 +4124,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         func : function
             a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+            .. versionadded:: 3.3.0
+        **kwargs
+            Keyword arguments to pass to func.
+
+            .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
 
         Examples
         --------
@@ -2561,13 +4153,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    1|  1|
         |    2|  2|
         +-----+---+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
         """
-        result = func(self)
-        assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
-                                              "should have been DataFrame." % type(result)
+        result = func(self, *args, **kwargs)
+        assert isinstance(
+            result, DataFrame
+        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
         return result
 
-    def sameSemantics(self, other):
+    def sameSemantics(self, other: "DataFrame") -> bool:
         """
         Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
         therefore return same results.
@@ -2585,6 +4188,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This API is a developer API.
 
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The other DataFrame to compare against.
+
+        Returns
+        -------
+        bool
+            Whether these two DataFrames are similar.
+
         Examples
         --------
         >>> df1 = spark.range(10)
@@ -2597,11 +4210,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         True
         """
         if not isinstance(other, DataFrame):
-            raise ValueError("other parameter should be of DataFrame; however, got %s"
-                             % type(other))
+            raise TypeError("other parameter should be of DataFrame; however, got %s" % type(other))
         return self._jdf.sameSemantics(other._jdf)
 
-    def semanticHash(self):
+    def semanticHash(self) -> int:
         """
         Returns a hash code of the logical query plan against this :class:`DataFrame`.
 
@@ -2614,6 +4226,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This API is a developer API.
 
+        Returns
+        -------
+        int
+            Hash value.
+
         Examples
         --------
         >>> spark.range(10).selectExpr("id as col0").semanticHash()  # doctest: +SKIP
@@ -2623,7 +4240,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._jdf.semanticHash()
 
-    def inputFiles(self):
+    def inputFiles(self) -> List[str]:
         """
         Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
         This method simply asks each constituent BaseRelation for its respective files and
@@ -2631,6 +4248,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         all input files. Duplicates are removed.
 
         .. versionadded:: 3.1.0
+
+        Returns
+        -------
+        list
+            List of file paths.
 
         Examples
         --------
@@ -2640,10 +4262,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return list(self._jdf.inputFiles())
 
-    where = copy_func(
-        filter,
-        sinceversion=1.3,
-        doc=":func:`where` is an alias for :func:`filter`.")
+    where = copy_func(filter, sinceversion=1.3, doc=":func:`where` is an alias for :func:`filter`.")
 
     # Two aliases below were added for pandas compatibility many years ago.
     # There are too many differences compared to pandas and we cannot just
@@ -2651,16 +4270,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
     groupby = copy_func(
-        groupBy,
-        sinceversion=1.4,
-        doc=":func:`groupby` is an alias for :func:`groupBy`.")
+        groupBy, sinceversion=1.4, doc=":func:`groupby` is an alias for :func:`groupBy`."
+    )
 
     drop_duplicates = copy_func(
         dropDuplicates,
         sinceversion=1.4,
-        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
+        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.",
+    )
 
-    def writeTo(self, table):
+    def writeTo(self, table: str) -> DataFrameWriterV2:
         """
         Create a write configuration builder for v2 sources.
 
@@ -2669,6 +4288,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         For example, to append or create or replace existing tables.
 
         .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        table : str
+            Target table name to write to.
+
+        Returns
+        -------
+        :class:`DataFrameWriterV2`
+            DataFrameWriterV2 to use further to specify how to save the data
 
         Examples
         --------
@@ -2679,109 +4308,275 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
+    # Keep to_pandas_on_spark for backward compatibility for now.
+    def to_pandas_on_spark(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        warnings.warn(
+            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
+            FutureWarning,
+        )
+        return self.pandas_api(index_col)
 
-def _to_scala_map(sc, jm):
+    def pandas_api(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        """
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
+
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
+        will be turned into a normal column.
+
+        This is only available if Pandas is installed and available.
+
+        Parameters
+        ----------
+        index_col: str or list of str, optional, default: None
+            Index column of table in Spark.
+
+        Returns
+        -------
+        :class:`PandasOnSparkDataFrame`
+
+        See Also
+        --------
+        pyspark.pandas.frame.DataFrame.to_spark
+
+        Examples
+        --------
+        >>> df.show()  # doctest: +SKIP
+        +----+----+
+        |Col1|Col2|
+        +----+----+
+        |   a|   1|
+        |   b|   2|
+        |   c|   3|
+        +----+----+
+
+        >>> df.pandas_api()  # doctest: +SKIP
+          Col1  Col2
+        0    a     1
+        1    b     2
+        2    c     3
+
+        We can specify the index columns.
+
+        >>> df.pandas_api(index_col="Col1"): # doctest: +SKIP
+              Col2
+        Col1
+        a        1
+        b        2
+        c        3
+        """
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self,
+            index_spark_columns=index_spark_columns,
+            index_names=index_names,  # type: ignore[arg-type]
+        )
+        return PandasOnSparkDataFrame(internal)
+
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        return self.pandas_api(index_col)
+
+
+def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     """
     Convert a dict into a JVM Map.
     """
+    assert sc._jvm is not None
     return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
-class DataFrameNaFunctions(object):
+class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
 
     .. versionadded:: 1.4
     """
 
-    def __init__(self, df):
+    def __init__(self, df: DataFrame):
         self.df = df
 
-    def drop(self, how='any', thresh=None, subset=None):
+    def drop(
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
+    ) -> DataFrame:
         return self.df.dropna(how=how, thresh=thresh, subset=subset)
 
     drop.__doc__ = DataFrame.dropna.__doc__
 
-    def fill(self, value, subset=None):
-        return self.df.fillna(value=value, subset=subset)
+    @overload
+    def fill(self, value: "LiteralType", subset: Optional[List[str]] = ...) -> DataFrame:
+        ...
+
+    @overload
+    def fill(self, value: Dict[str, "LiteralType"]) -> DataFrame:
+        ...
+
+    def fill(
+        self,
+        value: Union["LiteralType", Dict[str, "LiteralType"]],
+        subset: Optional[List[str]] = None,
+    ) -> DataFrame:
+        return self.df.fillna(value=value, subset=subset)  # type: ignore[arg-type]
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value=_NoValue, subset=None):
-        return self.df.replace(to_replace, value, subset)
+    @overload
+    def replace(
+        self,
+        to_replace: List["LiteralType"],
+        value: List["OptionalPrimitiveType"],
+        subset: Optional[List[str]] = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        subset: Optional[List[str]] = ...,
+    ) -> DataFrame:
+        ...
+
+    @overload
+    def replace(
+        self,
+        to_replace: List["LiteralType"],
+        value: "OptionalPrimitiveType",
+        subset: Optional[List[str]] = ...,
+    ) -> DataFrame:
+        ...
+
+    def replace(  # type: ignore[misc]
+        self,
+        to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
+        subset: Optional[List[str]] = None,
+    ) -> DataFrame:
+        return self.df.replace(to_replace, value, subset)  # type: ignore[arg-type]
 
     replace.__doc__ = DataFrame.replace.__doc__
 
 
-class DataFrameStatFunctions(object):
+class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 
     .. versionadded:: 1.4
     """
 
-    def __init__(self, df):
+    def __init__(self, df: DataFrame):
         self.df = df
 
-    def approxQuantile(self, col, probabilities, relativeError):
+    @overload
+    def approxQuantile(
+        self,
+        col: str,
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[float]:
+        ...
+
+    @overload
+    def approxQuantile(
+        self,
+        col: Union[List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> List[List[float]]:
+        ...
+
+    def approxQuantile(
+        self,
+        col: Union[str, List[str], Tuple[str]],
+        probabilities: Union[List[float], Tuple[float]],
+        relativeError: float,
+    ) -> Union[List[float], List[List[float]]]:
         return self.df.approxQuantile(col, probabilities, relativeError)
 
     approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
-    def corr(self, col1, col2, method=None):
+    def corr(self, col1: str, col2: str, method: Optional[str] = None) -> float:
         return self.df.corr(col1, col2, method)
 
     corr.__doc__ = DataFrame.corr.__doc__
 
-    def cov(self, col1, col2):
+    def cov(self, col1: str, col2: str) -> float:
         return self.df.cov(col1, col2)
 
     cov.__doc__ = DataFrame.cov.__doc__
 
-    def crosstab(self, col1, col2):
+    def crosstab(self, col1: str, col2: str) -> DataFrame:
         return self.df.crosstab(col1, col2)
 
     crosstab.__doc__ = DataFrame.crosstab.__doc__
 
-    def freqItems(self, cols, support=None):
+    def freqItems(self, cols: List[str], support: Optional[float] = None) -> DataFrame:
         return self.df.freqItems(cols, support)
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
-    def sampleBy(self, col, fractions, seed=None):
+    def sampleBy(
+        self, col: str, fractions: Dict[Any, float], seed: Optional[int] = None
+    ) -> DataFrame:
         return self.df.sampleBy(col, fractions, seed)
 
     sampleBy.__doc__ = DataFrame.sampleBy.__doc__
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
+
     globs = pyspark.sql.dataframe.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
-    globs['spark'] = SparkSession(sc)
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
-    globs['df2'] = sc.parallelize([Row(height=80, name='Tom'), Row(height=85, name='Bob')]).toDF()
-    globs['df3'] = sc.parallelize([Row(age=2, name='Alice'),
-                                   Row(age=5, name='Bob')]).toDF()
-    globs['df4'] = sc.parallelize([Row(age=10, height=80, name='Alice'),
-                                   Row(age=5, height=None, name='Bob'),
-                                   Row(age=None, height=None, name='Tom'),
-                                   Row(age=None, height=None, name=None)]).toDF()
-    globs['df5'] = sc.parallelize([Row(age=10, name='Alice', spy=False),
-                                   Row(age=5, name='Bob', spy=None),
-                                   Row(age=None, name='Mallory', spy=True)]).toDF()
-    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
-                                   Row(name='Bob', time=1479442946)]).toDF()
+    sc = SparkContext("local[4]", "PythonTest")
+    globs["sc"] = sc
+    globs["sqlContext"] = SQLContext(sc)
+    globs["spark"] = SparkSession(sc)
+    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
+        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
+    )
+    globs["df2"] = sc.parallelize([Row(height=80, name="Tom"), Row(height=85, name="Bob")]).toDF()
+    globs["df3"] = sc.parallelize([Row(age=2, name="Alice"), Row(age=5, name="Bob")]).toDF()
+    globs["df4"] = sc.parallelize(
+        [
+            Row(age=10, height=80, name="Alice"),
+            Row(age=5, height=None, name="Bob"),
+            Row(age=None, height=None, name="Tom"),
+            Row(age=None, height=None, name=None),
+        ]
+    ).toDF()
+    globs["df5"] = sc.parallelize(
+        [
+            Row(age=10, name="Alice", spy=False),
+            Row(age=5, name="Bob", spy=None),
+            Row(age=None, name="Mallory", spy=True),
+        ]
+    ).toDF()
+    globs["sdf"] = sc.parallelize(
+        [Row(name="Tom", time=1479441846), Row(name="Bob", time=1479442946)]
+    ).toDF()
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+        pyspark.sql.dataframe,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    globs["sc"].stop()
     if failure_count:
         sys.exit(-1)
 

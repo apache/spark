@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.io.ByteArrayInputStream
-import java.util.{Map => JavaMap}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -27,8 +27,8 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
+import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
+import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -77,26 +77,38 @@ object ExprCode {
 /**
  * State used for subexpression elimination.
  *
- * @param isNull A term that holds a boolean value representing whether the expression evaluated
- *               to null.
- * @param value A term for a value of a common sub-expression. Not valid if `isNull`
- *              is set to `true`.
+ * @param eval The source code for evaluating the subexpression.
+ * @param children The sequence of subexpressions as the children expressions. Before
+ *                 evaluating this subexpression, we should evaluate all children
+ *                 subexpressions first. This is used if we want to selectively evaluate
+ *                 particular subexpressions, instead of all at once. In the case, we need
+ *                 to make sure we evaluate all children subexpressions too.
  */
-case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
+case class SubExprEliminationState(eval: ExprCode, children: Seq[SubExprEliminationState])
+
+object SubExprEliminationState {
+  def apply(eval: ExprCode): SubExprEliminationState = {
+    new SubExprEliminationState(eval, Seq.empty)
+  }
+
+  def apply(
+      eval: ExprCode,
+      children: Seq[SubExprEliminationState]): SubExprEliminationState = {
+    new SubExprEliminationState(eval, children.reverse)
+  }
+}
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
  *
- * @param codes Strings representing the codes that evaluate common subexpressions.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
  * @param exprCodesNeedEvaluate Some expression codes that need to be evaluated before
  *                              calling common subexpressions.
  */
 case class SubExprCodes(
-  codes: Seq[String],
-  states: Map[Expression, SubExprEliminationState],
-  exprCodesNeedEvaluate: Seq[ExprCode])
+    states: Map[ExpressionEquals, SubExprEliminationState],
+    exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
  * The main information about a new added function.
@@ -335,7 +347,7 @@ class CodegenContext extends Logging {
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
-    val code = dataType match {
+    val code = UserDefinedType.sqlType(dataType) match {
       case StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
       case _ => code"$value = $initCode;"
@@ -413,7 +425,8 @@ class CodegenContext extends Logging {
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   // Visible for testing.
-  private[expressions] var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
+  private[expressions] var subExprEliminationExprs =
+    Map.empty[ExpressionEquals, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
   private val subexprFunctions = mutable.ArrayBuffer.empty[String]
@@ -615,7 +628,7 @@ class CodegenContext extends Logging {
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case NullType => "false"
     case _ =>
-      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError(
+      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
         "equality", dataType)
   }
 
@@ -637,7 +650,7 @@ class CodegenContext extends Logging {
       s"$clsName.compareFloats($c1, $c2)"
     // use c1 - c2 may overflow
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
-    case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
+    case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -706,7 +719,7 @@ class CodegenContext extends Logging {
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
-      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError("compare", dataType)
+      throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
   }
 
   /**
@@ -1018,7 +1031,7 @@ class CodegenContext extends Logging {
    * expressions and common expressions, instead of using the mapping in current context.
    */
   def withSubExprEliminationExprs(
-      newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
+      newSubExprEliminationExprs: Map[ExpressionEquals, SubExprEliminationState])(
       f: => Seq[ExprCode]): Seq[ExprCode] = {
     val oldsubExprEliminationExprs = subExprEliminationExprs
     subExprEliminationExprs = newSubExprEliminationExprs
@@ -1031,32 +1044,89 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpressions, generates the code snippets that evaluate those expressions and
-   * populates the mapping of common subexpressions to the generated code snippets. The generated
-   * code snippets will be returned and should be inserted into generated codes before these
-   * common subexpressions actually are used first time.
+   * Evaluates a sequence of `SubExprEliminationState` which represent subexpressions. After
+   * evaluating a subexpression, this method will clean up the code block to avoid duplicate
+   * evaluation.
+   */
+  def evaluateSubExprEliminationState(subExprStates: Iterable[SubExprEliminationState]): String = {
+    val code = new StringBuilder()
+
+    subExprStates.foreach { state =>
+      val currentCode = evaluateSubExprEliminationState(state.children) + "\n" + state.eval.code
+      code.append(currentCode + "\n")
+      state.eval.code = EmptyBlock
+    }
+
+    code.toString()
+  }
+
+  /**
+   * Checks and sets up the state and codegen for subexpression elimination in whole-stage codegen.
+   *
+   * This finds the common subexpressions, generates the code snippets that evaluate those
+   * expressions and populates the mapping of common subexpressions to the generated code snippets.
+   *
+   * The generated code snippet for subexpression is wrapped in `SubExprEliminationState`, which
+   * contains an `ExprCode` and the children `SubExprEliminationState` if any. The `ExprCode`
+   * includes java source code, result variable name and is-null variable name of the subexpression.
+   *
+   * Besides, this also returns a sequences of `ExprCode` which are expression codes that need to
+   * be evaluated (as their input parameters) before evaluating subexpressions.
+   *
+   * To evaluate the returned subexpressions, please call `evaluateSubExprEliminationState` with
+   * the `SubExprEliminationState`s to be evaluated. During generating the code, it will cleanup
+   * the states to avoid duplicate evaluation.
+   *
+   * The details of subexpression generation:
+   *   1. Gets subexpression set. See `EquivalentExpressions`.
+   *   2. Generate code of subexpressions as a whole block of code (non-split case)
+   *   3. Check if the total length of the above block is larger than the split-threshold. If so,
+   *      try to split it in step 4, otherwise returning the non-split code block.
+   *   4. Check if parameter lengths of all subexpressions satisfy the JVM limitation, if so,
+   *      try to split, otherwise returning the non-split code block.
+   *   5. For each subexpression, generating a function and put the code into it. To evaluate the
+   *      subexpression, just call the function.
+   *
+   * The explanation of subexpression codegen:
+   *   1. Wrapping in `withSubExprEliminationExprs` call with current subexpression map. Each
+   *      subexpression may depends on other subexpressions (children). So when generating code
+   *      for subexpressions, we iterate over each subexpression and put the mapping between
+   *      (subexpression -> `SubExprEliminationState`) into the map. So in next subexpression
+   *      evaluation, we can look for generated subexpressions and do replacement.
    */
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-    val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
+    val localSubExprEliminationExprsForNonSplit =
+      mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    lazy val commonExprVals = commonExprs.map(_.head.genCode(this))
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
 
-    lazy val nonSplitExprCode = {
-      commonExprs.zip(commonExprVals).map { case (exprs, eval) =>
-        // Generate the code for this expression tree.
-        val state = SubExprEliminationState(eval.isNull, eval.value)
-        exprs.foreach(localSubExprEliminationExprs.put(_, state))
-        eval.code.toString
+    val nonSplitCode = {
+      val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
+      commonExprs.map { expr =>
+        withSubExprEliminationExprs(localSubExprEliminationExprsForNonSplit.toMap) {
+          val eval = expr.genCode(this)
+          // Collects other subexpressions from the children.
+          val childrenSubExprs = mutable.ArrayBuffer.empty[SubExprEliminationState]
+          expr.foreach { e =>
+            subExprEliminationExprs.get(ExpressionEquals(e)) match {
+              case Some(state) => childrenSubExprs += state
+              case _ =>
+            }
+          }
+          val state = SubExprEliminationState(eval, childrenSubExprs.toSeq)
+          localSubExprEliminationExprsForNonSplit.put(ExpressionEquals(expr), state)
+          allStates += state
+          Seq(eval)
+        }
       }
+      allStates.toSeq
     }
 
     // For some operators, they do not require all its child's outputs to be evaluated in advance.
@@ -1064,16 +1134,22 @@ class CodegenContext extends Logging {
     // evaluate the outputs used more than twice. So we need to extract these variables used by
     // subexpressions and evaluate them before subexpressions.
     val (inputVarsForAllFuncs, exprCodesNeedEvaluate) = commonExprs.map { expr =>
-      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr.head)
+      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr)
       (inputVars.toSeq, exprCodes.toSeq)
     }.unzip
 
-    val splitThreshold = SQLConf.get.methodSplitThreshold
-    val codes = if (commonExprVals.map(_.code.length).sum > splitThreshold) {
+    val needSplit = nonSplitCode.map(_.eval.code.length).sum > SQLConf.get.methodSplitThreshold
+    val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
-        commonExprs.zipWithIndex.map { case (exprs, i) =>
-          val expr = exprs.head
-          val eval = commonExprVals(i)
+        val localSubExprEliminationExprs =
+          mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
+
+        commonExprs.zipWithIndex.foreach { case (expr, i) =>
+          val eval = withSubExprEliminationExprs(localSubExprEliminationExprs.toMap) {
+            Seq(expr.genCode(this))
+          }.head
+
+          val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
           val isNullLiteral = eval.isNull match {
             case TrueLiteral | FalseLiteral => true
@@ -1089,35 +1165,49 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
-          val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
-          val returnType = javaType(expr.dataType)
+          val argList =
+            inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val fn =
             s"""
-               |private $returnType $fnName(${argList.mkString(", ")}) {
+               |private void $fnName(${argList.mkString(", ")}) {
                |  ${eval.code}
                |  $isNullEvalCode
-               |  return ${eval.value};
+               |  $value = ${eval.value};
                |}
                """.stripMargin
 
-          val value = freshName("subExprValue")
-          val state = SubExprEliminationState(isNull, JavaCode.variable(value, expr.dataType))
-          exprs.foreach(localSubExprEliminationExprs.put(_, state))
+          // Collects other subexpressions from the children.
+          val childrenSubExprs = mutable.ArrayBuffer.empty[SubExprEliminationState]
+          expr.foreach { e =>
+            localSubExprEliminationExprs.get(ExpressionEquals(e)) match {
+              case Some(state) => childrenSubExprs += state
+              case _ =>
+            }
+          }
+
           val inputVariables = inputVars.map(_.variableName).mkString(", ")
-          s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
+          val code = code"${addNewFunction(fnName, fn)}($inputVariables);"
+          val state = SubExprEliminationState(
+            ExprCode(code, isNull, JavaCode.global(value, expr.dataType)),
+            childrenSubExprs.toSeq)
+          localSubExprEliminationExprs.put(ExpressionEquals(expr), state)
         }
+        (localSubExprEliminationExprs, exprCodesNeedEvaluate)
       } else {
+        val errMsg = "Failed to split subexpression code into small functions because " +
+          "the parameter length of at least one split function went over the JVM limit: " +
+          MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
+          throw new IllegalStateException(errMsg)
         } else {
-          logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
-          nonSplitExprCode
+          logInfo(errMsg)
+          (localSubExprEliminationExprsForNonSplit, Seq.empty)
         }
       }
     } else {
-      nonSplitExprCode
+      (localSubExprEliminationExprsForNonSplit, Seq.empty)
     }
-    SubExprCodes(codes, localSubExprEliminationExprs.toMap, exprCodesNeedEvaluate.flatten)
+    SubExprCodes(subExprsMap.toMap, exprCodes.flatten)
   }
 
   /**
@@ -1131,9 +1221,8 @@ class CodegenContext extends Logging {
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.foreach { e =>
-      val expr = e.head
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
+    commonExprs.foreach { expr =>
       val fnName = freshName("subExpr")
       val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
@@ -1163,11 +1252,13 @@ class CodegenContext extends Logging {
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
 
-      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+      val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+      subexprFunctions += subExprCode
       val state = SubExprEliminationState(
-        JavaCode.isNullGlobal(isNull),
-        JavaCode.global(value, expr.dataType))
-      subExprEliminationExprs ++= e.map(_ -> state).toMap
+        ExprCode(code"$subExprCode",
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, expr.dataType)))
+      subExprEliminationExprs += ExpressionEquals(expr) -> state
     }
   }
 
@@ -1432,14 +1523,7 @@ object CodeGenerator extends Logging {
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
-    val classes = {
-      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
-      resultField.setAccessible(true)
-      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
-      val classesField = loader.getClass.getDeclaredField("classes")
-      classesField.setAccessible(true)
-      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
-    }
+    val classes = evaluator.getBytecodes.asScala
 
     // Then walk the classes to get at the method bytecode.
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
@@ -1534,6 +1618,7 @@ object CodeGenerator extends Logging {
   /**
    * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
+  @tailrec
   def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
@@ -1607,6 +1692,7 @@ object CodeGenerator extends Logging {
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
+  @tailrec
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
@@ -1672,7 +1758,7 @@ object CodeGenerator extends Logging {
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
-        throw QueryExecutionErrors.cannotGenerateCodeForUnsupportedTypeError(dataType)
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
   }
 
@@ -1731,12 +1817,17 @@ object CodeGenerator extends Logging {
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
   def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
-    if (dataType.isInstanceOf[StructType]) {
+    val sqlDataType = dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case _ => dataType
+    }
+
+    if (sqlDataType.isInstanceOf[StructType]) {
       // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
       // `ordinal` parameter.
       s"$vector.getStruct($rowId)"
     } else {
-      getValue(vector, dataType, rowId)
+      getValue(vector, sqlDataType, rowId)
     }
   }
 
@@ -1753,7 +1844,7 @@ object CodeGenerator extends Logging {
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState] = Map.empty)
+      subExprs: Map[ExpressionEquals, SubExprEliminationState] = Map.empty)
       : (Set[VariableValue], Set[ExprCode]) = {
     val argSet = mutable.Set[VariableValue]()
     val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
@@ -1771,11 +1862,6 @@ object CodeGenerator extends Logging {
     val stack = mutable.Stack[Expression](expr)
     while (stack.nonEmpty) {
       stack.pop() match {
-        case e if subExprs.contains(e) =>
-          val SubExprEliminationState(isNull, value) = subExprs(e)
-          collectLocalVariable(value)
-          collectLocalVariable(isNull)
-
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
           val exprCode = ctx.currentVars(ref.ordinal)
@@ -1788,7 +1874,13 @@ object CodeGenerator extends Logging {
           collectLocalVariable(exprCode.isNull)
 
         case e =>
-          stack.pushAll(e.children)
+          subExprs.get(ExpressionEquals(e)) match {
+            case Some(state) =>
+              collectLocalVariable(state.eval.value)
+              collectLocalVariable(state.eval.isNull)
+            case None =>
+              stack.pushAll(e.children)
+          }
       }
     }
 
@@ -1812,8 +1904,8 @@ object CodeGenerator extends Logging {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType | DayTimeIntervalType => JAVA_LONG
+    case IntegerType | DateType | _: YearMonthIntervalType => JAVA_INT
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case _: DecimalType => "Decimal"
@@ -1829,12 +1921,14 @@ object CodeGenerator extends Logging {
     case _ => "Object"
   }
 
+  @tailrec
   def javaClass(dt: DataType): Class[_] = dt match {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
-    case IntegerType | DateType => java.lang.Integer.TYPE
-    case LongType | TimestampType | DayTimeIntervalType => java.lang.Long.TYPE
+    case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]

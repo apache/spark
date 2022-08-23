@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.EXCEPT
 
 
 /**
@@ -46,7 +47,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       return plan
     }
 
-    plan.transform {
+    plan.transformWithPruning(_.containsPattern(EXCEPT), ruleId) {
       case e @ Except(left, right, false) if isEligible(left, right) =>
         val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
         if (filterCondition.deterministic) {
@@ -86,8 +87,8 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val rightProjectList = projectList(right)
 
     left.output.size == left.output.map(_.name).distinct.size &&
-      left.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
-        right.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
+      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
           Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
             Project(rightProjectList, nonFilterChild(skipProject(right))))
   }

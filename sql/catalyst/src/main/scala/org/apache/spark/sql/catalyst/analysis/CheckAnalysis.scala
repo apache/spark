@@ -21,16 +21,18 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WINDOW_EXPRESSION
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -46,6 +48,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * These rules will be evaluated after our built-in check rules.
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
+
+  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
 
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
@@ -88,10 +92,32 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
+  private def isMapWithStringKey(e: Expression): Boolean = if (e.resolved) {
+    e.dataType match {
+      case m: MapType => m.keyType.isInstanceOf[StringType]
+      case _ => false
+    }
+  } else {
+    false
+  }
+
+  private def failUnresolvedAttribute(
+      operator: LogicalPlan,
+      a: Attribute,
+      errorClass: String): Nothing = {
+    val missingCol = a.sql
+    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    throw QueryCompilationErrors.unresolvedAttributeError(
+      errorClass, missingCol, orderedCandidates, a.origin)
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures.
-    plan.foreachUp {
+    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
+    // query plan structures in subqueries.
+    val inlineCTE = InlineCTE(alwaysInline = true)
+    inlineCTE(plan).foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
@@ -122,33 +148,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedFunc =>
+        throw QueryCompilationErrors.noSuchFunctionError(
+          u.multipartIdentifier, u, u.possibleQualifiedName)
+
+      case u: UnresolvedHint =>
+        u.failAnalysis(s"Hint not found: ${u.name}")
+
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
-
-      case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
-
-      case UncacheTable(u: UnresolvedRelation, _, _) =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
-
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -165,14 +178,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
-        // Check argument data types of higher-order functions downwards first.
-        // If the arguments of the higher-order functions are resolved but the type check fails,
-        // the argument functions will not get resolved, but we should report the argument type
-        // check failure instead of claiming the argument functions are unresolved.
         operator transformExpressionsDown {
+          // Check argument data types of higher-order functions downwards first.
+          // If the arguments of the higher-order functions are resolved but the type check fails,
+          // the argument functions will not get resolved, but we should report the argument type
+          // check failure instead of claiming the argument functions are unresolved.
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
@@ -180,23 +193,38 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
+
+          // If an attribute can't be resolved as a map key of string type, either the key should be
+          // surrounded with single quotes, or there is a typo in the attribute name.
+          case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
+            failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
         }
 
-        operator transformExpressionsUp {
+        getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
+            failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
+
+          case s: Star =>
+            withPosition(s) {
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
+            }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
-                  s"cannot resolve '${e.sql}' due to data type mismatch: $message")
+                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                    extraHintForAnsiTypeCoercionExpression(operator))
             }
 
           case c: Cast if !c.resolved =>
             failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
               c.dataType.catalogString)
+
+          case e: RuntimeReplaceable if !e.replacement.resolved =>
+            throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
+              "\nReplacement is unresolved: " + e.replacement)
 
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
@@ -204,7 +232,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
-              !e.isInstanceOf[WindowExpression] =>
+              !e.isInstanceOf[WindowExpression] && e.resolved =>
             val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             failAnalysis(s"Window function $w requires an OVER clause.")
 
@@ -217,27 +245,32 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
-          case w @ WindowExpression(e, s) =>
+          case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
-            e match {
+            w.windowFunction match {
+              case agg @ AggregateExpression(
+                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
+                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
+                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
+                failAnalysis(
+                  s"Cannot specify order by or frame for '${agg.aggregateFunction.prettyName}'.")
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction =>
-                w
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
-                w
-              case _ =>
-                failAnalysis(s"Expression '$e' not supported within a window function.")
+                  _: AggregateWindowFunction => // OK
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
+              case other =>
+                failAnalysis(s"Expression '$other' not supported within a window function.")
             }
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
-            s
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
               s"Input argument to ${e.prettyName} must be a constant.")
-        }
+
+          case _ =>
+        })
 
         operator match {
           case etw: EventTimeWatermark =>
@@ -260,20 +293,30 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression): Boolean = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+              if condition.dataType != BooleanType =>
+            failAnalysis(
+              s"join condition '${condition.sql}' " +
+                s"of type ${condition.dataType.catalogString} is not a boolean.")
+
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+            if (!toleranceAssertion.foldable) {
+              failAnalysis("Input argument tolerance must be a constant.")
+            }
+            if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
+              failAnalysis("Input argument tolerance must be non-negative.")
             }
 
+          case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if isAggregateExpression(expr) =>
+              case expr: Expression if AggregateExpression.isAggregate(expr) =>
                 val aggFunction = expr match {
                   case agg: AggregateExpression => agg.aggregateFunction
                   case udf: PythonUDF => udf
                 }
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if isAggregateExpression(expr) =>
+                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -305,12 +348,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
+              case s: ScalarSubquery
+                  if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
+                failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
+                  "present in the group by, nor in an aggregate function. Add it to group by " +
+                  "using ordinal position or wrap it in first() (or first_value) if you don't " +
+                  "care which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 failAnalysis(
                   "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
               }
@@ -373,6 +422,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
             metrics.foreach(m => checkMetric(m, m))
 
+          // see Analyzer.ResolveUnpivot
+          case up: Unpivot
+            if up.childrenResolved && up.ids.forall(_.resolved) && up.values.isEmpty =>
+            throw QueryCompilationErrors.unpivotRequiresValueColumns()
+          // see TypeCoercionBase.UnpivotCoercion
+          case up: Unpivot if !up.valuesTypeCoercioned =>
+            throw QueryCompilationErrors.unpivotValDataTypeMismatchError(up.values)
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
@@ -383,7 +440,24 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case LocalLimit(limitExpr, child) =>
+            checkLimitLikeClause("limit", limitExpr)
+            child match {
+              case Offset(offsetExpr, _) =>
+                val limit = limitExpr.eval().asInstanceOf[Int]
+                val offset = offsetExpr.eval().asInstanceOf[Int]
+                if (Int.MaxValue - limit < offset) {
+                  failAnalysis(
+                    s"""
+                       |The sum of the LIMIT clause and the OFFSET clause must not be greater than
+                       |the maximum 32-bit integer value (2,147,483,647),
+                       |but found limit = $limit, offset = $offset.
+                       |""".stripMargin.replace("\n", " "))
+                }
+              case _ =>
+            }
+
+          case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
@@ -406,16 +480,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
+
+              val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
-                  failAnalysis(
+                if (!dataTypesAreCompatibleFn(dt1, dt2)) {
+                  val errorMessage =
                     s"""
-                      |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
-                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
-                    """.stripMargin.replace("\n", " ").trim())
+                       |${operator.nodeName} can only be performed on tables with the compatible
+                       |column types. The ${ordinalNumber(ci)} column of the
+                       |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
+                       |compatible with ${dt2.catalogString} at same column of first table
+                    """.stripMargin.replace("\n", " ").trim()
+                  failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }
               }
             }
@@ -440,147 +518,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter: AlterTable if alter.table.resolved =>
-            val table = alter.table
-            def findField(operation: String, fieldName: Array[String]): StructField = {
-              // include collections because structs nested in maps and arrays may be altered
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                alter.failAnalysis(
-                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
-                  table.schema.treeString)
-              }
-              field.get._2
-            }
-            def positionArgumentExists(
-                position: ColumnPosition,
-                struct: StructType,
-                fieldsAdded: Seq[String]): Unit = {
-              position match {
-                case after: After =>
-                  val allFields = struct.fieldNames ++ fieldsAdded
-                  if (!allFields.contains(after.column())) {
-                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                      s"${allFields.mkString("[", ", ", "]")}")
-                  }
-                case _ =>
-              }
-            }
-            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
-              val parent = fieldNames.init
-              val field = if (parent.nonEmpty) {
-                findField(operation, parent).dataType
-              } else {
-                table.schema
-              }
-              field match {
-                case s: StructType => s
-                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
-                  s"its parent is not a StructType. Found $o")
-              }
-            }
-            def checkColumnNotExists(
-                operation: String,
-                fieldNames: Array[String],
-                struct: StructType): Unit = {
-              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
-                  s"already exists in ${struct.treeString}")
-              }
-            }
-
-            val colsToDelete = mutable.Set.empty[Seq[String]]
-            // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a parent
-            // name of fields to field names that belong to the parent. For example, if we add
-            // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-            // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-            val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-
-            alter.changes.foreach {
-              case add: AddColumn =>
-                // If a column to add is a part of columns to delete, we don't need to check
-                // if column already exists - applies to REPLACE COLUMNS scenario.
-                if (!colsToDelete.contains(add.fieldNames())) {
-                  checkColumnNotExists("add", add.fieldNames(), table.schema)
-                }
-                val parent = findParentStruct("add", add.fieldNames())
-                val parentName = add.fieldNames().init
-                val fieldsAdded = colsToAdd.getOrElse(parentName, Nil)
-                positionArgumentExists(add.position(), parent, fieldsAdded)
-                TypeUtils.failWithIntervalType(add.dataType())
-                colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
-              case update: UpdateColumnType =>
-                val field = {
-                  val f = findField("update", update.fieldNames)
-                  CharVarcharUtils.getRawType(f.metadata)
-                    .map(dt => f.copy(dataType = dt))
-                    .getOrElse(f)
-                }
-                val fieldName = update.fieldNames.quoted
-                update.newDataType match {
-                  case _: StructType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a struct by updating its fields")
-                  case _: MapType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a map by updating $fieldName.key or $fieldName.value")
-                  case _: ArrayType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update the element by updating $fieldName.element")
-                  case u: UserDefinedType[_] =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a UserDefinedType[${u.sql}] by updating its fields")
-                  case _: CalendarIntervalType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
-                      s"interval type")
-                  case _ =>
-                    // update is okay
-                }
-
-                // We don't need to handle nested types here which shall fail before
-                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                  case (CharType(l1), CharType(l2)) => l1 == l2
-                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-                  case _ => Cast.canUpCast(from, to)
-                }
-
-                if (!canAlterColumnType(field.dataType, update.newDataType)) {
-                  alter.failAnalysis(
-                    s"Cannot update ${table.name} field $fieldName: " +
-                        s"${field.dataType.simpleString} cannot be cast to " +
-                        s"${update.newDataType.simpleString}")
-                }
-              case update: UpdateColumnNullability =>
-                val field = findField("update", update.fieldNames)
-                val fieldName = update.fieldNames.quoted
-                if (!update.nullable && field.nullable) {
-                  alter.failAnalysis(
-                    s"Cannot change nullable column to non-nullable: $fieldName")
-                }
-              case updatePos: UpdateColumnPosition =>
-                findField("update", updatePos.fieldNames)
-                val parent = findParentStruct("update", updatePos.fieldNames())
-                val parentName = updatePos.fieldNames().init
-                positionArgumentExists(
-                  updatePos.position(),
-                  parent,
-                  colsToAdd.getOrElse(parentName, Nil))
-              case rename: RenameColumn =>
-                findField("rename", rename.fieldNames)
-                checkColumnNotExists(
-                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
-              case update: UpdateColumnComment =>
-                findField("update", update.fieldNames)
-              case delete: DeleteColumn =>
-                findField("delete", delete.fieldNames)
-                // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
-                // so that add operations do not fail when the columns to add exist and they
-                // are to be deleted.
-                colsToDelete += delete.fieldNames
-              case _ =>
-              // no validation needed for set and remove property
-            }
+          case alter: AlterTableCommand =>
+            checkAlterTableCommand(alter)
 
           case _ => // Falls back to the following checks
         }
@@ -612,6 +551,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.sql).mkString(",")}""".stripMargin)
 
+          case p @ Project(projectList, _) =>
+            projectList.foreach(_.transformDownWithPruning(
+              _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+              case UnresolvedWindowExpression(_, windowSpec) =>
+                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+            })
+
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
@@ -639,6 +585,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
+          case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in AsOfJoin:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
+
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
@@ -649,7 +604,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            // Lateral join is checked in checkSubqueryExpression.
+            !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in
@@ -658,8 +615,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
 
-          case _: UnresolvedHint =>
-            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
+          case _: UnresolvedHint => throw new IllegalStateException(
+            "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -694,10 +651,90 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     plan.setAnalyzed()
   }
 
+  private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
+    plan match {
+      // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
+      // feature. We should check errors in `aggregateExpressions` first.
+      case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
+      case _ => plan.expressions
+    }
+  }
+
+  private def getDataTypesAreCompatibleFn(plan: LogicalPlan): (DataType, DataType) => Boolean = {
+    val isUnion = plan.isInstanceOf[Union]
+    if (isUnion) {
+      (dt1: DataType, dt2: DataType) =>
+        DataType.equalsStructurally(dt1, dt2, true)
+    } else {
+      // SPARK-18058: we shall not care about the nullability of columns
+      (dt1: DataType, dt2: DataType) =>
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
+    }
+  }
+
+  private def getDefaultTypeCoercionPlan(plan: LogicalPlan): LogicalPlan =
+    TypeCoercion.typeCoercionRules.foldLeft(plan) { case (p, rule) => rule(p) }
+
+  private def extraHintMessage(issueFixedIfAnsiOff: Boolean): String = {
+    if (issueFixedIfAnsiOff) {
+      "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
+        s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    } else {
+      ""
+    }
+  }
+
+  private[analysis] def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
+    if (!SQLConf.get.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
+      var issueFixedIfAnsiOff = true
+      getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
+        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
+            e.checkInputDataTypes().isFailure =>
+          e.checkInputDataTypes() match {
+            case TypeCheckResult.TypeCheckFailure(_) =>
+              issueFixedIfAnsiOff = false
+          }
+
+        case _ =>
+      })
+      extraHintMessage(issueFixedIfAnsiOff)
+    }
+  }
+
+  private def extraHintForAnsiTypeCoercionPlan(plan: LogicalPlan): String = {
+    if (!SQLConf.get.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
+      var issueFixedIfAnsiOff = true
+      nonAnsiPlan match {
+        case _: Union | _: SetOperation if nonAnsiPlan.children.length > 1 =>
+          def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+
+          val ref = dataTypes(nonAnsiPlan.children.head)
+          val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
+          nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
+            // Check if the data types match.
+            dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
+                issueFixedIfAnsiOff = false
+              }
+            }
+          }
+
+        case _ =>
+      }
+      extraHintMessage(issueFixedIfAnsiOff)
+    }
+  }
+
   /**
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
-  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+  def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -729,52 +766,107 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Skip subquery aliases added by the Analyzer.
     // For projects, do the necessary mapping and skip to its child.
+    @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case child => child
     }
 
+    // Check whether the given expressions contains the subquery expression.
+    def containsExpr(expressions: Seq[Expression]): Boolean = {
+      expressions.exists(_.exists(_.semanticEquals(expr)))
+    }
+
+    def checkOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = p match {
+      case f: Filter =>
+        if (hasOuterReferences(expr.plan)) {
+          expr.plan.expressions.foreach(_.foreachUp {
+            case o: OuterReference =>
+              p.children.foreach(e =>
+                if (!e.output.exists(_.exprId == o.exprId)) {
+                  failAnalysis("outer attribute not found")
+                })
+            case _ =>
+          })
+        }
+      case _ =>
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
+    // Check if there is outer attribute that cannot be found from the plan.
+    checkOuterReference(plan, expr)
+
     expr match {
-      case ScalarSubquery(query, conditions, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           failAnalysis(
             s"Scalar subquery must return only one column, but got ${query.output.size}")
         }
 
-        if (conditions.nonEmpty) {
+        if (outerAttrs.nonEmpty) {
           cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
 
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project | _: SupportsSubquery => // Ok
+            case _: Filter | _: Project | _: SupportsSubquery => // Ok
+            case a: Aggregate =>
+              // If the correlated scalar subquery is in the grouping expressions of an Aggregate,
+              // it must also be in the aggregate expressions to be rewritten in the optimization
+              // phase.
+              if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
+                failAnalysis("Correlated scalar subqueries in the group by clause " +
+                  s"must also be in the aggregate expressions:\n$a")
+              }
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalar = true)
+
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+        val join = plan.asInstanceOf[LateralJoin]
+        // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
+        // cannot be decorrelated. Otherwise it may produce incorrect results.
+        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
+          expr.failAnalysis(
+            s"Non-deterministic lateral subqueries are not supported when joining with " +
+              s"outer relations that produce more than one row\n${expr.plan}")
+        }
+        // Check if the lateral join's join condition is deterministic.
+        if (join.condition.exists(!_.deterministic)) {
+          join.failAnalysis(
+            s"Lateral join condition cannot be non-deterministic: ${join.condition.get.sql}")
+        }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/Join and a few commands: $plan")
+              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
     }
-
-    // Validate to make sure the correlations appearing in the query are valid and
-    // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
   }
 
   /**
@@ -813,24 +905,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(
+      sub: LogicalPlan,
+      isScalar: Boolean = false,
+      isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
-          val outer = a.collect { case OuterReference(e) => e.toAttribute }
-          val local = a.references -- outer
-          if (local.nonEmpty) {
-            val msg =
-              s"""
-                 |Found an aggregate expression in a correlated predicate that has both
-                 |outer and local references, which is not supported yet.
-                 |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
-                 |Outer references: ${outer.map(_.sql).mkString(", ")},
-                 |Local references: ${local.map(_.sql).mkString(", ")}.
-               """.stripMargin.replace("\n", " ").trim()
-            failAnalysis(msg)
+          if (a.references.nonEmpty) {
+            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
       }
@@ -843,12 +928,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a scalar or a lateral subquery and
+    // DecorrelateInnerQuery is enabled. Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => (isScalar || isLateral) && SQLConf.get.decorrelateInnerQueryEnabled
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -879,14 +973,47 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     // +- SubqueryAlias t1, `t1`
     // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
     // +- LocalRelation [_1#73, _2#74]
-    def failOnNonEqualCorrelatedPredicate(found: Boolean, p: LogicalPlan): Unit = {
-      if (found) {
+    // SPARK-35080: The same issue can happen to correlated equality predicates when
+    // they do not guarantee one-to-one mapping between inner and outer attributes.
+    // For example:
+    // Table:
+    //   t1(a, b): [(0, 6), (1, 5), (2, 4)]
+    //   t2(c): [(6)]
+    //
+    // Query:
+    //   SELECT c, (SELECT COUNT(*) FROM t1 WHERE a + b = c) FROM t2
+    //
+    // Original subquery plan:
+    //   Aggregate [count(1)]
+    //   +- Filter ((a + b) = outer(c))
+    //      +- LocalRelation [a, b]
+    //
+    // Plan after pulling up correlated predicates:
+    //   Aggregate [a, b] [count(1), a, b]
+    //   +- LocalRelation [a, b]
+    //
+    // Plan after rewrite:
+    //   Project [c1, count(1)]
+    //   +- Join LeftOuter ((a + b) = c)
+    //      :- LocalRelation [c]
+    //      +- Aggregate [a, b] [count(1), a, b]
+    //         +- LocalRelation [a, b]
+    //
+    // The right hand side of the join transformed from the subquery will output
+    //   count(1) | a | b
+    //      1     | 0 | 6
+    //      1     | 1 | 5
+    //      1     | 2 | 4
+    // and the plan after rewrite will give the original query incorrect results.
+    def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
+      if (predicates.nonEmpty) {
         // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+        failAnalysis("Correlated column is not allowed in predicate " +
+          s"${predicates.map(_.sql).mkString}:\n$p")
       }
     }
 
-    var foundNonEqualCorrelatedPred: Boolean = false
+    val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
@@ -909,8 +1036,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // up to the operator producing the correlated values.
 
       // Category 1:
-      // ResolvedHint, Distinct, LeafNode, Repartition, and SubqueryAlias
-      case _: ResolvedHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
+      // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
+      case _: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias =>
 
       // Category 2:
       // These operators can be anywhere in a correlated subquery.
@@ -924,27 +1051,35 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
 
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
+
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
       case f: Filter =>
         val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
-
-        // Find any non-equality correlated predicates
-        foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
-          case _: EqualTo | _: EqualNullSafe => false
-          case _ => true
-        }
+        unsupportedPredicates ++= correlated.filterNot(DecorrelateInnerQuery.canPullUpOverAgg)
         failOnInvalidOuterReference(f)
 
       // Aggregate cannot host any correlated expressions
       // It can be on a correlation path if the correlation contains
-      // only equality correlated predicates.
+      // only supported correlated equality predicates.
       // It cannot be on a correlation path if the correlation has
       // non-equality correlated predicates.
       case a: Aggregate =>
         failOnInvalidOuterReference(a)
-        failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
+        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, a)
+
+      // Distinct does not host any correlated expressions, but during the optimization phase
+      // it will be rewritten as Aggregate, which can only be on a correlation path if the
+      // correlation contains only the supported correlated equality predicates.
+      // Only block it for lateral subqueries because scalar subqueries must be aggregated
+      // and it does not impact the results for IN/EXISTS subqueries.
+      case d: Distinct =>
+        if (isLateral) {
+          failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, d)
+        }
 
       // Join can host correlated expressions.
       case j @ Join(left, right, joinType, _, _) =>
@@ -994,22 +1129,81 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }}
   }
 
-  // Make sure that table is able to alter partition.
-  private def checkAlterTablePartition(
-      table: Table, parts: Seq[PartitionSpec]): Unit = {
-    (table, parts) match {
-      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
-        failAnalysis(s"Table ${table.name()} can not alter partitions.")
+  /**
+   * Validates the options used for alter table commands after table and columns are resolved.
+   */
+  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
+        alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
+          s"already exists in ${struct.treeString}")
+      }
+    }
 
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
+    }
 
-      // Skip atomic partition tables
-      case (_: SupportsAtomicPartitionManagement, _) =>
-      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
-        failAnalysis(
-          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
+    alter match {
+      case AddColumns(table: ResolvedTable, colsToAdd) =>
+        colsToAdd.foreach { colToAdd =>
+          checkColumnNotExists("add", colToAdd.name, table.schema)
+        }
+        checkColumnNameDuplication(colsToAdd)
 
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
+
+      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
+
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _, _) =>
+        val fieldName = col.name.quoted
+        if (a.dataType.isDefined) {
+          val field = CharVarcharUtils.getRawType(col.field.metadata)
+            .map(dt => col.field.copy(dataType = dt))
+            .getOrElse(col.field)
+          val newDataType = a.dataType.get
+          newDataType match {
+            case _: StructType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                "update a struct by updating its fields")
+            case _: MapType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update a map by updating $fieldName.key or $fieldName.value")
+            case _: ArrayType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update the element by updating $fieldName.element")
+            case u: UserDefinedType[_] =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update a UserDefinedType[${u.sql}] by updating its fields")
+            case _: CalendarIntervalType | _: AnsiIntervalType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
+            case _ => // update is okay
+          }
+
+          // We don't need to handle nested types here which shall fail before.
+          def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+            case (CharType(l1), CharType(l2)) => l1 == l2
+            case (CharType(l1), VarcharType(l2)) => l1 <= l2
+            case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+            case _ => Cast.canUpCast(from, to)
+          }
+
+          if (!canAlterColumnType(field.dataType, newDataType)) {
+            alter.failAnalysis(s"Cannot update ${table.name} field $fieldName: " +
+              s"${field.dataType.simpleString} cannot be cast to ${newDataType.simpleString}")
+          }
+        }
+        if (a.nullable.isDefined) {
+          if (!a.nullable.get && col.field.nullable) {
+            alter.failAnalysis(s"Cannot change nullable column to non-nullable: $fieldName")
+          }
+        }
       case _ =>
     }
   }

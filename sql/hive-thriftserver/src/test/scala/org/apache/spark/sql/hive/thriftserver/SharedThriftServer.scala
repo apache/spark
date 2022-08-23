@@ -99,15 +99,16 @@ trait SharedThriftServer extends SharedSparkSession {
     }
   }
 
-  protected def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
+  protected def withCLIServiceClient(username: String = user)
+      (f: ThriftCLIServiceClient => Unit): Unit = {
     require(serverPort != 0, "Failed to bind an actual port for HiveThriftServer2")
     val transport = mode match {
       case ServerMode.binary =>
         val rawTransport = new TSocket("localhost", serverPort)
-        PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+        PlainSaslHelper.getPlainTransport(username, "anonymous", rawTransport)
       case ServerMode.http =>
         val interceptor = new HttpBasicAuthInterceptor(
-          user,
+          username,
           "anonymous",
           null, null, true, new util.HashMap[String, String]())
         new THttpClient(

@@ -33,6 +33,7 @@ object ProcessUtils extends Logging {
   def executeProcess(
       fullCommand: Array[String],
       timeout: Long,
+      dumpOutput: Boolean = true,
       dumpErrors: Boolean = true,
       env: Map[String, String] = Map.empty[String, String]): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
@@ -42,7 +43,9 @@ object ProcessUtils extends Logging {
     val outputLines = new ArrayBuffer[String]
     Utils.tryWithResource(proc.getInputStream)(
       Source.fromInputStream(_, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
-        logInfo(line)
+        if (dumpOutput) {
+          logInfo(line)
+        }
         outputLines += line
       })
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),

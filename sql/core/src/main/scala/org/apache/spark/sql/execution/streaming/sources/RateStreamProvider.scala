@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
@@ -90,7 +88,7 @@ class RateStreamTable(
   override def schema(): StructType = RateStreamProvider.SCHEMA
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {

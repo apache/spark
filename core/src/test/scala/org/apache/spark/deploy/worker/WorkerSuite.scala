@@ -70,8 +70,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, securityMgr)
     val resourcesFile = conf.get(SPARK_WORKER_RESOURCE_FILE)
+    val workDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName).toString
     val localWorker = new Worker(rpcEnv, 50000, 20, 1234 * 5,
-      Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", "/tmp",
+      Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", workDir,
       conf, securityMgr, resourcesFile, shuffleServiceSupplier)
     if (local) {
       localWorker

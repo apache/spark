@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector
-import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
+import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -46,16 +47,16 @@ private[sql] object ArrowUtils {
     case BinaryType => ArrowType.Binary.INSTANCE
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
-    case TimestampType =>
-      if (timeZoneId == null) {
-        throw new UnsupportedOperationException(
-          s"${TimestampType.catalogString} must supply timeZoneId parameter")
-      } else {
-        new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
-      }
+    case TimestampType if timeZoneId == null =>
+      throw new IllegalStateException("Missing timezoneId where it is mandatory.")
+    case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
+    case TimestampNTZType =>
+      new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
     case NullType => ArrowType.Null.INSTANCE
+    case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
+    case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
     case _ =>
-      throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+      throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
@@ -72,9 +73,13 @@ private[sql] object ArrowUtils {
     case ArrowType.Binary.INSTANCE => BinaryType
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
+    case ts: ArrowType.Timestamp
+      if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null => TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
     case ArrowType.Null.INSTANCE => NullType
-    case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
+    case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
+    case di: ArrowType.Duration if di.getUnit == TimeUnit.MICROSECOND => DayTimeIntervalType()
+    case _ => throw QueryExecutionErrors.unsupportedDataTypeError(dt.toString)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */

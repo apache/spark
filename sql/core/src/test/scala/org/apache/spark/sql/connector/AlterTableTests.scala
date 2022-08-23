@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -310,6 +311,43 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD/ALTER COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
+
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add("a", StringType)
+          .add(StructField("b", IntegerType)
+            .withCurrentDefaultValue("2 + 3")
+            .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b set default 2 + 3")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withCurrentDefaultValue("2 + 3")
+              .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b drop default")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withExistenceDefaultValue("5")))
+      }
+    }
+  }
+
   test("AlterTable: add complex column") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -356,8 +394,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ADD COLUMN point.z double")
       }
 
-      assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point"))
     }
   }
 
@@ -385,6 +422,29 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-36372: Adding duplicate columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+    }
+  }
+
+  test("SPARK-36372: Adding duplicate nested columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+      }
+      assert(e.message.contains(
+        "Found duplicate column(s) in the user specified columns: `point.z`"))
+    }
+  }
+
   test("AlterTable: update column type int -> long") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
@@ -403,8 +463,13 @@ trait AlterTableTests extends SharedSparkSession {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e = intercept[AnalysisException](sql(s"ALTER TABLE $t ALTER COLUMN id TYPE interval"))
-      assert(e.getMessage.contains("id to interval type"))
+      (DataTypeTestUtils.dayTimeIntervalTypes ++ DataTypeTestUtils.yearMonthIntervalTypes)
+        .foreach {
+          case d: DataType => d.typeName
+            val e = intercept[AnalysisException](
+              sql(s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"))
+            assert(e.getMessage.contains("id to interval type"))
+        }
     }
   }
 
@@ -611,8 +676,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN data TYPE string")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -625,8 +689,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -684,7 +747,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("Couldn't resolve positional argument"))
+      assert(e1.getMessage.contains("Missing field non_exist"))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
       assert(getTableMetadata(tableName).schema == new StructType()
@@ -706,7 +769,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("Couldn't resolve positional argument"))
+      assert(e2.getMessage.contains("Missing field point.non_exist"))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
@@ -797,8 +860,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -811,8 +873,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -913,8 +974,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t RENAME COLUMN data TO some_string")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -927,8 +987,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t RENAME COLUMN point.x TO z")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -1049,7 +1108,7 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: drop column must exist") {
+  test("AlterTable: drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1058,12 +1117,16 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t DROP COLUMN data")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
     }
   }
 
-  test("AlterTable: nested drop column must exist") {
+  test("AlterTable: nested drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1072,36 +1135,28 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t DROP COLUMN point.x")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
+
     }
   }
 
-  test("AlterTable: set location") {
+  test("AlterTable: drop mixed existing/non-existing columns using IF EXISTS") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
+      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
+        s"USING $v2Format")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
-    }
-  }
-
-  test("AlterTable: set partition location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(exc.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+        s"names, name, points.element.z, id, points.element.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType()
+        .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
     }
   }
 
@@ -1154,6 +1209,17 @@ trait AlterTableTests extends SharedSparkSession {
       assert(table.schema === StructType(Seq(
         StructField("col2", StringType),
         StructField("col3", IntegerType).withComment("c3"))))
+    }
+  }
+
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (data string) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
     }
   }
 }

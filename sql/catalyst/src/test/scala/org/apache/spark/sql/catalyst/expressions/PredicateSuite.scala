@@ -392,7 +392,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: lessThan") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(LessThan(smallValues(i), largeValues(i)), true)
       checkEvaluation(LessThan(equalValues1(i), equalValues2(i)), false)
       checkEvaluation(LessThan(largeValues(i), smallValues(i)), false)
@@ -400,7 +400,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: LessThanOrEqual") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(LessThanOrEqual(smallValues(i), largeValues(i)), true)
       checkEvaluation(LessThanOrEqual(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(LessThanOrEqual(largeValues(i), smallValues(i)), false)
@@ -408,7 +408,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: GreaterThan") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(GreaterThan(smallValues(i), largeValues(i)), false)
       checkEvaluation(GreaterThan(equalValues1(i), equalValues2(i)), false)
       checkEvaluation(GreaterThan(largeValues(i), smallValues(i)), true)
@@ -416,7 +416,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: GreaterThanOrEqual") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(GreaterThanOrEqual(smallValues(i), largeValues(i)), false)
       checkEvaluation(GreaterThanOrEqual(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(GreaterThanOrEqual(largeValues(i), smallValues(i)), true)
@@ -424,7 +424,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: EqualTo") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(EqualTo(smallValues(i), largeValues(i)), false)
       checkEvaluation(EqualTo(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(EqualTo(largeValues(i), smallValues(i)), false)
@@ -432,7 +432,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: EqualNullSafe") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(EqualNullSafe(smallValues(i), largeValues(i)), false)
       checkEvaluation(EqualNullSafe(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(EqualNullSafe(largeValues(i), smallValues(i)), false)
@@ -643,5 +643,19 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExpr(GreaterThan, Double.NaN, Double.PositiveInfinity, true)
     checkExpr(GreaterThan, Double.NaN, Double.NaN, false)
     checkExpr(GreaterThan, 0.0, -0.0, false)
+  }
+
+  test("SPARK-36792: InSet should handle Double.NaN and Float.NaN") {
+    checkInAndInSet(In(Literal(Double.NaN), Seq(Literal(Double.NaN), Literal(2d))), true)
+    checkInAndInSet(In(Literal.create(null, DoubleType),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), null)
+    checkInAndInSet(In(Literal.create(null, DoubleType),
+      Seq(Literal(Double.NaN), Literal(2d))), null)
+    checkInAndInSet(In(Literal(3d),
+      Seq(Literal(Double.NaN), Literal(2d))), false)
+    checkInAndInSet(In(Literal(3d),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), null)
+    checkInAndInSet(In(Literal(Double.NaN),
+      Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
 }

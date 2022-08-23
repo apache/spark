@@ -187,6 +187,25 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     assert(instances.size === 1)
   }
 
+  test("SPARK-39983 - Broadcasted value not cached on driver") {
+    // Use distributed cluster as in local mode the broabcast value is actually cached.
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2,1,1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+
+    sc.broadcastInternal(value = 1234, serializedOnly = false) match {
+      case tb: TorrentBroadcast[Int] =>
+        assert(tb.hasCachedValue)
+        assert(1234 === tb.value)
+    }
+    sc.broadcastInternal(value = 1234, serializedOnly = true) match {
+      case tb: TorrentBroadcast[Int] =>
+        assert(!tb.hasCachedValue)
+        assert(1234 === tb.value)
+    }
+  }
+
   /**
    * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *

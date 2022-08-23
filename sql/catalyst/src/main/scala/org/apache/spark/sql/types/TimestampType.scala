@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class TimestampType private() extends AtomicType {
+class TimestampType private() extends DatetimeType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000Z (UTC+00:00)

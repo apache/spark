@@ -16,10 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.File
-
 import io.fabric8.kubernetes.client.KubernetesClient
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.util.Utils
@@ -33,14 +32,34 @@ private[spark] class KubernetesDriverBuilder {
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
           client,
-          new File(file),
-          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
+          file,
+          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME),
+          conf.sparkConf)
       }
       .getOrElse(SparkPod.initialPod())
 
     val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
       .map { className =>
-        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+        val feature = Utils.classForName[Any](className).newInstance()
+        val initializedFeature = feature match {
+          // Since 3.3, allow user to implement feature with KubernetesDriverConf
+          case d: KubernetesDriverCustomFeatureConfigStep =>
+            d.init(conf)
+            Some(d)
+          // raise SparkException with wrong type feature step
+          case _: KubernetesExecutorCustomFeatureConfigStep =>
+            None
+          // Since 3.2, allow user to implement feature without config
+          case f: KubernetesFeatureConfigStep =>
+            Some(f)
+          case _ => None
+        }
+        initializedFeature.getOrElse {
+          throw new SparkException(s"Failed to initialize feature step: $className, " +
+            s"please make sure your driver side feature steps are implemented by " +
+            s"`${classOf[KubernetesDriverCustomFeatureConfigStep].getName}` or " +
+            s"`${classOf[KubernetesFeatureConfigStep].getName}`.")
+        }
       }
 
     val features = Seq(
@@ -58,15 +77,18 @@ private[spark] class KubernetesDriverBuilder {
 
     val spec = KubernetesDriverSpec(
       initialPod,
+      driverPreKubernetesResources = Seq.empty,
       driverKubernetesResources = Seq.empty,
       conf.sparkConf.getAll.toMap)
 
     features.foldLeft(spec) { case (spec, feature) =>
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
+      val addedPreResources = feature.getAdditionalPreKubernetesResources()
       val addedResources = feature.getAdditionalKubernetesResources()
       KubernetesDriverSpec(
         configuredPod,
+        spec.driverPreKubernetesResources ++ addedPreResources,
         spec.driverKubernetesResources ++ addedResources,
         spec.systemProperties ++ addedSystemProperties)
     }

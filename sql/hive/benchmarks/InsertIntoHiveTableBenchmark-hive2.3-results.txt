@@ -1,11 +1,11 @@
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 insert hive table benchmark:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-INSERT INTO DYNAMIC                                4326           4373          66          0.0      422486.0       1.0X
-INSERT INTO HYBRID                                  726            741          21          0.0       70877.2       6.0X
-INSERT INTO STATIC                                  256            270          12          0.0       25015.7      16.9X
-INSERT OVERWRITE DYNAMIC                           4115           4150          49          0.0      401828.8       1.1X
-INSERT OVERWRITE HYBRID                             690            699           8          0.0       67370.5       6.3X
-INSERT OVERWRITE STATIC                             277            283           5          0.0       27097.9      15.6X
+INSERT INTO DYNAMIC                                4880           5354         671          0.0      476555.0       1.0X
+INSERT INTO HYBRID                                  748            790          37          0.0       73006.2       6.5X
+INSERT INTO STATIC                                  257            271          16          0.0       25053.5      19.0X
+INSERT OVERWRITE DYNAMIC                           4927           5114         266          0.0      481116.6       1.0X
+INSERT OVERWRITE HYBRID                             722            724           3          0.0       70503.6       6.8X
+INSERT OVERWRITE STATIC                             264            277          11          0.0       25761.2      18.5X
 

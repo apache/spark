@@ -19,6 +19,8 @@ license: |
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
+  
+*Note*: Apache Mesos support is deprecated as of Apache Spark 3.2.0. It will be removed in a future version.
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 
@@ -30,7 +32,9 @@ The advantages of deploying Spark with Mesos include:
 
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
 Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # How it Works

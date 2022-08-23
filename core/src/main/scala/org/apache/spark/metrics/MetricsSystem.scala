@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
@@ -152,11 +152,14 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
-  def getSourcesByName(sourceName: String): Seq[Source] =
+  def getSourcesByName(sourceName: String): Seq[Source] = sources.synchronized {
     sources.filter(_.sourceName == sourceName).toSeq
+  }
 
   def registerSource(source: Source): Unit = {
-    sources += source
+    sources.synchronized {
+      sources += source
+    }
     try {
       val regName = buildRegistryName(source)
       registry.register(regName, source.metricRegistry)
@@ -166,7 +169,9 @@ private[spark] class MetricsSystem private (
   }
 
   def removeSource(source: Source): Unit = {
-    sources -= source
+    sources.synchronized {
+      sources -= source
+    }
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
@@ -206,9 +211,18 @@ private[spark] class MetricsSystem private (
               .newInstance(kv._2, registry)
             prometheusServlet = Some(servlet)
           } else {
-            val sink = Utils.classForName[Sink](classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry])
-              .newInstance(kv._2, registry)
+            val sink = try {
+              Utils.classForName[Sink](classPath)
+                .getConstructor(classOf[Properties], classOf[MetricRegistry])
+                .newInstance(kv._2, registry)
+            } catch {
+              case _: NoSuchMethodException =>
+                // Fallback to three-parameters constructor having SecurityManager
+                Utils.classForName[Sink](classPath)
+                  .getConstructor(
+                    classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+                  .newInstance(kv._2, registry, null)
+            }
             sinks += sink
           }
         } catch {
@@ -219,6 +233,8 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  def metricsProperties(): Properties = metricsConfig.properties
 }
 
 private[spark] object MetricsSystem {

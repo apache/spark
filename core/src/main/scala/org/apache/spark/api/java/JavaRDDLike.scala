@@ -451,6 +451,19 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * `org.apache.spark.api.java.JavaRDDLike.treeAggregate` with a parameter to do the
+   * final aggregation on the executor.
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U],
+      depth: Int,
+      finalAggregateOnExecutor: Boolean): U = {
+    rdd.treeAggregate(zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor)(fakeClassTag[U])
+  }
+
+  /**
    * Return the number of elements in the RDD.
    */
   def count(): Long = rdd.count()

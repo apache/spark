@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapCol
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -207,9 +207,10 @@ case class CachedRDDBuilder(
     tableName: Option[String]) {
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
+  @transient @volatile private var _cachedColumnBuffersAreLoaded: Boolean = false
 
-  val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
-  val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
+  val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
+  val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
@@ -237,11 +238,31 @@ case class CachedRDDBuilder(
   }
 
   def isCachedColumnBuffersLoaded: Boolean = {
-    _cachedColumnBuffers != null
+    if (_cachedColumnBuffers != null) {
+      synchronized {
+        return _cachedColumnBuffers != null && isCachedRDDLoaded
+      }
+    }
+    false
+  }
+
+  private def isCachedRDDLoaded: Boolean = {
+      _cachedColumnBuffersAreLoaded || {
+        val bmMaster = SparkEnv.get.blockManager.master
+        val rddLoaded = _cachedColumnBuffers.partitions.forall { partition =>
+          bmMaster.getBlockStatus(RDDBlockId(_cachedColumnBuffers.id, partition.index), false)
+            .exists { case(_, blockStatus) => blockStatus.isCached }
+        }
+        if (rddLoaded) {
+          _cachedColumnBuffersAreLoaded = rddLoaded
+        }
+        rddLoaded
+    }
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (cachedPlan.supportsColumnar) {
+    val cb = if (cachedPlan.supportsColumnar &&
+        serializer.supportsColumnarInput(cachedPlan.output)) {
       serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,

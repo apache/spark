@@ -58,4 +58,7 @@ case class ReferenceSort(
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ReferenceSort =
+    copy(child = newChild)
 }

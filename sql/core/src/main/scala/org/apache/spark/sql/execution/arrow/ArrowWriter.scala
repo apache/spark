@@ -24,6 +24,7 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -59,6 +60,7 @@ object ArrowWriter {
       case (BinaryType, vector: VarBinaryVector) => new BinaryWriter(vector)
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
+      case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -73,8 +75,10 @@ object ArrowWriter {
         }
         new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
+      case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
+      case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (dt, _) =>
-        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+        throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
     }
   }
 }
@@ -284,6 +288,18 @@ private[arrow] class TimestampWriter(
   }
 }
 
+private[arrow] class TimestampNTZWriter(
+    val valueVector: TimeStampMicroVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, input.getLong(ordinal))
+  }
+}
+
 private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
@@ -391,5 +407,27 @@ private[arrow] class NullWriter(val valueVector: NullVector) extends ArrowFieldW
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+  }
+}
+
+private[arrow] class IntervalYearWriter(val valueVector: IntervalYearVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, input.getInt(ordinal));
+  }
+}
+
+private[arrow] class DurationWriter(val valueVector: DurationVector)
+  extends ArrowFieldWriter {
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.set(count, input.getLong(ordinal))
   }
 }

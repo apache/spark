@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.write;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
 
 /**
@@ -61,5 +62,13 @@ public interface Write {
    */
   default StreamingWrite toStreaming() {
     throw new UnsupportedOperationException(description() + ": Streaming write is not supported");
+  }
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    return new CustomMetric[]{};
   }
 }

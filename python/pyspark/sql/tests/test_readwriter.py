@@ -26,7 +26,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ReadwriterTests(ReusedSQLTestCase):
-
     def test_save_and_load(self):
         df = self.df
         tmpPath = tempfile.mkdtemp()
@@ -43,21 +42,27 @@ class ReadwriterTests(ReusedSQLTestCase):
         actual = self.spark.read.json(tmpPath)
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        df.write.save(format="json", mode="overwrite", path=tmpPath,
-                      noUse="this options will not be used in save.")
-        actual = self.spark.read.load(format="json", path=tmpPath,
-                                      noUse="this options will not be used in load.")
+        df.write.save(
+            format="json",
+            mode="overwrite",
+            path=tmpPath,
+            noUse="this options will not be used in save.",
+        )
+        actual = self.spark.read.load(
+            format="json", path=tmpPath, noUse="this options will not be used in load."
+        )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        defaultDataSourceName = self.spark.conf.get("spark.sql.sources.default",
-                                                    "org.apache.spark.sql.parquet")
+        defaultDataSourceName = self.spark.conf.get(
+            "spark.sql.sources.default", "org.apache.spark.sql.parquet"
+        )
         self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         actual = self.spark.read.load(path=tmpPath)
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.spark.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
-        csvpath = os.path.join(tempfile.mkdtemp(), 'data')
-        df.write.option('quote', None).format('csv').save(csvpath)
+        csvpath = os.path.join(tempfile.mkdtemp(), "data")
+        df.write.option("quote", None).format("csv").save(csvpath)
 
         shutil.rmtree(tmpPath)
 
@@ -77,16 +82,17 @@ class ReadwriterTests(ReusedSQLTestCase):
         actual = self.spark.read.json(tmpPath)
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        df.write.mode("overwrite").options(noUse="this options will not be used in save.")\
-                .option("noUse", "this option will not be used in save.")\
-                .format("json").save(path=tmpPath)
-        actual =\
-            self.spark.read.format("json")\
-                           .load(path=tmpPath, noUse="this options will not be used in load.")
+        df.write.mode("overwrite").options(noUse="this options will not be used in save.").option(
+            "noUse", "this option will not be used in save."
+        ).format("json").save(path=tmpPath)
+        actual = self.spark.read.format("json").load(
+            path=tmpPath, noUse="this options will not be used in load."
+        )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        defaultDataSourceName = self.spark.conf.get("spark.sql.sources.default",
-                                                    "org.apache.spark.sql.parquet")
+        defaultDataSourceName = self.spark.conf.get(
+            "spark.sql.sources.default", "org.apache.spark.sql.parquet"
+        )
         self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         actual = self.spark.read.load(path=tmpPath)
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
@@ -96,8 +102,10 @@ class ReadwriterTests(ReusedSQLTestCase):
 
     def test_bucketed_write(self):
         data = [
-            (1, "foo", 3.0), (2, "foo", 5.0),
-            (3, "bar", -1.0), (4, "bar", 6.0),
+            (1, "foo", 3.0),
+            (2, "foo", 5.0),
+            (3, "bar", -1.0),
+            (4, "bar", 6.0),
         ]
         df = self.spark.createDataFrame(data, ["x", "y", "z"])
 
@@ -132,15 +140,21 @@ class ReadwriterTests(ReusedSQLTestCase):
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
             # Test write with bucket and sort with a list of columns
-            (df.write.bucketBy(2, "x")
+            (
+                df.write.bucketBy(2, "x")
                 .sortBy(["y", "z"])
-                .mode("overwrite").saveAsTable("pyspark_bucket"))
+                .mode("overwrite")
+                .saveAsTable("pyspark_bucket")
+            )
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
             # Test write with bucket and sort with multiple columns
-            (df.write.bucketBy(2, "x")
+            (
+                df.write.bucketBy(2, "x")
                 .sortBy("y", "z")
-                .mode("overwrite").saveAsTable("pyspark_bucket"))
+                .mode("overwrite")
+                .saveAsTable("pyspark_bucket")
+            )
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
     def test_insert_into(self):
@@ -182,8 +196,7 @@ class ReadwriterV2Tests(ReusedSQLTestCase):
         from pyspark.sql.functions import years, months, days, hours, bucket
 
         df = self.spark.createDataFrame(
-            [(1, datetime.datetime(2000, 1, 1), "foo")],
-            ("id", "ts", "value")
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
         )
 
         writer = df.writeTo("testcat.t")
@@ -205,7 +218,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

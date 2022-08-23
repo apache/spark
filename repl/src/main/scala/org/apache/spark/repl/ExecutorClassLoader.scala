@@ -25,8 +25,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.xbean.asm7._
-import org.apache.xbean.asm7.Opcodes._
+import org.apache.xbean.asm9._
+import org.apache.xbean.asm9.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -213,7 +213,7 @@ class ExecutorClassLoader(
         ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS)
       val cleaner = new ConstructorCleaner(name, cw)
       cr.accept(cleaner, 0)
-      return cw.toByteArray
+      cw.toByteArray
     } else {
       // Pass the class through unmodified
       val bos = new ByteArrayOutputStream
@@ -227,7 +227,7 @@ class ExecutorClassLoader(
           done = true
         }
       }
-      return bos.toByteArray
+      bos.toByteArray
     }
   }
 
@@ -240,7 +240,7 @@ class ExecutorClassLoader(
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM7, cv) {
+extends ClassVisitor(ASM9, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)
@@ -257,9 +257,9 @@ extends ClassVisitor(ASM7, cv) {
       mv.visitInsn(RETURN)
       mv.visitMaxs(-1, -1) // stack size and local vars will be auto-computed
       mv.visitEnd()
-      return null
+      null
     } else {
-      return mv
+      mv
     }
   }
 }

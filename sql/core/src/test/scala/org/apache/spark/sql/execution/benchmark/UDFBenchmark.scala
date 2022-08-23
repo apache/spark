@@ -28,10 +28,11 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/UDFBenchmark-results.txt".
  * }}}
  */

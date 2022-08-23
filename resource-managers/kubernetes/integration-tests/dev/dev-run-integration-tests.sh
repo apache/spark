@@ -19,6 +19,8 @@
 set -exo errexit
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
+. $TEST_ROOT_DIR/build/util.sh
+
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
@@ -28,6 +30,7 @@ BASE_IMAGE_NAME=
 JVM_IMAGE_NAME=
 PYTHON_IMAGE_NAME=
 R_IMAGE_NAME=
+DOCKER_FILE=
 SPARK_MASTER=
 NAMESPACE=
 SERVICE_ACCOUNT=
@@ -35,7 +38,8 @@ CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 JAVA_VERSION="8"
-HADOOP_PROFILE="hadoop-3.2"
+BUILD_DEPENDENCIES_MVN_FLAG="-am"
+HADOOP_PROFILE="hadoop-3"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
@@ -67,6 +71,10 @@ while (( "$#" )); do
       ;;
     --spark-tgz)
       SPARK_TGZ="$2"
+      shift
+      ;;
+    --docker-file)
+      DOCKER_FILE="$2"
       shift
       ;;
     --spark-master)
@@ -117,6 +125,9 @@ while (( "$#" )); do
       HADOOP_PROFILE="$2"
       shift
       ;;
+    --skip-building-dependencies)
+      BUILD_DEPENDENCIES_MVN_FLAG=""
+      ;;
     *)
       echo "Unexpected command line flag $2 $1."
       exit 1
@@ -137,6 +148,11 @@ properties=(
 if [ -n "$JAVA_IMAGE_TAG" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
+fi
+
+if [ -n "$DOCKER_FILE" ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.dockerFile=$(realpath $DOCKER_FILE) )
 fi
 
 if [ -n "$NAMESPACE" ];
@@ -173,7 +189,16 @@ properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
   -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
-  -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
-$TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}
+(
+  cd $TEST_ROOT_DIR;
+  ./build/mvn install \
+    -pl resource-managers/kubernetes/integration-tests \
+    $BUILD_DEPENDENCIES_MVN_FLAG \
+    -Pscala-$SCALA_VERSION \
+    -P$HADOOP_PROFILE \
+    -Pkubernetes \
+    -Pkubernetes-integration-tests \
+    ${properties[@]}
+)

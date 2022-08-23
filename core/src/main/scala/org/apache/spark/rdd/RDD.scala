@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
@@ -92,15 +93,7 @@ abstract class RDD[T: ClassTag](
 
   private def sc: SparkContext = {
     if (_sc == null) {
-      throw new SparkException(
-        "This RDD lacks a SparkContext. It could happen in the following cases: \n(1) RDD " +
-        "transformations and actions are NOT invoked by the driver, but inside of other " +
-        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid " +
-        "because the values transformation and count action cannot be performed inside of the " +
-        "rdd1.map transformation. For more information, see SPARK-5063.\n(2) When a Spark " +
-        "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
-        "an RDD not defined by the streaming job is used in DStream operations. For more " +
-        "information, See SPARK-13758.")
+      throw SparkCoreErrors.rddLacksSparkContextError()
     }
     _sc
   }
@@ -172,8 +165,7 @@ abstract class RDD[T: ClassTag](
   private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
-      throw new UnsupportedOperationException(
-        "Cannot change storage level of an RDD after it was already assigned a level")
+      throw SparkCoreErrors.cannotChangeStorageLevelError()
     }
     // If this is the first time this RDD is marked for persisting, register it
     // with the SparkContext for cleanups and accounting. Do this only once.
@@ -401,7 +393,7 @@ abstract class RDD[T: ClassTag](
         }
       // Need to compute the block.
       case Right(iter) =>
-        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
+        new InterruptibleIterator(context, iter)
     }
   }
 
@@ -951,8 +943,7 @@ abstract class RDD[T: ClassTag](
         def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
           case (false, false) => false
-          case _ => throw new SparkException("Can only zip RDDs with " +
-            "same number of elements in each partition")
+          case _ => throw SparkCoreErrors.canOnlyZipRDDsWithSamePartitionSizeError()
         }
         def next(): (T, U) = (thisIter.next(), otherIter.next())
       }
@@ -1119,7 +1110,7 @@ abstract class RDD[T: ClassTag](
     }
     sc.runJob(this, reducePartition, mergeResult)
     // Get the final result out of our Option, or throw an exception if the RDD was empty
-    jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
+    jobResult.getOrElse(throw SparkCoreErrors.emptyCollectionError())
   }
 
   /**
@@ -1151,7 +1142,7 @@ abstract class RDD[T: ClassTag](
       }
     }
     partiallyReduced.treeAggregate(Option.empty[T])(op, op, depth)
-      .getOrElse(throw new UnsupportedOperationException("empty collection"))
+      .getOrElse(throw SparkCoreErrors.emptyCollectionError())
   }
 
   /**
@@ -1220,7 +1211,22 @@ abstract class RDD[T: ClassTag](
       seqOp: (U, T) => U,
       combOp: (U, U) => U,
       depth: Int = 2): U = withScope {
-    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+      treeAggregate(zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor = false)
+  }
+
+  /**
+   * [[org.apache.spark.rdd.RDD#treeAggregate]] with a parameter to do the final
+   * aggregation on the executor
+   *
+   * @param finalAggregateOnExecutor do final aggregation on executor
+   */
+  def treeAggregate[U: ClassTag](
+      zeroValue: U,
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int,
+      finalAggregateOnExecutor: Boolean): U = withScope {
+      require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (partitions.length == 0) {
       Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
     } else {
@@ -1241,6 +1247,15 @@ abstract class RDD[T: ClassTag](
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
           (i, iter) => iter.map((i % curNumPartitions, _))
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
+      }
+      if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
+        // map the partially aggregated rdd into a key-value rdd
+        // do the computation in the single executor with one partition
+        // get the new RDD[U]
+        partiallyAggregated = partiallyAggregated
+          .map(v => (0.toByte, v))
+          .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
+          .values
       }
       val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
       partiallyAggregated.fold(copiedZeroValue)(cleanCombOp)
@@ -1311,7 +1326,7 @@ abstract class RDD[T: ClassTag](
       : PartialResult[Map[T, BoundedDouble]] = withScope {
     require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValueApprox() does not support arrays")
+      throw SparkCoreErrors.countByValueApproxNotSupportArraysError()
     }
     val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (_, iter) =>
       val map = new OpenHashMap[T, Long]
@@ -1462,7 +1477,7 @@ abstract class RDD[T: ClassTag](
   def first(): T = withScope {
     take(1) match {
       case Array(t) => t
-      case _ => throw new UnsupportedOperationException("empty collection")
+      case _ => throw SparkCoreErrors.emptyCollectionError()
     }
   }
 
@@ -1612,7 +1627,7 @@ abstract class RDD[T: ClassTag](
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
     if (context.checkpointDir.isEmpty) {
-      throw new SparkException("Checkpoint directory has not been set in the SparkContext")
+      throw SparkCoreErrors.checkpointDirectoryHasNotBeenSetInSparkContextError()
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new ReliableRDDCheckpointData(this))
     }
@@ -1725,7 +1740,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Removes an RDD's shuffles and it's non-persisted ancestors.
    * When running without a shuffle service, cleaning up shuffle files enables downscaling.
    * If you use the RDD after this call, you should checkpoint and materialize it first.
@@ -1734,7 +1748,6 @@ abstract class RDD[T: ClassTag](
    *   * Tuning the driver GC to be more aggressive, so the regular context cleaner is triggered
    *   * Setting an appropriate TTL for shuffle files to be auto cleaned
    */
-  @Experimental
   @DeveloperApi
   @Since("3.1.0")
   def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
@@ -1743,9 +1756,11 @@ abstract class RDD[T: ClassTag](
        * Clean the shuffles & all of its parents.
        */
       def cleanEagerly(dep: Dependency[_]): Unit = {
-        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
-          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-          cleaner.doCleanupShuffle(shuffleId, blocking)
+        dep match {
+          case dependency: ShuffleDependency[_, _, _] =>
+            val shuffleId = dependency.shuffleId
+            cleaner.doCleanupShuffle(shuffleId, blocking)
+          case _ => // do nothing
         }
         val rdd = dep.rdd
         val rddDepsOpt = rdd.internalDependencies
@@ -1795,7 +1810,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   @Since("3.1.0")
-  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  def getResourceProfile(): ResourceProfile = resourceProfile.orNull
 
   // =======================================================================
   // Other internal methods and fields

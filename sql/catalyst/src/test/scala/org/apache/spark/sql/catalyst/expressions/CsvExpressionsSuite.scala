@@ -158,13 +158,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("infer schema of CSV strings") {
-    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "STRUCT<`_c0`: INT, `_c1`: STRING>")
+    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("infer schema of CSV strings by using options") {
     checkEvaluation(
       new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
-      "STRUCT<`_c0`: INT, `_c1`: STRING>")
+      "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("to_csv - struct") {

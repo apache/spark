@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
@@ -72,8 +73,8 @@ class ResolveHintsSuite extends AnalysisTest {
   test("do not traverse past existing broadcast hints") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("table"),
-        ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
+        ResolvedHint(table("table").where($"a" > 1), HintInfo(strategy = Some(BROADCAST)))),
+      ResolvedHint(testRelation.where($"a" > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
   }
 
@@ -84,7 +85,7 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
 
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery("tableAlias")),
       ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
@@ -97,8 +98,9 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("do not traverse past subquery alias") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testRelation.where('a > 1).analyze,
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where($"a" > 1)
+        .subquery("tableAlias")),
+      testRelation.where($"a" > 1).analyze,
       caseSensitive = false)
   }
 
@@ -110,9 +112,10 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
-        .select('a).analyze,
-      caseSensitive = false)
+      ResolvedHint(testRelation.where($"a" > 1).select($"a"), HintInfo(strategy = Some(BROADCAST)))
+        .select($"a").analyze,
+      caseSensitive = false,
+      inlineCTE = true)
   }
 
   test("should not traverse down CTE") {
@@ -123,8 +126,9 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testRelation.where('a > 1).select('a).select('a).analyze,
-      caseSensitive = false)
+      testRelation.where($"a" > 1).select($"a").select($"a").analyze,
+      caseSensitive = false,
+      inlineCTE = true)
   }
 
   test("coalesce and repartition hint") {
@@ -233,7 +237,7 @@ class ResolveHintsSuite extends AnalysisTest {
     }
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
-        e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
+        e.getMessage.getFormattedMessage.contains("Unrecognized hint: unknown_hint")))
   }
 
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
@@ -293,6 +297,67 @@ class ResolveHintsSuite extends AnalysisTest {
           None,
           JoinHint.NONE),
         caseSensitive = true)
+    }
+  }
+
+  test("SPARK-35786: Support optimize rebalance by expression in AQE") {
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
+      RebalancePartitions(Seq.empty, testRelation))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", 1 :: Nil, table("TaBlE")),
+        testRelation)
+    }
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
+      Seq("Hint parameter should include columns"))
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
+      Seq("Hint parameter should include columns"))
+  }
+
+  test("SPARK-38410: Support specify initial partition number for rebalance") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+      Seq(
+        Nil -> 3,
+        Seq(1) -> 1,
+        Seq(UnresolvedAttribute("a")) -> 3,
+        Seq(1, UnresolvedAttribute("a")) -> 1).foreach { case (param, initialNumPartitions) =>
+        assert(UnresolvedHint("REBALANCE", param, testRelation).analyze
+          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == initialNumPartitions)
+      }
     }
   }
 }

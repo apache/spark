@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -53,9 +52,7 @@ import org.apache.hive.service.cli.GetInfoType;
 import org.apache.hive.service.cli.GetInfoValue;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationHandle;
-import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.SessionHandle;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation;
 import org.apache.hive.service.cli.operation.GetCatalogsOperation;
 import org.apache.hive.service.cli.operation.GetColumnsOperation;
@@ -69,6 +66,8 @@ import org.apache.hive.service.cli.operation.MetadataOperation;
 import org.apache.hive.service.cli.operation.Operation;
 import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,7 +140,8 @@ public class HiveSessionImpl implements HiveSession {
     sessionState = new SessionState(hiveConf, username);
     sessionState.setUserIpAddress(ipAddress);
     sessionState.setIsHiveServerQuery(true);
-    SessionState.start(sessionState);
+    // Use setCurrentSessionState to avoid creating useless SessionDirs.
+    SessionState.setCurrentSessionState(sessionState);
     try {
       sessionState.loadAuxJars();
       sessionState.loadReloadableAuxJars();
@@ -789,7 +789,7 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   @Override
-  public TableSchema getResultSetMetadata(OperationHandle opHandle) throws HiveSQLException {
+  public TTableSchema getResultSetMetadata(OperationHandle opHandle) throws HiveSQLException {
     acquire(true);
     try {
       return sessionManager.getOperationManager().getOperationResultSetSchema(opHandle);
@@ -799,7 +799,7 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   @Override
-  public RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
+  public TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException {
     acquire(true);
     try {

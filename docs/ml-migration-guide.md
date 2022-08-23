@@ -269,7 +269,7 @@ mlVec = mllibVec.asML()
 mlMat = mllibMat.asML()
 {% endhighlight %}
 
-Refer to the [`MLUtils` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) for further detail.
+Refer to the [`MLUtils` Python docs](api/python/reference/api/pyspark.mllib.util.MLUtils.html#pyspark.mllib.util.MLUtils) for further detail.
 </div>
 </div>
 

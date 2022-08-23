@@ -22,16 +22,18 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
@@ -114,7 +116,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       dataset: Dataset[_]): DecisionTreeRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val instances = extractInstances(dataset)
+
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
+
     val strategy = getOldStrategy(categoricalFeatures)
     require(!strategy.bootstrap, "DecisionTreeRegressor does not need bootstrap sampling")
 

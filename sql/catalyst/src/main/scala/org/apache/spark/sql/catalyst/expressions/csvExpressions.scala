@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,15 +91,21 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw QueryExecutionErrors.rowFromCSVParserNotExpectedError
+      throw new IllegalStateException("Expected one row from CSV parser.")
     }
   }
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient lazy val parser = {
+    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
+    // the unicode specification, which should not appear in Java's strings.
+    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
+    // scalastyle:off nonascii
+    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
+    // scalastyle:on nonascii
     val parsedOptions = new CSVOptions(
-      options,
+      exprOptions,
       columnPruning = true,
       defaultTimeZoneId = timeZoneId.get,
       defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
@@ -140,6 +146,9 @@ case class CsvToStructs(
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def prettyName: String = "from_csv"
+
+  override protected def withNewChildInternal(newChild: Expression): CsvToStructs =
+    copy(child = newChild)
 }
 
 /**
@@ -150,7 +159,7 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       STRUCT<`_c0`: INT, `_c1`: STRING>
+       STRUCT<_c0: INT, _c1: STRING>
   """,
   since = "3.0.0",
   group = "csv_funcs")
@@ -183,7 +192,13 @@ case class SchemaOfCsv(
   }
 
   override def eval(v: InternalRow): Any = {
-    val parsedOptions = new CSVOptions(options, true, "UTC")
+    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
+    // the unicode specification, which should not appear in Java's strings.
+    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
+    // scalastyle:off nonascii
+    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
+    // scalastyle:on nonascii
+    val parsedOptions = new CSVOptions(exprOptions, true, "UTC")
     val parser = new CsvParser(parsedOptions.asParserSettings)
     val row = parser.parseLine(csv.toString)
     assert(row != null, "Parsed CSV record should not be null.")
@@ -197,6 +212,9 @@ case class SchemaOfCsv(
   }
 
   override def prettyName: String = "schema_of_csv"
+
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
+    copy(child = newChild)
 }
 
 /**
@@ -241,7 +259,7 @@ case class StructsToCsv(
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
     case other =>
-      throw QueryExecutionErrors.inputTypeUnsupportedError(other)
+      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
   }
 
   @transient
@@ -264,4 +282,7 @@ case class StructsToCsv(
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 
   override def prettyName: String = "to_csv"
+
+  override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
+    copy(child = newChild)
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.IOException
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -26,12 +24,12 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -59,22 +57,26 @@ case class InsertIntoHadoopFsRelationCommand(
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1WriteCommand {
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
   private[sql] lazy val dynamicPartitionOverwrite: Boolean = {
-    val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
+    val partitionOverwriteMode = parameters.get(DataSourceUtils.PARTITION_OVERWRITE_MODE)
       // scalastyle:off caselocale
       .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
       // scalastyle:on caselocale
-      .getOrElse(SQLConf.get.partitionOverwriteMode)
+      .getOrElse(conf.partitionOverwriteMode)
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
     enableDynamicOverwrite && mode == SaveMode.Overwrite &&
       staticPartitions.size < partitionColumns.length
   }
+
+  override def requiredOrdering: Seq[SortOrder] =
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
+      staticPartitions.size)
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -119,7 +121,7 @@ case class InsertIntoHadoopFsRelationCommand(
       val pathExists = fs.exists(qualifiedOutputPath)
       (mode, pathExists) match {
         case (SaveMode.ErrorIfExists, true) =>
-          throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
+          throw QueryCompilationErrors.outputPathAlreadyExistsError(qualifiedOutputPath)
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
@@ -135,7 +137,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Ignore, exists) =>
           !exists
         case (s, exists) =>
-          throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+          throw QueryExecutionErrors.saveModeUnsupportedError(s, exists)
       }
     }
 
@@ -185,7 +187,8 @@ case class InsertIntoHadoopFsRelationCommand(
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-          options = options)
+          options = options,
+          numStaticPartitionCols = staticPartitions.size)
 
 
       // update metastore partition metadata
@@ -234,8 +237,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
     if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
-      throw new IOException(s"Unable to clear output " +
-        s"directory $staticPrefixPath prior to writing to it")
+      throw QueryExecutionErrors.cannotClearOutputDirectoryError(staticPrefixPath)
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
@@ -244,8 +246,7 @@ case class InsertIntoHadoopFsRelationCommand(
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
       if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
-        throw new IOException(s"Unable to clear partition " +
-          s"directory $path prior to writing to it")
+        throw QueryExecutionErrors.cannotClearPartitionDirectoryError(path)
       }
     }
   }
@@ -274,4 +275,7 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }.toMap
   }
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
 }

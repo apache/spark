@@ -68,7 +68,7 @@ test_that("createDataFrame/collect Arrow optimization - type specification", {
     callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  expect_equal(collect(createDataFrame(rdf)), expected)
+  expect_true(all(collect(createDataFrame(rdf)) == expected))
 })
 
 test_that("dapply() Arrow optimization", {
@@ -140,7 +140,7 @@ test_that("dapply() Arrow optimization - type specification (date and timestamp)
                               b = as.POSIXct("1990-02-24 12:34:56"))))
   df <- createDataFrame(rdf)
   ret <- dapply(df, function(rdf) { rdf }, schema(df))
-  expect_equal(collect(ret), rdf)
+  expect_true(all(collect(ret) == rdf))
 })
 
 test_that("gapply() Arrow optimization", {
@@ -226,7 +226,7 @@ test_that("gapply() Arrow optimization - type specification (date and timestamp)
   ret <- gapply(df,
                 "a",
                 function(key, grouped) { grouped }, schema(df))
-  expect_equal(collect(ret), rdf)
+  expect_true(all(collect(ret) == rdf))
 })
 
 test_that("Arrow optimization - unsupported types", {

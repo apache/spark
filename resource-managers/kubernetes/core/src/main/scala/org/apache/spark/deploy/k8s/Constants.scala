@@ -19,7 +19,9 @@ package org.apache.spark.deploy.k8s
 private[spark] object Constants {
 
   // Labels
+  val SPARK_VERSION_LABEL = "spark-version"
   val SPARK_APP_ID_LABEL = "spark-app-selector"
+  val SPARK_APP_NAME_LABEL = "spark-app-name"
   val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
   val SPARK_RESOURCE_PROFILE_ID_LABEL = "spark-exec-resourceprofile-id"
   val SPARK_ROLE_LABEL = "spark-role"
@@ -59,6 +61,7 @@ private[spark] object Constants {
   val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
+  val ENV_EXECUTOR_POD_NAME = "SPARK_EXECUTOR_POD_NAME"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"

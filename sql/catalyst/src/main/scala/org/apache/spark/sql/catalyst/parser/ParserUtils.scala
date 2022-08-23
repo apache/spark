@@ -114,6 +114,24 @@ object ParserUtils {
     Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
   }
 
+  def positionAndText(
+      startToken: Token,
+      stopToken: Token,
+      sqlText: String,
+      objectType: Option[String],
+      objectName: Option[String]): Origin = {
+    val startOpt = Option(startToken)
+    val stopOpt = Option(stopToken)
+    Origin(
+      line = startOpt.map(_.getLine),
+      startPosition = startOpt.map(_.getCharPositionInLine),
+      startIndex = startOpt.map(_.getStartIndex),
+      stopIndex = stopOpt.map(_.getStopIndex),
+      sqlText = Some(sqlText),
+      objectType = objectType,
+      objectName = objectName)
+  }
+
   /** Validate the condition. If it doesn't throw a parse exception. */
   def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
@@ -126,9 +144,15 @@ object ParserUtils {
    * registered origin. This method restores the previously set origin after completion of the
    * closure.
    */
-  def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
+  def withOrigin[T](ctx: ParserRuleContext, sqlText: Option[String] = None)(f: => T): T = {
     val current = CurrentOrigin.get
-    CurrentOrigin.set(position(ctx.getStart))
+    val text = sqlText.orElse(current.sqlText)
+    if (text.isEmpty) {
+      CurrentOrigin.set(position(ctx.getStart))
+    } else {
+      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
+        current.objectType, current.objectName))
+    }
     try {
       f
     } finally {
@@ -158,42 +182,46 @@ object ParserUtils {
       }
     }
 
-    // Skip the first and last quotations enclosing the string literal.
-    val charBuffer = CharBuffer.wrap(b, 1, b.length - 1)
+    if (b.startsWith("r") || b.startsWith("R")) {
+      b.substring(2, b.length - 1)
+    } else {
+      // Skip the first and last quotations enclosing the string literal.
+      val charBuffer = CharBuffer.wrap(b, 1, b.length - 1)
 
-    while (charBuffer.remaining() > 0) {
-      charBuffer match {
-        case U16_CHAR_PATTERN(cp) =>
-          // \u0000 style 16-bit unicode character literals.
-          sb.append(Integer.parseInt(cp, 16).toChar)
-          charBuffer.position(charBuffer.position() + 6)
-        case U32_CHAR_PATTERN(cp) =>
-          // \U00000000 style 32-bit unicode character literals.
-          // Use Long to treat codePoint as unsigned in the range of 32-bit.
-          val codePoint = JLong.parseLong(cp, 16)
-          if (codePoint < 0x10000) {
-            sb.append((codePoint & 0xFFFF).toChar)
-          } else {
-            val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xD800
-            val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xDC00
-            sb.append(highSurrogate.toChar)
-            sb.append(lowSurrogate.toChar)
-          }
-          charBuffer.position(charBuffer.position() + 10)
-        case OCTAL_CHAR_PATTERN(cp) =>
-          // \000 style character literals.
-          sb.append(Integer.parseInt(cp, 8).toChar)
-          charBuffer.position(charBuffer.position() + 4)
-        case ESCAPED_CHAR_PATTERN(c) =>
-          // escaped character literals.
-          appendEscapedChar(c.charAt(0))
-          charBuffer.position(charBuffer.position() + 2)
-        case _ =>
-          // non-escaped character literals.
-          sb.append(charBuffer.get())
+      while (charBuffer.remaining() > 0) {
+        charBuffer match {
+          case U16_CHAR_PATTERN(cp) =>
+            // \u0000 style 16-bit unicode character literals.
+            sb.append(Integer.parseInt(cp, 16).toChar)
+            charBuffer.position(charBuffer.position() + 6)
+          case U32_CHAR_PATTERN(cp) =>
+            // \U00000000 style 32-bit unicode character literals.
+            // Use Long to treat codePoint as unsigned in the range of 32-bit.
+            val codePoint = JLong.parseLong(cp, 16)
+            if (codePoint < 0x10000) {
+              sb.append((codePoint & 0xFFFF).toChar)
+            } else {
+              val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xD800
+              val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xDC00
+              sb.append(highSurrogate.toChar)
+              sb.append(lowSurrogate.toChar)
+            }
+            charBuffer.position(charBuffer.position() + 10)
+          case OCTAL_CHAR_PATTERN(cp) =>
+            // \000 style character literals.
+            sb.append(Integer.parseInt(cp, 8).toChar)
+            charBuffer.position(charBuffer.position() + 4)
+          case ESCAPED_CHAR_PATTERN(c) =>
+            // escaped character literals.
+            appendEscapedChar(c.charAt(0))
+            charBuffer.position(charBuffer.position() + 2)
+          case _ =>
+            // non-escaped character literals.
+            sb.append(charBuffer.get())
+        }
       }
+      sb.toString()
     }
-    sb.toString()
   }
 
   /** the column name pattern in quoted regex without qualifier */

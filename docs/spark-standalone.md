@@ -25,7 +25,9 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
 Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # Installing Spark Standalone to a Cluster
@@ -452,6 +454,14 @@ explicitly set, multiple executors from the same application may be launched on 
 if the worker has enough cores and memory. Otherwise, each executor grabs all the cores available
 on the worker by default, in which case only one executor per application may be launched on each
 worker during one single schedule iteration.
+
+# Stage Level Scheduling Overview
+
+Stage level scheduling is supported on Standalone when dynamic allocation is enabled. Currently, when the Master allocates executors for one application, it will schedule based on the order of the ResourceProfile ids for multiple ResourceProfiles. The ResourceProfile with smaller id will be scheduled firstly. Normally this won’t matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind. For scheduling, we will only take executor memory and executor cores from built-in executor resources and all other custom resources from a ResourceProfile, other built-in executor resources such as offHeap and memoryOverhead won't take any effect. The base default profile will be created based on the spark configs when you submit an application. Executor memory and executor cores from the base default profile can be propagated to custom ResourceProfiles, but all other custom resources can not be propagated.
+
+## Caveats
+
+As mentioned in [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation), if cores for each executor is not explicitly specified with dynamic allocation enabled, spark will possibly acquire much more executors than expected. So you are recommended to explicitly set executor cores for each resource profile when using stage level scheduling.
 
 # Monitoring and Logging
 

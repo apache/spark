@@ -68,7 +68,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
-    partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
+    partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
   }
 
@@ -80,9 +80,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
       stopping = true
       if (success) {
-        return Option(mapStatus)
+        Option(mapStatus)
       } else {
-        return None
+        None
       }
     } finally {
       // Clean up our sorter, which may have its own intermediate files

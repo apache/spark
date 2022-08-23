@@ -26,9 +26,12 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{daysToMicros, TimeZoneUTC}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -66,9 +69,16 @@ class UnivocityParser(
   private val tokenIndexArr =
     requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
 
+  // True if we should inform the Univocity CSV parser to select which fields to read by their
+  // positions. Generally assigned by input configuration options, except when input column(s) have
+  // default values, in which case we omit the explicit indexes in order to know how many tokens
+  // were present in each line instead.
+  private def columnPruning: Boolean = options.columnPruning &&
+    !requiredSchema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+  private val parsedSchema = if (columnPruning) requiredSchema else dataSchema
 
   val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
@@ -87,14 +97,19 @@ class UnivocityParser(
   private val noRows = None
 
   private lazy val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
-  private lazy val dateFormatter = DateFormatter(
-    options.dateFormat,
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
     options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -104,6 +119,20 @@ class UnivocityParser(
   } else {
     new NoopFilters
   }
+
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.timestampFormatInRead.isEmpty
+    }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback.getOrElse {
+      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        options.dateFormatInRead.isEmpty
+    }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -183,19 +212,6 @@ class UnivocityParser(
         Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
-    case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          timestampFormatter.parse(datum)
-        } catch {
-          case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
-        }
-      }
-
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -203,9 +219,43 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
+        }
+      }
+
+    case _: TimestampType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // There may be date type entries in timestamp column due to schema inference
+            if (options.prefersDate) {
+              daysToMicros(dateFormatter.parse(datum), options.zoneId)
+            } else {
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility if enabled.
+              if (!enableParsingFallbackForDateType) {
+                throw e
+              }
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+            }
+        }
+      }
+
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        } catch {
+          case NonFatal(e) if options.prefersDate =>
+            daysToMicros(dateFormatter.parse(datum), TimeZoneUTC.toZoneId)
         }
       }
 
@@ -217,11 +267,21 @@ class UnivocityParser(
         IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
       }
 
+    case ym: YearMonthIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), ym).eval(EmptyRow)
+      }
+
+    case dt: DayTimeIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), dt).eval(EmptyRow)
+      }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
+    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
   }
 
   private def nullSafeDatum(
@@ -231,7 +291,7 @@ class UnivocityParser(
        options: CSVOptions)(converter: ValueConverter): Any = {
     if (datum == options.nullValue || datum == null) {
       if (!nullable) {
-        throw new RuntimeException(s"null value found but field $name is not nullable.")
+        throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
       null
     } else {
@@ -245,7 +305,7 @@ class UnivocityParser(
    */
   val parse: String => Option[InternalRow] = {
     // This is intentionally a val to create a function once and reuse.
-    if (options.columnPruning && requiredSchema.isEmpty) {
+    if (columnPruning && requiredSchema.isEmpty) {
       // If `columnPruning` enabled and partition attributes scanned only,
       // `schema` gets empty.
       (_: String) => Some(InternalRow.empty)
@@ -255,7 +315,7 @@ class UnivocityParser(
     }
   }
 
-  private val getToken = if (options.columnPruning) {
+  private val getToken = if (columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
   } else {
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
@@ -266,7 +326,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        new RuntimeException("Malformed CSV record"))
+        QueryExecutionErrors.malformedCSVRecordError())
     }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
@@ -274,7 +334,7 @@ class UnivocityParser(
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(new RuntimeException("Malformed CSV record"))
+      Some(QueryExecutionErrors.malformedCSVRecordError())
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
@@ -297,7 +357,8 @@ class UnivocityParser(
         case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
-          row.setNullAt(i)
+          // Use the corresponding DEFAULT value associated with the column, if any.
+          row.update(i, requiredSchema.existenceDefaultValues(i))
       }
       i += 1
     }
@@ -370,7 +431,7 @@ private[sql] object UnivocityParser {
 
     override def next(): T = {
       if (!hasNext) {
-        throw new NoSuchElementException("End of stream")
+        throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord)
       nextRecord = tokenizer.parseNext()

@@ -63,7 +63,7 @@ public class UploadBlockStream extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof UploadBlockStream) {
+    if (other instanceof UploadBlockStream) {
       UploadBlockStream o = (UploadBlockStream) other;
       return Objects.equals(blockId, o.blockId)
         && Arrays.equals(metadata, o.metadata);

@@ -83,7 +83,15 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
 
-        case TimestampType =>
+        case TimestampType | TimestampNTZType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
+        case _: YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case _: DayTimeIntervalType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
 
@@ -179,7 +187,23 @@ sealed trait BufferSetterGetterUtils {
               row.setNullAt(ordinal)
             }
 
-        case TimestampType =>
+        case TimestampType | TimestampNTZType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case _: YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case _: DayTimeIntervalType =>
           (row: InternalRow, ordinal: Int, value: Any) =>
             if (value != null) {
               row.setLong(ordinal, value.asInstanceOf[Long])
@@ -454,6 +478,9 @@ case class ScalaUDAF(
   override def nodeName: String = name
 
   override def name: String = udafName.getOrElse(udaf.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDAF =
+    copy(children = newChildren)
 }
 
 case class ScalaAggregator[IN, BUF, OUT](
@@ -520,6 +547,10 @@ case class ScalaAggregator[IN, BUF, OUT](
   override def nodeName: String = name
 
   override def name: String = aggregatorName.getOrElse(agg.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ScalaAggregator[IN, BUF, OUT] =
+    copy(children = newChildren)
 }
 
 /**

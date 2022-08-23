@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,10 +34,10 @@ import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationStatus;
 import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -303,13 +302,9 @@ public abstract class Operation {
     cleanupOperationLog();
   }
 
-  public abstract TableSchema getResultSetSchema() throws HiveSQLException;
+  public abstract TTableSchema getResultSetSchema() throws HiveSQLException;
 
-  public abstract RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
-
-  public RowSet getNextRowSet() throws HiveSQLException {
-    return getNextRowSet(FetchOrientation.FETCH_NEXT, DEFAULT_FETCH_MAX_ROWS);
-  }
+  public abstract TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
 
   /**
    * Verify if the given fetch orientation is part of the default orientation types.

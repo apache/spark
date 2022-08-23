@@ -117,7 +117,7 @@ private[scheduler] class TaskSetExcludelist(
     // over the limit, exclude this task from the entire host.
     val execsWithFailuresOnNode = nodeToExecsWithFailures.getOrElseUpdate(host, new HashSet())
     execsWithFailuresOnNode += exec
-    val failuresOnHost = execsWithFailuresOnNode.toIterator.flatMap { exec =>
+    val failuresOnHost = execsWithFailuresOnNode.iterator.flatMap { exec =>
       execToFailures.get(exec).map { failures =>
         // We count task attempts here, not the number of unique executors with failures.  This is
         // because jobs are aborted based on the number task attempts; if we counted unique
@@ -138,7 +138,7 @@ private[scheduler] class TaskSetExcludelist(
         // This executor has been excluded for this stage.  Let's check if it
         // the whole node should be excluded.
         val excludedExecutorsOnNode =
-          execsWithFailuresOnNode.filter(excludedExecs.contains(_))
+          execsWithFailuresOnNode.intersect(excludedExecs)
         val now = clock.getTimeMillis()
         // SparkListenerExecutorBlacklistedForStage is deprecated but post both events
         // to keep backward compatibility

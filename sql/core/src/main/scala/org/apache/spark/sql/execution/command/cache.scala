@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 /**
  * Clear all cached data from the in-memory cache.
  */
-case object ClearCacheCommand extends RunnableCommand with IgnoreCachedData {
+case object ClearCacheCommand extends LeafRunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()

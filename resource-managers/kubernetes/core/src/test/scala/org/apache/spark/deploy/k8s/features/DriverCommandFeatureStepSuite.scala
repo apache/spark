@@ -175,7 +175,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     }
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()
-    KubernetesDriverSpec(pod, Nil, props)
+    KubernetesDriverSpec(pod, Nil, Nil, props)
   }
 
 }

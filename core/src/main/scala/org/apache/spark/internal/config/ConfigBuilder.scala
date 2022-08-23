@@ -104,7 +104,9 @@ private[spark] class TypedConfigBuilder[T](
   /** Checks if the user-provided value for the config matches the validator. */
   def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
     transform { v =>
-      if (!validator(v)) throw new IllegalArgumentException(errorMsg)
+      if (!validator(v)) {
+        throw new IllegalArgumentException(s"'$v' in ${parent.key} is invalid. $errorMsg")
+      }
       v
     }
   }
@@ -138,15 +140,15 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefault(default: T): ConfigEntry[T] = {
     // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
     // behave the same w.r.t. variable expansion of default values.
-    if (default.isInstanceOf[String]) {
-      createWithDefaultString(default.asInstanceOf[String])
-    } else {
-      val transformedDefault = converter(stringConverter(default))
-      val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
-        parent._prependSeparator, parent._alternatives, transformedDefault, converter,
-        stringConverter, parent._doc, parent._public, parent._version)
-      parent._onCreate.foreach(_(entry))
-      entry
+    default match {
+      case str: String => createWithDefaultString(str)
+      case _ =>
+        val transformedDefault = converter(stringConverter(default))
+        val entry = new ConfigEntryWithDefault[T](parent.key, parent._prependedKey,
+          parent._prependSeparator, parent._alternatives, transformedDefault, converter,
+          stringConverter, parent._doc, parent._public, parent._version)
+        parent._onCreate.foreach(_ (entry))
+        entry
     }
   }
 

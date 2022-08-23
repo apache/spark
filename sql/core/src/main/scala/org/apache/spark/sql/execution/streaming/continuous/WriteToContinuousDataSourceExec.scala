@@ -19,30 +19,37 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.StreamExecution
 
 /**
  * The physical plan for writing data into a continuous processing [[StreamingWrite]].
  */
-case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPlan)
+case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPlan,
+    customMetrics: Seq[CustomMetric])
   extends UnaryExecNode with Logging {
 
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
+  override lazy val metrics = customMetrics.map { customMetric =>
+    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+  }.toMap
+
   override protected def doExecute(): RDD[InternalRow] = {
     val queryRdd = query.execute()
     val writerFactory = write.createStreamingWriterFactory(
       PhysicalWriteInfoImpl(queryRdd.getNumPartitions))
-    val rdd = new ContinuousWriteRDD(queryRdd, writerFactory)
+    val rdd = new ContinuousWriteRDD(queryRdd, writerFactory, metrics)
 
     logInfo(s"Start processing data source write support: $write. " +
       s"The input RDD has ${rdd.partitions.length} partitions.")
@@ -63,11 +70,14 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
           // Do not wrap interruption exceptions that will be handled by streaming specially.
           case _ if StreamExecution.isInterruptionException(cause, sparkContext) => throw cause
           // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
+          case NonFatal(e) => throw QueryExecutionErrors.writingJobAbortedError(e)
           case _ => throw cause
         }
     }
 
     sparkContext.emptyRDD
   }
+
+  override protected def withNewChildInternal(
+    newChild: SparkPlan): WriteToContinuousDataSourceExec = copy(query = newChild)
 }

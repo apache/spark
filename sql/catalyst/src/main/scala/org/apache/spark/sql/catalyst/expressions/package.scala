@@ -335,8 +335,14 @@ package object expressions  {
         matchWithFourOrMoreQualifierParts(nameParts, resolver)
       }
 
+      val prunedCandidates = if (candidates.size > 1) {
+        candidates.filter(c => !c.metadata.contains("__is_duplicate"))
+      } else {
+        candidates
+      }
+
       def name = UnresolvedAttribute(nameParts).name
-      candidates match {
+      prunedCandidates match {
         case Seq(a) if nestedFields.nonEmpty =>
           // One match, but we also need to extract the requested nested field.
           // The foldLeft adds ExtractValues for every remaining parts of the identifier,

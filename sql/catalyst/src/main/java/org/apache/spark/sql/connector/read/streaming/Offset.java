@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * An abstract representation of progress through a {@link MicroBatchStream} or
  * {@link ContinuousStream}.
+ * <p>
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.
@@ -33,6 +34,7 @@ public abstract class Offset {
     /**
      * A JSON-serialized representation of an Offset that is
      * used for saving offsets to the offset log.
+     * <p>
      * Note: We assume that equivalent/equal offsets serialize to
      * identical JSON strings.
      *

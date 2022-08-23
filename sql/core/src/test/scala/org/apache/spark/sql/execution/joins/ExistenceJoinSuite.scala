@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructT
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, 2.0),
@@ -82,12 +84,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       joinType: JoinType,
       leftRows: => DataFrame,
       rightRows: => DataFrame,
-      condition: => Expression,
+      condition: => Option[Expression],
       expectedAnswer: Seq[Row]): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
       val join = Join(leftRows.logicalPlan, rightRows.logicalPlan,
-        Inner, Some(condition), JoinHint.NONE)
+        Inner, condition, JoinHint.NONE)
       ExtractEquiJoinKeys.unapply(join)
     }
 
@@ -103,8 +105,8 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       ProjectExec(output, FilterExec(condition, join))
     }
 
-    test(s"$testName using ShuffledHashJoin") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -123,7 +125,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -141,8 +143,8 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using SortMergeJoin") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+    testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -163,29 +165,29 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements.apply(
-            BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, Some(condition))),
+            BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, condition)),
           expectedAnswer,
           sortAnswers = true)
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements.apply(
             createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
-              left, right, BuildLeft, leftSemiPlus, Some(condition)))),
+              left, right, BuildLeft, leftSemiPlus, condition))),
           expectedAnswer,
           sortAnswers = true)
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build right") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build right") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements.apply(
-            BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, Some(condition))),
+            BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, condition)),
           expectedAnswer,
           sortAnswers = true)
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements.apply(
             createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
-              left, right, BuildRight, leftSemiPlus, Some(condition)))),
+              left, right, BuildRight, leftSemiPlus, condition))),
           expectedAnswer,
           sortAnswers = true)
       }
@@ -193,11 +195,28 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   testExistenceJoin(
+    "test no condition with non-empty right side for left semi join",
+    LeftSemi,
+    left,
+    right,
+    None,
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(null, null),
+      Row(null, 5.0), Row(6, null)))
+
+  testExistenceJoin(
+    "test no condition with empty right side for left semi join",
+    LeftSemi,
+    left,
+    spark.emptyDataFrame,
+    None,
+    Seq.empty)
+
+  testExistenceJoin(
     "test single condition (equal) for left semi join",
     LeftSemi,
     left,
     right,
-    singleConditionEQ,
+    Some(singleConditionEQ),
     Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
 
   testExistenceJoin(
@@ -205,7 +224,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     LeftSemi,
     left,
     right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
-    singleConditionEQ,
+    Some(singleConditionEQ),
     Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
 
   testExistenceJoin(
@@ -213,7 +232,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     LeftSemi,
     left,
     right,
-    composedConditionEQ,
+    Some(composedConditionEQ),
     Seq(Row(2, 1.0), Row(2, 1.0)))
 
   testExistenceJoin(
@@ -221,47 +240,65 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     LeftSemi,
     left,
     right,
-    composedConditionNEQ,
+    Some(composedConditionNEQ),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(2, 1.0), Row(2, 1.0)))
 
   testExistenceJoin(
-    "test single condition (equal) for left Anti join",
+    "test no condition with non-empty right side for left anti join",
     LeftAnti,
     left,
     right,
-    singleConditionEQ,
+    None,
+    Seq.empty)
+
+  testExistenceJoin(
+    "test no condition with empty right side for left anti join",
+    LeftAnti,
+    left,
+    spark.emptyDataFrame,
+    None,
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(null, null),
+      Row(null, 5.0), Row(6, null)))
+
+  testExistenceJoin(
+    "test single condition (equal) for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(singleConditionEQ),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0)))
 
 
   testExistenceJoin(
-    "test single unique condition (equal) for left Anti join",
+    "test single unique condition (equal) for left anti join",
     LeftAnti,
     left,
     right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
-    singleConditionEQ,
+    Some(singleConditionEQ),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0)))
 
   testExistenceJoin(
-    "test composed condition (equal & non-equal) test for anti join",
+    "test composed condition (equal & non-equal) test for left anti join",
     LeftAnti,
     left,
     right,
-    composedConditionEQ,
+    Some(composedConditionEQ),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
 
   testExistenceJoin(
-    "test composed condition (both non-equal) for anti join",
+    "test composed condition (both non-equal) for left anti join",
     LeftAnti,
     left,
     right,
-    composedConditionNEQ,
+    Some(composedConditionNEQ),
     Seq(Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
 
   testExistenceJoin(
-    "test composed unique condition (both non-equal) for anti join",
+    "test composed unique condition (both non-equal) for left anti join",
     LeftAnti,
     left,
     rightUniqueKey,
-    (left.col("a") === rightUniqueKey.col("c") && left.col("b") < rightUniqueKey.col("d")).expr,
+    Some((left.col("a") === rightUniqueKey.col("c") && left.col("b") < rightUniqueKey.col("d"))
+      .expr),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
 }

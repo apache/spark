@@ -133,6 +133,12 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     Utils.deleteRecursively(tempDir)
   }
 
+  test("GBTRegressor validate input dataset") {
+    testInvalidRegressionLabels(new GBTRegressor().fit(_))
+    testInvalidWeights(new GBTRegressor().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GBTRegressor().fit(_))
+  }
+
   test("model support predict leaf index") {
     val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
     val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)

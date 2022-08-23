@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -61,9 +61,7 @@ object CharVarcharUtils extends Logging {
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
     if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw new AnalysisException("char/varchar type can only be used in the table schema. " +
-        s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
-        s" treat them as string type as same as Spark 3.0 and earlier")
+      throw QueryCompilationErrors.charOrVarcharTypeAsStringUnsupportedError()
     } else {
       replaceCharVarcharWithString(dt)
     }
@@ -83,6 +81,22 @@ object CharVarcharUtils extends Logging {
       })
     case _: CharType => StringType
     case _: VarcharType => StringType
+    case _ => dt
+  }
+
+  /**
+   * Replaces CharType with VarcharType recursively in the given data type.
+   */
+  def replaceCharWithVarchar(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceCharWithVarchar(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceCharWithVarchar(kt), replaceCharWithVarchar(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCharWithVarchar(field.dataType))
+      })
+    case CharType(length) => VarcharType(length)
     case _ => dt
   }
 
@@ -140,6 +154,21 @@ object CharVarcharUtils extends Logging {
     StructType(fields)
   }
 
+  def getRawSchema(schema: StructType, conf: SQLConf): StructType = {
+    val fields = schema.map { field =>
+      getRawType(field.metadata).map { dt =>
+        if (conf.getConf(SQLConf.CHAR_AS_VARCHAR)) {
+          val metadata = new MetadataBuilder().withMetadata(field.metadata)
+            .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
+          field.copy(dataType = replaceCharWithVarchar(dt), metadata = metadata)
+        } else {
+          field.copy(dataType = dt)
+        }
+      }.getOrElse(field)
+    }
+    StructType(fields)
+  }
+
   /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
@@ -151,7 +180,7 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
-  private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
+  def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
         StaticInvoke(

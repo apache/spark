@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
-import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
+import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
 import org.apache.spark.util.Utils
 
 /**
@@ -222,6 +222,12 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def executorResourceRequestToRequirement(resourceRequest: Seq[ExecutorResourceRequest])
+    : Seq[ResourceRequirement] = {
+    resourceRequest.map(request =>
+      ResourceRequirement(request.resourceName, request.amount.toInt, 1))
+  }
+
   def resourcesMeetRequirements(
       resourcesFree: Map[String, Int],
       resourceRequirements: Seq[ResourceRequirement])
@@ -386,7 +392,6 @@ private[spark] object ResourceUtils extends Logging {
     val resourcePlugins = Utils.loadExtensions(classOf[ResourceDiscoveryPlugin], pluginClasses,
       sparkConf)
     // apply each plugin until one of them returns the information for this resource
-    var riOption: Optional[ResourceInformation] = Optional.empty()
     resourcePlugins.foreach { plugin =>
       val riOption = plugin.discoverResource(resourceRequest, sparkConf)
       if (riOption.isPresent()) {

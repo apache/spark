@@ -1,0 +1,55 @@
+== Physical Plan ==
+* Sort (9)
++- Exchange (8)
+   +- * HashAggregate (7)
+      +- Exchange (6)
+         +- * HashAggregate (5)
+            +- * Project (4)
+               +- * Filter (3)
+                  +- * ColumnarToRow (2)
+                     +- Scan parquet default.lineitem (1)
+
+
+(1) Scan parquet default.lineitem
+Output [7]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6, l_shipdate#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_shipdate), LessThanOrEqual(l_shipdate,1998-09-02)]
+ReadSchema: struct<l_quantity:decimal(10,0),l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_tax:decimal(10,0),l_returnflag:string,l_linestatus:string,l_shipdate:date>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [7]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6, l_shipdate#7]
+
+(3) Filter [codegen id : 1]
+Input [7]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6, l_shipdate#7]
+Condition : (isnotnull(l_shipdate#7) AND (l_shipdate#7 <= 1998-09-02))
+
+(4) Project [codegen id : 1]
+Output [6]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6]
+Input [7]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6, l_shipdate#7]
+
+(5) HashAggregate [codegen id : 1]
+Input [6]: [l_quantity#1, l_extendedprice#2, l_discount#3, l_tax#4, l_returnflag#5, l_linestatus#6]
+Keys [2]: [l_returnflag#5, l_linestatus#6]
+Functions [8]: [partial_sum(l_quantity#1), partial_sum(l_extendedprice#2), partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)), partial_sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)) * promote_precision(cast(CheckOverflow((1 + promote_precision(cast(l_tax#4 as decimal(11,0)))), DecimalType(11,0), true) as decimal(22,0)))), DecimalType(34,0), true)), partial_avg(UnscaledValue(l_quantity#1)), partial_avg(UnscaledValue(l_extendedprice#2)), partial_avg(UnscaledValue(l_discount#3)), partial_count(1)]
+Aggregate Attributes [15]: [sum#8, isEmpty#9, sum#10, isEmpty#11, sum#12, isEmpty#13, sum#14, isEmpty#15, sum#16, count#17, sum#18, count#19, sum#20, count#21, count#22]
+Results [17]: [l_returnflag#5, l_linestatus#6, sum#23, isEmpty#24, sum#25, isEmpty#26, sum#27, isEmpty#28, sum#29, isEmpty#30, sum#31, count#32, sum#33, count#34, sum#35, count#36, count#37]
+
+(6) Exchange
+Input [17]: [l_returnflag#5, l_linestatus#6, sum#23, isEmpty#24, sum#25, isEmpty#26, sum#27, isEmpty#28, sum#29, isEmpty#30, sum#31, count#32, sum#33, count#34, sum#35, count#36, count#37]
+Arguments: hashpartitioning(l_returnflag#5, l_linestatus#6, 5), ENSURE_REQUIREMENTS, [id=#38]
+
+(7) HashAggregate [codegen id : 2]
+Input [17]: [l_returnflag#5, l_linestatus#6, sum#23, isEmpty#24, sum#25, isEmpty#26, sum#27, isEmpty#28, sum#29, isEmpty#30, sum#31, count#32, sum#33, count#34, sum#35, count#36, count#37]
+Keys [2]: [l_returnflag#5, l_linestatus#6]
+Functions [8]: [sum(l_quantity#1), sum(l_extendedprice#2), sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)), sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)) * promote_precision(cast(CheckOverflow((1 + promote_precision(cast(l_tax#4 as decimal(11,0)))), DecimalType(11,0), true) as decimal(22,0)))), DecimalType(34,0), true)), avg(UnscaledValue(l_quantity#1)), avg(UnscaledValue(l_extendedprice#2)), avg(UnscaledValue(l_discount#3)), count(1)]
+Aggregate Attributes [8]: [sum(l_quantity#1)#39, sum(l_extendedprice#2)#40, sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#41, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)) * promote_precision(cast(CheckOverflow((1 + promote_precision(cast(l_tax#4 as decimal(11,0)))), DecimalType(11,0), true) as decimal(22,0)))), DecimalType(34,0), true))#42, avg(UnscaledValue(l_quantity#1))#43, avg(UnscaledValue(l_extendedprice#2))#44, avg(UnscaledValue(l_discount#3))#45, count(1)#46]
+Results [10]: [l_returnflag#5, l_linestatus#6, sum(l_quantity#1)#39 AS sum_qty#47, sum(l_extendedprice#2)#40 AS sum_base_price#48, sum(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#41 AS sum_disc_price#49, sum(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(l_extendedprice#2 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#3 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)) * promote_precision(cast(CheckOverflow((1 + promote_precision(cast(l_tax#4 as decimal(11,0)))), DecimalType(11,0), true) as decimal(22,0)))), DecimalType(34,0), true))#42 AS sum_charge#50, cast((avg(UnscaledValue(l_quantity#1))#43 / 1.0) as decimal(14,4)) AS avg_qty#51, cast((avg(UnscaledValue(l_extendedprice#2))#44 / 1.0) as decimal(14,4)) AS avg_price#52, cast((avg(UnscaledValue(l_discount#3))#45 / 1.0) as decimal(14,4)) AS avg_disc#53, count(1)#46 AS count_order#54]
+
+(8) Exchange
+Input [10]: [l_returnflag#5, l_linestatus#6, sum_qty#47, sum_base_price#48, sum_disc_price#49, sum_charge#50, avg_qty#51, avg_price#52, avg_disc#53, count_order#54]
+Arguments: rangepartitioning(l_returnflag#5 ASC NULLS FIRST, l_linestatus#6 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#55]
+
+(9) Sort [codegen id : 3]
+Input [10]: [l_returnflag#5, l_linestatus#6, sum_qty#47, sum_base_price#48, sum_disc_price#49, sum_charge#50, avg_qty#51, avg_price#52, avg_disc#53, count_order#54]
+Arguments: [l_returnflag#5 ASC NULLS FIRST, l_linestatus#6 ASC NULLS FIRST], true, 0

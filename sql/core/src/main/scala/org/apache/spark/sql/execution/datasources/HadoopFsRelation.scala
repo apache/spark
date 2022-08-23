@@ -40,6 +40,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 case class HadoopFsRelation(
     location: FileIndex,
     partitionSchema: StructType,
+    // The top-level columns in `dataSchema` should match the actual physical file schema, otherwise
+    // the ORC data source may not work with the by-ordinal mode.
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
@@ -54,9 +56,6 @@ case class HadoopFsRelation(
   val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
       partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-  def partitionSchemaOption: Option[StructType] =
-    if (partitionSchema.isEmpty) None else Some(partitionSchema)
 
   override def toString: String = {
     fileFormat match {

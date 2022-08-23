@@ -49,7 +49,7 @@ public interface ShufflePartitionWriter {
    * by the parent {@link ShuffleMapOutputWriter}. If one does so, ensure that
    * {@link OutputStream#close()} does not close the resource, since it will be reused across
    * partition writes. The underlying resources should be cleaned up in
-   * {@link ShuffleMapOutputWriter#commitAllPartitions()} and
+   * {@link ShuffleMapOutputWriter#commitAllPartitions(long[])} and
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    */
   OutputStream openStream() throws IOException;
@@ -68,7 +68,7 @@ public interface ShufflePartitionWriter {
    * by the parent {@link ShuffleMapOutputWriter}. If one does so, ensure that
    * {@link WritableByteChannelWrapper#close()} does not close the resource, since the channel
    * will be reused across partition writes. The underlying resources should be cleaned up in
-   * {@link ShuffleMapOutputWriter#commitAllPartitions()} and
+   * {@link ShuffleMapOutputWriter#commitAllPartitions(long[])} and
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    * <p>
    * This method is primarily for advanced optimizations where bytes can be copied from the input
@@ -79,7 +79,7 @@ public interface ShufflePartitionWriter {
    * Note that the returned {@link WritableByteChannelWrapper} itself is closed, but not the
    * underlying channel that is returned by {@link WritableByteChannelWrapper#channel()}. Ensure
    * that the underlying channel is cleaned up in {@link WritableByteChannelWrapper#close()},
-   * {@link ShuffleMapOutputWriter#commitAllPartitions()}, or
+   * {@link ShuffleMapOutputWriter#commitAllPartitions(long[])}, or
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    */
   default Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {

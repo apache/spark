@@ -34,6 +34,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
@@ -54,7 +55,8 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will use Hadoop 2.7 if we cannot resolve the Hadoop artifact.
+    // We will use Hadoop 3.x if we can't resolve the hadoop artifact
+    // when builtin hadoop is Hadoop 3. Otherwise we will use Hadoop 2.x.
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
@@ -66,7 +68,11 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = "2.7.4"
+            val fallbackVersion = if (VersionUtils.isHadoop3) {
+              "3.3.4"
+            } else {
+              "2.7.4"
+            }
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
               "again. It is recommended to set jars used by Hive metastore client through " +
@@ -104,14 +110,15 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 1, _) => Some(hive.v3_1)
       case _ => None
     }.getOrElse {
-      throw new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
-        s"Please set ${HiveUtils.HIVE_METASTORE_VERSION.key} with a valid version.")
+      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
+        version, HiveUtils.HIVE_METASTORE_VERSION.key)
     }
   }
 
   def supportsHadoopShadedClient(hadoopVersion: String): Boolean = {
     VersionUtils.majorMinorPatchVersion(hadoopVersion).exists {
       case (3, 2, v) if v >= 2 => true
+      case (3, 3, v) if v >= 1 => true
       case _ => false
     }
   }
@@ -309,14 +316,12 @@ private[hive] class IsolatedClientLoader(
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
-        if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
-          val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
-          throw new ClassNotFoundException(
-            s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
-            "Please make sure that jars for your version of hive and hadoop are included in the " +
-            s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS.key}.", e)
-        } else {
-          throw e
+        e.getCause match {
+          case cnf: NoClassDefFoundError =>
+            throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
+              cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
+          case _ =>
+            throw e
         }
     } finally {
       Thread.currentThread.setContextClassLoader(origLoader)

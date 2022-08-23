@@ -29,9 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -220,30 +218,23 @@ public class TransportClientFactorySuite {
     }
   }
 
-  @Test(expected = IOException.class)
-  public void closeFactoryBeforeCreateClient() throws IOException, InterruptedException {
+  @Test
+  public void closeFactoryBeforeCreateClient() {
     TransportClientFactory factory = context.createClientFactory();
     factory.close();
-    factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    Assert.assertThrows(IOException.class,
+      () -> factory.createClient(TestUtils.getLocalHost(), server1.getPort()));
   }
 
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
-
   @Test
-  public void fastFailConnectionInTimeWindow() throws IOException, InterruptedException {
+  public void fastFailConnectionInTimeWindow() {
     TransportClientFactory factory = context.createClientFactory();
     TransportServer server = context.createServer();
     int unreachablePort = server.getPort();
     server.close();
-    try {
-      factory.createClient(TestUtils.getLocalHost(), unreachablePort, true);
-    } catch (Exception e) {
-      assert(e instanceof IOException);
-    }
-    expectedException.expect(IOException.class);
-    expectedException.expectMessage("fail this connection directly");
-    factory.createClient(TestUtils.getLocalHost(), unreachablePort, true);
-    expectedException = ExpectedException.none();
+    Assert.assertThrows(IOException.class,
+      () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
+    Assert.assertThrows("fail this connection directly", IOException.class,
+      () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
   }
 }

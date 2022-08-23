@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -35,15 +37,26 @@ import org.apache.spark.sql.types._
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
-  extends ComplexTypeMergingExpression {
+  extends ComplexTypeMergingExpression with ConditionalExpression with TernaryLike[Expression] {
 
   @transient
   override lazy val inputTypesForMerging: Seq[DataType] = {
     Seq(trueValue.dataType, falseValue.dataType)
   }
 
-  override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
+  override def first: Expression = predicate
+  override def second: Expression = trueValue
+  override def third: Expression = falseValue
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
+
+  /**
+   * Only the condition expression will always be evaluated.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = predicate :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(IF)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
@@ -92,6 +105,13 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
+    predicate = newFirst,
+    trueValue = newSecond,
+    falseValue = newThird
+  )
 }
 
 /**
@@ -125,9 +145,14 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],
     elseValue: Option[Expression] = None)
-  extends ComplexTypeMergingExpression with Serializable {
+  extends ComplexTypeMergingExpression with ConditionalExpression {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(CASE_WHEN)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 
   // both then and else expressions should be considered.
   @transient
@@ -161,6 +186,36 @@ case class CaseWhen(
     }
   }
 
+  /**
+   * Like `If`, the children of `CaseWhen` only get accessed in a certain condition.
+   * We should only return the first condition expression as it will always get accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = {
+    // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
+    // because a subexpression in conditions will be run no matter which condition is matched
+    // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,
+    // a subexpression among values doesn't need to be in conditions because no matter which
+    // condition is true, it will be evaluated.
+    val conditions = if (branches.length > 1) {
+      branches.map(_._1)
+    } else {
+      // If there is only one branch, the first condition is already covered by
+      // `alwaysEvaluatedInputs` and we should exclude it here.
+      Nil
+    }
+    // For an expression to be in all branch values of a CaseWhen statement, it must also be in
+    // the elseValue.
+    val values = if (elseValue.nonEmpty) {
+      branches.map(_._2) ++ elseValue
+    } else {
+      Nil
+    }
+
+    Seq(conditions, values)
+  }
+
   override def eval(input: InternalRow): Any = {
     var i = 0
     val size = branches.size
@@ -171,9 +226,9 @@ case class CaseWhen(
       i += 1
     }
     if (elseValue.isDefined) {
-      return elseValue.get.eval(input)
+      elseValue.get.eval(input)
     } else {
-      return null
+      null
     }
   }
 

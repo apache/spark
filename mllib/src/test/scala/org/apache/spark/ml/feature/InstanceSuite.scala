@@ -22,7 +22,7 @@ import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
 
-class InstanceSuite extends SparkFunSuite{
+class InstanceSuite extends SparkFunSuite {
   test("Kryo class register") {
     val conf = new SparkConf(false)
     conf.set(KRYO_REGISTRATION_REQUIRED, true)

@@ -59,6 +59,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class ObjectHashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
@@ -75,8 +77,7 @@ case class ObjectHashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext,
-      "number of tasks fall-backed to sort-based aggregation")
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -84,7 +85,7 @@ case class ObjectHashAggregateExec(
     val aggTime = longMetric("aggTime")
     val spillSize = longMetric("spillSize")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
-    val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
+    val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       val beforeAgg = System.nanoTime()
@@ -138,13 +139,7 @@ case class ObjectHashAggregateExec(
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
     }
   }
-}
 
-object ObjectHashAggregateExec {
-  def supportsAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
-    aggregateExpressions.map(_.aggregateFunction).exists {
-      case _: TypedImperativeAggregate[_] => true
-      case _ => false
-    }
-  }
+  override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
+    copy(child = newChild)
 }

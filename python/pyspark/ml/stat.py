@@ -17,14 +17,22 @@
 
 import sys
 
+from typing import Optional, Tuple, TYPE_CHECKING
+
+
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
-class ChiSquareTest(object):
+
+class ChiSquareTest:
     """
     Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
@@ -35,8 +43,11 @@ class ChiSquareTest(object):
     .. versionadded:: 2.2.0
 
     """
+
     @staticmethod
-    def test(dataset, featuresCol, labelCol, flatten=False):
+    def test(
+        dataset: DataFrame, featuresCol: str, labelCol: str, flatten: bool = False
+    ) -> DataFrame:
         """
         Perform a Pearson's independence test using dataset.
 
@@ -94,12 +105,14 @@ class ChiSquareTest(object):
         4.0
         """
         sc = SparkContext._active_spark_context
+        assert sc is not None
+
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
         args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
         return _java2py(sc, javaTestObj.test(*args))
 
 
-class Correlation(object):
+class Correlation:
     """
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
@@ -113,8 +126,9 @@ class Correlation(object):
     which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
     to avoid recomputing the common lineage.
     """
+
     @staticmethod
-    def corr(dataset, column, method="pearson"):
+    def corr(dataset: DataFrame, column: str, method: str = "pearson") -> DataFrame:
         """
         Compute the correlation matrix with specified method using dataset.
 
@@ -160,12 +174,14 @@ class Correlation(object):
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
         sc = SparkContext._active_spark_context
+        assert sc is not None
+
         javaCorrObj = _jvm().org.apache.spark.ml.stat.Correlation
         args = [_py2java(sc, arg) for arg in (dataset, column, method)]
         return _java2py(sc, javaCorrObj.corr(*args))
 
 
-class KolmogorovSmirnovTest(object):
+class KolmogorovSmirnovTest:
     """
     Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
     distribution.
@@ -177,8 +193,9 @@ class KolmogorovSmirnovTest(object):
     .. versionadded:: 2.4.0
 
     """
+
     @staticmethod
-    def test(dataset, sampleCol, distName, *params):
+    def test(dataset: DataFrame, sampleCol: str, distName: str, *params: float) -> DataFrame:
         """
         Conduct a one-sample, two-sided Kolmogorov-Smirnov test for probability distribution
         equality. Currently supports the normal distribution, taking as parameters the mean and
@@ -225,14 +242,17 @@ class KolmogorovSmirnovTest(object):
         0.175
         """
         sc = SparkContext._active_spark_context
+        assert sc is not None
+
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
         dataset = _py2java(sc, dataset)
-        params = [float(param) for param in params]
-        return _java2py(sc, javaTestObj.test(dataset, sampleCol, distName,
-                                             _jvm().PythonUtils.toSeq(params)))
+        params = [float(param) for param in params]  # type: ignore[assignment]
+        return _java2py(
+            sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
+        )
 
 
-class Summarizer(object):
+class Summarizer:
     """
     Tools for vectorized statistics on MLlib Vectors.
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
@@ -254,32 +274,29 @@ class Summarizer(object):
     +-----------------------------------+
     |{[1.0,1.0,1.0], 1}                 |
     +-----------------------------------+
-    <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
     |{[1.0,1.5,2.0], 2}              |
     +--------------------------------+
-    <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
     +--------------+
     |mean(features)|
     +--------------+
     |[1.0,1.0,1.0] |
     +--------------+
-    <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features)).show(truncate=False)
     +--------------+
     |mean(features)|
     +--------------+
     |[1.0,1.5,2.0] |
     +--------------+
-    <BLANKLINE>
     """
+
     @staticmethod
     @since("2.4.0")
-    def mean(col, weightCol=None):
+    def mean(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of mean summary
         """
@@ -287,7 +304,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("3.0.0")
-    def sum(col, weightCol=None):
+    def sum(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of sum summary
         """
@@ -295,7 +312,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def variance(col, weightCol=None):
+    def variance(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of variance summary
         """
@@ -303,7 +320,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("3.0.0")
-    def std(col, weightCol=None):
+    def std(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of std summary
         """
@@ -311,7 +328,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def count(col, weightCol=None):
+    def count(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of count summary
         """
@@ -319,7 +336,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def numNonZeros(col, weightCol=None):
+    def numNonZeros(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of numNonZero summary
         """
@@ -327,7 +344,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def max(col, weightCol=None):
+    def max(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of max summary
         """
@@ -335,7 +352,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def min(col, weightCol=None):
+    def min(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of min summary
         """
@@ -343,7 +360,7 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def normL1(col, weightCol=None):
+    def normL1(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of normL1 summary
         """
@@ -351,14 +368,14 @@ class Summarizer(object):
 
     @staticmethod
     @since("2.4.0")
-    def normL2(col, weightCol=None):
+    def normL2(col: Column, weightCol: Optional[Column] = None) -> Column:
         """
         return a column of normL2 summary
         """
         return Summarizer._get_single_metric(col, weightCol, "normL2")
 
     @staticmethod
-    def _check_param(featuresCol, weightCol):
+    def _check_param(featuresCol: Column, weightCol: Optional[Column]) -> Tuple[Column, Column]:
         if weightCol is None:
             weightCol = lit(1.0)
         if not isinstance(featuresCol, Column) or not isinstance(weightCol, Column):
@@ -366,13 +383,16 @@ class Summarizer(object):
         return featuresCol, weightCol
 
     @staticmethod
-    def _get_single_metric(col, weightCol, metric):
+    def _get_single_metric(col: Column, weightCol: Optional[Column], metric: str) -> Column:
         col, weightCol = Summarizer._check_param(col, weightCol)
-        return Column(JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer." + metric,
-                                                col._jc, weightCol._jc))
+        return Column(
+            JavaWrapper._new_java_obj(
+                "org.apache.spark.ml.stat.Summarizer." + metric, col._jc, weightCol._jc
+            )
+        )
 
     @staticmethod
-    def metrics(*metrics):
+    def metrics(*metrics: str) -> "SummaryBuilder":
         """
         Given a list of metrics, provides a builder that it turns computes metrics from a column.
 
@@ -407,8 +427,11 @@ class Summarizer(object):
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
         sc = SparkContext._active_spark_context
-        js = JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer.metrics",
-                                       _to_seq(sc, metrics))
+        assert sc is not None
+
+        js = JavaWrapper._new_java_obj(
+            "org.apache.spark.ml.stat.Summarizer.metrics", _to_seq(sc, metrics)
+        )
         return SummaryBuilder(js)
 
 
@@ -422,10 +445,11 @@ class SummaryBuilder(JavaWrapper):
     .. versionadded:: 2.4.0
 
     """
-    def __init__(self, jSummaryBuilder):
+
+    def __init__(self, jSummaryBuilder: "JavaObject"):
         super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
-    def summary(self, featuresCol, weightCol=None):
+    def summary(self, featuresCol: Column, weightCol: Optional[Column] = None) -> Column:
         """
         Returns an aggregate object that contains the summary of the column with the requested
         metrics.
@@ -446,10 +470,12 @@ class SummaryBuilder(JavaWrapper):
             structure is determined during the creation of the builder.
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
+        assert self._java_obj is not None
+
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
 
 
-class MultivariateGaussian(object):
+class MultivariateGaussian:
     """Represents a (mean, cov) tuple
 
     .. versionadded:: 3.0.0
@@ -457,12 +483,14 @@ class MultivariateGaussian(object):
     Examples
     --------
     >>> from pyspark.ml.linalg import DenseMatrix, Vectors
+    >>> from pyspark.ml.stat import MultivariateGaussian
     >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
     """
-    def __init__(self, mean, cov):
+
+    def __init__(self, mean: Vector, cov: Matrix):
         self.mean = mean
         self.cov = cov
 
@@ -472,24 +500,24 @@ if __name__ == "__main__":
     import numpy
     import pyspark.ml.stat
     from pyspark.sql import SparkSession
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
 
     globs = pyspark.ml.stat.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder \
-        .master("local[2]") \
-        .appName("ml.stat tests") \
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.stat tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
 
-    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

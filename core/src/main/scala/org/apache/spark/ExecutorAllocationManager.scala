@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
@@ -204,13 +204,11 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      // If dynamic allocation shuffle tracking or worker decommissioning along with
-      // storage shuffle decommissioning is enabled we have *experimental* support for
-      // decommissioning without a shuffle service.
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED) ||
-          (decommissionEnabled &&
-            conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))) {
-        logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+        logInfo("Dynamic allocation is enabled without a shuffle service.")
+      } else if (decommissionEnabled &&
+          conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+        logInfo("Shuffle data decommission is enabled without a shuffle service.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
           "shuffle service. You may enable this through spark.shuffle.service.enabled.")
@@ -233,16 +231,7 @@ private[spark] class ExecutorAllocationManager(
     cleaner.foreach(_.attachListener(executorMonitor))
 
     val scheduleTask = new Runnable() {
-      override def run(): Unit = {
-        try {
-          schedule()
-        } catch {
-          case ct: ControlThrowable =>
-            throw ct
-          case t: Throwable =>
-            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-        }
-      }
+      override def run(): Unit = Utils.tryLog(schedule())
     }
 
     if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {
@@ -290,11 +279,11 @@ private[spark] class ExecutorAllocationManager(
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
   private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
-    val pending = listener.totalPendingTasksPerResourceProfile(rpId)
+    val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
     val running = listener.totalRunningTasksPerResourceProfile(rpId)
-    val numRunningOrPendingTasks = pending + running
+    val numRunningOrPendingTasks = pendingTask + pendingSpeculative + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
     logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
@@ -737,6 +726,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
+        removeStageFromResourceProfileIfUnused(stageAttempt)
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -781,20 +771,7 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             stageAttemptToNumRunningTask -= stageAttempt
-            if (!stageAttemptToNumTasks.contains(stageAttempt)) {
-              val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
-                v.contains(stageAttempt)
-              }.keys
-              if (rpForStage.size == 1) {
-                // be careful about the removal from here due to late tasks, make sure stage is
-                // really complete and no tasks left
-                resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
-              } else {
-                logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
-                  s" but have $rpForStage")
-              }
-            }
-
+            removeStageFromResourceProfileIfUnused(stageAttempt)
           }
         }
         if (taskEnd.taskInfo.speculative) {
@@ -859,6 +836,28 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         // Clear unschedulableTaskSets since atleast one task becomes schedulable now
         unschedulableTaskSets.remove(stageAttempt)
+        removeStageFromResourceProfileIfUnused(stageAttempt)
+      }
+    }
+
+    def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
+      if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
+          !stageAttemptToNumTasks.contains(stageAttempt) &&
+          !stageAttemptToNumSpeculativeTasks.contains(stageAttempt) &&
+          !stageAttemptToTaskIndices.contains(stageAttempt) &&
+          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt)
+      ) {
+        val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
+          v.contains(stageAttempt)
+        }.keys
+        if (rpForStage.size == 1) {
+          // be careful about the removal from here due to late tasks, make sure stage is
+          // really complete and no tasks left
+          resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
+        } else {
+          logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
+              s" but have $rpForStage")
+        }
       }
     }
 
@@ -916,23 +915,11 @@ private[spark] class ExecutorAllocationManager(
       hasPendingSpeculativeTasks || hasPendingRegularTasks
     }
 
-    def totalPendingTasksPerResourceProfile(rp: Int): Int = {
-      pendingTasksPerResourceProfile(rp) + pendingSpeculativeTasksPerResourceProfile(rp)
-    }
-
-    /**
-     * The number of tasks currently running across all stages.
-     * Include running-but-zombie stage attempts
-     */
-    def totalRunningTasks(): Int = {
-      stageAttemptToNumRunningTask.values.sum
-    }
-
     def totalRunningTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
       // attempts is a Set, change to Seq so we keep all values
       attempts.map { attempt =>
-        stageAttemptToNumRunningTask.getOrElseUpdate(attempt, 0)
+        stageAttemptToNumRunningTask.getOrElse(attempt, 0)
       }.sum
     }
 
@@ -1009,6 +996,8 @@ private[spark] class ExecutorAllocationManagerSource(
   registerGauge("numberMaxNeededExecutors",
     executorAllocationManager.numExecutorsTargetPerResourceProfileId.keys
       .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
+  registerGauge("numberDecommissioningExecutors",
+    executorAllocationManager.executorMonitor.decommissioningCount, 0)
 }
 
 private object ExecutorAllocationManager {

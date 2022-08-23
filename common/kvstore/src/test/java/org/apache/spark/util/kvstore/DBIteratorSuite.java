@@ -73,9 +73,8 @@ public abstract class DBIteratorSuite {
   private static final BaseComparator NATURAL_ORDER = (t1, t2) -> t1.key.compareTo(t2.key);
   private static final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
   private static final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
-  private static final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> {
-    return Integer.valueOf(t1.num).compareTo(t2.num);
-  };
+  private static final BaseComparator NUMERIC_INDEX_ORDER =
+      (t1, t2) -> Integer.compare(t1.num, t2.num);
   private static final BaseComparator CHILD_INDEX_ORDER = (t1, t2) -> t1.child.compareTo(t2.child);
 
   /**
@@ -380,7 +379,7 @@ public abstract class DBIteratorSuite {
 
   @Test
   public void testRefWithIntNaturalKey() throws Exception {
-    LevelDBSuite.IntKeyType i = new LevelDBSuite.IntKeyType();
+    IntKeyType i = new IntKeyType();
     i.key = 1;
     i.id = "1";
     i.values = Arrays.asList("1");
@@ -491,11 +490,15 @@ public abstract class DBIteratorSuite {
   }
 
   private KVStoreView<CustomType1> view() throws Exception {
+    // SPARK-38896: this `view` will be closed in
+    // the `collect(KVStoreView<CustomType1> view)` method.
     return db.view(CustomType1.class);
   }
 
   private List<CustomType1> collect(KVStoreView<CustomType1> view) throws Exception {
-    return Arrays.asList(Iterables.toArray(view, CustomType1.class));
+    try (KVStoreIterator<CustomType1> iterator = view.closeableIterator()) {
+      return Lists.newArrayList(iterator);
+    }
   }
 
   private List<CustomType1> sortBy(Comparator<CustomType1> comp) {

@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
@@ -80,6 +85,38 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     )
   }
 
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val inputData = MemoryStream[Int]
+    val result = inputData.toDS()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates()
+      .select($"eventTime".cast("long").as[Long])
+
+    testStream(result, Append)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "2")),
+      AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
+      CheckAnswer(10 to 15: _*),
+      assertNumStateRows(
+        total = Seq(6), updated = Seq(6), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      CheckNewAnswer(25),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(6))),
+
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(0), droppedByWatermark = Seq(1), removed = Some(Seq(0))),
+
+      AddData(inputData, 10),
+      CheckNewAnswer(),
+      assertStateOperatorProgressMetric(
+        operatorName = "dedupe", numShufflePartitions = 2, numStateStoreInstances = 2)
+    )
+  }
+
   test("deduplicate with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
@@ -114,8 +151,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(windowedaggregate)(
@@ -134,7 +171,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckLastBatch(),
       assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L),
-        droppedByWatermark = Seq(0L, 1L)),
+        droppedByWatermark = Seq(0L, 1L), None),
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
       CheckLastBatch((15 -> 1), (25 -> 1)),
@@ -332,4 +369,118 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     }
   }
 
+  test("SPARK-35880: custom metric numDroppedDuplicateRows in state operator progress") {
+    val dedupeInputData = MemoryStream[(String, Int)]
+    val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
+
+    testStream(dedupe, Append)(
+      AddData(dedupeInputData, "a" -> 1),
+      CheckLastBatch("a" -> 1),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeInputData, "a" -> 2, "b" -> 3),
+      CheckLastBatch("b" -> 3),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1),
+
+      AddData(dedupeInputData, "a" -> 5, "b" -> 2, "c" -> 9),
+      CheckLastBatch("c" -> 9),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 2)
+    )
+
+    // with watermark
+    val dedupeWithWMInputData = MemoryStream[Int]
+    val dedupeWithWatermark = dedupeWithWMInputData.toDS()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates()
+      .select($"eventTime".cast("long").as[Long])
+
+    testStream(dedupeWithWatermark, Append)(
+      AddData(dedupeWithWMInputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
+      CheckAnswer(10 to 15: _*),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 24),
+
+      AddData(dedupeWithWMInputData, 14),
+      CheckNewAnswer(),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1),
+
+      // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      AddData(dedupeWithWMInputData, 25),
+      CheckNewAnswer(25),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeWithWMInputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeWithWMInputData, 26, 26),
+      CheckNewAnswer(26),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1)
+    )
+  }
+
+  test("SPARK-39650: duplicate with specific keys should allow input to change schema") {
+    withTempDir { checkpoint =>
+      val dedupeInputData = MemoryStream[(String, Int)]
+      val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
+
+      testStream(dedupe, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData, "a" -> 1),
+        CheckLastBatch("a" -> 1),
+
+        AddData(dedupeInputData, "a" -> 2, "b" -> 3),
+        CheckLastBatch("b" -> 3)
+      )
+
+      val dedupeInputData2 = MemoryStream[(String, Int, String)]
+      val dedupe2 = dedupeInputData2.toDS().dropDuplicates("_1")
+
+      // initialize new memory stream with previously executed batches
+      dedupeInputData2.addData(("a", 1, "dummy"))
+      dedupeInputData2.addData(Seq(("a", 2, "dummy"), ("b", 3, "dummy")))
+
+      testStream(dedupe2, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData2, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+        CheckLastBatch(("c", 9, "c"))
+      )
+    }
+  }
+
+  test("SPARK-39650: recovery from checkpoint having all columns as value schema") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint. In the checkpoint
+    // we define the input schema as (String, Int).
+    val inputData = MemoryStream[(String, Int, String)]
+    val dedupe = inputData.toDS().dropDuplicates("_1")
+
+    // The fix will land after Spark 3.3.0, hence we can check backward compatibility with
+    // checkpoint being built from Spark 3.3.0.
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.3.0-streaming-deduplication/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(("a", 1, "dummy"))
+    inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
+
+    testStream(dedupe, Append)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+        Note: The checkpoint was generated using the following input in Spark version 3.3.0
+        AddData(inputData, ("a", 1)),
+        CheckLastBatch(("a", 1)),
+        AddData(inputData, ("a", 2), ("b", 3)),
+        CheckLastBatch(("b", 3))
+       */
+
+      AddData(inputData, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+      CheckLastBatch(("c", 9, "c"))
+    )
+  }
 }

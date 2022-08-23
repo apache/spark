@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -35,7 +35,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
-  var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -240,7 +239,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName DROP COLUMN bad_column")
       }.getMessage
-      assert(msg.contains("Cannot delete missing field bad_column in test.alt_table schema"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Drop a column to not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -266,7 +265,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg1 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
-      assert(msg1.contains("Cannot update missing field bad_column in test.alt_table schema"))
+      assert(msg1.contains("Missing field bad_column in table h2.test.alt_table"))
       // Update column to wrong type
       val msg2 = intercept[ParseException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
@@ -297,7 +296,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column DROP NOT NULL")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column nullability in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -321,7 +320,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column comments in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -346,7 +345,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
         }.getMessage
-        assert(msg.contains("Cannot rename missing field C2 in test.alt_table schema"))
+        assert(msg.contains("Missing field C2 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -362,7 +361,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName DROP COLUMN C3")
         }.getMessage
-        assert(msg.contains("Cannot delete missing field C3 in test.alt_table schema"))
+        assert(msg.contains("Missing field C3 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -376,7 +375,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -390,7 +389,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -410,7 +409,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === false)
     }

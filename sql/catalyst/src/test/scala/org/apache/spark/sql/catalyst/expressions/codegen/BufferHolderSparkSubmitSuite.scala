@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.scalatest.{Assertions, BeforeAndAfterEach}
 import org.scalatest.matchers.must.Matchers
 
-import org.apache.spark.{SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.SparkSubmitSuite
+import org.apache.spark.TestUtils
+import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.ResetSystemProperties
@@ -29,7 +29,7 @@ import org.apache.spark.util.ResetSystemProperties
 // A test for growing the buffer holder to nearly 2GB. Due to the heap size limitation of the Spark
 // unit tests JVM, the actually test code is running as a submit job.
 class BufferHolderSparkSubmitSuite
-  extends SparkFunSuite
+  extends SparkSubmitTestUtils
     with Matchers
     with BeforeAndAfterEach
     with ResetSystemProperties {
@@ -46,7 +46,7 @@ class BufferHolderSparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-ea",
       unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
+    runSparkSubmit(argsForSparkSubmit)
   }
 }
 

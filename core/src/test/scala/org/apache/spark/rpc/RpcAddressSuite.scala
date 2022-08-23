@@ -52,4 +52,22 @@ class RpcAddressSuite extends SparkFunSuite {
     val address = RpcAddress("1.2.3.4", 1234)
     assert(address.toSparkURL == "spark://1.2.3.4:1234")
   }
+
+  test("SPARK-39468: IPv6 hostPort") {
+    val address = RpcAddress("::1", 1234)
+    assert(address.host == "[::1]")
+    assert(address.port == 1234)
+    assert(address.hostPort == "[::1]:1234")
+  }
+
+  test("SPARK-39468: IPv6 fromSparkURL") {
+    val address = RpcAddress.fromSparkURL("spark://[::1]:1234")
+    assert(address.host == "[::1]")
+    assert(address.port == 1234)
+  }
+
+  test("SPARK-39468: IPv6 toSparkURL") {
+    val address = RpcAddress("::1", 1234)
+    assert(address.toSparkURL == "spark://[::1]:1234")
+  }
 }

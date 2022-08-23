@@ -33,9 +33,10 @@ Hints give users a way to suggest how Spark SQL to use specific approaches to ge
 
 Partitioning hints allow users to suggest a partitioning strategy that Spark should follow. `COALESCE`, `REPARTITION`,
 and `REPARTITION_BY_RANGE` hints are supported and are equivalent to `coalesce`, `repartition`, and
-`repartitionByRange` [Dataset APIs](api/scala/org/apache/spark/sql/Dataset.html), respectively. These hints give users
-a way to tune performance and control the number of output files in Spark SQL. When multiple partitioning hints are
-specified, multiple nodes are inserted into the logical plan, but the leftmost hint is picked by the optimizer.
+`repartitionByRange` [Dataset APIs](api/scala/org/apache/spark/sql/Dataset.html), respectively. The `REBALANCE` can only
+be used as a hint .These hints give users a way to tune performance and control the number of output files in Spark SQL.
+When multiple partitioning hints are specified, multiple nodes are inserted into the logical plan, but the leftmost hint
+is picked by the optimizer.
 
 #### Partitioning Hints Types
 
@@ -51,6 +52,10 @@ specified, multiple nodes are inserted into the logical plan, but the leftmost h
 
   The `REPARTITION_BY_RANGE` hint can be used to repartition to the specified number of partitions using the specified partitioning expressions. It takes column names and an optional partition number as parameters.
 
+* **REBALANCE**
+
+  The `REBALANCE` hint can be used to rebalance the query result output partitions, so that every partition is of a reasonable size (not too small and not too big). It can take column names as parameters, and try its best to partition the query result by these columns. This is a best-effort: if there are skews, Spark will split the skewed partitions, to make these partitions not too big. This hint is useful when you need to write the result of this query to a table, to avoid too small/big files. This hint is ignored if AQE is not enabled.
+
 #### Examples
 
 ```sql
@@ -65,6 +70,14 @@ SELECT /*+ REPARTITION(3, c) */ * FROM t;
 SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t;
 
 SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
+
+SELECT /*+ REBALANCE */ * FROM t;
+
+SELECT /*+ REBALANCE(3) */ * FROM t;
+
+SELECT /*+ REBALANCE(c) */ * FROM t;
+
+SELECT /*+ REBALANCE(3, c) */ * FROM t;
 
 -- multiple partitioning hints
 EXPLAIN EXTENDED SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c) */ * FROM t;

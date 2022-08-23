@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import io.fabric8.kubernetes.api.model.NamespaceBuilder
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
@@ -36,7 +37,8 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
 
   val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
-  val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
+  val namespace = namespaceOption.getOrElse("spark-" +
+    UUID.randomUUID().toString.replaceAll("-", ""))
   val serviceAccountName =
     Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
@@ -44,11 +46,11 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   val clientConfig = kubernetesClient.getConfiguration
 
   def createNamespace(): Unit = {
-    defaultClient.namespaces.createNew()
+    defaultClient.namespaces.create(new NamespaceBuilder()
       .withNewMetadata()
       .withName(namespace)
       .endMetadata()
-      .done()
+      .build())
   }
 
   def deleteNamespace(): Unit = {

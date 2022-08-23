@@ -183,7 +183,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   test("inner join where, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        upperCaseData.join(lowerCaseData).where('n === 'N),
+        upperCaseData.join(lowerCaseData).where($"n" === $"N"),
         Seq(
           Row(1, "A", 1, "a"),
           Row(2, "B", 2, "b"),
@@ -404,8 +404,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("full outer join") {
     withTempView("`left`", "`right`") {
-      upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
-      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      upperCaseData.where($"N" <= 4).createOrReplaceTempView("`left`")
+      upperCaseData.where($"N" >= 3).createOrReplaceTempView("`right`")
 
       val left = UnresolvedRelation(TableIdentifier("left"))
       val right = UnresolvedRelation(TableIdentifier("right"))
@@ -623,7 +623,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       testData.createOrReplaceTempView("B")
       testData2.createOrReplaceTempView("C")
       testData3.createOrReplaceTempView("D")
-      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      upperCaseData.where($"N" >= 3).createOrReplaceTempView("`right`")
       val cartesianQueries = Seq(
         /** The following should error out since there is no explicit cross join */
         "SELECT * FROM testData inner join testData2",
@@ -1074,8 +1074,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
 
     // Before optimization, there is a logical Filter operator.
-    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
-    assert(filterInAnalysis.isDefined)
+    val filterInAnalysis = df.queryExecution.analyzed.exists(_.isInstanceOf[Filter])
+    assert(filterInAnalysis)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
     val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
@@ -1097,7 +1097,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   }
 
   test("SPARK-29850: sort-merge-join an empty table should not memory leak") {
-    val df1 = spark.range(10).select($"id", $"id" % 3 as 'p)
+    val df1 = spark.range(10).select($"id", $"id" % 3 as Symbol("p"))
       .repartition($"id").groupBy($"id").agg(Map("p" -> "max"))
     val df2 = spark.range(0)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1381,6 +1381,62 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 3)
           // Have sort on left side before last sort merge join
           assert(collect(plan) { case _: SortExec => true }.size === 6)
+      }
+
+      // Test singe partition
+      val fullJoinDF = sql(
+        s"""
+           |SELECT /*+ BROADCAST(t1) */ COUNT(*)
+           |FROM range(0, 10, 1, 1) t1 FULL OUTER JOIN range(0, 10, 1, 1) t2
+           |""".stripMargin)
+      val plan = fullJoinDF.queryExecution.executedPlan
+      assert(collect(plan) { case _: ShuffleExchangeExec => true}.size == 1)
+      checkAnswer(fullJoinDF, Row(100))
+    }
+  }
+
+  test("SPARK-35984: Config to force applying shuffled hash join") {
+    val sql = "SELECT * FROM testData JOIN testData2 ON key = a"
+    assertJoin(sql, classOf[SortMergeJoinExec])
+    withSQLConf("spark.sql.join.forceApplyShuffledHashJoin" -> "true") {
+      assertJoin(sql, classOf[ShuffledHashJoinExec])
+    }
+  }
+
+  test("SPARK-36794: Ignore duplicated key when building relation for semi/anti hash join") {
+    withTable("t1", "t2") {
+      spark.range(10).map(i => (i.toString, i + 1)).toDF("c1", "c2").write.saveAsTable("t1")
+      spark.range(10).map(i => ((i % 5).toString, i % 3)).toDF("c1", "c2").write.saveAsTable("t2")
+
+      val semiJoinQueries = Seq(
+        // No join condition, ignore duplicated key.
+        (s"SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
+          true),
+        // Have join condition on build join key only, ignore duplicated key.
+        (s"""
+            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+            |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
+          """.stripMargin,
+          true),
+        // Have join condition on other build attribute beside join key, do not ignore
+        // duplicated key.
+        (s"""
+            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+            |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+          """.stripMargin,
+          false)
+      )
+      semiJoinQueries.foreach {
+        case (query, ignoreDuplicatedKey) =>
+          val semiJoinDF = sql(query)
+          val antiJoinDF = sql(query.replaceAll("SEMI", "ANTI"))
+          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+          Seq(semiJoinDF, antiJoinDF).foreach { df =>
+            assert(collect(df.queryExecution.executedPlan) {
+              case j: ShuffledHashJoinExec if j.ignoreDuplicatedKey == ignoreDuplicatedKey => true
+            }.size == 1)
+          }
       }
     }
   }

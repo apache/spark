@@ -24,6 +24,7 @@ import java.nio.ByteOrder;
 
 public final class RecordBinaryComparator extends RecordComparator {
 
+  private static final boolean UNALIGNED = Platform.unaligned();
   private static final boolean LITTLE_ENDIAN =
       ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN);
 
@@ -41,7 +42,7 @@ public final class RecordBinaryComparator extends RecordComparator {
     // we have guaranteed `leftLen` == `rightLen`.
 
     // check if stars align and we can get both offsets to be aligned
-    if ((leftOff % 8) == (rightOff % 8)) {
+    if (!UNALIGNED && ((leftOff % 8) == (rightOff % 8))) {
       while ((leftOff + i) % 8 != 0 && i < leftLen) {
         final int v1 = Platform.getByte(leftObj, leftOff + i);
         final int v2 = Platform.getByte(rightObj, rightOff + i);
@@ -52,7 +53,7 @@ public final class RecordBinaryComparator extends RecordComparator {
       }
     }
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
-    if (Platform.unaligned() || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
+    if (UNALIGNED || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
       while (i <= leftLen - 8) {
         long v1 = Platform.getLong(leftObj, leftOff + i);
         long v2 = Platform.getLong(rightObj, rightOff + i);

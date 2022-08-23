@@ -1,21 +1,21 @@
-OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
-Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                 30687          31552         NaN          3.4         292.7       1.0X
-With nested predicate Pushdown                      105            150          61        999.3           1.0     292.5X
+Without nested predicate Pushdown                  9255           9355          92         11.3          88.3       1.0X
+With nested predicate Pushdown                       53             63           5       1972.1           0.5     174.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
-Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                 30505          31828         NaN          3.4         290.9       1.0X
-With nested predicate Pushdown                     3156           3215          77         33.2          30.1       9.7X
+Without nested predicate Pushdown                  9154           9301         116         11.5          87.3       1.0X
+With nested predicate Pushdown                       56             67          13       1865.1           0.5     162.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
-Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without nested predicate Pushdown                 34475          35302         NaN          3.0         328.8       1.0X
-With nested predicate Pushdown                    34003          34596         567          3.1         324.3       1.0X
+Without nested predicate Pushdown                 17628          17820         128          5.9         168.1       1.0X
+With nested predicate Pushdown                    17601          17868         128          6.0         167.9       1.0X
 

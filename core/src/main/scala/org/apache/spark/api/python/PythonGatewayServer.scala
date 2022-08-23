@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataOutputStream, File, FileOutputStream}
+import java.net.InetAddress
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 
@@ -42,7 +43,8 @@ private[spark] object PythonGatewayServer extends Logging {
       logError(s"${gatewayServer.server.getClass} failed to bind; exiting")
       System.exit(1)
     } else {
-      logDebug(s"Started PythonGatewayServer on port $boundPort")
+      val address = InetAddress.getLoopbackAddress()
+      logDebug(s"Started PythonGatewayServer on $address with port $boundPort")
     }
 
     // Communicate the connection information back to the python process by writing the

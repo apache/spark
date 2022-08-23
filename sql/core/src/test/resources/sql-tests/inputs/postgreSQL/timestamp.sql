@@ -18,21 +18,21 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 
 -- PostgreSQL implicitly casts string literals to data with timestamp types, but
 -- Spark does not support that kind of implicit casts.
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'now');
 -- SELECT pg_sleep(0.1);
 
 -- BEGIN;
 
 -- PostgreSQL implicitly casts string literals to data with timestamp types, but
 -- Spark does not support that kind of implicit casts.
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'));
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('today'));
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('yesterday'));
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'now');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'today');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'yesterday');
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow');
 -- time zone should be ignored by this data type
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow EST'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow EST');
 -- [SPARK-29024] Ignore case while resolving time zones
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow Zulu'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow Zulu');
 
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today';
 SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow';
@@ -60,7 +60,7 @@ TRUNCATE TABLE TIMESTAMP_TBL;
 -- INSERT INTO TIMESTAMP_TBL VALUES ('infinity');
 -- PostgreSQL implicitly casts string literals to data with timestamp types, but
 -- Spark does not support that kind of implicit casts.
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('epoch'));
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'epoch');
 -- [SPARK-27923] Spark SQL insert there obsolete special values to NULL
 -- Obsolete special values
 -- INSERT INTO TIMESTAMP_TBL VALUES ('invalid');

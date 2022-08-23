@@ -21,7 +21,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -34,24 +35,40 @@ class StateSchemaCompatibilityChecker(
   private val storeCpLocation = providerId.storeId.storeCheckpointLocation()
   private val fm = CheckpointFileManager.create(storeCpLocation, hadoopConf)
   private val schemaFileLocation = schemaFile(storeCpLocation)
+  private val schemaWriter =
+    SchemaWriter.createSchemaWriter(StateSchemaCompatibilityChecker.VERSION)
 
   fm.mkdirs(schemaFileLocation.getParent)
 
   def check(keySchema: StructType, valueSchema: StructType): Unit = {
+    check(keySchema, valueSchema, ignoreValueSchema = false)
+  }
+
+  def check(keySchema: StructType, valueSchema: StructType, ignoreValueSchema: Boolean): Unit = {
     if (fm.exists(schemaFileLocation)) {
       logDebug(s"Schema file for provider $providerId exists. Comparing with provided schema.")
       val (storedKeySchema, storedValueSchema) = readSchemaFile()
-      if (storedKeySchema.equals(keySchema) && storedValueSchema.equals(valueSchema)) {
+      if (storedKeySchema.equals(keySchema) &&
+        (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
         // schema is exactly same
       } else if (!schemasCompatible(storedKeySchema, keySchema) ||
-        !schemasCompatible(storedValueSchema, valueSchema)) {
+        (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema))) {
+        val errorMsgForKeySchema = s"- Provided key schema: $keySchema\n" +
+          s"- Existing key schema: $storedKeySchema\n"
+
+        // If it is requested to skip checking the value schema, we also don't expose the value
+        // schema information to the error message.
+        val errorMsgForValueSchema = if (!ignoreValueSchema) {
+          s"- Provided value schema: $valueSchema\n" +
+            s"- Existing value schema: $storedValueSchema\n"
+        } else {
+          ""
+        }
         val errorMsg = "Provided schema doesn't match to the schema for existing state! " +
           "Please note that Spark allow difference of field name: check count of fields " +
           "and data type of each field.\n" +
-          s"- Provided key schema: $keySchema\n" +
-          s"- Provided value schema: $valueSchema\n" +
-          s"- Existing key schema: $storedKeySchema\n" +
-          s"- Existing value schema: $storedValueSchema\n" +
+          errorMsgForKeySchema +
+          errorMsgForValueSchema +
           s"If you want to force running query without schema validation, please set " +
           s"${SQLConf.STATE_SCHEMA_CHECK_ENABLED.key} to false.\n" +
           "Please note running query with incompatible schema could cause indeterministic" +
@@ -69,22 +86,15 @@ class StateSchemaCompatibilityChecker(
   }
 
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
-    DataType.equalsIgnoreNameAndCompatibleNullability(storedSchema, schema)
+    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
-  private def readSchemaFile(): (StructType, StructType) = {
+  // Visible for testing
+  private[sql] def readSchemaFile(): (StructType, StructType) = {
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
-      // Currently we only support version 1, which we can simplify the version validation and
-      // the parse logic.
-      val version = MetadataVersionUtil.validateVersion(versionStr,
-        StateSchemaCompatibilityChecker.VERSION)
-      require(version == 1)
-
-      val keySchemaStr = inStream.readUTF()
-      val valueSchemaStr = inStream.readUTF()
-
-      (StructType.fromString(keySchemaStr), StructType.fromString(valueSchemaStr))
+      val schemaReader = SchemaReader.createSchemaReader(versionStr)
+      schemaReader.read(inStream)
     } catch {
       case e: Throwable =>
         logError(s"Fail to read schema file from $schemaFileLocation", e)
@@ -95,11 +105,17 @@ class StateSchemaCompatibilityChecker(
   }
 
   private def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
+    createSchemaFile(keySchema, valueSchema, schemaWriter)
+  }
+
+  // Visible for testing
+  private[sql] def createSchemaFile(
+      keySchema: StructType,
+      valueSchema: StructType,
+      schemaWriter: SchemaWriter): Unit = {
     val outStream = fm.createAtomic(schemaFileLocation, overwriteIfPossible = false)
     try {
-      outStream.writeUTF(s"v${StateSchemaCompatibilityChecker.VERSION}")
-      outStream.writeUTF(keySchema.json)
-      outStream.writeUTF(valueSchema.json)
+      schemaWriter.write(keySchema, valueSchema, outStream)
       outStream.close()
     } catch {
       case e: Throwable =>
@@ -114,5 +130,5 @@ class StateSchemaCompatibilityChecker(
 }
 
 object StateSchemaCompatibilityChecker {
-  val VERSION = 1
+  val VERSION = 2
 }

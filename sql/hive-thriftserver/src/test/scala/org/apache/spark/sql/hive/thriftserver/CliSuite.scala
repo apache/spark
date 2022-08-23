@@ -21,25 +21,31 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
+import java.util.concurrent.CountDownLatch
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
+import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfterAll
+import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.HiveUtils._
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A test suite for the `spark-sql` CLI tool.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class CliSuite extends SparkFunSuite {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
@@ -75,7 +81,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       `hive.metastore.warehouse.dir`.
    * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
    *                            not, disabled by default
-   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   * @param metastore which path the embedded derby database for metastore locates. Use the
    *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
@@ -548,22 +554,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("AnalysisException with root cause will be printStacktrace") {
+  test("SparkException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("NumberFormatException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
-      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("JsonParseException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("AnalysisException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("SparkException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -593,5 +599,103 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
         -> "BroadcastHashJoin"
     )
+  }
+
+  test("SPARK-35086: --verbose should be passed to Spark SQL CLI") {
+    runCliWithin(2.minute, Seq("--verbose"))(
+      "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2;" ->
+        "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2"
+    )
+  }
+
+  test("SPARK-35102: Make spark.sql.hive.version meaningful and not deprecated") {
+    runCliWithin(1.minute,
+      Seq("--conf", "spark.sql.hive.version=0.1"),
+      Seq(s"please use ${HIVE_METASTORE_VERSION.key}"))("" -> "")
+    runCliWithin(2.minute,
+      Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
+      s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
+  }
+
+  test("SPARK-37471: spark-sql support nested bracketed comment ") {
+    runCliWithin(1.minute)(
+      """
+        |/* SELECT /*+ HINT() */ 4; */
+        |SELECT 1;
+        |""".stripMargin -> "SELECT 1"
+    )
+  }
+
+  test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    runCliWithin(2.minute)(
+      // Only unclosed comment.
+      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
+      // Unclosed nested bracketed comment.
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
+      // Unclosed comment with query.
+      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      // Whole comment.
+      "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
+    )
+  }
+
+  test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
+    runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
+  }
+
+  test("SPARK-37906: Spark SQL CLI should not pass final comment") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("SPARK-37906")
+    val sparkContext = new SparkContext(sparkConf)
+    SparkSQLEnv.sparkContext = sparkContext
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val sessionState = new CliSessionState(cliConf)
+    SessionState.setCurrentSessionState(sessionState)
+    val cli = new SparkSQLCLIDriver
+    Seq("SELECT 1; --comment" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment" -> Seq("SELECT 1", " /* comment"),
+      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", " /* comment select 1;"),
+      "/* This is a comment without end symbol SELECT 1;" ->
+        Seq("/* This is a comment without end symbol SELECT 1;"),
+      "SELECT 1; --comment\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
+      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
+      "/* This is a comment without end symbol SELECT 1;\n" ->
+        Seq("/* This is a comment without end symbol SELECT 1;\n"),
+      "/* comment */ SELECT 1;" -> Seq("/* comment */ SELECT 1"),
+      "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
+      "-- comment " -> Seq(),
+      "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
+      "/*  comment */  " -> Seq()
+    ).foreach { case (query, ret) =>
+      assert(cli.splitSemiColon(query).asScala === ret)
+    }
+    sessionState.close()
+    SparkSQLEnv.stop()
+  }
+
+  test("SPARK-39068: support in-memory catalog and running concurrently") {
+    val extraConf = Seq("-c", s"${StaticSQLConf.CATALOG_IMPLEMENTATION.key}=in-memory")
+    val cd = new CountDownLatch(2)
+    def t: Thread = new Thread {
+      override def run(): Unit = {
+        // catalog is in-memory and isolated, so that we can create table with duplicated
+        // names.
+        runCliWithin(1.minute, extraArgs = extraConf)(
+          "create table src(key int) using hive;" ->
+            "Hive support is required to CREATE Hive TABLE",
+          "create table src(key int) using parquet;" -> "")
+        cd.countDown()
+      }
+    }
+    t.start()
+    t.start()
+    cd.await()
   }
 }

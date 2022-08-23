@@ -65,6 +65,7 @@ object SelectedField {
   /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
+  @scala.annotation.tailrec
   private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
     expr match {
       case a: Attribute =>
@@ -75,7 +76,11 @@ object SelectedField {
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
         selectField(c.child, Option(struct(newField)))
-      case GetArrayStructFields(child, field, _, _, containsNull) =>
+      case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val field = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // GetArrayStructFields is the top level extractor. This means its result is
@@ -91,7 +96,7 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _, _) =>
+      case GetMapValue(child, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val MapType(keyType, _, valueContainsNull) = child.dataType

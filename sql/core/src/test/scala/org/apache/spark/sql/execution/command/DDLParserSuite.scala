@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunc, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   private lazy val parser = new SparkSqlParser()
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -43,15 +45,18 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
+
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
     comparePlans(plan, expected, checkAnalysis = false)
   }
 
-  test("alter database - property values must be set") {
-    assertUnsupported(
-      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+  test("show current namespace") {
+    comparePlans(
+      parser.parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceCommand())
   }
 
   test("insert overwrite directory") {
@@ -113,13 +118,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertUnsupported(
       sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_with_value"))
-  }
-
-  test("alter table - SerDe property values must be set") {
-    assertUnsupported(
-      sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
-        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
   }
 
   test("alter table: exchange partition (not supported)") {
@@ -195,21 +193,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(parsed.isInstanceOf[Project])
   }
 
-  test("duplicate keys in table properties") {
-    val e = intercept[ParseException] {
-      parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'key1'"))
-  }
-
-  test("duplicate columns in partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
-  }
-
   test("unsupported operations") {
     intercept[ParseException] {
       parser.parsePlan(
@@ -279,16 +262,16 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("transform query spec") {
-    val p = ScriptTransformation(
-      Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
-      "func", Seq.empty, plans.table("e"), null)
+    val p = Project(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")), plans.table("e"))
+    val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+      s.copy(child = p.copy(child = p.child.where($"f" < 10)),
+        output = Seq($"key".string, $"value".string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      p.copy(output = Seq('c.string, 'd.string)))
+      s.copy(output = Seq($"c".string, $"d".string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      s.copy(output = Seq($"c".int, $"d".decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {
@@ -317,6 +300,182 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parser.parsePlan(v1)
+
+    val expected1 = CreateView(
+      UnresolvedIdentifier(Seq("view1")),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed2 = parser.parsePlan(v2)
+
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed2, expected2)
+
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    intercept(v3, "It is not allowed to add database prefix")
+  }
+
+  test("create temp view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed1 = parser.parsePlan(v1)
+    val expected1 = CreateView(
+      UnresolvedIdentifier(Seq("view1")),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
+        |(col1, col3 COMMENT 'hello')
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+          """.stripMargin
+    val parsed2 = parser.parsePlan(v2)
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map(),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parser.parsePlan(v1)
+    }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+         |CREATE OR REPLACE VIEW view1
+         |(col1, col3 COMMENT 'hello')
+         |$duplicateClause
+         |$duplicateClause
+         |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
+  }
+
+  test("CREATE FUNCTION") {
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE OR REPLACE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), false, true))
+
+    comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
+      CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a", "b", "c")), "fun", Seq(), true, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(JarResource, "j")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(ArchiveResource, "a")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING FILE 'f'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(FileResource, "f")), false, false))
+
+    comparePlans(
+      parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'"),
+      CreateFunction(UnresolvedIdentifier(Seq("a")), "fun",
+        Seq(FunctionResource(JarResource, "j"),
+          FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
+        false, false))
+
+    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
+      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("DROP FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
+      UnresolvedFunc(name, "DROP FUNCTION", true,
+        Some("Please use fully qualified identifier to drop the persistent function."))
+    }
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a"),
+      DropFunction(createFuncPlan(Seq("a")), false))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
+
+    intercept("DROP TEMPORARY FUNCTION a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
+    intercept("DROP TEMPORARY FUNCTION IF EXISTS a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+              |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+              |(col1, col3 COMMENT 'hello')
+              |TBLPROPERTIES('prop1Key'="prop1Val")
+              |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
   }
 
   test("create table like") {
@@ -397,5 +556,26 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(source6.table == "table2")
     assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
+  }
+
+  test("SET CATALOG") {
+    comparePlans(
+      parser.parsePlan("SET CATALOG abc"),
+      SetCatalogCommand("abc"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG 'a b c'"),
+      SetCatalogCommand("a b c"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG `a b c`"),
+      SetCatalogCommand("a b c"))
+  }
+
+  test("SHOW CATALOGS") {
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS"),
+      ShowCatalogsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
+      ShowCatalogsCommand(Some("defau*")))
   }
 }

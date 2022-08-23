@@ -61,9 +61,14 @@ trait ShuffleExchangeLike extends Exchange {
   def shuffleOrigin: ShuffleOrigin
 
   /**
-   * The asynchronous job that materializes the shuffle.
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
    */
-  def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+  final def submitShuffleJob: Future[MapOutputStatistics] = executeQuery {
+    mapOutputStatisticsFuture
+  }
+
+  protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
 
   /**
    * Returns the shuffle RDD with specified partition specs.
@@ -86,11 +91,23 @@ case object ENSURE_REQUIREMENTS extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // can still optimize it via changing shuffle partition number, as data partitioning won't change.
-case object REPARTITION extends ShuffleOrigin
+case object REPARTITION_BY_COL extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified repartition operator with
 // a certain partition number. Spark can't optimize it.
-case object REPARTITION_WITH_NUM extends ShuffleOrigin
+case object REPARTITION_BY_NUM extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator.
+// Spark will try to rebalance partitions that make per-partition size not too small and not
+// too big. Local shuffle read will be used if possible to reduce network traffic.
+case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator with
+// columns. Spark will try to rebalance partitions that make per-partition size not too small and
+// not too big.
+// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle read cannot be used for it as
+// the output needs to be partitioned by the given columns.
+case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
@@ -106,18 +123,20 @@ case class ShuffleExchangeExec(
   private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
 
-  private val serializer: Serializer =
+  private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
-  @transient override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+  @transient
+  override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
     } else {
@@ -146,12 +165,17 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    ShuffleExchangeExec.prepareShuffleDependency(
+    val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
       outputPartitioning,
       serializer,
       writeMetrics)
+    metrics("numPartitions").set(dep.partitioner.numPartitions)
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext, executionId, metrics("numPartitions") :: Nil)
+    dep
   }
 
   /**
@@ -166,6 +190,9 @@ case class ShuffleExchangeExec(
     }
     cachedShuffleRDD
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
+    copy(child = newChild)
 }
 
 object ShuffleExchangeExec {
@@ -241,12 +268,9 @@ object ShuffleExchangeExec {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
-        new Partitioner {
-          override def numPartitions: Int = n
-          // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
-          // `HashPartitioning.partitionIdExpression` to produce partitioning key.
-          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
-        }
+        // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
+        // `HashPartitioning.partitionIdExpression` to produce partitioning key.
+        new PartitionIdPassthrough(n)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -268,12 +292,8 @@ object ShuffleExchangeExec {
           rddForSampling,
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
-      case SinglePartition =>
-        new Partitioner {
-          override def numPartitions: Int = 1
-          override def getPartition(key: Any): Int = 0
-        }
-      case _ => sys.error(s"Exchange not implemented for $newPartitioning")
+      case SinglePartition => new ConstantPartitioner
+      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
@@ -292,7 +312,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case _ => sys.error(s"Exchange not implemented for $newPartitioning")
+      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&

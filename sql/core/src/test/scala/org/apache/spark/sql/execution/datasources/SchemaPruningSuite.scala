@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalactic.Equality
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
@@ -31,7 +32,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
   extends QueryTest
@@ -57,11 +58,18 @@ abstract class SchemaPruningSuite
     contactId: Int,
     employer: Employer)
 
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
+
+  case class Employee(id: Int, name: FullName, employer: Company)
+
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
   val susanSmith = FullName("Susan", "Z.", "Smith")
 
-  val employer = Employer(0, Company("abc", "123 Business Street"))
+  val company = Company("abc", "123 Business Street")
+
+  val employer = Employer(0, company)
   val employerWithNullCompany = Employer(1, null)
   val employerWithNullCompany2 = Employer(2, null)
 
@@ -76,6 +84,8 @@ abstract class SchemaPruningSuite
     Department(0, "Engineering", 0, employer) ::
     Department(1, "Marketing", 1, employerWithNullCompany) ::
     Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
+
+  val employees = Employee(0, janeDoe, company) :: Employee(1, johnDoe, company) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -351,6 +361,43 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("SPARK-34638: nested column prune on generator output") {
+    val query1 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first")
+    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkAnswer(query1, Row("Susan") :: Nil)
+
+    // Currently we don't prune multiple field case.
+    val query2 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.middle")
+    checkScan(query2, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query2, Row("Susan", "Z.") :: Nil)
+
+    val query3 = spark.table("contacts")
+      .select(explode(col("friends")).as("friend"))
+      .select("friend.first", "friend.middle", "friend")
+    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-34638: nested column prune on generator output - case-sensitivity") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.First")
+      checkScan(query1, "struct<friends:array<struct<first:string>>>")
+      checkAnswer(query1, Row("Susan") :: Nil)
+
+      val query2 = spark.table("contacts")
+        .select(explode(col("friends")).as("friend"))
+        .select("friend.MIDDLE")
+      checkScan(query2, "struct<friends:array<struct<middle:string>>>")
+      checkAnswer(query2, Row("Z.") :: Nil)
+    }
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)
@@ -532,7 +579,7 @@ abstract class SchemaPruningSuite
         Seq(Concat(Seq($"name.first", $"name.last")),
           Concat(Seq($"name.last", $"name.first")))
       ),
-      Seq('a.string, 'b.string),
+      Seq($"a".string, $"b".string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query1, "struct<name:struct<first:string,last:string>>")
@@ -549,7 +596,7 @@ abstract class SchemaPruningSuite
     val name = StructType.fromDDL("first string, middle string, last string")
     val query2 = Expand(
       Seq(Seq($"name", $"name.last")),
-      Seq('a.struct(name), 'b.string),
+      Seq($"a".struct(name), $"b".string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
@@ -577,6 +624,26 @@ abstract class SchemaPruningSuite
       val query2 = sql("select friends.middle, col from contact_alias")
       checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
       checkAnswer(query2, Row(Array("Z."), "Susan") :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38918: nested schema pruning with correlated subqueries") {
+    withContacts {
+      withEmployees {
+        val query = sql(
+          """
+            |select count(*)
+            |from contacts c
+            |where not exists (select null from employees e where e.name.first = c.name.first
+            |  and e.employer.name = c.employer.company.name)
+            |""".stripMargin)
+        checkScan(query,
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<id:int,company:struct<name:string,address:string>>>",
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<name:string,address:string>>")
+        checkAnswer(query, Row(3))
+      }
     }
   }
 
@@ -655,6 +722,23 @@ abstract class SchemaPruningSuite
         "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
       spark.read.format(dataSourceName).schema(departmentSchema).load(path + "/departments")
         .createOrReplaceTempView("departments")
+
+      testThunk
+    }
+  }
+
+  private def withEmployees(testThunk: => Unit): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      makeDataSourceFile(employees, new File(path + "/employees"))
+
+      // Providing user specified schema. Inferred schema from different data sources might
+      // be different.
+      val schema = "`id` INT,`name` STRUCT<`first`: STRING, `middle`: STRING, `last`: STRING>, " +
+        "`employer` STRUCT<`name`: STRING, `address`: STRING>"
+      spark.read.format(dataSourceName).schema(schema).load(path + "/employees")
+        .createOrReplaceTempView("employees")
 
       testThunk
     }
@@ -772,6 +856,228 @@ abstract class SchemaPruningSuite
         val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
         implicit val equality = schemaEquality
         assert(scanSchema === expectedScanSchema)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from array") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) ::
+          Row(null, null) ::
+          Row(null, null) :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("friends.First is not null")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query1, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query1,
+        Row("Jane", "X.") ::
+          Row("Janet", null) ::
+          Row("Jim", null) ::
+          Row("John", "Y.") :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("Name.MIDDLE is not null")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query2, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query2,
+        Row("Jane", "X.") ::
+          Row("John", "Y.") :: Nil)
+    }
+  }
+
+  test("SPARK-34638: queries should not fail on unsupported cases") {
+    withTable("nested_array") {
+      sql("select * from values array(array(named_struct('a', 1, 'b', 3), " +
+        "named_struct('a', 2, 'b', 4))) T(items)").write.saveAsTable("nested_array")
+      val query = sql("select d.a from (select explode(c) d from " +
+        "(select explode(items) c from nested_array))")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
+    }
+
+    withTable("map") {
+      sql("select * from values map(1, named_struct('a', 1, 'b', 3), " +
+        "2, named_struct('a', 2, 'b', 4)) T(items)").write.saveAsTable("map")
+      val query = sql("select d.a from (select explode(items) (c, d) from map)")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
+    }
+  }
+
+  test("SPARK-36352: Spark should check result plan's output schema name") {
+    withMixedCaseData {
+      val query = sql("select cOL1, cOl2.B from mixedcase")
+      assert(query.queryExecution.executedPlan.schema.catalogString ==
+        "struct<cOL1:string,B:int>")
+      checkAnswer(query.orderBy("id"),
+        Row("r0c1", 1) ::
+          Row("r1c1", 2) ::
+          Nil)
+    }
+  }
+
+  test("SPARK-37450: Prunes unnecessary fields from Explode for count aggregation") {
+    import testImplicits._
+
+    withTempView("table") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        val jsonStr =
+          """
+            |{
+            |  "items": [
+            |  {"itemId": 1, "itemData": "a"},
+            |  {"itemId": 2, "itemData": "b"}
+            |]}
+            |""".stripMargin
+        val df = spark.read.json(Seq(jsonStr).toDS)
+        makeDataSourceFile(df, new File(path))
+
+        spark.read.format(dataSourceName).load(path)
+          .createOrReplaceTempView("table")
+
+        val read = spark.table("table")
+        val query = read.select(explode($"items").as(Symbol("item"))).select(count($"*"))
+
+        checkScan(query, "struct<items:array<struct<itemId:long>>>")
+        checkAnswer(query, Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-37577: Fix ClassCastException: ArrayType cannot be cast to StructType") {
+    import testImplicits._
+
+    val schema = StructType(Seq(
+      StructField("array", ArrayType(StructType(
+        Seq(StructField("string", StringType, false),
+          StructField("inner_array", ArrayType(StructType(
+            Seq(StructField("inner_string", StringType, false))), true), false)
+        )), false))
+    ))
+
+    val count = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
+      .select(explode($"array").alias("element"))
+      .select("element.*")
+      .select(explode($"inner_array"))
+      .count()
+    assert(count == 0)
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated EXISTS subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
+
+      checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+
+      checkAnswer(query, Row(Row("John", "Y.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated NOT EXISTS subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  NOT EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  NOT EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
+
+      checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+
+      checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated IN subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first IN (SELECT * FROM first_names n WHERE c.name.last < n.value)
+          |""".stripMargin)
+
+      checkScan(query,
+        "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
+
+      checkAnswer(query, Row(Row("John", "Y.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated NOT IN subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Janet", "Jim", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id NOT IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first NOT IN (SELECT * FROM first_names n WHERE c.name.last > n.value)
+          |""".stripMargin)
+
+      checkScan(query,
+        "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
+
+      checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
     }
   }
 }

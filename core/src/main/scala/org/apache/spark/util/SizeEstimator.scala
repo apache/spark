@@ -33,11 +33,9 @@ import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
- * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
- * If `estimatedSize` does not return `None`, [[SizeEstimator]] will use the returned size
- * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
- * The difference between a [[KnownSizeEstimation]] and
- * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+ * When a class extends it, [[SizeEstimator]] will query the `estimatedSize`, and use
+ * the returned size as the size of the object. The difference between a [[KnownSizeEstimation]]
+ * and [[org.apache.spark.util.collection.SizeTracker]] is that, a
  * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
  * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
  * using [[SizeEstimator]].
@@ -158,7 +156,7 @@ object SizeEstimator extends Logging {
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
-        return guess
+        guess
     }
   }
 
@@ -264,7 +262,7 @@ object SizeEstimator extends Logging {
         val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
         state.size += math.max(s1, s2) +
-          (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
+          (size * ((length - ARRAY_SAMPLE_SIZE) / ARRAY_SAMPLE_SIZE))
       }
     }
   }
@@ -284,7 +282,7 @@ object SizeEstimator extends Logging {
       drawn.add(index)
       val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
       if (obj != null) {
-        size += SizeEstimator.estimate(obj, state.visited).toLong
+        size += SizeEstimator.estimate(obj, state.visited)
       }
     }
     size

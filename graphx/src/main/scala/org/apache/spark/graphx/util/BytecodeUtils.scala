@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
 
-import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor}
-import org.apache.xbean.asm7.Opcodes._
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, MethodVisitor}
+import org.apache.xbean.asm9.Opcodes._
 
 import org.apache.spark.util.Utils
 
@@ -109,14 +109,14 @@ private[graphx] object BytecodeUtils {
    * determine the actual method invoked by inspecting the bytecode.
    */
   private class MethodInvocationFinder(className: String, methodName: String)
-    extends ClassVisitor(ASM7) {
+    extends ClassVisitor(ASM9) {
 
     val methodsInvoked = new HashSet[(Class[_], String)]
 
     override def visitMethod(access: Int, name: String, desc: String,
                              sig: String, exceptions: Array[String]): MethodVisitor = {
       if (name == methodName) {
-        new MethodVisitor(ASM7) {
+        new MethodVisitor(ASM9) {
           override def visitMethodInsn(
               op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {

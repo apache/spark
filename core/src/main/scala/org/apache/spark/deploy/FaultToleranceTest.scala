@@ -24,11 +24,12 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Future, Promise}
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.duration._
 import scala.sys.process._
 
-import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}

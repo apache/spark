@@ -30,15 +30,16 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  * <p>
  * These APIs are used to modify table partition or partition metadata,
  * they will change the table data as well.
- * ${@link #createPartitions}:
- *     add an array of partitions and any data they contain to the table
- * ${@link #dropPartitions}:
- *     remove an array of partitions and any data they contain from the table
- * ${@link #purgePartitions}:
- *     remove an array of partitions and any data they contain from the table by skipping
- *     a trash even if it is supported
- * ${@link #truncatePartitions}:
- *     truncate an array of partitions by removing partitions data
+ * <ul>
+ *   <li>{@link #createPartitions}: add an array of partitions and any data they contain to the
+ *   table</li>
+ *   <li>{@link #dropPartitions}: remove an array of partitions and any data they contain from
+ *   the table</li>
+ *   <li>{@link #purgePartitions}: remove an array of partitions and any data they contain from
+ *   the table by skipping a trash even if it is supported</li>
+ *   <li>{@link #truncatePartitions}: truncate an array of partitions by removing partitions
+ *   data</li>
+ * </ul>
  *
  * @since 3.1.0
  */

@@ -57,22 +57,6 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   }
 
   /**
-   * Prune the hive table using filters on the partitions of the table.
-   */
-  private def prunePartitions(
-      relation: HiveTableRelation,
-      partitionFilters: ExpressionSet): Seq[CatalogTablePartition] = {
-    if (conf.metastorePartitionPruning) {
-      session.sessionState.catalog.listPartitionsByFilter(
-        relation.tableMeta.identifier, partitionFilters.toSeq)
-    } else {
-      ExternalCatalogUtils.prunePartitionsByFilter(relation.tableMeta,
-        session.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
-        partitionFilters.toSeq, conf.sessionLocalTimeZone)
-    }
-  }
-
-  /**
    * Update the statistics of the table.
    */
   private def updateTableMeta(
@@ -96,10 +80,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
         (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
       })
+      val rowCount = if (prunedPartitions.forall(_.stats.flatMap(_.rowCount).exists(_ > 0))) {
+        Option(prunedPartitions.map(_.stats.get.rowCount.get).sum)
+      } else {
+        filteredStats.flatMap(_.rowCount)
+      }
       relation.tableMeta.copy(
         stats = Some(CatalogStatistics(
           sizeInBytes = BigInt(sizeOfPartitions.sum),
-          rowCount = filteredStats.flatMap(_.rowCount),
+          rowCount = rowCount,
           colStats = colStats.getOrElse(Map.empty))))
     } else {
       relation.tableMeta
@@ -111,7 +100,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
-        val newPartitions = prunePartitions(relation, partitionKeyFilters)
+        val newPartitions = ExternalCatalogUtils.listPartitionsByFilter(conf,
+          session.sessionState.catalog, relation.tableMeta, partitionKeyFilters.toSeq)
         val newTableMeta = updateTableMeta(relation, newPartitions, partitionKeyFilters)
         val newRelation = relation.copy(
           tableMeta = newTableMeta, prunedPartitions = Some(newPartitions))

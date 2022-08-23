@@ -63,6 +63,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       8080,
       4080,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      kconf.appId,
       driverService)
   }
 
@@ -95,6 +96,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       DEFAULT_BLOCKMANAGER_PORT,
       UI_PORT.defaultValue.get,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      kconf.appId,
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
     assert(additionalProps(DRIVER_PORT.key) === DEFAULT_DRIVER_PORT.toString)
@@ -158,13 +160,76 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       " a Kubernetes service.")
   }
 
+  test("Support ipFamilies spec with default SingleStack and IPv4") {
+    val sparkConf = new SparkConf(false)
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+    assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
+    val driverService = configurationStep
+      .getAdditionalKubernetesResources()
+      .head
+      .asInstanceOf[Service]
+    assert(driverService.getSpec.getIpFamilyPolicy() == "SingleStack")
+    assert(driverService.getSpec.getIpFamilies.size() === 1)
+    assert(driverService.getSpec.getIpFamilies.get(0) == "IPv4")
+  }
+
+  test("Support ipFamilies spec with SingleStack and IPv6") {
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, "IPv6")
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+    assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
+    val driverService = configurationStep
+      .getAdditionalKubernetesResources()
+      .head
+      .asInstanceOf[Service]
+    assert(driverService.getSpec.getIpFamilyPolicy() == "SingleStack")
+    assert(driverService.getSpec.getIpFamilies.size() === 1)
+    assert(driverService.getSpec.getIpFamilies.get(0) == "IPv6")
+  }
+
+  test("Support DualStack") {
+    Seq("PreferDualStack", "RequireDualStack").foreach { stack =>
+      val configAndAnswers = Seq(
+        ("IPv4,IPv6", Seq("IPv4", "IPv6")),
+        ("IPv6,IPv4", Seq("IPv6", "IPv4")))
+      configAndAnswers.foreach { case (config, answer) =>
+        val sparkConf = new SparkConf(false)
+          .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, stack)
+          .set(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, config)
+        val kconf = KubernetesTestConf.createDriverConf(
+          sparkConf = sparkConf,
+          labels = DRIVER_LABELS,
+          serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
+        val configurationStep = new DriverServiceFeatureStep(kconf)
+        assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
+        val driverService = configurationStep
+          .getAdditionalKubernetesResources()
+          .head
+          .asInstanceOf[Service]
+        assert(driverService.getSpec.getIpFamilyPolicy() == stack)
+        assert(driverService.getSpec.getIpFamilies === answer.asJava)
+      }
+    }
+  }
+
   private def verifyService(
       driverPort: Int,
       blockManagerPort: Int,
       drierUIPort: Int,
       expectedServiceName: String,
+      appId: String,
       service: Service): Unit = {
     assert(service.getMetadata.getName === expectedServiceName)
+    assert(service.getMetadata.getLabels.containsKey(SPARK_APP_ID_LABEL) &&
+      service.getMetadata.getLabels.get(SPARK_APP_ID_LABEL).equals(appId))
     assert(service.getSpec.getClusterIP === "None")
     DRIVER_LABELS.foreach { case (k, v) =>
       assert(service.getSpec.getSelector.get(k) === v)

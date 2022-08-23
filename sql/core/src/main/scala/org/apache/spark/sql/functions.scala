@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -44,7 +45,8 @@ import org.apache.spark.util.Utils
  * Spark also includes more built-in functions that are less common and are not defined here.
  * You can still access them (and all the functions defined here) using the `functions.expr()` API
  * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation.
+ * at SQL API documentation of your Spark version, see also
+ * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
  * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
@@ -111,7 +113,17 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = typedLit(literal)
+  def lit(literal: Any): Column = literal match {
+    case c: Column => c
+    case s: Symbol => new ColumnName(s.name)
+    case _ =>
+      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
+      // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this method,
+      // `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence, we can
+      // just manually call `Literal.apply` to skip the expensive `ScalaReflection` code. This is
+      // significantly better when there are many threads calling `lit` concurrently.
+      Column(Literal(literal))
+  }
 
   /**
    * Creates a [[Column]] of literal value.
@@ -131,6 +143,9 @@ object functions {
    * Otherwise, a new [[Column]] is created to represent the literal value.
    * The difference between this function and [[lit]] is that this function
    * can handle parameterized scala types e.g.: List, Seq and Map.
+   *
+   * @note `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
+   * Scala types are not used.
    *
    * @group normal_funcs
    * @since 3.2.0
@@ -656,6 +671,14 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+
+  /**
    * Aggregate function: returns the maximum value of the expression in a group.
    *
    * @group agg_funcs
@@ -670,6 +693,14 @@ object functions {
    * @since 1.3.0
    */
   def max(columnName: String): Column = max(Column(columnName))
+
+  /**
+   * Aggregate function: returns the value associated with the maximum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def max_by(e: Column, ord: Column): Column = withAggregateFunction { MaxBy(e.expr, ord.expr) }
 
   /**
    * Aggregate function: returns the average of the values in a group.
@@ -690,6 +721,14 @@ object functions {
   def mean(columnName: String): Column = avg(columnName)
 
   /**
+   * Aggregate function: returns the median of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
+
+  /**
    * Aggregate function: returns the minimum value of the expression in a group.
    *
    * @group agg_funcs
@@ -704,6 +743,14 @@ object functions {
    * @since 1.3.0
    */
   def min(columnName: String): Column = min(Column(columnName))
+
+  /**
+   * Aggregate function: returns the value associated with the minimum value of ord.
+   *
+   * @group agg_funcs
+   * @since 3.3.0
+   */
+  def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
@@ -1737,15 +1784,27 @@ object functions {
   def cbrt(columnName: String): Column = cbrt(Column(columnName))
 
   /**
-   * Computes the ceiling of the given value.
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def ceil(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("ceil"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def ceil(e: Column): Column = withExpr { Ceil(e.expr) }
+  def ceil(e: Column): Column = withExpr {
+    UnresolvedFunction(Seq("ceil"), Seq(e.expr), isDistinct = false)
+  }
 
   /**
-   * Computes the ceiling of the given column.
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1799,6 +1858,24 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
+   * @param e angle in radians
+   * @return cotangent of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def cot(e: Column): Column = withExpr { Cot(e.expr) }
+
+  /**
+   * @param e angle in radians
+   * @return cosecant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -1839,15 +1916,27 @@ object functions {
   def factorial(e: Column): Column = withExpr { Factorial(e.expr) }
 
   /**
-   * Computes the floor of the given value.
+   * Computes the floor of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def floor(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("floor"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
+
+  /**
+   * Computes the floor of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def floor(e: Column): Column = withExpr { Floor(e.expr) }
+  def floor(e: Column): Column = withExpr {
+    UnresolvedFunction(Seq("floor"), Seq(e.expr), isDistinct = false)
+  }
 
   /**
-   * Computes the floor of the given column.
+   * Computes the floor of the given column value to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2185,6 +2274,15 @@ object functions {
    * @since 2.0.0
    */
   def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
+   * @param e angle in radians
+   * @return secant of the angle
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def sec(e: Column): Column = withExpr { Sec(e.expr) }
 
   /**
    * Shift the given value numBits left. If the given value is a long value, this function
@@ -2531,6 +2629,14 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
+   * Calculates the bit length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def bit_length(e: Column): Column = withExpr { BitLength(e.expr) }
+
+  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -2679,6 +2785,17 @@ object functions {
   }
 
   /**
+   * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    UnresolvedFunction("lpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
+  }
+
+  /**
    * Trim the spaces from left end for the specified string value.
    *
    * @group string_funcs
@@ -2694,6 +2811,14 @@ object functions {
   def ltrim(e: Column, trimString: String): Column = withExpr {
     StringTrimLeft(e.expr, Literal(trimString))
   }
+
+  /**
+   * Calculates the byte length for the specified string column.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
@@ -2746,6 +2871,17 @@ object functions {
    */
   def rpad(str: Column, len: Int, pad: String): Column = withExpr {
     StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
+   * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    UnresolvedFunction("rpad", Seq(str.expr, lit(len).expr, lit(pad).expr), isDistinct = false)
   }
 
   /**
@@ -2868,6 +3004,25 @@ object functions {
   }
 
   /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column, language: Column, country: Column): Column = withExpr {
+    Sentences(string.expr, language.expr, country.expr)
+  }
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   * The default locale is used.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def sentences(string: Column): Column = withExpr {
+    Sentences(string.expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -2908,31 +3063,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * (Scala-specific) Creates a datetime interval
-   *
-   * @param years Number of years
-   * @param months Number of months
-   * @param weeks Number of weeks
-   * @param days Number of days
-   * @param hours Number of hours
-   * @param mins Number of mins
-   * @param secs Number of secs
-   * @return A datetime interval
-   * @group datetime_funcs
-   * @since 3.2.0
-   */
-  def make_interval(
-      years: Column = lit(0),
-      months: Column = lit(0),
-      weeks: Column = lit(0),
-      days: Column = lit(0),
-      hours: Column = lit(0),
-      mins: Column = lit(0),
-      secs: Column = lit(0)): Column = withExpr {
-    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
-  }
 
   /**
    * Returns the date that is `numMonths` after `startDate`.
@@ -2978,6 +3108,16 @@ object functions {
    * @since 1.5.0
    */
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
+
+  /**
+   * Returns the current timestamp without time zone at the start of query evaluation
+   * as a timestamp without time zone column.
+   * All calls of localtimestamp within the same query return the same value.
+   *
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def localtimestamp(): Column = withExpr { LocalTimestamp() }
 
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
@@ -3147,6 +3287,15 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * @return A date created from year, month and day fields.
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
+    MakeDate(year.expr, month.expr, day.expr)
+  }
 
   /**
    * Returns number of months between dates `start` and `end`.
@@ -3512,7 +3661,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers. Note that the duration is a fixed length of
@@ -3568,7 +3717,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers. Note that the duration is a fixed length of
@@ -3613,7 +3762,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers.
@@ -3626,7 +3775,75 @@ object functions {
   }
 
   /**
-   * Creates timestamp from the number of seconds since UTC epoch.
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. The length of session window is defined as "the timestamp
+   * of latest input of the session + gap duration", so when the new inputs are bound to the
+   * current session window, the end time of session window can be expanded according to the new
+   * inputs.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType or TimestampNTZType.
+   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
+   *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+   *                    valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: String): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration)
+    }.as("session_window")
+  }
+
+  /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. For static gap duration, the length of session window
+   * is defined as "the timestamp of latest input of the session + gap duration", so when
+   * the new inputs are bound to the current session window, the end time of session window
+   * can be expanded according to the new inputs.
+   *
+   * Besides a static gap duration value, users can also provide an expression to specify
+   * gap duration dynamically based on the input row. With dynamic gap duration, the closing
+   * of a session window does not depend on the latest input anymore. A session window's range
+   * is the union of all events' ranges which are determined by event start time and evaluated
+   * gap duration during the query execution. Note that the rows with negative or zero gap
+   * duration will be filtered out from the aggregation.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType or TimestampNTZType.
+   * @param gapDuration A column specifying the timeout of the session. It could be static value,
+   *                    e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+   *                    duration dynamically based on the input row.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: Column): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration.expr)
+    }.as("session_window")
+  }
+
+  /**
+   * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
+   * to a timestamp.
    * @group datetime_funcs
    * @since 3.1.0
    */
@@ -3743,12 +3960,26 @@ object functions {
 
   /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
+   * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
+
+  /**
+   * Sorts the input array based on the given comparator function. The comparator will take two
+   * arguments representing two elements of the array. It returns a negative integer, 0, or a
+   * positive integer as the first element is less than, equal to, or greater than the second
+   * element. If the comparator function returns null, the function will fail and raise an error.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column, comparator: (Column, Column) => Column): Column = withExpr {
+    new ArraySort(e.expr, createLambda(comparator))
+  }
 
   /**
    * Remove all elements that equal to element from the given array.
@@ -3800,22 +4031,22 @@ object functions {
   }
 
   private def createLambda(f: Column => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
     val function = f(Column(x)).expr
     LambdaFunction(function, Seq(x))
   }
 
   private def createLambda(f: (Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
     val function = f(Column(x), Column(y)).expr
     LambdaFunction(function, Seq(x, y))
   }
 
   private def createLambda(f: (Column, Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
-    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val x = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("x")))
+    val y = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("y")))
+    val z = UnresolvedNamedLambdaVariable(Seq(UnresolvedNamedLambdaVariable.freshVarName("z")))
     val function = f(Column(x), Column(y), Column(z)).expr
     LambdaFunction(function, Seq(x, y, z))
   }
@@ -4123,6 +4354,7 @@ object functions {
     JsonTuple(json.expr +: fields.map(Literal.apply))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
@@ -4131,13 +4363,19 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. Accepts the same options as the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: Map[String, String]): Column =
     from_json(e, schema.asInstanceOf[DataType], options)
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4147,14 +4385,20 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
     JsonToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
@@ -4163,13 +4407,19 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
     from_json(e, schema, options.asScala.toMap)
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4179,10 +4429,15 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
     from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
   }
@@ -4214,6 +4469,7 @@ object functions {
   def from_json(e: Column, schema: DataType): Column =
     from_json(e, schema, Map.empty[String, String])
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4221,14 +4477,22 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param schema the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
     from_json(e, schema, options.asScala.toMap)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` with the specified schema.
@@ -4236,10 +4500,17 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param schema the schema as a DDL-formatted string.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.3.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
     val dataType = parseTypeWithFallback(
       schema,
@@ -4264,6 +4535,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String].asJava)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
@@ -4273,10 +4545,15 @@ object functions {
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
+  // scalastyle:on line.size.limit
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
     withExpr(new JsonToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
@@ -4301,21 +4578,28 @@ object functions {
    */
   def schema_of_json(json: Column): Column = withExpr(new SchemaOfJson(json.expr))
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a JSON string and infers its schema in DDL format using options.
    *
    * @param json a foldable string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
-   *                json data source. See [[DataFrameReader#json]].
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def schema_of_json(json: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
    * a `MapType` into a JSON string with the specified schema.
@@ -4324,16 +4608,22 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *                Additionally the function supports the `pretty` option which enables
    *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column = withExpr {
     StructsToJson(options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Converts a column containing a `StructType`, `ArrayType` or
    * a `MapType` into a JSON string with the specified schema.
@@ -4342,12 +4632,17 @@ object functions {
    * @param e a column containing a struct, an array or a map.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *                Additionally the function supports the `pretty` option which enables
    *                pretty JSON generation.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
+  // scalastyle:on line.size.limit
   def to_json(e: Column, options: java.util.Map[String, String]): Column =
     to_json(e, options.asScala.toMap)
 
@@ -4388,8 +4683,9 @@ object functions {
 
   /**
    * Sorts the input array for the given column in ascending or descending order,
-   * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array in ascending order or
+   * according to the natural ordering of the array elements. NaN is greater than any non-NaN
+   * elements for double/float type. Null elements will be placed at the beginning of the returned
+   * array in ascending order or
    * at the end of the returned array in descending order.
    *
    * @group collection_funcs
@@ -4398,7 +4694,8 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
-   * Returns the minimum value in the array.
+   * Returns the minimum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4406,7 +4703,8 @@ object functions {
   def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
 
   /**
-   * Returns the maximum value in the array.
+   * Returns the maximum value in the array. NaN is greater than any non-NaN elements for
+   * double/float type. NULL elements are skipped.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4480,6 +4778,15 @@ object functions {
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
   /**
+   * Returns true if the map contains the key.
+   * @group collection_funcs
+   * @since 3.3.0
+   */
+  def map_contains_key(column: Column, key: Any): Column = withExpr {
+    ArrayContains(MapKeys(column.expr), lit(key).expr)
+  }
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0
@@ -4524,6 +4831,7 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a column containing a CSV string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
@@ -4532,15 +4840,21 @@ object functions {
    * @param schema the schema to use when parsing the CSV string
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     CsvToStructs(replaced, options, e.expr)
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Parses a column containing a CSV string into a `StructType`
    * with the specified schema. Returns `null`, in the case of an unparseable string.
@@ -4549,10 +4863,15 @@ object functions {
    * @param schema the schema to use when parsing the CSV string
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
     withExpr(new CsvToStructs(e.expr, schema.expr, options.asScala.toMap))
   }
@@ -4577,32 +4896,44 @@ object functions {
    */
   def schema_of_csv(csv: Column): Column = withExpr(new SchemaOfCsv(csv.expr))
 
+  // scalastyle:off line.size.limit
   /**
    * Parses a CSV string and infers its schema in DDL format using options.
    *
    * @param csv a foldable string column containing a CSV string.
    * @param options options to control how the CSV is parsed. accepts the same options and the
-   *                json data source. See [[DataFrameReader#csv]].
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    * @return a column with string literal containing schema in DDL format.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column = {
     withExpr(SchemaOfCsv(csv.expr, options.asScala.toMap))
   }
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Converts a column containing a `StructType` into a CSV string with
    * the specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct.
    * @param options options to control how the struct column is converted into a CSV string.
-   *                It accepts the same options and the json data source.
+   *                It accepts the same options and the CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
+  // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column = withExpr {
     StructsToCsv(options.asScala.toMap, e.expr)
   }
@@ -4661,7 +4992,7 @@ object functions {
       case lit @ Literal(_, IntegerType) =>
         Bucket(lit, e.expr)
       case _ =>
-        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
     }
   }
 
@@ -5163,18 +5494,7 @@ object functions {
     "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
-        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-        "argument, and the closure will see the default value of the Java type for the null " +
-        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-        "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-        "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
-        s"use this API with caution"
-      throw new AnalysisException(errorMsg)
+      throw QueryCompilationErrors.usingUntypedScalaUDFError()
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }
@@ -5208,5 +5528,14 @@ object functions {
   @scala.annotation.varargs
   def call_udf(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
+  }
+
+  /**
+   * Unwrap UDT data type column into its underlying type.
+   *
+   * @since 3.4.0
+   */
+  def unwrap_udt(column: Column): Column = withExpr {
+    UnwrapUDT(column.expr)
   }
 }

@@ -46,10 +46,9 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
  *
- * Each tuple has three parts: [null bit set] [values] [variable length portion]
+ * Each tuple has three parts: [null-tracking bit set] [values] [variable length portion]
  *
- * The bit set is used for null tracking and is aligned to 8-byte word boundaries.  It stores
- * one bit per field.
+ * The null-tracking bit set is aligned to 8-byte word boundaries. It stores one bit per field.
  *
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
  * primitive types, such as long, double, or int, we store the value directly in the word. For
@@ -76,11 +75,11 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public static final Set<DataType> mutableFieldTypes;
 
-  // DecimalType is also mutable
+  // DecimalType, DayTimeIntervalType and YearMonthIntervalType are also mutable
   static {
     mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
-        Arrays.asList(new DataType[] {
+        Arrays.asList(
           NullType,
           BooleanType,
           ByteType,
@@ -90,8 +89,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           FloatType,
           DoubleType,
           DateType,
-          TimestampType
-        })));
+          TimestampType,
+          TimestampNTZType
+        )));
   }
 
   public static boolean isFixedLength(DataType dt) {
@@ -102,7 +102,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return mutableFieldTypes.contains(dt);
+      return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
+        mutableFieldTypes.contains(dt);
     }
   }
 
@@ -112,7 +113,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
 
     return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType;
+      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
+      dt instanceof YearMonthIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////

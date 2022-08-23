@@ -23,7 +23,10 @@ license: |
 
 # Spark Security: Things You Need To Know
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+
 Spark supports multiple deployments types and each one supports different levels of security. Not
 all deployment types will be secure in all environments and none are secure by default. Be
 sure to evaluate your environment, what Spark supports, and take the appropriate measure to secure
@@ -149,23 +152,6 @@ The following table describes the different options available for configuring th
   <td>false</td>
   <td>
     Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
-  </td>
-  <td>2.2.0</td>
-</tr>
-<tr>
-  <td><code>spark.network.crypto.keyLength</code></td>
-  <td>128</td>
-  <td>
-    The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
-  </td>
-  <td>2.2.0</td>
-</tr>
-<tr>
-  <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
-  <td>PBKDF2WithHmacSHA1</td>
-  <td>
-    The key factory algorithm to use when generating encryption keys. Should be one of the
-    algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -839,6 +825,9 @@ The following options provides finer-grained control for this feature:
   <td>3.0.0</td>
 </tr>
 </table>
+
+Users can exclude Kerberos delegation token renewal at resource scheduler. Currently it is only supported
+on YARN. The configuration is covered in the [Running Spark on YARN](running-on-yarn.html#yarn-specific-kerberos-configuration) page.
 
 ## Long-Running Applications
 

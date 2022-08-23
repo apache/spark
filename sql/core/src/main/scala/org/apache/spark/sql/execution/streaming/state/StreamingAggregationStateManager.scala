@@ -92,7 +92,7 @@ abstract class StreamingAggregationStateManagerBaseImpl(
 
   override def keys(store: ReadStateStore): Iterator[UnsafeRow] = {
     // discard and don't convert values to avoid computation
-    store.getRange(None, None).map(_.key)
+    store.iterator().map(_.key)
   }
 }
 

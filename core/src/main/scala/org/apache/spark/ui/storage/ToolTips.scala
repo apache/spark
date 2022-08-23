@@ -24,7 +24,7 @@ private[ui] object ToolTips {
 
   val STORAGE_LEVEL =
     "StorageLevel displays where the persisted RDD is stored, " +
-      "format of the persisted RDD (serialized or de-serialized) and" +
+      "format of the persisted RDD (serialized or de-serialized) and " +
       "replication factor of the persisted RDD"
 
   val CACHED_PARTITIONS =

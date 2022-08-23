@@ -41,7 +41,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
     plan match {
-      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _) =>
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
         (leftKeys ++ rightKeys).exists {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
@@ -132,8 +132,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       leftExpr.collect { case a: AttributeReference => a } ++
       rightExpr.collect { case a: AttributeReference => a }
     )
-    if (attributesInCondition.filter { attributesToFindStateWatermarkFor.contains(_) }.size > 1 ||
-        attributesInCondition.filter { attributesWithEventWatermark.contains(_) }.size > 1) {
+    if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
+        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
       return None
     }
@@ -169,7 +169,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
     val constraintTerm = constraintTerms.head
-    if (constraintTerm.collectFirst { case u: UnaryMinus => u }.isEmpty) {
+    if (!constraintTerm.exists(_.isInstanceOf[UnaryMinus])) {
       // Incorrect condition. We want the constraint term in canonical form to be `-leftTime`
       // so that resolve for it as `-leftTime + watermark + c < 0` ==> `watermark + c < leftTime`.
       // Now, if the original conditions is `rightTime-with-watermark > leftTime` and watermark
@@ -237,9 +237,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>
           collect(child, negate)
-        case PromotePrecision(child) =>
-          collect(child, negate)
-        case Cast(child, dataType, _) =>
+        case Cast(child, dataType, _, _) =>
           dataType match {
             case _: NumericType | _: TimestampType => collect(child, negate)
             case _ =>
@@ -266,6 +264,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                 Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
                   calendarInterval.microseconds.toDouble)
               }
+            case _: DayTimeIntervalType =>
+              // Unbox and then cast
+              Literal(lit.value.asInstanceOf[Long].toDouble)
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))
             case _: NumericType =>

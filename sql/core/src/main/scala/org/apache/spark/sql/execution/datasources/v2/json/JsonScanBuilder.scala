@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.json
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
@@ -31,7 +31,7 @@ class JsonScanBuilder (
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
   override def build(): Scan = {
     JsonScan(
       sparkSession,
@@ -40,17 +40,16 @@ class JsonScanBuilder (
       readDataSchema(),
       readPartitionSchema(),
       options,
-      pushedFilters())
+      pushedDataFilters,
+      partitionFilters,
+      dataFilters)
   }
 
-  private var _pushedFilters: Array[Filter] = Array.empty
-
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.jsonFilterPushDown) {
-      _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
+      StructFilters.pushedFilters(dataFilters, dataSchema)
+    } else {
+      Array.empty[Filter]
     }
-    filters
   }
-
-  override def pushedFilters(): Array[Filter] = _pushedFilters
 }

@@ -37,6 +37,8 @@ For example, historically, `native` implementation handles `CHAR/VARCHAR` with S
 
 `native` implementation supports a vectorized ORC reader and has been the default ORC implementaion since Spark 2.3.
 The vectorized reader is used for the native ORC tables (e.g., the ones created using the clause `USING ORC`) when `spark.sql.orc.impl` is set to `native` and `spark.sql.orc.enableVectorizedReader` is set to `true`.
+For nested data types (array, map and struct), vectorized reader is disabled by default. Set `spark.sql.orc.enableNestedColumnVectorizedReader` to `true` to enable vectorized reader for these types.
+
 For the Hive ORC serde tables (e.g., the ones created using the clause `USING HIVE OPTIONS (fileFormat 'ORC')`),
 the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also set to `true`, and is turned on by default.
 
@@ -152,6 +154,16 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td>2.3.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.orc.enableNestedColumnVectorizedReader</code></td>
+    <td><code>false</code></td>
+    <td>
+      Enables vectorized orc decoding in <code>native</code> implementation for nested data types
+      (array, map and struct). If <code>spark.sql.orc.enableVectorizedReader</code> is set to
+      <code>false</code>, this is ignored.
+    </td>
+    <td>3.2.0</td>
+  </tr>
+  <tr>
   <td><code>spark.sql.orc.mergeSchema</code></td>
   <td>false</td>
   <td>
@@ -172,3 +184,30 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
   <td>2.0.0</td>
   </tr>
 </table>
+
+## Data Source Option
+
+Data source options of ORC can be set via:
+* the `.option`/`.options` methods of
+  * `DataFrameReader`
+  * `DataFrameWriter`
+  * `DataStreamReader`
+  * `DataStreamWriter`
+* `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
+
+<table class="table">
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+  <tr>
+    <td><code>mergeSchema</code></td>
+    <td><code>false</code></td>
+    <td>sets whether we should merge schemas collected from all ORC part-files. This will override <code>spark.sql.orc.mergeSchema</code>. The default value is specified in <code>spark.sql.orc.mergeSchema</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>compression</code></td>
+    <td><code>snappy</code></td>
+    <td>compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (none, snappy, zlib, lzo, zstd and lz4). This will override <code>orc.compress</code> and <code>spark.sql.orc.compression.codec</code>.</td>
+    <td>write</td>
+  </tr>
+</table>
+Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.

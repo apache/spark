@@ -30,6 +30,7 @@ import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -92,9 +93,12 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
     assert(hashed2.get(unsafeData(2)).toArray === data2)
 
+    // SPARK-38542: UnsafeHashedRelation should serialize numKeys out
+    assert(hashed2.keys().map(_.copy()).forall(_.numFields == 1))
+
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
-    hashed2.asInstanceOf[UnsafeHashedRelation].writeExternal(out2)
+    hashed2.writeExternal(out2)
     out2.flush()
     // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
     // as they are inserted
@@ -610,20 +614,25 @@ class HashedRelationSuite extends SharedSparkSession {
     val keys = Seq(BoundReference(0, ByteType, false),
       BoundReference(1, IntegerType, false),
       BoundReference(2, ShortType, false))
-    val packed = HashJoin.rewriteKeyExpr(keys)
-    val unsafeProj = UnsafeProjection.create(packed)
-    val packedKeys = unsafeProj(row)
+    // Rewrite and exacting key expressions should not cause exception when ANSI mode is on.
+    Seq("false", "true").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val packed = HashJoin.rewriteKeyExpr(keys)
+        val unsafeProj = UnsafeProjection.create(packed)
+        val packedKeys = unsafeProj(row)
 
-    Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
-      val key = HashJoin.extractKeyExprAt(keys, i)
-      val proj = UnsafeProjection.create(key)
-      assert(proj(packedKeys).get(0, dt) == -i - 1)
+        Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
+          val key = HashJoin.extractKeyExprAt(keys, i)
+          val proj = UnsafeProjection.create(key)
+          assert(proj(packedKeys).get(0, dt) == -i - 1)
+        }
+      }
     }
   }
 
   test("EmptyHashedRelation override methods behavior test") {
     val buildKey = Seq(BoundReference(0, LongType, false))
-    val hashed = HashedRelation(Seq.empty[InternalRow].toIterator, buildKey, 1, mm)
+    val hashed = HashedRelation(Seq.empty[InternalRow].iterator, buildKey, 1, mm)
     assert(hashed == EmptyHashedRelation)
 
     val key = InternalRow(1L)

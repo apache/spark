@@ -183,8 +183,8 @@ class BucketedRandomProjectionLSH(override val uid: String)
     var i = 0
     while (i < localNumHashTables) {
       val offset = i * inputDim
-      val norm = BLAS.f2jBLAS.dnrm2(inputDim, values, offset, 1)
-      if (norm != 0) BLAS.f2jBLAS.dscal(inputDim, 1.0 / norm, values, offset, 1)
+      val norm = BLAS.javaBLAS.dnrm2(inputDim, values, offset, 1)
+      if (norm != 0) BLAS.javaBLAS.dscal(inputDim, 1.0 / norm, values, offset, 1)
       i += 1
     }
     val randMatrix = new DenseMatrix(localNumHashTables, inputDim, values, true)

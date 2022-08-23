@@ -25,17 +25,17 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
   override def hashCode: Int = 41 * (41 + x.toInt) + y.toInt
   override def equals(that: Any): Boolean = {
-    if (that.isInstanceOf[ExamplePoint]) {
-      val e = that.asInstanceOf[ExamplePoint]
-      (this.x == e.x || (this.x.isNaN && e.x.isNaN) || (this.x.isInfinity && e.x.isInfinity)) &&
-        (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
-    } else {
-      false
+    that match {
+      case e: ExamplePoint =>
+        (this.x == e.x || (this.x.isNaN && e.x.isNaN) || (this.x.isInfinity && e.x.isInfinity)) &&
+          (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
+      case _ => false
     }
   }
 }
@@ -330,6 +330,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("SPARK-35664: encoding/decoding TimestampNTZType to/from java.time.LocalDateTime") {
+    val schema = new StructType().add("t", TimestampNTZType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val localDateTime = java.time.LocalDateTime.parse("2019-02-26T16:56:00")
+    val row = toRow(encoder, Row(localDateTime))
+    assert(row.getLong(0) === DateTimeUtils.localDateTimeToMicros(localDateTime))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0) === localDateTime)
+  }
+
   test("encoding/decoding DateType to/from java.time.LocalDate") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType)
@@ -343,13 +353,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
-    val schema = new StructType().add("d", DayTimeIntervalType)
-    val encoder = RowEncoder(schema).resolveAndBind()
-    val duration = java.time.Duration.ofDays(1)
-    val row = toRow(encoder, Row(duration))
-    assert(row.getLong(0) === IntervalUtils.durationToMicros(duration))
-    val readback = fromRow(encoder, row)
-    assert(readback.get(0).equals(duration))
+    dayTimeIntervalTypes.foreach { dayTimeIntervalType =>
+      val schema = new StructType().add("d", dayTimeIntervalType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val duration = java.time.Duration.ofDays(1)
+      val row = toRow(encoder, Row(duration))
+      assert(row.getLong(0) === IntervalUtils.durationToMicros(duration))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0).equals(duration))
+    }
+  }
+
+  test("SPARK-34615: encoding/decoding YearMonthIntervalType to/from java.time.Period") {
+    yearMonthIntervalTypes.foreach { yearMonthIntervalType =>
+      val schema = new StructType().add("p", yearMonthIntervalType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val period = java.time.Period.ofMonths(1)
+      val row = toRow(encoder, Row(period))
+      assert(row.getInt(0) === IntervalUtils.periodToMonths(period))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0).equals(period))
+    }
   }
 
   for {
@@ -408,6 +432,29 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
                  """.stripMargin, e)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-38437: encoding TimestampType/DateType from any supported datetime Java types") {
+    Seq(true, false).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val schema = new StructType()
+          .add("t0", TimestampType)
+          .add("t1", TimestampType)
+          .add("d0", DateType)
+          .add("d1", DateType)
+        val encoder = RowEncoder(schema, lenient = true).resolveAndBind()
+        val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
+        val ld = java.time.LocalDate.parse("2022-03-08")
+        val row = encoder.createSerializer().apply(
+          Row(instant, java.sql.Timestamp.from(instant), ld, java.sql.Date.valueOf(ld)))
+        val expectedMicros = DateTimeUtils.instantToMicros(instant)
+        assert(row.getLong(0) === expectedMicros)
+        assert(row.getLong(1) === expectedMicros)
+        val expectedDays = DateTimeUtils.localDateToDays(ld)
+        assert(row.getInt(2) === expectedDays)
+        assert(row.getInt(3) === expectedDays)
       }
     }
   }

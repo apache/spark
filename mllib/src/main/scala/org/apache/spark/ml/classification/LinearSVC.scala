@@ -34,6 +34,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -180,8 +181,12 @@ class LinearSVC @Since("2.2.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
-    val instances = extractInstances(dataset)
-      .setName("training instances")
+    val instances = dataset.select(
+      checkClassificationLabels($(labelCol), Some(2)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
 
     val (summarizer, labelSummarizer) = Summarizer
       .getClassificationSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
@@ -222,6 +227,7 @@ class LinearSVC @Since("2.2.0") (
     }
 
     val featuresStd = summarizer.std.toArray
+    val featuresMean = summarizer.mean.toArray
     val getFeaturesStd = (j: Int) => featuresStd(j)
     val regularization = if ($(regParam) != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
@@ -239,7 +245,8 @@ class LinearSVC @Since("2.2.0") (
        as a result, no scaling is needed.
      */
     val (rawCoefficients, objectiveHistory) =
-      trainImpl(instances, actualBlockSizeInMB, featuresStd, regularization, optimizer)
+      trainImpl(instances, actualBlockSizeInMB, featuresStd, featuresMean,
+        regularization, optimizer)
 
     if (rawCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -277,16 +284,19 @@ class LinearSVC @Since("2.2.0") (
       instances: RDD[Instance],
       actualBlockSizeInMB: Double,
       featuresStd: Array[Double],
+      featuresMean: Array[Double],
       regularization: Option[L2Regularization],
       optimizer: BreezeOWLQN[Int, BDV[Double]]): (Array[Double], Array[Double]) = {
     val numFeatures = featuresStd.length
     val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
 
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
+    val scaledMean = Array.tabulate(numFeatures)(i => inverseStd(i) * featuresMean(i))
+    val bcInverseStd = instances.context.broadcast(inverseStd)
+    val bcScaledMean = instances.context.broadcast(scaledMean)
 
     val standardized = instances.mapPartitions { iter =>
-      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
-      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+      val func = StandardScalerModel.getTransformFunc(Array.empty, bcInverseStd.value, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
 
@@ -295,13 +305,24 @@ class LinearSVC @Since("2.2.0") (
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
-    val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)
+    val getAggregatorFunc = new HingeBlockAggregator(bcInverseStd, bcScaledMean,
+      $(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
       regularization, $(aggregationDepth))
 
-    val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
+    val initialSolution = Array.ofDim[Double](numFeaturesPlusIntercept)
+    if ($(fitIntercept)) {
+      // orginal `initialSolution` is for problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      // we should adjust it to the initial solution for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // NOTE: this is NOOP before we finally support model initialization
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+      initialSolution(numFeatures) += adapt
+    }
 
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      new BDV[Double](initialSolution))
     val arrayBuilder = mutable.ArrayBuilder.make[Double]
     var state: optimizer.State = null
     while (states.hasNext) {
@@ -309,9 +330,19 @@ class LinearSVC @Since("2.2.0") (
       arrayBuilder += state.adjustedValue
     }
     blocks.unpersist()
-    bcFeaturesStd.destroy()
+    bcInverseStd.destroy()
+    bcScaledMean.destroy()
 
-    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+    val solution = if (state == null) null else state.x.toArray
+    if ($(fitIntercept) && solution != null) {
+      // the final solution is for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // we should adjust it back for original problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
+      solution(numFeatures) -= adapt
+    }
+    (solution, arrayBuilder.result)
   }
 }
 

@@ -27,6 +27,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -114,8 +115,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        spark, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
@@ -161,7 +161,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       blocking: Boolean = false): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
-        _.find(_.sameResult(plan)).isDefined
+        _.exists(_.sameResult(plan))
       } else {
         _.sameResult(plan)
       }
@@ -187,7 +187,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
         val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
+        cd.plan.exists(_.sameResult(plan)) && !cacheAlreadyLoaded
       })
     }
   }
@@ -207,7 +207,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Tries to re-cache all the cache entries that refer to the given plan.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
-    recacheByCondition(spark, _.plan.find(_.sameResult(plan)).isDefined)
+    recacheByCondition(spark, _.plan.exists(_.sameResult(plan)))
   }
 
   /**
@@ -223,8 +223,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        spark, forceDisableConfigs)
+      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
@@ -268,7 +267,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         }.getOrElse(currentFragment)
     }
 
-    newPlan transformAllExpressions {
+    newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }
@@ -289,7 +288,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
+    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
   }
 
   /**
@@ -327,5 +326,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       .exists(_.startsWith(prefixToInvalidate))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
+  }
+
+  /**
+   * If CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING is enabled, just return original session.
+   */
+  private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
+    if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+      session
+    } else {
+      SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
+    }
   }
 }

@@ -23,6 +23,12 @@ select * from values ("one", 1), ("two", 2L) as data(a, b);
 -- foldable expressions
 select * from values ("one", 1 + 0), ("two", 1 + 3L) as data(a, b);
 
+-- expressions with alias
+select * from values ("one", 1 as one) as data(a, b);
+
+-- literal functions
+select a from values ("one", current_timestamp) as data(a, b);
+
 -- complex types
 select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b);
 

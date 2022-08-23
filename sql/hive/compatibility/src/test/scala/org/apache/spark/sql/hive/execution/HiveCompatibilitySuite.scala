@@ -40,6 +40,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
+  private val originalAnsiMode = TestHive.conf.getConf(SQLConf.ANSI_ENABLED)
   private val originalCreateHiveTable =
     TestHive.conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
 
@@ -56,6 +57,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    // Hive doesn't follow ANSI Standard.
+    TestHive.setConf(SQLConf.ANSI_ENABLED, false)
     // Ensures that the table insertion behavior is consistent with Hive
     TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.LEGACY.toString)
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
@@ -72,6 +75,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
+      TestHive.setConf(SQLConf.ANSI_ENABLED, originalAnsiMode)
       TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT, originalCreateHiveTable)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
@@ -143,6 +147,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Hive returns null for minute('2015-03-18')
     "udf_minute",
 
+    // Hive DESC FUNCTION returns a string to indicate undefined function, while Spark triggers a
+    // query error.
+    "udf_index",
+    "udf_stddev_pop",
 
     // Cant run without local map/reduce.
     "index_auto_update",
@@ -524,9 +532,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_xpath_long",
     "udf_xpath_short",
     "udf_xpath_string",
-
-    // [SPARK-33428][SQL] CONV UDF use BigInt to avoid Long value overflow
-    "udf_conv",
 
     // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
     "alter_rename_partition1",
@@ -1006,6 +1011,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",
+    "udf_conv",
     "udf_cos",
     "udf_count",
     "udf_date_add",

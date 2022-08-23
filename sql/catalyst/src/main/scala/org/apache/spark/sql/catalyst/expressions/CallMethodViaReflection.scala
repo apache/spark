@@ -114,6 +114,9 @@ case class CallMethodViaReflection(children: Seq[Expression])
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }
 
 object CallMethodViaReflection {

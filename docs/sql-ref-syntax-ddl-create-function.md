@@ -81,7 +81,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     Specifies the list of resources that contain the implementation of the function
     along with its dependencies.
 
-    **Syntax:** `USING { { (JAR | FILE ) resource_uri } , ... }`
+    **Syntax:** `USING { { (JAR | FILE | ARCHIVE) resource_uri } , ... }`
 
 ### Examples
 

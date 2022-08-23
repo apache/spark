@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
+import org.apache.spark.sql.connector.SchemaRequiredDataSource
+import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -95,6 +96,19 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         checkPlainResult(spark.table("t"), "CHAR(5)", v)
         sql(s"ALTER TABLE t DROP PARTITION(c='a')")
         checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("char type values should not be padded when charVarcharAsString is true") {
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(a STRING, b CHAR(5), c CHAR(5)) USING $format partitioned by (c)")
+        sql("INSERT INTO t VALUES ('abc', 'abc', 'abc')")
+        checkAnswer(sql("SELECT b FROM t WHERE b='abc'"), Row("abc"))
+        checkAnswer(sql("SELECT b FROM t WHERE b in ('abc')"), Row("abc"))
+        checkAnswer(sql("SELECT c FROM t WHERE c='abc'"), Row("abc"))
+        checkAnswer(sql("SELECT c FROM t WHERE c in ('abc')"), Row("abc"))
       }
     }
   }
@@ -331,8 +345,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c STRUCT<c: $typeName(5)>) USING $format")
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
-      val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      val e = intercept[RuntimeException](sql("INSERT INTO t SELECT struct('123456')"))
+      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
     }
   }
 
@@ -582,21 +596,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-33992: char/varchar resolution in correlated sub query") {
-    withTable("t1", "t2") {
-      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql("INSERT INTO t1 VALUES ('c', 'b')")
-      sql("INSERT INTO t2 VALUES ('a', 'b')")
-
-      checkAnswer(sql(
-        """
-          |SELECT v FROM t1
-          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
-        Row("c"))
-    }
-  }
-
   test("SPARK-34003: fix char/varchar fails w/ both group by and order by ") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), i INT) USING $format")
@@ -629,6 +628,60 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
       sql("INSERT INTO t VALUES ('c ')")
       checkAnswer(spark.table("t"), Row("c "))
+    }
+  }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - join keys") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(5), c CHAR(8)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+      Seq("t1.c = t2.c", "t2.c = t1.c",
+        "t1.c = 'b'", "'b' = t1.c", "t1.c = 'b    '", "'b    ' = t1.c",
+        "t1.c = 'b      '", "'b      ' = t1.c").foreach { predicate =>
+        checkAnswer(sql(
+          s"""
+             |SELECT v FROM t1
+             |WHERE 'a' IN (SELECT v FROM t2 WHERE $predicate)
+           """.stripMargin),
+          Row("c"))
+      }
+    }
+  }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - other preds") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(c0 INT, c1 CHAR(5), c2 CHAR(7)) USING $format")
+      sql("INSERT INTO t VALUES (1, 'abc', 'abc')")
+      Seq("c1 = 'abc'", "'abc' = c1", "c1 = 'abc  '", "'abc  ' = c1",
+        "c1 = 'abc    '", "'abc    ' = c1", "c1 = c2", "c2 = c1",
+        "c1 IN ('xxx', 'abc', 'xxxxx')", "c1 IN ('xxx', 'abc  ', 'xxxxx')",
+        "c1 IN ('xxx', 'abc    ', 'xxxxx')",
+        "c1 IN (c2)", "c2 IN (c1)").foreach { predicate =>
+        checkAnswer(sql(
+          s"""
+             |SELECT c0 FROM t t1
+             |WHERE (
+             |  SELECT count(*) AS c
+             |  FROM t
+             |  WHERE c0 = t1.c0 AND $predicate
+             |) > 0
+         """.stripMargin),
+          Row(1))
+      }
+    }
+  }
+
+  test("SPARK-35359: create table and insert data over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+        withTable("t") {
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql("INSERT INTO t SELECT 'aaa'")
+          checkAnswer(sql("select * from t"), Row("aaa"))
+        }
+      }
     }
   }
 }
@@ -758,7 +811,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         withTable("t") {
           sql("SELECT '12' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
-          val df = sql("select * from t")
           checkAnswer(sql("select * from t"), Row("12"))
         }
       }
@@ -800,27 +852,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           checkAnswer(spark.table("t"), Row("123456"))
         }
       }
-    }
-  }
-
-  // TODO(SPARK-33875): Move these tests to super after DESCRIBE COLUMN v2 implemented
-  test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
-        Row("varchar(3)"))
-      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
-        Row("char(5)"))
-    }
-  }
-
-  // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
-  test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      val rest = sql("SHOW CREATE TABLE t").head().getString(0)
-      assert(rest.contains("VARCHAR(3)"))
-      assert(rest.contains("CHAR(5)"))
     }
   }
 

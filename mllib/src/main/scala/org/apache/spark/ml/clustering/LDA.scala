@@ -33,6 +33,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
@@ -467,7 +468,7 @@ abstract class LDAModel private[ml] (
     val func = getTopicDistributionMethod
     val transformer = udf(func)
     dataset.withColumn($(topicDistributionCol),
-      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      transformer(columnToVector(dataset, getFeaturesCol)),
       outputSchema($(topicDistributionCol)).metadata)
   }
 
@@ -945,6 +946,7 @@ class LDA @Since("1.6.0") (
       learningDecay, optimizer, learningOffset, seed)
 
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+      .setName("training instances")
 
     // The EM solver will transform this oldData to a graph, and use a internal graphCheckpointer
     // to update and cache the graph, so we do not need to cache it.
@@ -993,13 +995,10 @@ object LDA extends MLReadable[LDA] {
   private[clustering] def getOldDataset(
        dataset: Dataset[_],
        featuresCol: String): RDD[(Long, OldVector)] = {
-    dataset
-      .select(monotonically_increasing_id(),
-        DatasetUtils.columnToVector(dataset, featuresCol))
-      .rdd
-      .map { case Row(docId: Long, features: Vector) =>
-        (docId, OldVectors.fromML(features))
-      }
+    dataset.select(
+      monotonically_increasing_id(),
+      checkNonNanVectors(columnToVector(dataset, featuresCol))
+    ).rdd.map { case Row(docId: Long, f: Vector) => (docId, OldVectors.fromML(f)) }
   }
 
   private class LDAReader extends MLReader[LDA] {

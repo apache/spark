@@ -25,8 +25,8 @@ import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext, TestUtils}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.ml.{Model, PredictionModel, Transformer}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.classification.{ClassificationModel, ProbabilisticClassificationModel}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.classification._
+import org.apache.spark.ml.linalg._
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -231,5 +231,156 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       case Row(features: Vector, prediction: Vector) =>
         assert(prediction === transform(features))
     }
+  }
+
+  def testInvalidRegressionLabels(f: DataFrame => Any): Unit = {
+    import testImplicits._
+
+    // labels contains NULL
+    val df1 = sc.parallelize(Seq(
+      (null, 1.0, Vectors.dense(1.0, 2.0)),
+      ("1.0", 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("str_label", "weight", "features")
+      .select(col("str_label").cast("double").as("label"), col("weight"), col("features"))
+    val e1 = intercept[Exception](f(df1))
+    assert(e1.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    // labels contains NaN
+    val df2 = sc.parallelize(Seq(
+      (Double.NaN, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](f(df2))
+    assert(e2.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    // labels contains invalid value: Infinity
+    val df3 = sc.parallelize(Seq(
+      (Double.NegativeInfinity, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e3 = intercept[Exception](f(df3))
+    assert(e3.getMessage.contains("Labels MUST NOT be Infinity"))
+  }
+
+  def testInvalidClassificationLabels(f: DataFrame => Any, numClasses: Option[Int]): Unit = {
+    import testImplicits._
+
+    // labels contains NULL
+    val df1 = sc.parallelize(Seq(
+      (null, 1.0, Vectors.dense(1.0, 2.0)),
+      ("1.0", 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("str_label", "weight", "features")
+      .select(col("str_label").cast("double").as("label"), col("weight"), col("features"))
+    val e1 = intercept[Exception](f(df1))
+    assert(e1.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    // labels contains NaN
+    val df2 = sc.parallelize(Seq(
+      (Double.NaN, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](f(df2))
+    assert(e2.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    numClasses match {
+      case Some(2) =>
+        // labels contains invalid value: 3
+        val df3 = sc.parallelize(Seq(
+          (3.0, 1.0, Vectors.dense(1.0, 2.0)),
+          (1.0, 1.0, Vectors.dense(1.0, 2.0))
+        )).toDF("label", "weight", "features")
+        val e3 = intercept[Exception](f(df3))
+        assert(e3.getMessage.contains("Labels MUST be in {0, 1}"))
+
+      case _ =>
+        // labels contains invalid value: -3
+        val df3 = sc.parallelize(Seq(
+          (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+          (-3.0, 1.0, Vectors.dense(1.0, 2.0))
+        )).toDF("label", "weight", "features")
+        val e3 = intercept[Exception](f(df3))
+        assert(e3.getMessage.contains("Labels MUST be in [0"))
+
+        // labels contains invalid value: Infinity
+        val df4 = sc.parallelize(Seq(
+          (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+          (Double.PositiveInfinity, 1.0, Vectors.dense(1.0, 2.0))
+        )).toDF("label", "weight", "features")
+        val e4 = intercept[Exception](f(df4))
+        assert(e4.getMessage.contains("Labels MUST be in [0"))
+
+        // labels contains invalid value: 0.1
+        val df5 = sc.parallelize(Seq(
+          (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+          (0.1, 1.0, Vectors.dense(1.0, 2.0))
+        )).toDF("label", "weight", "features")
+        val e5 = intercept[Exception](f(df5))
+        assert(e5.getMessage.contains("Labels MUST be Integers"))
+    }
+  }
+
+  def testInvalidWeights(f: DataFrame => Any): Unit = {
+    import testImplicits._
+
+    // weights contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, "1.0", Vectors.dense(1.0, 2.0)),
+      (0.0, null, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "str_weight", "features")
+      .select(col("label"), col("str_weight").cast("double").as("weight"), col("features"))
+    val e1 = intercept[Exception](f(df1))
+    assert(e1.getMessage.contains("Weights MUST NOT be Null or NaN"))
+
+    // weights contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, Double.NaN, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](f(df2))
+    assert(e2.getMessage.contains("Weights MUST NOT be Null or NaN"))
+
+    // weights contains invalid value: -3
+    val df3 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, -3.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e3 = intercept[Exception](f(df3))
+    assert(e3.getMessage.contains("Weights MUST NOT be Negative or Infinity"))
+
+    // weights contains invalid value: Infinity
+    val df4 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, Double.PositiveInfinity, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e4 = intercept[Exception](f(df4))
+    assert(e4.getMessage.contains("Weights MUST NOT be Negative or Infinity"))
+  }
+
+  def testInvalidVectors(f: DataFrame => Any): Unit = {
+    import testImplicits._
+
+    // vectors contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, 1.0, null)
+    )).toDF("label", "weight", "features")
+    val e1 = intercept[Exception](f(df1))
+    assert(e1.getMessage.contains("Vectors MUST NOT be Null"))
+
+    // vectors contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, 1.0, Vectors.dense(Double.NaN, 2.0))
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](f(df2))
+    assert(e2.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
+
+    // vectors contains Infinity
+    val df3 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, 1.0, Vectors.dense(1.0, Double.NegativeInfinity))
+    )).toDF("label", "weight", "features")
+    val e3 = intercept[Exception](f(df3))
+    assert(e3.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
   }
 }

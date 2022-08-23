@@ -179,7 +179,7 @@ class Column(val expr: Expression) extends Logging {
     // NamedExpression under this Cast.
     case c: Cast =>
       c.transformUp {
-        case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
+        case c @ Cast(_: NamedExpression, _, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
         case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
@@ -845,6 +845,14 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def rlike(literal: String): Column = withExpr { RLike(expr, lit(literal).expr) }
+
+  /**
+   * SQL ILIKE expression (case insensitive LIKE).
+   *
+   * @group expr_ops
+   * @since 3.3.0
+   */
+  def ilike(literal: String): Column = withExpr { new ILike(expr, lit(literal).expr) }
 
   /**
    * An expression that gets an item at position `ordinal` out of an array,

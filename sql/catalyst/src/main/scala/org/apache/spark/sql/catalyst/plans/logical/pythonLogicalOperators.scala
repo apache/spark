@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.util.truncatedString
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -37,6 +38,9 @@ case class FlatMapGroupsInPandas(
    * from the input.
    */
   override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInPandas =
+    copy(child = newChild)
 }
 
 /**
@@ -49,6 +53,24 @@ case class MapInPandas(
     child: LogicalPlan) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas =
+    copy(child = newChild)
+}
+
+/**
+ * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
+ * This is used by DataFrame.mapInArrow() in PySpark
+ */
+case class PythonMapInArrow(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+    copy(child = newChild)
 }
 
 /**
@@ -56,14 +78,24 @@ case class MapInPandas(
  * This is used by DataFrame.groupby().cogroup().apply().
  */
 case class FlatMapCoGroupsInPandas(
-    leftAttributes: Seq[Attribute],
-    rightAttributes: Seq[Attribute],
+    leftGroupingLen: Int,
+    rightGroupingLen: Int,
     functionExpr: Expression,
     output: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode {
 
   override val producedAttributes = AttributeSet(output)
+  override lazy val references: AttributeSet =
+    AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
+
+  def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
+
+  def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
+    copy(left = newLeft, right = newRight)
 }
 
 trait BaseEvalPython extends UnaryNode {
@@ -83,7 +115,10 @@ trait BaseEvalPython extends UnaryNode {
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython
+    child: LogicalPlan) extends BaseEvalPython {
+  override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
+    copy(child = newChild)
+}
 
 /**
  * A logical plan that evaluates a [[PythonUDF]] with Apache Arrow.
@@ -92,4 +127,30 @@ case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
-    evalType: Int) extends BaseEvalPython
+    evalType: Int) extends BaseEvalPython {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
+    copy(child = newChild)
+}
+
+/**
+ * A logical plan that adds a new long column with the name `name` that
+ * increases one by one. This is for 'distributed-sequence' default index
+ * in pandas API on Spark.
+ */
+case class AttachDistributedSequence(
+    sequenceAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
+
+  override val output: Seq[Attribute] = sequenceAttr +: child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): AttachDistributedSequence =
+    copy(child = newChild)
+
+  override def simpleString(maxFields: Int): String = {
+    val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val indexColumn = s"Index: $sequenceAttr"
+    s"$nodeName$truncatedOutputString $indexColumn"
+  }
+}

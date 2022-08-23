@@ -7,7 +7,10 @@
 *.pyo
 *.swp
 *~
+.java-version
 .DS_Store
+.ammonite
+.bloop
 .bsp/
 .cache
 .classpath
@@ -17,10 +20,12 @@
 .generated-mima*
 .idea/
 .idea_modules/
+.metals
 .project
 .pydevproject
 .scala_dependencies
 .settings
+.vscode
 /lib/
 R-unit-tests.log
 R/unit-tests.out
@@ -52,8 +57,10 @@ sql/docs
 sql/site
 lib_managed/
 lint-r-report.log
+lint-js-report.log
 log/
 logs/
+metals.sbt
 out/
 project/boot/
 project/build/target/
@@ -63,9 +70,11 @@ project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
 python/.eggs/
+python/coverage.xml
 python/deps
 python/docs/_site/
-python/docs/source/reference/api/
+python/docs/source/reference/**/api/
+python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
@@ -103,3 +112,11 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# For Node.js
+node_modules
+
+# For Antlr
+sql/catalyst/gen/
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

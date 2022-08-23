@@ -44,12 +44,14 @@ public class LocalDiskSingleSpillMapOutputWriter
   @Override
   public void transferMapSpillFile(
       File mapSpillFile,
-      long[] partitionLengths) throws IOException {
+      long[] partitionLengths,
+      long[] checksums) throws IOException {
     // The map spill file already has the proper format, and it contains all of the partition data.
     // So just transfer it directly to the destination without any merging.
     File outputFile = blockResolver.getDataFile(shuffleId, mapId);
     File tempFile = Utils.tempFileWith(outputFile);
     Files.move(mapSpillFile.toPath(), tempFile.toPath());
-    blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tempFile);
+    blockResolver
+      .writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, checksums, tempFile);
   }
 }

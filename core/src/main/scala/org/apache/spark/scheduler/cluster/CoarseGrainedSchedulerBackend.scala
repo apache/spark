@@ -21,14 +21,15 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -80,6 +81,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+
+  // Profile IDs to the times that executors were requested for.
+  // The operations we do on queue are all amortized constant cost
+  // see https://www.scala-lang.org/api/2.13.x/scala/collection/mutable/ArrayDeque.html
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private val execRequestTimes = new HashMap[Int, Queue[(Int, Long)]]
 
   private val listenerBus = scheduler.sc.listenerBus
 
@@ -167,6 +174,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
+      case ShufflePushCompletion(shuffleId, shuffleMergeId, mapIndex) =>
+        scheduler.dagScheduler.shufflePushCompleted(shuffleId, shuffleMergeId, mapIndex)
+
       case ReviveOffers =>
         makeOffers()
 
@@ -213,6 +223,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+
+      case MiscellaneousProcessAdded(time: Long,
+          processId: String, info: MiscellaneousProcessDetails) =>
+        listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }
@@ -251,9 +266,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
+          // If we've requested the executor figure out when we did.
+          val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
+            execRequestTimes.get(resourceProfileId).flatMap {
+              times =>
+              times.headOption.map {
+                h =>
+                // Take off the top element
+                times.dequeue()
+                // If we requested more than one exec reduce the req count by 1 and prepend it back
+                if (h._1 > 1) {
+                  ((h._1 - 1, h._2)) +=: times
+                }
+                h._2
+              }
+            }
+          }
+
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
-            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis())
+            resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis(),
+            requestTs = reqTs)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -423,8 +456,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, lossReason)
-          listenerBus.post(
-            SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
+          listenerBus.post(SparkListenerExecutorRemoved(
+            System.currentTimeMillis(), executorId, lossReason.toString))
         case None =>
           // SPARK-15262: If an executor is still alive even after the scheduler has removed
           // its metadata, we may receive a heartbeat from that executor and tell its block
@@ -432,6 +465,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // about the executor, but the scheduler will not. Therefore, we should remove the
           // executor from the block manager when we hit this case.
           scheduler.sc.env.blockManager.master.removeExecutorAsync(executorId)
+          // SPARK-35011: If we reach this code path, which means the executor has been
+          // already removed from the scheduler backend but the block manager master may
+          // still know it. In this case, removing the executor from block manager master
+          // would only post the event `SparkListenerBlockManagerRemoved`, which is unfortunately
+          // ignored by `AppStatusListener`. As a result, the executor would be shown on the UI
+          // forever. Therefore, we should also post `SparkListenerExecutorRemoved` here.
+          listenerBus.post(SparkListenerExecutorRemoved(
+            System.currentTimeMillis(), executorId, reason.toString))
           logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }
@@ -571,7 +612,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error asking standalone scheduler to shut down executors", e)
+        throw SparkCoreErrors.askStandaloneSchedulerToShutDownExecutorsError(e)
     }
   }
 
@@ -586,7 +627,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error stopping standalone scheduler's driver endpoint", e)
+        throw SparkCoreErrors.stopStandaloneSchedulerDriverEndpointError(e)
     }
   }
 
@@ -725,6 +766,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val numExisting = requestedTotalExecutorsPerResourceProfile.getOrElse(defaultProf, 0)
       requestedTotalExecutorsPerResourceProfile(defaultProf) = numExisting + numAdditionalExecutors
       // Account for executors pending to be added or removed
+      updateExecRequestTime(defaultProf.id, numAdditionalExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
@@ -763,13 +805,51 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
     val response = synchronized {
+      val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
+        case (rp, num) =>
+          (rp.id, num)
+      }.toMap
       this.requestedTotalExecutorsPerResourceProfile.clear()
       this.requestedTotalExecutorsPerResourceProfile ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
+      updateExecRequestTimes(oldResourceProfileToNumExecutors, resourceProfileIdToNumExecutors)
       doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
     defaultAskTimeout.awaitResult(response)
+  }
+
+  private def updateExecRequestTimes(oldProfile: Map[Int, Int], newProfile: Map[Int, Int]): Unit = {
+    newProfile.map {
+      case (k, v) =>
+        val delta = v - oldProfile.getOrElse(k, 0)
+        if (delta != 0) {
+          updateExecRequestTime(k, delta)
+        }
+    }
+  }
+
+  private def updateExecRequestTime(profileId: Int, delta: Int) = {
+    val times = execRequestTimes.getOrElseUpdate(profileId, Queue[(Int, Long)]())
+    if (delta > 0) {
+      // Add the request to the end, constant time op
+      times += ((delta, System.currentTimeMillis()))
+    } else if (delta < 0) {
+      // Consume as if |delta| had been allocated
+      var toConsume = -delta
+      // Note: it's possible that something else allocated an executor and we have
+      // a negative delta, we can just avoid mutating the queue.
+      while (toConsume > 0 && times.nonEmpty) {
+        val h = times.dequeue
+        if (h._1 > toConsume) {
+          // Prepend updated first req to times, constant time op
+          ((h._1 - toConsume, h._2)) +=: times
+          toConsume = 0
+        } else {
+          toConsume = toConsume - h._1
+        }
+      }
+    }
   }
 
   /**

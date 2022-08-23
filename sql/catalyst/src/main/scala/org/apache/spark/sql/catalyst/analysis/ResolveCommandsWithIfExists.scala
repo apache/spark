@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, DropView, LogicalPlan, NoopCommand, UncacheTable}
+import org.apache.spark.sql.catalyst.plans.logical.{DropFunction, DropTable, DropView, LogicalPlan, NoopCommand, UncacheTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 
 /**
  * A rule for handling commands when the table or temp view is not resolved.
@@ -26,12 +27,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * resolved. If the "ifExists" flag is set to true. the plan is resolved to [[NoopCommand]],
  */
 object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(COMMAND)) {
     case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
       NoopCommand("DROP TABLE", u.multipartIdentifier)
     case DropView(u: UnresolvedView, ifExists) if ifExists =>
       NoopCommand("DROP VIEW", u.multipartIdentifier)
     case UncacheTable(u: UnresolvedRelation, ifExists, _) if ifExists =>
       NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
+    case DropFunction(u: UnresolvedFunc, ifExists) if ifExists =>
+      NoopCommand("DROP FUNCTION", u.multipartIdentifier)
   }
 }

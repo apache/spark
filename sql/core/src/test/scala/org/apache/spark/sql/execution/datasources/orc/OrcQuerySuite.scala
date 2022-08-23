@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -34,7 +35,10 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -368,7 +372,7 @@ abstract class OrcQueryTest extends OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(0, 10).select('id as "Acol").write.orc(path)
+      spark.range(0, 10).select($"id" as "Acol").write.orc(path)
       spark.read.orc(path).schema("Acol")
       intercept[IllegalArgumentException] {
         spark.read.orc(path).schema("acol")
@@ -413,19 +417,19 @@ abstract class OrcQueryTest extends OrcTest {
             s"No data was filtered for predicate: $pred")
         }
 
-        checkPredicate('a === 5, List(5).map(Row(_, null)))
-        checkPredicate('a <=> 5, List(5).map(Row(_, null)))
-        checkPredicate('a < 5, List(1, 3).map(Row(_, null)))
-        checkPredicate('a <= 5, List(1, 3, 5).map(Row(_, null)))
-        checkPredicate('a > 5, List(7, 9).map(Row(_, null)))
-        checkPredicate('a >= 5, List(5, 7, 9).map(Row(_, null)))
-        checkPredicate('a.isNull, List(null).map(Row(_, null)))
-        checkPredicate('b.isNotNull, List())
-        checkPredicate('a.isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
-        checkPredicate('a > 0 && 'a < 3, List(1).map(Row(_, null)))
-        checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
-        checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
-        checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+        checkPredicate($"a" === 5, List(5).map(Row(_, null)))
+        checkPredicate($"a" <=> 5, List(5).map(Row(_, null)))
+        checkPredicate($"a" < 5, List(1, 3).map(Row(_, null)))
+        checkPredicate($"a" <= 5, List(1, 3, 5).map(Row(_, null)))
+        checkPredicate($"a" > 5, List(7, 9).map(Row(_, null)))
+        checkPredicate($"a" >= 5, List(5, 7, 9).map(Row(_, null)))
+        checkPredicate($"a".isNull, List(null).map(Row(_, null)))
+        checkPredicate($"b".isNotNull, List())
+        checkPredicate($"a".isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate($"a" > 0 && $"a" < 3, List(1).map(Row(_, null)))
+        checkPredicate($"a" < 1 || $"a" > 8, List(9).map(Row(_, null)))
+        checkPredicate(!($"a" > 3), List(1, 3).map(Row(_, null)))
+        checkPredicate(!($"a" > 0 && $"a" < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
   }
@@ -712,6 +716,150 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         assert(fileFormat == Some(classOf[OrcFileFormat]))
       }
     }
+  }
+
+  test("SPARK-34862: Support ORC vectorized reader for nested column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x" * 10
+        val structColumn = (x, s"$x" * 100)
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val mapColumn = Map(
+          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
+          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
+          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }
+        assert(vectorizationEnabled)
+        checkAnswer(readDf, df)
+      }
+    }
+  }
+
+  test("SPARK-37728: Reading nested columns with ORC vectorized reader should not " +
+    "cause ArrayIndexOutOfBoundsException") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(100).map { _ =>
+        val arrayColumn = (0 until 50).map(_ => (0 until 1000).map(k => k.toString))
+        arrayColumn
+      }.toDF("record").repartition(1)
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }
+        assert(vectorizationEnabled)
+        checkAnswer(readDf, df)
+      }
+    }
+  }
+
+  test("SPARK-36594: ORC vectorized reader should properly check maximal number of fields") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x" * 10
+        val structColumn = (x, s"$x" * 100)
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x" * 100)))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      df.write.format("orc").save(path)
+
+      Seq(("5", false), ("10", true)).foreach {
+        case (maxNumFields, vectorizedEnabled) =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
+            val scanPlan = spark.read.orc(path).queryExecution.executedPlan
+            assert(scanPlan.exists {
+              case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+              case _ => false
+            } == vectorizedEnabled)
+          }
+      }
+    }
+  }
+
+  test("Read/write all timestamp types") {
+    val data = (0 to 255).map { i =>
+      (new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
+    } :+ (null, null)
+
+    withOrcFile(data) { file =>
+      withAllNativeOrcReaders {
+        checkAnswer(spark.read.orc(file), data.toDF().collect())
+      }
+    }
+  }
+
+  test("SPARK-37463: read/write Timestamp ntz to Orc with different time zone") {
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      val sqlText = """
+                      |select
+                      | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
+                      | timestamp_ntz '1883-11-16 00:00:00.0' as ts_ntz2,
+                      | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
+                      |""".stripMargin
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sql(sqlText)
+
+        df.write.mode("overwrite").orc(path)
+
+        val query = s"select * from `orc`.`$path`"
+
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withAllNativeOrcReaders {
+              checkAnswer(sql(query), df)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // SPARK-39519: Ignore this case because it requires more than 4g heap memory to ensure test
+  // stability when use Java 11. Should test it manually when upgrading `hive-storage-api`
+  ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(1, 22, 1, 1).map { _ =>
+        val byteData = Array.fill[Byte](1024 * 1024)('X')
+        val mapData = (1 to 100).map(i => (i, byteData))
+        mapData
+      }.toDF()
+      df.write.format("orc").save(path)
+    }
+  }
+
+  test("SPARK-39381: Make vectorized orc columar writer batch size configurable") {
+    Seq(10, 100).foreach(batchSize => {
+      withSQLConf(SQLConf.ORC_VECTORIZED_WRITER_BATCH_SIZE.key -> batchSize.toString) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.range(1, 1024, 1, 1).map { _ =>
+            val byteData = Array.fill[Byte](5 * 1024 * 1024)('X')
+            byteData
+          }.toDF()
+          df.write.format("orc").save(path)
+        }
+      }
+    })
   }
 }
 

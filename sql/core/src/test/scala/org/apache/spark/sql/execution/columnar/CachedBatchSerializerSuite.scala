@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation.clearSerializer
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -101,7 +103,13 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
-    throw new IllegalStateException("This does not work. This is only for testing")
+    convertCachedBatchToColumnarBatch(input, cacheAttributes, selectedAttributes, conf)
+      .mapPartitionsInternal { batches =>
+        val toUnsafe = UnsafeProjection.create(selectedAttributes, selectedAttributes)
+        batches.flatMap { batch =>
+          batch.rowIterator().asScala.map(toUnsafe)
+        }
+      }
   }
 
   override def buildFilter(
@@ -138,8 +146,9 @@ class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
       input.write.parquet(workDirPath)
       val data = spark.read.parquet(workDirPath)
       data.cache()
-      assert(data.count() == 3)
-      checkAnswer(data, Row(100) :: Row(200) :: Row(300) :: Nil)
+      val df = data.union(data)
+      assert(df.count() == 6)
+      checkAnswer(df, Row(100) :: Row(200) :: Row(300) :: Row(100) :: Row(200) :: Row(300) :: Nil)
     }
   }
 }

@@ -19,12 +19,13 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 import scala.concurrent.duration.Duration;
 
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.AvailableNowTrigger$;
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 
 /**
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
@@ -89,13 +90,38 @@ public class Trigger {
   }
 
   /**
-   * A trigger that process only one batch of data in a streaming query then terminates
-   * the query.
+   * A trigger that processes all available data in a single batch then terminates the query.
    *
    * @since 2.2.0
+   * @deprecated This is deprecated as of Spark 3.4.0. Use {@link #AvailableNow()} to leverage
+   *             better guarantee of processing, fine-grained scale of batches, and better gradual
+   *             processing of watermark advancement including no-data batch.
+   *             See the NOTES in {@link #AvailableNow()} for details.
    */
+  @Deprecated
   public static Trigger Once() {
     return OneTimeTrigger$.MODULE$;
+  }
+
+  /**
+   * A trigger that processes all available data at the start of the query in one or multiple
+   * batches, then terminates the query.
+   *
+   * Users are encouraged to set the source options to control the size of the batch as similar as
+   * controlling the size of the batch in {@link #ProcessingTime(long)} trigger.
+   *
+   * NOTES:
+   * - This trigger provides a strong guarantee of processing: regardless of how many batches were
+   *   left over in previous run, it ensures all available data at the time of execution gets
+   *   processed before termination. All uncommitted batches will be processed first.
+   * - Watermark gets advanced per each batch, and no-data batch gets executed before termination
+   *   if the last batch advances the watermark. This helps to maintain smaller and predictable
+   *   state size and smaller latency on the output of stateful operators.
+   *
+   * @since 3.3.0
+   */
+  public static Trigger AvailableNow() {
+    return AvailableNowTrigger$.MODULE$;
   }
 
   /**

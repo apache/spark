@@ -16,27 +16,30 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneId
+import java.time.{Duration, Period, ZoneId}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
-import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
@@ -68,6 +71,9 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
         s"[${left.dataType.catalogString}, ${right.dataType.catalogString}]")
     }
   }
+
+  protected def leftArrayElementNullable = left.dataType.asInstanceOf[ArrayType].containsNull
+  protected def rightArrayElementNullable = right.dataType.asInstanceOf[ArrayType].containsNull
 }
 
 
@@ -87,8 +93,6 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
        4
       > SELECT _FUNC_(map('a', 1, 'b', 2));
        2
-      > SELECT _FUNC_(NULL);
-       -1
   """,
   since = "1.5.0",
   group = "collection_funcs")
@@ -108,8 +112,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
     } else child.dataType match {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
-      case other => throw new UnsupportedOperationException(
-        s"The size function doesn't support the operand type ${other.getClass.getCanonicalName}")
+      case other => throw QueryExecutionErrors.unsupportedOperandTypeForSizeFunctionError(other)
     }
   }
 
@@ -125,10 +128,37 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
       defineCodeGen(ctx, ev, c => s"($c).numElements()")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Size = copy(child = newChild)
 }
 
 object Size {
   def apply(child: Expression): Size = new Size(child)
+}
+
+
+/**
+ * Given an array, returns total number of elements in it.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the size of an array. The function returns null for null input.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
+       4
+  """,
+  since = "3.3.0",
+  group = "collection_funcs")
+case class ArraySize(child: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with UnaryLike[Expression] {
+
+  override lazy val replacement: Expression = Size(child, legacySizeOfNull = false)
+
+  override def prettyName: String = "array_size"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  protected def withNewChildInternal(newChild: Expression): ArraySize = copy(child = newChild)
 }
 
 /**
@@ -159,6 +189,61 @@ case class MapKeys(child: Expression)
   }
 
   override def prettyName: String = "map_keys"
+
+  override protected def withNewChildInternal(newChild: Expression): MapKeys =
+    copy(child = newChild)
+}
+
+
+/**
+ * Returns an unordered array containing the keys of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
+       true
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 3);
+       false
+  """,
+  group = "map_funcs",
+  since = "3.3.0")
+case class MapContainsKey(left: Expression, right: Expression)
+  extends RuntimeReplaceable with BinaryLike[Expression] with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = ArrayContains(MapKeys(left), right)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (MapType(kt, vt, valueContainsNull), dt) =>
+        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo(kt, dt) match {
+          case Some(widerType) => Seq(MapType(widerType, vt, valueContainsNull), widerType)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
+        TypeUtils.checkForOrderingExpr(kt, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${MapType.simpleString} followed by a value with same key type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
+  }
+
+  override def prettyName: String = "map_contains_key"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(newLeft, newRight)
+  }
 }
 
 @ExpressionDescription(
@@ -175,16 +260,35 @@ case class MapKeys(child: Expression)
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
+case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
+  extends Expression with ExpectsInputTypes {
 
+  def this(children: Seq[Expression]) = {
+    this(
+      children,
+      children.zipWithIndex.map {
+        case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
+        case (e: NamedExpression, _) if e.resolved => Literal(e.name)
+        case (e: NamedExpression, _) => NamePlaceholder
+        case (_, idx) => Literal(idx.toString)
+      })
+  }
+
+  if (children.size != names.size) {
+    throw new IllegalArgumentException(
+      "The numbers of zipped arrays and field names should be the same")
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
 
   @transient override lazy val dataType: DataType = {
-    val fields = children.zip(arrayElementTypes).zipWithIndex.map {
-      case ((expr: NamedExpression, elementType), _) =>
-        StructField(expr.name, elementType, nullable = true)
-      case ((_, elementType), idx) =>
-        StructField(idx.toString, elementType, nullable = true)
+    val fields = arrayElementTypes.zip(names).map {
+      case (elementType, Literal(name, StringType)) =>
+        StructField(name.toString, elementType, nullable = true)
     }
     ArrayType(StructType(fields), containsNull = false)
   }
@@ -321,6 +425,15 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
   }
 
   override def prettyName: String = "arrays_zip"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ArraysZip =
+    copy(children = newChildren)
+}
+
+object ArraysZip {
+  def apply(children: Seq[Expression]): ArraysZip = {
+    new ArraysZip(children)
+  }
 }
 
 /**
@@ -351,6 +464,9 @@ case class MapValues(child: Expression)
   }
 
   override def prettyName: String = "map_values"
+
+  override protected def withNewChildInternal(newChild: Expression): MapValues =
+    copy(child = newChild)
 }
 
 /**
@@ -523,6 +639,8 @@ case class MapEntries(child: Expression)
   }
 
   override def prettyName: String = "map_entries"
+
+  override def withNewChildInternal(newChild: Expression): MapEntries = copy(child = newChild)
 }
 
 /**
@@ -642,6 +760,9 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   }
 
   override def prettyName: String = "map_concat"
+
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MapConcat =
+    copy(children = newChildren)
 }
 
 /**
@@ -720,6 +841,9 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
   }
 
   override def prettyName: String = "map_from_entries"
+
+  override protected def withNewChildInternal(newChild: Expression): MapFromEntries =
+    copy(child = newChild)
 }
 
 
@@ -774,7 +898,8 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient lazy val elementType: DataType =
     arrayExpression.dataType.asInstanceOf[ArrayType].elementType
 
-  def containsNull: Boolean = arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
+  private def resultArrayElementNullable: Boolean =
+    arrayExpression.dataType.asInstanceOf[ArrayType].containsNull
 
   def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
@@ -809,8 +934,8 @@ trait ArraySortLike extends ExpectsInputTypes {
       } else {
         s"int $c = ${ctx.genComp(elementType, s"(($jt) $o1)", s"(($jt) $o2)")};"
       }
-      val canPerformFastSort =
-        CodeGenerator.isPrimitiveType(elementType) && elementType != BooleanType && !containsNull
+      val canPerformFastSort = CodeGenerator.isPrimitiveType(elementType) &&
+        elementType != BooleanType && !resultArrayElementNullable
       val nonNullPrimitiveAscendingSort = if (canPerformFastSort) {
           val javaType = CodeGenerator.javaType(elementType)
           val primitiveTypeName = CodeGenerator.primitiveTypeName(elementType)
@@ -868,9 +993,9 @@ object ArraySortLike {
 @ExpressionDescription(
   usage = """
     _FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order
-      according to the natural ordering of the array elements. Null elements will be placed
-      at the beginning of the returned array in ascending order or at the end of the returned
-      array in descending order.
+      according to the natural ordering of the array elements. NaN is greater than any non-NaN
+      elements for double/float type. Null elements will be placed at the beginning of the returned
+      array in ascending order or at the end of the returned array in descending order.
   """,
   examples = """
     Examples:
@@ -919,6 +1044,10 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SortArray =
+    copy(base = newLeft, ascendingOrder = newRight)
 }
 
 /**
@@ -953,6 +1082,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def dataType: DataType = child.dataType
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   @transient lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
@@ -993,7 +1124,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(arrayData, elementType, childName,
-      i, s"$indices[$i]", dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$indices[$i]", resultArrayElementNullable)
 
     s"""
        |int $numElements = $childName.numElements();
@@ -1007,6 +1138,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   }
 
   override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
+
+  override def withNewChildInternal(newChild: Expression): Shuffle = copy(child = newChild)
 }
 
 /**
@@ -1034,6 +1167,8 @@ case class Reverse(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
 
   override def dataType: DataType = child.dataType
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   override def nullSafeEval(input: Any): Any = doReverse(input)
 
@@ -1069,7 +1204,7 @@ case class Reverse(child: Expression)
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, childName, i, j, dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, childName, i, j, resultArrayElementNullable)
 
     s"""
        |final int $numElements = $childName.numElements();
@@ -1083,6 +1218,9 @@ case class Reverse(child: Expression)
   }
 
   override def prettyName: String = "reverse"
+
+  override protected def withNewChildInternal(newChild: Expression): Reverse =
+    copy(child = newChild)
 }
 
 /**
@@ -1098,9 +1236,7 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def dataType: DataType = BooleanType
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1180,6 +1316,10 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayContains =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1197,7 +1337,7 @@ case class ArrayContains(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant {
+  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant with Predicate {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -1214,11 +1354,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
     bruteForceEval _
   }
 
-  override def dataType: DataType = BooleanType
-
   override def nullable: Boolean = {
-    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
-      right.dataType.asInstanceOf[ArrayType].containsNull
+    left.nullable || right.nullable || leftArrayElementNullable || rightArrayElementNullable
   }
 
   override def nullSafeEval(a1: Any, a2: Any): Any = {
@@ -1238,12 +1375,12 @@ case class ArraysOverlap(left: Expression, right: Expression)
       (arr2, arr1)
     }
     if (smaller.numElements() > 0) {
-      val smallestSet = new mutable.HashSet[Any]
+      val smallestSet = new java.util.HashSet[Any]()
       smaller.foreach(elementType, (_, v) =>
         if (v == null) {
           hasNull = true
         } else {
-          smallestSet += v
+          smallestSet.add(v)
         })
       bigger.foreach(elementType, (_, v1) =>
         if (v1 == null) {
@@ -1403,6 +1540,10 @@ case class ArraysOverlap(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "arrays_overlap"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArraysOverlap =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1426,9 +1567,13 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def dataType: DataType = x.dataType
 
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
 
-  @transient override lazy val children: Seq[Expression] = Seq(x, start, length) // called from eval
+  override def first: Expression = x
+  override def second: Expression = start
+  override def third: Expression = length
 
   @transient private lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
 
@@ -1437,16 +1582,14 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = if (startInt == 0) {
-      throw new RuntimeException(
-        s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
     } else if (startInt < 0) {
       startInt + arr.numElements()
     } else {
       startInt - 1
     }
     if (lengthInt < 0) {
-      throw new RuntimeException(s"Unexpected value for length in function $prettyName: " +
-        "length must be greater than or equal to 0.")
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName)
     }
     // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
@@ -1466,8 +1609,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
          |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
          |if ($start == 0) {
-         |  throw new RuntimeException("Unexpected value for start in function $prettyName: "
-         |    + "SQL array indices start at 1.");
+         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
          |} else if ($start < 0) {
          |  $startIdx = $start + $x.numElements();
          |} else {
@@ -1475,8 +1617,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $startIdx = $start - 1;
          |}
          |if ($length < 0) {
-         |  throw new RuntimeException("Unexpected value for length in function $prettyName: "
-         |    + "length must be greater than or equal to 0.");
+         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError("$prettyName");
          |} else if ($length > $x.numElements() - $startIdx) {
          |  $resLength = $x.numElements() - $startIdx;
          |} else {
@@ -1500,7 +1641,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val allocation = CodeGenerator.createArrayData(
       values, elementType, resLength, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(values, elementType, inputArray,
-      i, s"$i + $startIdx", dataType.asInstanceOf[ArrayType].containsNull)
+      i, s"$i + $startIdx", resultArrayElementNullable)
 
     s"""
        |if ($startIdx < 0 || $startIdx >= $inputArray.numElements()) {
@@ -1514,6 +1655,10 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        |}
      """.stripMargin
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Slice =
+    copy(x = newFirst, start = newSecond, length = newThird)
 }
 
 /**
@@ -1556,6 +1701,16 @@ case class ArrayJoin(
   } else {
     Seq(array, delimiter)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    if (nullReplacement.isDefined) {
+      copy(
+        array = newChildren(0),
+        delimiter = newChildren(1),
+        nullReplacement = Some(newChildren(2)))
+    } else {
+      copy(array = newChildren(0), delimiter = newChildren(1))
+    }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
@@ -1692,7 +1847,9 @@ case class ArrayJoin(
  * Returns the minimum value in the array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Returns the minimum value in the array. NULL elements are skipped.",
+  usage = """
+    _FUNC_(array) - Returns the minimum value in the array. NaN is greater than
+    any non-NaN elements for double/float type. NULL elements are skipped.""",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
@@ -1754,13 +1911,18 @@ case class ArrayMin(child: Expression)
   }
 
   override def prettyName: String = "array_min"
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayMin =
+    copy(child = newChild)
 }
 
 /**
  * Returns the maximum value in the array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Returns the maximum value in the array. NULL elements are skipped.",
+  usage = """
+    _FUNC_(array) - Returns the maximum value in the array. NaN is greater than
+    any non-NaN elements for double/float type. NULL elements are skipped.""",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
@@ -1822,6 +1984,9 @@ case class ArrayMax(child: Expression)
   }
 
   override def prettyName: String = "array_max"
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayMax =
+    copy(child = newChild)
 }
 
 
@@ -1901,6 +2066,46 @@ case class ArrayPosition(left: Expression, right: Expression)
        """.stripMargin
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayPosition =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns the value of index `right` in Array `left`. If the index points outside of the array
+ * boundaries, then this function returns NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (0-based) index. If the index points
+     outside of the array boundaries, then this function returns NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 0);
+       1
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       NULL
+      > SELECT _FUNC_(array(1, 2, 3), -1);
+       NULL
+  """,
+  since = "3.4.0",
+  group = "array_funcs")
+case class Get(
+    left: Expression,
+    right: Expression,
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, GetArrayItem(left, right, failOnError = false))
+
+  override def prettyName: String = "get"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }
 
 /**
@@ -1908,15 +2113,15 @@ case class ArrayPosition(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. The function returns NULL
-      if the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false.
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If Index is 0,
+      Spark will throw an error. If index < 0, accesses elements from the last to the first.
+      The function returns NULL if the index exceeds the length of the array and
+      `spark.sql.ansi.enabled` is set to false.
       If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
       for invalid indices.
 
-    _FUNC_(map, key) - Returns value for given key. The function returns NULL
-      if the key is not contained in the map and `spark.sql.ansi.enabled` is set to false.
-      If `spark.sql.ansi.enabled` is set to true, it throws NoSuchElementException instead.
+    _FUNC_(map, key) - Returns value for given key. The function returns NULL if the key is not
+       contained in the map.
   """,
   examples = """
     Examples:
@@ -1930,17 +2135,20 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(
     left: Expression,
     right: Expression,
+    // The value to return if index is out of bound
+    defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
+  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
   @transient private lazy val mapValueContainsNull =
     left.dataType.asInstanceOf[MapType].valueContainsNull
 
-  @transient private lazy val arrayContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull
+  @transient private lazy val arrayElementNullable =
+    left.dataType.asInstanceOf[ArrayType].containsNull
 
   @transient private lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(mapKeyType)
 
@@ -1998,7 +2206,7 @@ case class ElementAt(
   override def nullable: Boolean = left.dataType match {
     case _: ArrayType =>
       computeNullabilityFromArray(left, right, failOnError, nullability)
-    case _: MapType => if (failOnError) mapValueContainsNull else true
+    case _: MapType => true
   }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
@@ -2010,20 +2218,23 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw new ArrayIndexOutOfBoundsException(
-              s"Invalid index: $index, numElements: ${array.numElements()}")
+            throw QueryExecutionErrors.invalidElementAtIndexError(
+              index, array.numElements(), getContextOrNull())
           } else {
-            null
+            defaultValueOutOfBound match {
+              case Some(value) => value.eval()
+              case None => null
+            }
           }
         } else {
           val idx = if (index == 0) {
-            throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+            throw QueryExecutionErrors.elementAtByIndexZeroError()
           } else if (index > 0) {
             index - 1
           } else {
             array.numElements() + index
           }
-          if (arrayContainsNull && array.isNullAt(idx)) {
+          if (arrayElementNullable && array.isNullAt(idx)) {
             null
           } else {
             array.get(idx, dataType)
@@ -2031,7 +2242,7 @@ case class ElementAt(
         }
       }
     case _: MapType =>
-      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering, failOnError)
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2039,7 +2250,7 @@ case class ElementAt(
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
-          val nullCheck = if (arrayContainsNull) {
+          val nullCheck = if (arrayElementNullable) {
             s"""
                |if ($eval1.isNullAt($index)) {
                |  ${ev.isNull} = true;
@@ -2050,12 +2261,21 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"""throw new ArrayIndexOutOfBoundsException(
-               |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
-               |);
-             """.stripMargin
+            val errorContext = getContextOrNullCode(ctx)
+            // scalastyle:off line.size.limit
+            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
+            // scalastyle:on line.size.limit
           } else {
-            s"${ev.isNull} = true;"
+            defaultValueOutOfBound match {
+              case Some(value) =>
+                val defaultValueEval = value.genCode(ctx)
+                s"""
+                  ${defaultValueEval.code};
+                  ${ev.isNull} = ${defaultValueEval.isNull};
+                  ${ev.value} = ${defaultValueEval.value};
+                """.stripMargin
+              case None => s"${ev.isNull} = true;"
+            }
           }
 
           s"""
@@ -2064,7 +2284,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -2078,11 +2298,59 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], failOnError)
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
     }
   }
 
   override def prettyName: String = "element_at"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
+
+  override def initQueryContext(): Option[SQLQueryContext] = {
+    if (failOnError && left.resolved && left.dataType.isInstanceOf[ArrayType]) {
+      Some(origin.context)
+    } else {
+      None
+    }
+  }
+}
+
+/**
+ * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
+ * The function is identical to the function `element_at`, except that it returns `NULL` result
+ * instead of throwing an exception on array's index out of bound or map's key not found when
+ * `spark.sql.ansi.enabled` is true.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If Index is 0,
+      Spark will throw an error. If index < 0, accesses elements from the last to the first.
+      The function always returns NULL if the index exceeds the length of the array.
+
+    _FUNC_(map, key) - Returns value for given key. The function always returns NULL
+      if the key is not contained in the map.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
+       b
+  """,
+  since = "3.3.0",
+  group = "map_funcs")
+case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) =
+    this(left, right, ElementAt(left, right, None, failOnError = false))
+
+  override def prettyName: String = "try_element_at"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }
 
 /**
@@ -2107,6 +2375,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
       TypeCheckResult.TypeCheckSuccess
@@ -2129,6 +2399,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       super.dataType
     }
   }
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
 
   private def javaType: String = CodeGenerator.javaType(dataType)
 
@@ -2158,9 +2430,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
           val arrayData = inputs.map(_.asInstanceOf[ArrayData])
           val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
           if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-            throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-              " elements due to exceeding the array size limit " +
-              ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+            throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
           }
           val finalData = new Array[AnyRef](numberOfElements.toInt)
           var position = 0
@@ -2263,8 +2533,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"args[$y]", counter, z,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      arrayData, elementType, s"args[$y]", counter, z, resultArrayElementNullable)
 
     val concat = ctx.freshName("concat")
     val concatDef =
@@ -2289,6 +2558,9 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override def toString: String = s"concat(${children.mkString(", ")})"
 
   override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Concat =
+    copy(children = newChildren)
 }
 
 /**
@@ -2311,6 +2583,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
   @transient override lazy val dataType: DataType = childDataType.elementType
 
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+
   @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
@@ -2332,9 +2606,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       val arrayData = elements.map(_.asInstanceOf[ArrayData])
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
       if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-          s"$numberOfElements elements due to exceeding the array size limit " +
-          ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+        throw QueryExecutionErrors.flattenArraysWithElementsExceedLimitError(numberOfElements)
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
@@ -2382,8 +2654,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
     val allocation = CodeGenerator.createArrayData(
       tempArrayDataName, elementType, numElemName, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
-      tempArrayDataName, elementType, arr, counter, l,
-      dataType.asInstanceOf[ArrayType].containsNull)
+      tempArrayDataName, elementType, arr, counter, l, resultArrayElementNullable)
 
     s"""
     |$numElemCode
@@ -2401,6 +2672,9 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
   }
 
   override def prettyName: String = "flatten"
+
+  override protected def withNewChildInternal(newChild: Expression): Flatten =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -2413,8 +2687,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
-      then the step expression must resolve to the 'interval' type, otherwise to the same type
-      as the start and stop expressions.
+      then the step expression must resolve to the 'interval' or 'year-month interval' or
+      'day-time interval' type, otherwise to the same type as the start and stop expressions.
   """,
   arguments = """
     Arguments:
@@ -2432,6 +2706,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       > SELECT _FUNC_(5, 1);
        [5,4,3,2,1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
+       [2018-01-01,2018-02-01,2018-03-01]
+      > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval '0-1' year to month);
        [2018-01-01,2018-02-01,2018-03-01]
   """,
   group = "array_funcs",
@@ -2458,6 +2734,15 @@ case class Sequence(
 
   override def children: Seq[Expression] = Seq(start, stop) ++ stepOpt
 
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): TimeZoneAwareExpression = {
+    if (stepOpt.isDefined) {
+      copy(start = newChildren(0), stop = newChildren(1), stepOpt = Some(newChildren(2)))
+    } else {
+      copy(start = newChildren(0), stop = newChildren(1))
+    }
+  }
+
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -2470,8 +2755,14 @@ case class Sequence(
     val typesCorrect =
       startType.sameType(stop.dataType) &&
         (startType match {
-          case TimestampType | DateType =>
-            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType)
+          case TimestampType | TimestampNTZType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType.acceptsType(stepType) ||
+              DayTimeIntervalType.acceptsType(stepType)
+          case DateType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType.acceptsType(stepType) ||
+              DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || stepType.sameType(startType)
           case _ => false
@@ -2481,29 +2772,53 @@ case class Sequence(
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"$prettyName only supports integral, timestamp or date types")
+        s"""
+           |$prettyName uses the wrong parameter type. The parameter type must conform to:
+           |1. The start and stop expressions must resolve to the same type.
+           |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
+           |then the step expression must resolve to the 'interval' or
+           |'${YearMonthIntervalType.simpleString}' or '${DayTimeIntervalType.simpleString}' type,
+           |otherwise to the same type as the start and stop expressions.
+         """.stripMargin)
     }
   }
 
-  def coercibleChildren: Seq[Expression] = children.filter(_.dataType != CalendarIntervalType)
+  private def isNotIntervalType(expr: Expression) = expr.dataType match {
+    case CalendarIntervalType | _: AnsiIntervalType => false
+    case _ => true
+  }
+
+  def coercibleChildren: Seq[Expression] = children.filter(isNotIntervalType)
 
   def castChildrenTo(widerType: DataType): Expression = Sequence(
     Cast(start, widerType),
     Cast(stop, widerType),
-    stepOpt.map(step => if (step.dataType != CalendarIntervalType) Cast(step, widerType) else step),
+    stepOpt.map(step => if (isNotIntervalType(step)) Cast(step, widerType) else step),
     timeZoneId)
 
-  @transient private lazy val impl: SequenceImpl = dataType.elementType match {
+  @transient private lazy val impl: InternalSequence = dataType.elementType match {
     case iType: IntegralType =>
       type T = iType.InternalType
       val ct = ClassTag[T](iType.tag.mirror.runtimeClass(iType.tag.tpe))
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
-    case TimestampType =>
-      new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
+    case TimestampType | TimestampNTZType =>
+      if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new TemporalSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new PeriodSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+      } else {
+        new DurationSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+      }
 
     case DateType =>
-      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+      if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new TemporalSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
+      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new PeriodSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
+      } else {
+        new DurationSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
+      }
   }
 
   override def eval(input: InternalRow): Any = {
@@ -2586,7 +2901,7 @@ object Sequence {
     }
   }
 
-  private trait SequenceImpl {
+  private trait InternalSequence {
     def eval(start: Any, stop: Any, step: Any): Any
 
     def genCode(
@@ -2601,7 +2916,7 @@ object Sequence {
   }
 
   private class IntegralSequenceImpl[T: ClassTag]
-    (elemType: IntegralType)(implicit num: Integral[T]) extends SequenceImpl {
+    (elemType: IntegralType)(implicit num: Integral[T]) extends InternalSequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (elemType.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
@@ -2615,7 +2930,7 @@ object Sequence {
       val stop = input2.asInstanceOf[T]
       val step = input3.asInstanceOf[T]
 
-      var i: Int = getSequenceLength(start, stop, step)
+      var i: Int = getSequenceLength(start, stop, step, step)
       val arr = new Array[T](i)
       while (i > 0) {
         i -= 1
@@ -2633,7 +2948,7 @@ object Sequence {
         elemType: String): String = {
       val i = ctx.freshName("i")
       s"""
-         |${genSequenceLengthCode(ctx, start, stop, step, i)}
+         |${genSequenceLengthCode(ctx, start, stop, step, step, i)}
          |$arr = new $elemType[$i];
          |while ($i > 0) {
          |  $i--;
@@ -2643,32 +2958,133 @@ object Sequence {
     }
   }
 
+  private class PeriodSequenceImpl[T: ClassTag]
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      YearMonthIntervalType(),
+      Period.of(0, 1, 0))
+
+    val intervalType: DataType = YearMonthIntervalType()
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      (input.asInstanceOf[Int], 0, 0)
+    }
+
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = $step;
+         |final int $stepDays = 0;
+         |final long $stepMicros = 0L;
+       """.stripMargin
+    }
+  }
+
+  private class DurationSequenceImpl[T: ClassTag]
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      DayTimeIntervalType(),
+      Duration.ofDays(1))
+
+    val intervalType: DataType = DayTimeIntervalType()
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      val duration = input.asInstanceOf[Long]
+      val days = IntervalUtils.getDays(duration)
+      val micros = duration - days * MICROS_PER_DAY
+      (0, days, micros)
+    }
+
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = 0;
+         |final int $stepDays =
+         |  (int) org.apache.spark.sql.catalyst.util.IntervalUtils.getDays($step);
+         |final long $stepMicros = $step - $stepDays * ${MICROS_PER_DAY}L;
+       """.stripMargin
+    }
+  }
+
   private class TemporalSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
-      (implicit num: Integral[T]) extends SequenceImpl {
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
       CalendarIntervalType,
       new CalendarInterval(0, 1, 0))
 
+    val intervalType: DataType = CalendarIntervalType
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      val step = input.asInstanceOf[CalendarInterval]
+      (step.months, step.days, step.microseconds)
+    }
+
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = $step.months;
+         |final int $stepDays = $step.days;
+         |final long $stepMicros = $step.microseconds;
+       """.stripMargin
+    }
+  }
+
+  private abstract class InternalSequenceBase[T: ClassTag]
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T]) extends InternalSequence {
+
+    val defaultStep: DefaultStep
+
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
     // We choose a minimum days(28) in one month to calculate the `intervalStepInMicros`
     // in order to make sure the estimated array length is long enough
-    private val microsPerMonth = 28 * microsPerDay
+    private val microsPerMonth = 28 * MICROS_PER_DAY
+
+    protected val intervalType: DataType
+
+    protected def splitStep(input: Any): (Int, Int, Long)
+
+    private val addInterval: (Long, Int, Int, Long, ZoneId) => Long = outerDataType match {
+      case TimestampType | DateType => timestampAddInterval
+      case TimestampNTZType => timestampNTZAddInterval
+    }
+
+    private def toMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        daysToMicros(value.toInt, zoneId)
+      } else {
+        value * scale
+      }
+    }
+
+    private def fromMicros(value: Long, scale: Long): Long = {
+      if (scale == MICROS_PER_DAY) {
+        microsToDays(value, zoneId).toLong
+      } else {
+        value / scale
+      }
+    }
 
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
-      val step = input3.asInstanceOf[CalendarInterval]
-      val stepMonths = step.months
-      val stepDays = step.days
-      val stepMicros = step.microseconds
+      val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(
-          "sequence step must be a day interval if start and end values are dates")
+        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
+          " of day granularity if start and end values are dates")
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -2683,29 +3099,50 @@ object Sequence {
         // To estimate the resulted array length we need to make assumptions
         // about a month length in days and a day length in microseconds
         val intervalStepInMicros =
-          stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
-        val startMicros: Long = num.toLong(start) * scale
-        val stopMicros: Long = num.toLong(stop) * scale
-        val maxEstimatedArrayLength =
-          getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
+          stepMicros + stepMonths * microsPerMonth + stepDays * MICROS_PER_DAY
 
-        val stepSign = if (stopMicros >= startMicros) +1 else -1
+        val startMicros: Long = toMicros(num.toLong(start), scale)
+        val stopMicros: Long = toMicros(num.toLong(stop), scale)
+
+        val estimatedArrayLength =
+          getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
+
+        val stepSign = if (intervalStepInMicros > 0) +1 else -1
         val exclusiveItem = stopMicros + stepSign
-        val arr = new Array[T](maxEstimatedArrayLength)
+        var arr = new Array[T](estimatedArrayLength)
         var t = startMicros
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
-          arr(i) = fromLong(t / scale)
+          val result = fromMicros(t, scale)
+          // if we've underestimated the size of the array, due to crossing a DST
+          // "spring forward" without a corresponding "fall back", make a copy
+          // that's larger by 1
+          if (i == arr.length) {
+            arr = arr.padTo(i + 1, fromLong(0L))
+          }
+          arr(i) = fromLong(result)
           i += 1
-          t = timestampAddInterval(
-            startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
+          t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
         if (arr.length == i) arr else arr.slice(0, i)
       }
     }
+
+    protected def stepSplitCode(
+         stepMonths: String, stepDays: String, stepMicros: String, step: String): String
+
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    private val addIntervalCode = outerDataType match {
+      case TimestampType | DateType => s"$dtu.timestampAddInterval"
+      case TimestampNTZType => s"$dtu.timestampNTZAddInterval"
+    }
+
+    private val daysToMicrosCode = s"$dtu.daysToMicros"
+    private val microsToDaysCode = s"$dtu.microsToDays"
 
     override def genCode(
         ctx: CodegenContext,
@@ -2731,25 +3168,45 @@ object Sequence {
       val sequenceLengthCode =
         s"""
            |final long $intervalInMicros =
-           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${microsPerDay}L;
-           |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
-          """.stripMargin
+           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${MICROS_PER_DAY}L;
+           |${genSequenceLengthCode(
+              ctx, startMicros, stopMicros, step, intervalInMicros, arrLength)}
+         """.stripMargin
 
       val check = if (scale == MICROS_PER_DAY) {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
            |  throw new IllegalArgumentException(
-           |    "sequence step must be a day interval if start and end values are dates");
+           |    "sequence step must be an ${intervalType.typeName} " +
+           |    "of day granularity if start and end values are dates");
            |}
-          """.stripMargin
+         """.stripMargin
         } else {
           ""
         }
 
+      val stepSplits = stepSplitCode(stepMonths, stepDays, stepMicros, step)
+
+      val toMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"""
+          |  final long $startMicros = $daysToMicrosCode((int) $start, $zid);
+          |  final long $stopMicros = $daysToMicrosCode((int) $stop, $zid);
+          |""".stripMargin
+      } else {
+        s"""
+          |  final long $startMicros = $start * ${scale}L;
+          |  final long $stopMicros = $stop * ${scale}L;
+          |""".stripMargin
+      }
+
+      val fromMicrosCode = if (scale == MICROS_PER_DAY) {
+        s"($elemType) $microsToDaysCode($t, $zid)"
+      } else {
+        s"($elemType) ($t / ${scale}L)"
+      }
+
       s"""
-         |final int $stepMonths = $step.months;
-         |final int $stepDays = $step.days;
-         |final long $stepMicros = $step.microseconds;
+         |$stepSplits
          |
          |$check
          |
@@ -2759,12 +3216,11 @@ object Sequence {
          |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
-         |  final long $startMicros = $start * ${scale}L;
-         |  final long $stopMicros = $stop * ${scale}L;
+         |  $toMicrosCode
          |
          |  $sequenceLengthCode
          |
-         |  final int $stepSign = $stopMicros >= $startMicros ? +1 : -1;
+         |  final int $stepSign = $intervalInMicros > 0 ? +1 : -1;
          |  final long $exclusiveItem = $stopMicros + $stepSign;
          |
          |  $arr = new $elemType[$arrLength];
@@ -2772,9 +3228,12 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
-         |    $arr[$i] = ($elemType) ($t / ${scale}L);
+         |    if ($i == $arr.length) {
+         |      $arr = java.util.Arrays.copyOf($arr, $i + 1);
+         |    }
+         |    $arr[$i] = $fromMicrosCode;
          |    $i += 1;
-         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |    $t = $addIntervalCode(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
          |  }
          |
@@ -2786,15 +3245,16 @@ object Sequence {
     }
   }
 
-  private def getSequenceLength[U](start: U, stop: U, step: U)(implicit num: Integral[U]): Int = {
+  private def getSequenceLength[U](start: U, stop: U, step: Any, estimatedStep: U)
+      (implicit num: Integral[U]): Int = {
     import num._
     require(
-      (step > num.zero && start <= stop)
-        || (step < num.zero && start >= stop)
-        || (step == num.zero && start == stop),
+      (estimatedStep > num.zero && start <= stop)
+        || (estimatedStep < num.zero && start >= stop)
+        || (estimatedStep == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
-    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
+    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / estimatedStep.toLong
 
     require(
       len <= MAX_ROUNDED_ARRAY_LENGTH,
@@ -2808,16 +3268,17 @@ object Sequence {
       start: String,
       stop: String,
       step: String,
+      estimatedStep: String,
       len: String): String = {
     val longLen = ctx.freshName("longLen")
     s"""
-       |if (!(($step > 0 && $start <= $stop) ||
-       |  ($step < 0 && $start >= $stop) ||
-       |  ($step == 0 && $start == $stop))) {
+       |if (!(($estimatedStep > 0 && $start <= $stop) ||
+       |  ($estimatedStep < 0 && $start >= $stop) ||
+       |  ($estimatedStep == 0 && $start == $stop))) {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $step;
+       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $estimatedStep;
        |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
        |  throw new IllegalArgumentException(
        |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
@@ -2854,8 +3315,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
       null
     } else {
       if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
-          s"due to exceeding the array size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(count)
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))
@@ -2947,6 +3407,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
      """.stripMargin
   }
 
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayRepeat = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3061,6 +3523,9 @@ case class ArrayRemove(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_remove"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayRemove = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3078,6 +3543,8 @@ trait ArraySetLike {
 
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(et)
+
+  protected def resultArrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
 
   protected def genGetValue(array: String, i: String): String =
     CodeGenerator.getValue(array, et, i)
@@ -3104,7 +3571,9 @@ trait ArraySetLike {
   @transient protected lazy val nullValueHolder = et match {
     case ByteType => "(byte) 0"
     case ShortType => "(short) 0"
-    case LongType => "(long) 0"
+    case LongType => "0L"
+    case FloatType => "0.0f"
+    case DoubleType => "0.0"
     case _ => "0"
   }
 
@@ -3112,7 +3581,7 @@ trait ArraySetLike {
       body: String,
       value: String,
       nullElementIndex: String): String = {
-    if (dt.asInstanceOf[ArrayType].containsNull) {
+    if (resultArrayElementNullable) {
       s"""
          |$body
          |if ($nullElementIndex >= 0) {
@@ -3132,9 +3601,7 @@ trait ArraySetLike {
       nullElementIndex : String): String = withResultArrayNullCheck(
     s"""
        |if ($size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Cannot create array with " + $size +
-       |  " elements of data due to exceeding the limit " +
-       |  "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} elements for ArrayData.");
+       |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($size);
        |}
        |
        |if (!UnsafeArrayData.shouldUseGenericArrayData(${et.defaultSize}, $size)) {
@@ -3180,32 +3647,54 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def nullSafeEval(array: Any): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    val data = array.asInstanceOf[ArrayData]
     doEvaluation(data)
   }
 
   @transient private lazy val doEvaluation = if (TypeUtils.typeWithProperEquals(elementType)) {
-    (data: Array[AnyRef]) => new GenericArrayData(data.distinct.asInstanceOf[Array[Any]])
+    (array: ArrayData) =>
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      val hs = new SQLOpenHashSet[Any]()
+      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+        (value: Any) =>
+          if (!hs.contains(value)) {
+            if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+              ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+            }
+            arrayBuffer += value
+            hs.add(value)
+          },
+        (valueNaN: Any) => arrayBuffer += valueNaN)
+      val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+        (value: Any) => withNaNCheckFunc(value),
+        () => arrayBuffer += null)
+      var i = 0
+      while (i < array.numElements()) {
+        withNullCheckFunc(array, i)
+        i += 1
+      }
+      new GenericArrayData(arrayBuffer.toSeq)
   } else {
-    (data: Array[AnyRef]) => {
+    (data: ArrayData) => {
+      val array = data.toArray[AnyRef](elementType)
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
       var alreadyStoredNull = false
-      for (i <- 0 until data.length) {
-        if (data(i) != null) {
+      for (i <- array.indices) {
+        if (array(i) != null) {
           var found = false
           var j = 0
           while (!found && j < arrayBuffer.size) {
             val va = arrayBuffer(j)
-            found = (va != null) && ordering.equiv(va, data(i))
+            found = (va != null) && ordering.equiv(va, array(i))
             j += 1
           }
           if (!found) {
-            arrayBuffer += data(i)
+            arrayBuffer += array(i)
           }
         } else {
           // De-duplicate the null values.
           if (!alreadyStoredNull) {
-            arrayBuffer += data(i)
+            arrayBuffer += array(i)
             alreadyStoredNull = true
           }
         }
@@ -3224,46 +3713,25 @@ case class ArrayDistinct(child: Expression)
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array) => {
-        val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
         // Only need to track null element index when array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
-             |boolean $foundNullElement = false;
              |int $nullElementIndex = -1;
            """.stripMargin
         } else {
           ""
         }
 
-        def withArrayNullAssignment(body: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array.isNullAt($i)) {
-               |  if (!$foundNullElement) {
-               |    $nullElementIndex = $size;
-               |    $foundNullElement = true;
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
-        val processArray = withArrayNullAssignment(
+        val body =
           s"""
-             |$jt $value = ${genGetValue(array, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
@@ -3271,6 +3739,26 @@ case class ArrayDistinct(child: Expression)
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
+           """.stripMargin
+
+        val withNaNCheckCodeGenerator =
+          (array: String, index: String) =>
+              s"$jt $value = ${genGetValue(array, index)};" +
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                  (valueNaN: String) =>
+                    s"""
+                       |$size++;
+                       |$builder.$$plus$$eq($valueNaN);
+                     """.stripMargin)
+
+        val processArray = SQLOpenHashSet.withNullCheckCode(
+          resultArrayElementNullable,
+          resultArrayElementNullable,
+          array, i, hashSet, withNaNCheckCodeGenerator,
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
            """.stripMargin)
 
         s"""
@@ -3293,6 +3781,9 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def prettyName: String = "array_distinct"
+
+  override protected def withNewChildInternal(newChild: Expression): ArrayDistinct =
+    copy(child = newChild)
 }
 
 /**
@@ -3316,9 +3807,7 @@ trait ArrayBinaryLike
 
 object ArrayBinaryLike {
   def throwUnionLengthOverflowException(length: Int): Unit = {
-    throw new RuntimeException(s"Unsuccessful try to union arrays with $length " +
-      s"elements due to exceeding the array size limit " +
-      s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    throw QueryExecutionErrors.unionArrayWithElementsExceedLimitError(length)
   }
 }
 
@@ -3345,26 +3834,25 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val hs = new OpenHashSet[Any]
-        var foundNullElement = false
+        val hs = new SQLOpenHashSet[Any]()
+        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+          (value: Any) =>
+            if (!hs.contains(value)) {
+              if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+                ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
+              }
+              arrayBuffer += value
+              hs.add(value)
+            },
+          (valueNaN: Any) => arrayBuffer += valueNaN)
+        val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withNaNCheckFunc(value),
+          () => arrayBuffer += null
+        )
         Seq(array1, array2).foreach { array =>
           var i = 0
           while (i < array.numElements()) {
-            if (array.isNullAt(i)) {
-              if (!foundNullElement) {
-                arrayBuffer += null
-                foundNullElement = true
-              }
-            } else {
-              val elem = array.get(i, elementType)
-              if (!hs.contains(elem)) {
-                if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                  ArrayBinaryLike.throwUnionLengthOverflowException(arrayBuffer.size)
-                }
-                arrayBuffer += elem
-                hs.add(elem)
-              }
-            }
+            withNullCheckFunc(array, i)
             i += 1
           }
         }
@@ -3419,39 +3907,19 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
         val array = ctx.freshName("array")
         val arrays = ctx.freshName("arrays")
         val arrayDataIdx = ctx.freshName("arrayDataIdx")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArrayNullAssignment(body: String) =
-          if (dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array.isNullAt($i)) {
-               |  if (!$foundNullElement) {
-               |    $nullElementIndex = $size;
-               |    $foundNullElement = true;
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
-        val processArray = withArrayNullAssignment(
+        val body =
           s"""
-             |$jt $value = ${genGetValue(array, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
@@ -3459,12 +3927,31 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
+           """.stripMargin
+
+        val withNaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+              (valueNaN: String) =>
+                s"""
+                   |$size++;
+                   |$builder.$$plus$$eq($valueNaN);
+                     """.stripMargin)
+
+        val processArray = SQLOpenHashSet.withNullCheckCode(
+          resultArrayElementNullable,
+          resultArrayElementNullable,
+          array, i, hashSet, withNaNCheckCodeGenerator,
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
-             |boolean $foundNullElement = false;
              |int $nullElementIndex = -1;
            """.stripMargin
         } else {
@@ -3495,6 +3982,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   }
 
   override def prettyName: String = "array_union"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayUnion = copy(left = newLeft, right = newRight)
 }
 
 object ArrayUnion {
@@ -3555,9 +4045,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck
-    ArrayType(elementType,
-      left.dataType.asInstanceOf[ArrayType].containsNull &&
-        right.dataType.asInstanceOf[ArrayType].containsNull)
+    ArrayType(elementType, leftArrayElementNullable && rightArrayElementNullable)
   }
 
   override def dataType: DataType = internalDataType
@@ -3566,34 +4054,42 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
         if (array1.numElements() != 0 && array2.numElements() != 0) {
-          val hs = new OpenHashSet[Any]
-          val hsResult = new OpenHashSet[Any]
-          var foundNullElement = false
+          val hs = new SQLOpenHashSet[Any]
+          val hsResult = new SQLOpenHashSet[Any]
+          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+          val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+            (value: Any) => hs.add(value),
+            (valueNaN: Any) => {} )
+          val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+            (value: Any) => withArray2NaNCheckFunc(value),
+            () => {}
+          )
+          val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
+            (value: Any) =>
+              if (hs.contains(value) && !hsResult.contains(value)) {
+                arrayBuffer += value
+                hsResult.add(value)
+              },
+            (valueNaN: Any) =>
+              if (hs.containsNaN()) {
+                arrayBuffer += valueNaN
+              })
+          val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hsResult,
+            (value: Any) => withArray1NaNCheckFunc(value),
+            () =>
+              if (hs.containsNull()) {
+                arrayBuffer += null
+              }
+          )
+
           var i = 0
           while (i < array2.numElements()) {
-            if (array2.isNullAt(i)) {
-              foundNullElement = true
-            } else {
-              val elem = array2.get(i, elementType)
-              hs.add(elem)
-            }
+            withArray2NullCheckFunc(array2, i)
             i += 1
           }
-          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
           i = 0
           while (i < array1.numElements()) {
-            if (array1.isNullAt(i)) {
-              if (foundNullElement) {
-                arrayBuffer += null
-                foundNullElement = false
-              }
-            } else {
-              val elem = array1.get(i, elementType)
-              if (hs.contains(elem) && !hsResult.contains(elem)) {
-                arrayBuffer += elem
-                hsResult.add(elem)
-              }
-            }
+            withArray1NullCheckFunc(array1, i)
             i += 1
           }
           new GenericArrayData(arrayBuffer.toSeq)
@@ -3667,73 +4163,28 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val foundNullElement = ctx.freshName("foundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val hashSetResult = ctx.freshName("hashSetResult")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArray2NullCheck(body: String): String =
-          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array2.isNullAt($i)) {
-                 |  $foundNullElement = true;
-                 |} else {
-                 |  $body
-                 |}
-               """.stripMargin
-            } else {
-              // if array1's element is not nullable, we don't need to track the null element index.
-              s"""
-                 |if (!$array2.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
+        val withArray2NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                (valueNaN: String) => "")
 
-        val writeArray2ToHashSet = withArray2NullCheck(
+        val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
+          rightArrayElementNullable, leftArrayElementNullable,
+          array2, i, hashSet, withArray2NaNCheckCodeGenerator, "")
+
+        val body =
           s"""
-             |$jt $value = ${genGetValue(array2, i)};
-             |$hashSet.add$hsPostFix($hsValueCast$value);
-           """.stripMargin)
-
-        def withArray1NullAssignment(body: String) =
-          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array1.isNullAt($i)) {
-                 |  if ($foundNullElement) {
-                 |    $nullElementIndex = $size;
-                 |    $foundNullElement = false;
-                 |    $size++;
-                 |    $builder.$$plus$$eq($nullValueHolder);
-                 |  }
-                 |} else {
-                 |  $body
-                 |}
-               """.stripMargin
-            } else {
-              s"""
-                 |if (!$array1.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
-
-        val processArray1 = withArray1NullAssignment(
-          s"""
-             |$jt $value = ${genGetValue(array1, i)};
              |if ($hashSet.contains($hsValueCast$value) &&
              |    !$hashSetResult.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
@@ -3742,12 +4193,34 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
              |  $hashSetResult.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
+           """.stripMargin
+
+        val withArray1NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
+                (valueNaN: Any) =>
+                  s"""
+                     |if ($hashSet.containsNaN()) {
+                     |  ++$size;
+                     |  $builder.$$plus$$eq($valueNaN);
+                     |}
+                 """.stripMargin)
+
+        val processArray1 = SQLOpenHashSet.withNullCheckCode(
+          leftArrayElementNullable, rightArrayElementNullable,
+          array1, i, hashSetResult, withArray1NaNCheckCodeGenerator,
+          s"""
+             |if ($hashSet.containsNull()) {
+             |  $nullElementIndex = $size;
+             |  $size++;
+             |  $builder.$$plus$$eq($nullValueHolder);
+             |}
            """.stripMargin)
 
         // Only need to track null element index when result array's element is nullable.
-        val declareNullTrackVariables = if (dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (resultArrayElementNullable) {
           s"""
-             |boolean $foundNullElement = false;
              |int $nullElementIndex = -1;
            """.stripMargin
         } else {
@@ -3778,6 +4251,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   }
 
   override def prettyName: String = "array_intersect"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayIntersect =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3808,33 +4285,34 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
-        val hs = new OpenHashSet[Any]
-        var notFoundNullElement = true
+        val hs = new SQLOpenHashSet[Any]
+        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+        val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+          (value: Any) => hs.add(value),
+          (valueNaN: Any) => {})
+        val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withArray2NaNCheckFunc(value),
+          () => {}
+        )
+        val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+          (value: Any) =>
+            if (!hs.contains(value)) {
+              arrayBuffer += value
+              hs.add(value)
+            },
+          (valueNaN: Any) => arrayBuffer += valueNaN)
+        val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+          (value: Any) => withArray1NaNCheckFunc(value),
+          () => arrayBuffer += null
+        )
         var i = 0
         while (i < array2.numElements()) {
-          if (array2.isNullAt(i)) {
-            notFoundNullElement = false
-          } else {
-            val elem = array2.get(i, elementType)
-            hs.add(elem)
-          }
+          withArray2NullCheckFunc(array2, i)
           i += 1
         }
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         i = 0
         while (i < array1.numElements()) {
-          if (array1.isNullAt(i)) {
-            if (notFoundNullElement) {
-              arrayBuffer += null
-              notFoundNullElement = false
-            }
-          } else {
-            val elem = array1.get(i, elementType)
-            if (!hs.contains(elem)) {
-              arrayBuffer += elem
-              hs.add(elem)
-            }
-          }
+          withArray1NullCheckFunc(array1, i)
           i += 1
         }
         new GenericArrayData(arrayBuffer.toSeq)
@@ -3902,64 +4380,27 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       val ptName = CodeGenerator.primitiveTypeName(jt)
 
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val notFoundNullElement = ctx.freshName("notFoundNullElement")
         val nullElementIndex = ctx.freshName("nullElementIndex")
         val builder = ctx.freshName("builder")
-        val openHashSet = classOf[OpenHashSet[_]].getName
+        val openHashSet = classOf[SQLOpenHashSet[_]].getName
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
         val arrayBuilderClass = s"$arrayBuilder$$of$ptName"
 
-        def withArray2NullCheck(body: String): String =
-          if (right.dataType.asInstanceOf[ArrayType].containsNull) {
-            if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-              s"""
-                 |if ($array2.isNullAt($i)) {
-                 |  $notFoundNullElement = false;
-                 |} else {
-                 |  $body
-                 |}
-             """.stripMargin
-            } else {
-              // if array1's element is not nullable, we don't need to track the null element index.
-              s"""
-                 |if (!$array2.isNullAt($i)) {
-                 |  $body
-                 |}
-               """.stripMargin
-            }
-          } else {
-            body
-          }
+        val withArray2NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, i)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
+                s"$hashSet.add$hsPostFix($hsValueCast$value);",
+                (valueNaN: Any) => "")
 
-        val writeArray2ToHashSet = withArray2NullCheck(
+        val writeArray2ToHashSet = SQLOpenHashSet.withNullCheckCode(
+          rightArrayElementNullable, leftArrayElementNullable,
+          array2, i, hashSet, withArray2NaNCheckCodeGenerator, "")
+
+        val body =
           s"""
-             |$jt $value = ${genGetValue(array2, i)};
-             |$hashSet.add$hsPostFix($hsValueCast$value);
-           """.stripMargin)
-
-        def withArray1NullAssignment(body: String) =
-          if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($array1.isNullAt($i)) {
-               |  if ($notFoundNullElement) {
-               |    $nullElementIndex = $size;
-               |    $notFoundNullElement = false;
-               |    $size++;
-               |    $builder.$$plus$$eq($nullValueHolder);
-               |  }
-               |} else {
-               |  $body
-               |}
-             """.stripMargin
-          } else {
-            body
-          }
-
-        val processArray1 = withArray1NullAssignment(
-          s"""
-             |$jt $value = ${genGetValue(array1, i)};
              |if (!$hashSet.contains($hsValueCast$value)) {
              |  if (++$size > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
              |    break;
@@ -3967,12 +4408,31 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
              |  $hashSet.add$hsPostFix($hsValueCast$value);
              |  $builder.$$plus$$eq($value);
              |}
+           """.stripMargin
+
+        val withArray1NaNCheckCodeGenerator =
+          (array: String, index: String) =>
+            s"$jt $value = ${genGetValue(array, index)};" +
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
+                (valueNaN: String) =>
+                  s"""
+                     |$size++;
+                     |$builder.$$plus$$eq($valueNaN);
+                 """.stripMargin)
+
+        val processArray1 = SQLOpenHashSet.withNullCheckCode(
+          leftArrayElementNullable,
+          leftArrayElementNullable,
+          array1, i, hashSet, withArray1NaNCheckCodeGenerator,
+          s"""
+             |$nullElementIndex = $size;
+             |$size++;
+             |$builder.$$plus$$eq($nullValueHolder);
            """.stripMargin)
 
         // Only need to track null element index when array1's element is nullable.
-        val declareNullTrackVariables = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+        val declareNullTrackVariables = if (leftArrayElementNullable) {
           s"""
-             |boolean $notFoundNullElement = true;
              |int $nullElementIndex = -1;
            """.stripMargin
         } else {
@@ -4002,4 +4462,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   }
 
   override def prettyName: String = "array_except"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }

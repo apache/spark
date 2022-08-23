@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming.ui
 
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -37,7 +36,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_M
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.ui.SparkUICssErrorHandler
 
-class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
 

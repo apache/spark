@@ -25,7 +25,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaSimpleDataSourceV2 implements TestingV2Source {
 
-  class MyScanBuilder extends JavaSimpleScanBuilder {
+  static class MyScanBuilder extends JavaSimpleScanBuilder {
 
     @Override
     public InputPartition[] planInputPartitions() {

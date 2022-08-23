@@ -21,12 +21,13 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
  * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
  * {@link PartitionReaderFactory#createColumnarReader(InputPartition)}. It's responsible for
  * outputting data for a RDD partition.
- *
+ * <p>
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
  * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
  * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}
@@ -48,4 +49,13 @@ public interface PartitionReader<T> extends Closeable {
    * Return the current record. This method should return same value until `next` is called.
    */
   T get();
+
+  /**
+   * Returns an array of custom task metrics. By default it returns empty array. Note that it is
+   * not recommended to put heavy logic in this method as it may affect reading performance.
+   */
+  default CustomTaskMetric[] currentMetricsValues() {
+    CustomTaskMetric[] NO_METRICS = {};
+    return NO_METRICS;
+  }
 }

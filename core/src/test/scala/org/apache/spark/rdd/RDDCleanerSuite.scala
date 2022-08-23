@@ -23,25 +23,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
 
-class RDDCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    // Once `Utils.getOrCreateLocalRootDirs` is called, it is cached in `Utils.localRootDirs`.
-    // Unless this is manually cleared before and after a test, it returns the same directory
-    // set before even if 'spark.local.dir' is configured afterwards.
-    Utils.clearLocalRootDirs()
-  }
-
-  override def afterEach(): Unit = {
-    Utils.clearLocalRootDirs()
-    super.afterEach()
-  }
+class RDDCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
 
   test("RDD shuffle cleanup standalone") {
     val conf = new SparkConf()

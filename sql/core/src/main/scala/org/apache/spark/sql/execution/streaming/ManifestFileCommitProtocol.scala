@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * A [[FileCommitProtocol]] that tracks the list of valid files in a manifest file, used in
@@ -131,8 +132,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    throw new UnsupportedOperationException(
-      s"$this does not support adding files with an absolute path")
+    throw QueryExecutionErrors.addFilesWithAbsolutePathUnsupportedError(this.toString)
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {

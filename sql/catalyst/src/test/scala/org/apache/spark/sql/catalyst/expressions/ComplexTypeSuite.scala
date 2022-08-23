@@ -70,12 +70,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         if (ansiEnabled) {
           checkExceptionInExpression[Exception](
             GetArrayItem(array, Literal(5)),
-            "Invalid index: 5, numElements: 2"
+            "The index 5 is out of bounds. The array has 2 elements."
           )
 
           checkExceptionInExpression[Exception](
             GetArrayItem(array, Literal(-1)),
-            "Invalid index: -1, numElements: 2"
+            "The index -1 is out of bounds. The array has 2 elements."
           )
         } else {
           checkEvaluation(GetArrayItem(array, Literal(5)), null)
@@ -85,19 +85,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33460: GetMapValue NoSuchElementException") {
+  test("SPARK-40066: GetMapValue returns null on invalid map value access") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
-
-        if (ansiEnabled) {
-          checkExceptionInExpression[Exception](
-            GetMapValue(map, Literal(5)),
-            "Key 5 does not exist."
-          )
-        } else {
-          checkEvaluation(GetMapValue(map, Literal(5)), null)
-        }
+        checkEvaluation(GetMapValue(map, Literal(5)), null)
       }
     }
   }
@@ -386,16 +378,16 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    val c3 = 'c.int.at(2)
+    val c1 = $"a".int.at(0)
+    val c3 = $"c".int.at(2)
     checkEvaluation(CreateStruct(Seq(c1, c3)), create_row(1, 3), row)
     checkEvaluation(CreateStruct(Literal.create(null, LongType) :: Nil), create_row(null))
   }
 
   test("CreateNamedStruct") {
     val row = create_row(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    val c3 = 'c.int.at(2)
+    val c1 = $"a".int.at(0)
+    val c3 = $"c".int.at(2)
     checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), create_row(1, 3), row)
     checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
       create_row(1, UTF8String.fromString("y")), row)
@@ -410,11 +402,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickResolve('c.map(MapType(StringType, StringType)).at(0).getItem("a")),
+    checkEvaluation(quickResolve(Symbol("c")
+      .map(MapType(StringType, StringType)).at(0).getItem("a")),
       "b", create_row(Map("a" -> "b")))
-    checkEvaluation(quickResolve('c.array(StringType).at(0).getItem(1)),
+    checkEvaluation(quickResolve($"c".array(StringType).at(0).getItem(1)),
       "b", create_row(Seq("a", "b")))
-    checkEvaluation(quickResolve('c.struct('a.int).at(0).getField("a")),
+    checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
   }
 

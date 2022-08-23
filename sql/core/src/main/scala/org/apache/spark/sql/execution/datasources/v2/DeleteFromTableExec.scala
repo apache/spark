@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.SupportsDelete
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 
 case class DeleteFromTableExec(
-    table: SupportsDelete,
-    condition: Array[Filter],
-    refreshCache: () => Unit) extends V2CommandExec {
+    table: SupportsDeleteV2,
+    condition: Array[Predicate],
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
