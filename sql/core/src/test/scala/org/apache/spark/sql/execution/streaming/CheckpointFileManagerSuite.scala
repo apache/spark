@@ -110,7 +110,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       intercept[IOException] {
         fm.open(path)
       }
-      fm.delete(dir) // should not throw exception
+      fm.delete(path) // should not throw exception
     }
   }
 }
