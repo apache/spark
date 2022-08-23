@@ -431,7 +431,7 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> StreamingQuery:
         """
-        Returns an active query from this SparkSession.
+        Returns an active query from this :class:`SparkSession`.
 
         .. versionadded:: 2.0.0
 
