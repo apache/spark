@@ -866,10 +866,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(compact, 10, 18, 6)",
+    "value" : "0.000010",
     "precision" : "1",
     "scale" : "0",
     "config" : "\"spark.sql.ansi.enabled\""

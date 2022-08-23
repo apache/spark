@@ -840,7 +840,7 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+setGeneric("array_sort", function(x, ...) { standardGeneric("array_sort") })
 
 #' @rdname column_ml_functions
 #' @name NULL
