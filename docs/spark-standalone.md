@@ -329,7 +329,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td><code>spark.shuffle.service.db.backend</code></td>
   <td>LEVELDB</td>
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based 
