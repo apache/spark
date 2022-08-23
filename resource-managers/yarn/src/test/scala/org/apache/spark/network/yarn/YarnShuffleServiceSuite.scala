@@ -789,7 +789,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     (0 until maxId).foreach { id =>
       val appId = ApplicationId.newInstance(0, id)
-      resolver.applicationRemoved(appId.toString, false)
+      resolver.applicationRemoved(appId.toString, true)
     }
 
     s1.stop()
@@ -799,7 +799,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     val message = intercept[RejectedExecutionException] {
       val appId = ApplicationId.newInstance(0, maxId)
-      resolver.applicationRemoved(appId.toString, false)
+      resolver.applicationRemoved(appId.toString, true)
     }.getMessage
     assert(message.contains("Terminated, pool size = 0, " +
       s"active threads = 0, queued tasks = 0, completed tasks = $maxId"))

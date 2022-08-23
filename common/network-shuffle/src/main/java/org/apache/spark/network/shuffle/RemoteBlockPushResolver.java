@@ -803,7 +803,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (!mergedShuffleCleaner.isShutdown()) {
       try {
         mergedShuffleCleaner.shutdown();
-        boolean isTermination = mergedShuffleCleaner.awaitTermination(60L, TimeUnit.SECONDS);
+        boolean isTermination = mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS);
         if (!isTermination) {
           mergedShuffleCleaner.shutdownNow();
         }
