@@ -105,11 +105,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case l: LogicalPlan =>
       l.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e)
+        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) =>
+          unwrapCast(e).getOrElse(e)
       }
   }
 
-  private def unwrapCast(exp: Expression): Expression = exp match {
+  private def unwrapCast(exp: Expression): Option[Expression] = exp match {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
@@ -125,14 +126,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      swap(unwrapCast(swap(exp)))
+      unwrapCast(swap(exp)).map(swap)
 
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
-      simplifyNumericComparison(be, fromExp, toType, value)
+      Option(simplifyNumericComparison(be, fromExp, toType, value))
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
@@ -155,20 +156,17 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       list.foreach {
         case lit @ Literal(null, _) => nullList += lit
         case lit @ NonNullLiteral(_, _) =>
-          val originalEqualTo = EqualTo(in.value, lit)
-          unwrapCast(originalEqualTo) match {
-            case equalTo @ EqualTo(_, unwrapLit: Literal) =>
-              // the function `unwrapCast` may returns original expression when the literal can not
-              // cast to fromType, for instance: (the boundreference is of type DECIMAL(5,2))
-              //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
-              // Due to `cast(lit, fromExp.dataType) == null` we simply return
-              // `falseIfNotNull(fromExp)`.
-              if (equalTo == originalEqualTo && Cast(lit, fromExp.dataType).eval() == null) {
-                cannotCastList += falseIfNotNull(fromExp)
-              } else {
-                canCastList += unwrapLit
-              }
-            case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastList += e
+          unwrapCast(EqualTo(in.value, lit)) match {
+            // the function `unwrapCast` returns None means the literal can not cast to fromType,
+            // for instance: (the boundreference is of type DECIMAL(5,2))
+            //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
+            // Due to `cast(lit, fromExp.dataType) == null` we simply return
+            // `falseIfNotNull(fromExp)`.
+            case None =>
+              cannotCastList += falseIfNotNull(fromExp)
+            case Some(EqualTo(_, unwrapLit: Literal)) =>
+              canCastList += unwrapLit
+            case Some(e @ And(IsNull(_), Literal(null, BooleanType))) => cannotCastList += e
             case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
           }
         case _ => throw new IllegalStateException("Illegal value found in in.list.")
@@ -176,20 +174,20 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
       // return original expression when in.list contains only null values.
       if (canCastList.isEmpty && cannotCastList.isEmpty) {
-        exp
+        None
       } else {
         // cast null value to fromExp.dataType, to make sure the new return list is in the same data
         // type.
         val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
         val unwrapIn = In(fromExp, newList.toSeq)
         cannotCastList.headOption match {
-          case None => unwrapIn
+          case None => Option(unwrapIn)
           // since `cannotCastList` are all the same,
           // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
           case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
               if cannotCastList.map(_.canonicalized).distinct.length == 1 =>
-            Or(falseIfNotNull, unwrapIn)
-          case _ => exp
+            Option(Or(falseIfNotNull, unwrapIn))
+          case _ => None
         }
       }
 
@@ -209,37 +207,35 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         .foreach {
           case lit @ Literal(null, _) => nullSet += lit.value
           case lit @ NonNullLiteral(_, _) =>
-            val originalEqualTo = EqualTo(inSet.child, lit)
-            unwrapCast(originalEqualTo) match {
-              case equalTo @ EqualTo(_, unwrapLit: Literal) =>
-                // The same with `In`, when the lit cast to from.dataType failed, we simply return
-                // `falseIfNotNull(fromExp)`.
-                if (equalTo == originalEqualTo && Cast(lit, fromExp.dataType).eval() == null) {
-                  cannotCastSet += falseIfNotNull(fromExp)
-                } else {
-                  canCastSet += unwrapLit.value
-                }
-              case e @ And(IsNull(_), Literal(null, BooleanType)) => cannotCastSet += e
+            unwrapCast(EqualTo(inSet.child, lit)) match {
+              // The same with `In`, when the lit cast to from.dataType failed, we simply return
+              // `falseIfNotNull(fromExp)`.
+              case None =>
+                cannotCastSet += falseIfNotNull(fromExp)
+              case Some(EqualTo(_, unwrapLit: Literal)) =>
+                canCastSet += unwrapLit.value
+              case Some(e @ And(IsNull(_), Literal(null, BooleanType))) => cannotCastSet += e
               case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
             }
           case _ => throw new IllegalStateException("Illegal value found in hset.")
         }
 
       if (canCastSet.isEmpty && cannotCastSet.isEmpty) {
-        exp
+        None
       } else {
         val unwrapInSet = InSet(fromExp, nullSet ++ canCastSet)
         cannotCastSet.headOption match {
-          case None => unwrapInSet
+          case None => Option(unwrapInSet)
           // since `cannotCastList` are all the same,
           // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
           case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-            if cannotCastSet.map(_.canonicalized).size == 1 => Or(falseIfNotNull, unwrapInSet)
-          case _ => exp
+            if cannotCastSet.map(_.canonicalized).size == 1 =>
+            Option(Or(falseIfNotNull, unwrapInSet))
+          case _ => None
         }
       }
 
-    case _ => exp
+    case _ => None
   }
 
   /**
@@ -276,7 +272,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
             // make sure the expression is evaluated if it is non-deterministic
             case EqualNullSafe(_, _) if exp.deterministic =>
               FalseLiteral
-            case _ => exp
+            case _ => null
           }
         } else if (maxCmp == 0) {
           exp match {
@@ -290,7 +286,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
               EqualTo(fromExp, Literal(max, fromType))
             case EqualNullSafe(_, _) =>
               EqualNullSafe(fromExp, Literal(max, fromType))
-            case _ => exp
+            case _ => null
           }
         } else if (minCmp < 0) {
           exp match {
@@ -301,7 +297,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
             // make sure the expression is evaluated if it is non-deterministic
             case EqualNullSafe(_, _) if exp.deterministic =>
               FalseLiteral
-            case _ => exp
+            case _ => null
           }
         } else { // minCmp == 0
           exp match {
@@ -315,7 +311,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
               EqualTo(fromExp, Literal(min, fromType))
             case EqualNullSafe(_, _) =>
               EqualNullSafe(fromExp, Literal(min, fromType))
-            case _ => exp
+            case _ => null
           }
         }
       }
@@ -328,8 +324,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
     if (newValue == null) {
       // This means the cast failed, for instance, due to the value is not representable in the
-      // narrower type. In this case we simply return the original expression.
-      return exp
+      // narrower type. In this case we simply return null.
+      return null
     }
     val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
     val lit = Literal(newValue, fromType)
@@ -342,7 +338,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case EqualNullSafe(_, _) => EqualNullSafe(fromExp, lit)
         case LessThan(_, _) => LessThan(fromExp, lit)
         case LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
-        case _ => exp
+        case _ => null
       }
     } else if (cmp < 0) {
       // This means the literal value is rounded up after casting to `fromType`
@@ -351,7 +347,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case EqualNullSafe(_, _) if fromExp.deterministic => FalseLiteral
         case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
         case LessThan(_, _) | LessThanOrEqual(_, _) => LessThan(fromExp, lit)
-        case _ => exp
+        case _ => null
       }
     } else {
       // This means the literal value is rounded down after casting to `fromType`
@@ -360,7 +356,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case EqualNullSafe(_, _) => FalseLiteral
         case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThan(fromExp, lit)
         case LessThan(_, _) | LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
-        case _ => exp
+        case _ => null
       }
     }
   }
