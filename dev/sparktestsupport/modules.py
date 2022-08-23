@@ -386,6 +386,7 @@ pyspark_core = Module(
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
+        "pyspark.taskcontext",
         "pyspark.util",
         # unittests
         "pyspark.tests.test_appsubmit",
