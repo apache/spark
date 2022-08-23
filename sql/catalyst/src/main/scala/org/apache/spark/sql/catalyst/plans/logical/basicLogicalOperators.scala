@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -1146,8 +1146,11 @@ case class Aggregate(
     groupingExpressions.nonEmpty && aggregateExpressions.map {
       case Alias(child, _) => child
       case e => e
-    }.forall(a => a.deterministic &&
-      a.collect { case _: AggregateFunction | _: PythonUDF => true }.isEmpty)
+    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)) ||
+      (a match {
+        case c: Cast => groupingExpressions.exists(g => c.child.semanticEquals(g))
+        case _ => false
+      }))
   }
 }
 

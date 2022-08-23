@@ -217,16 +217,20 @@ class AggregateOptimizeSuite extends AnalysisTest {
       Aggregate(Seq(a + 1), Seq(Alias(a + 1, "a_1")()), relation),
       Aggregate(Seq(a + 1), Seq(Alias((a + 1).cast(StringType), "a_1")()), relation),
       Aggregate(Seq((a + 1).cast(StringType)),
-        Seq(Alias((a + 1).cast(StringType), "a_1")()), relation),
-      Aggregate(Seq(a), Seq(Alias(a + 2, "a_2")()), relation),
-      Aggregate(Seq((a + 1).cast(StringType)), Seq(Alias(a.cast(StringType), "a")()), relation),
-      Aggregate(Seq((a + 1).cast(LongType)),
-        Seq(Alias((a + 1).cast(StringType), "a1")()), relation)
+        Seq(Alias((a + 1).cast(StringType), "a_1")()), relation)
     ).foreach(agg => assert(agg.groupOnly === true))
 
     Seq(
+      // with AggregateFunction
       Aggregate(Seq(a + 1), Seq(Alias(Count(b), "sum_b")()), relation),
-      Aggregate(Seq(a + 1), Seq(Alias(Max(b), "max_b")()), relation)
+      Aggregate(Seq(a + 1), Seq(Alias(Max(b), "max_b")()), relation),
+
+      // without AggregateFunction
+      Aggregate(Seq(a), Seq(Alias(a + 2, "a_2")()), relation),
+      Aggregate(Seq(a), Seq(Alias(a % 2, "a_2")()), relation),
+      Aggregate(Seq((a + 1).cast(StringType)), Seq(Alias(a.cast(StringType), "a")()), relation),
+      Aggregate(Seq((a + 1).cast(LongType)),
+        Seq(Alias((a + 1).cast(StringType), "a1")()), relation)
     ).foreach(agg => assert(agg.groupOnly === false))
   }
 }
