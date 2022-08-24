@@ -79,7 +79,7 @@ class LimitPushdownSuite extends PlanTest {
       Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).analyze
+      Union(testRelation.limit(1), testRelation2.limit(1).select($"d", $"e", $"f")).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -89,7 +89,7 @@ class LimitPushdownSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
       Limit(2, Union(
-        LocalLimit(2, testRelation), LocalLimit(2, testRelation2.select($"d", $"e", $"f")))).analyze
+        LocalLimit(2, testRelation), LocalLimit(2, testRelation2).select($"d", $"e", $"f"))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -236,7 +236,7 @@ class LimitPushdownSuite extends PlanTest {
     val originalQuery = x.join(y, LeftOuter, joinCondition).select("x.a".attr).limit(5)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      Limit(5, LocalLimit(5, x).join(y, LeftOuter, joinCondition)).select("x.a".attr).analyze
+      Limit(5, LocalLimit(5, x).join(y, LeftOuter, joinCondition).select("x.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -244,21 +244,22 @@ class LimitPushdownSuite extends PlanTest {
     // Push down when it is group only and limit 1.
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
-      Limit(1, x).select("x.a".attr).analyze)
+      LocalLimit(1, x).select("x.a".attr).limit(1).analyze)
 
     comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(1).analyze),
-      Limit(1, x).select("x.a".attr).select("x.a".attr).analyze)
+      LocalLimit(1, x).select("x.a".attr).limit(1).select("x.a".attr).analyze)
 
     comparePlans(
       Optimize.execute(x.union(y).groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
-      LocalLimit(1, x).union(LocalLimit(1, y)).limit(1).select("x.a".attr).analyze)
+      LocalLimit(1, LocalLimit(1, x).union(LocalLimit(1, y))).select("x.a".attr).limit(1).analyze)
 
     comparePlans(
       Optimize.execute(
         x.groupBy("x.a".attr)("x.a".attr)
           .select("x.a".attr.as("a1"), "x.a".attr.as("a2")).limit(1).analyze),
-      x.limit(1).select("x.a".attr).select("x.a".attr.as("a1"), "x.a".attr.as("a2")).analyze)
+      LocalLimit(1, x).select("x.a".attr)
+        .limit(1).select("x.a".attr.as("a1"), "x.a".attr.as("a2")).analyze)
 
     // No push down
     comparePlans(
