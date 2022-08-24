@@ -19,14 +19,17 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
+import org.apache.spark.internal.io.FileCommitProtocol.overwriteStagingDir
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
+/**
+ * A variant of [[HadoopMapReduceCommitProtocol]] that used for overwrite save mode.
+ */
 class SQLOverwriteHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   // Override stagingDir here to keep use same staging dir when dynamicPartitionOverwrite is true.
-  @transient override lazy val stagingDir: Path =
-    FileCommitProtocol.overwriteStagingDir(path, jobId)
+  @transient override lazy val stagingDir: Path = overwriteStagingDir(path, jobId)
 }

@@ -174,14 +174,9 @@ case class InsertIntoHadoopFsRelationCommand(
 
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
-      val committerOutputPath = if (useOverwriteFileCommitProtocol) {
-        if (mode == SaveMode.Overwrite) {
-          FileCommitProtocol.overwriteStagingDir(outputPath.toString, jobId)
-            .makeQualified(fs.getUri, fs.getWorkingDirectory)
-        } else {
-          // Fallback to default behavior
-          qualifiedOutputPath
-        }
+      val committerOutputPath = if (useOverwriteFileCommitProtocol && mode == SaveMode.Overwrite) {
+        FileCommitProtocol.overwriteStagingDir(outputPath.toString, jobId)
+          .makeQualified(fs.getUri, fs.getWorkingDirectory)
       } else if (dynamicPartitionOverwrite) {
         FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
           .makeQualified(fs.getUri, fs.getWorkingDirectory)
