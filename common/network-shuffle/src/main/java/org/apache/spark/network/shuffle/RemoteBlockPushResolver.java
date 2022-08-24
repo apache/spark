@@ -801,14 +801,23 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void close() {
     if (!mergedShuffleCleaner.isShutdown()) {
+      // Use two phases shutdown refer to
+      // https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
       try {
         mergedShuffleCleaner.shutdown();
-        boolean terminated = mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS);
-        if (!terminated) {
+        // Wait a while for existing tasks to terminate
+        if (!mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS)) {
           mergedShuffleCleaner.shutdownNow();
+          // Wait a while for tasks to respond to being cancelled
+          if (!mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS)) {
+            logger.warn("mergedShuffleCleaner did not terminate");
+          }
         }
       } catch (InterruptedException ignored) {
-        // ignore InterruptedException.
+        // (Re-)Cancel if current thread also interrupted
+        mergedShuffleCleaner.shutdownNow();
+        // Preserve interrupt status
+        Thread.currentThread().interrupt();
       }
     }
     if (db != null) {
