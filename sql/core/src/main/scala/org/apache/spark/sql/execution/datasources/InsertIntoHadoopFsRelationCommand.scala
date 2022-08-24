@@ -86,7 +86,8 @@ case class InsertIntoHadoopFsRelationCommand(
       outputColumnNames,
       s"when inserting into $outputPath",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
+    val useOverwriteFileCommitProtocol =
+      sparkSession.sessionState.conf.useOverwriteFileCommitProtocol
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -127,8 +128,8 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
-          } else if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
-            // For new commit protocol, do not delete directories first.
+          } else if (useOverwriteFileCommitProtocol) {
+            // For `SQLOverwriteHadoopMapReduceCommitProtocol`, do not delete directories first.
             true
           } else if (dynamicPartitionOverwrite) {
             // For dynamic partition overwrite, do not delete partition directories ahead.
@@ -173,8 +174,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
-      val committerOutputPath =
-      if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
+      val committerOutputPath = if (useOverwriteFileCommitProtocol) {
         if (mode == SaveMode.Overwrite) {
           FileCommitProtocol.overwriteStagingDir(outputPath.toString, jobId)
             .makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -189,8 +189,10 @@ case class InsertIntoHadoopFsRelationCommand(
         qualifiedOutputPath
       }
 
-      val preCommitJob =
-        if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol &&
+      // When `dynamicPartitionOverwrite` is true, `SQLOverwriteHadoopMapReduceCommitProtocol`
+      // will execute as the method `dynamicPartitionOverwrite`, so Spark don't need to delete
+      // matching partition here.
+      val preCommitJob = if (useOverwriteFileCommitProtocol &&
           mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
           Some(() =>
             deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer))
@@ -214,40 +216,38 @@ case class InsertIntoHadoopFsRelationCommand(
           numStaticPartitionCols = staticPartitions.size,
           preCommitJob = preCommitJob)
 
-      if (mode == SaveMode.Overwrite) {
-        if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
-          if (partitionColumns.isEmpty) {
-            // Non-partition table overwrite should rename staging dir to output path
-            if (!fs.rename(committerOutputPath, qualifiedOutputPath)) {
-              throw new IOException(s"Failed to rename $committerOutputPath to $outputPath")
-            }
-          } else if (staticPartitions.size == partitionColumns.size) {
-            // For static partition overwrite, if custom partition path is not empty, result data
-            // haven been written to target custom partition path during commitJob.
-            if (!customPartitionLocations.contains(staticPartitions)) {
-              val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
-              val targetLocation = qualifiedOutputPath.suffix(staticPartitionPrefix)
-              if (!fs.exists(targetLocation.getParent)) {
-                fs.mkdirs(targetLocation.getParent)
-              }
-              if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
-                throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
-                  s"$targetLocation")
-              }
-            }
-          } else if (dynamicPartitionOverwrite) {
-            // Same behavior as default, do nothing here.
-          } else {
-            // STATIC mode dynamic partition overwrite
+      if (useOverwriteFileCommitProtocol && mode == SaveMode.Overwrite) {
+        if (partitionColumns.isEmpty) {
+          // Non-partition table overwrite should rename staging dir to output path
+          if (!fs.rename(committerOutputPath, qualifiedOutputPath)) {
+            throw new IOException(s"Failed to rename $committerOutputPath to $outputPath")
+          }
+        } else if (staticPartitions.size == partitionColumns.size) {
+          // For static partition overwrite, if custom partition path is not empty, result data
+          // haven been written to target custom partition path during commitJob.
+          if (!customPartitionLocations.contains(staticPartitions)) {
+            val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
             val targetLocation = qualifiedOutputPath.suffix(staticPartitionPrefix)
             if (!fs.exists(targetLocation.getParent)) {
               fs.mkdirs(targetLocation.getParent)
             }
-            val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
             if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
               throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
                 s"$targetLocation")
             }
+          }
+        } else if (dynamicPartitionOverwrite) {
+          // Same behavior as default, do nothing here.
+        } else {
+          // STATIC mode dynamic partition overwrite
+          val targetLocation = qualifiedOutputPath.suffix(staticPartitionPrefix)
+          if (!fs.exists(targetLocation.getParent)) {
+            fs.mkdirs(targetLocation.getParent)
+          }
+          val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
+          if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
+            throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
+              s"$targetLocation")
           }
         }
       }
