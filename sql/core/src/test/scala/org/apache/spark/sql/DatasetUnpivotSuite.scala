@@ -364,7 +364,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN",
       parameters = Map(
         "objectName" -> "`1`",
-        "objectList" -> "`id`, `int1`, `str1`, `str2`, `long1`"))
+        "suggestion" ->
+          " Did you mean one of the following? [`id`, `int1`, `str1`, `str2`, `long1`]"))
 
     // unpivoting where value column does not exist
     val e2 = intercept[AnalysisException] {
@@ -380,7 +381,8 @@ class DatasetUnpivotSuite extends QueryTest
       errorClass = "UNRESOLVED_COLUMN",
       parameters = Map(
         "objectName" -> "`does`",
-        "objectList" -> "`id`, `int1`, `long1`, `str1`, `str2`"))
+        "suggestion" ->
+          " Did you mean one of the following? [`id`, `int1`, `long1`, `str1`, `str2`]"))
 
     // unpivoting with empty list of value columns
     // where potential value columns are of incompatible types
@@ -502,7 +504,8 @@ class DatasetUnpivotSuite extends QueryTest
       // expected message is wrong: https://issues.apache.org/jira/browse/SPARK-39783
       parameters = Map(
         "objectName" -> "`an`.`id`",
-        "objectList" -> "`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`"))
+        "suggestion" -> (" Did you mean one of the following? " +
+          "[`an`.`id`, `int1`, `long1`, `str`.`one`, `str`.`two`]")))
   }
 
   test("unpivot with struct fields") {

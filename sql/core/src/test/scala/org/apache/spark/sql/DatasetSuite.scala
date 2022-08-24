@@ -935,7 +935,8 @@ class DatasetSuite extends QueryTest
       ds.as[ClassData2]
     }
     assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
+    assert(e.messageParameters.sameElements(
+      Array("`c`", " Did you mean one of the following? [`a`, `b`]")))
   }
 
   test("runtime nullability check") {

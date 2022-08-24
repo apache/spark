@@ -121,7 +121,8 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
         "UNRESOLVED_COLUMN",
-        Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
+        Array("`invalid_col`",
+          " Did you mean one of the following? [`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`]"))
     }
   }
 
@@ -1570,15 +1571,17 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         "UNRESOLVED_COLUMN",
         Array(
           "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+          " Did you mean one of the following? [`testcat`.`ns1`.`ns2`.`tbl`.`p`," +
+            " `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`]"))
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
         "UNRESOLVED_COLUMN",
         Array(
           "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
+          " Did you mean one of the following? [`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`]"))
 
       // UPDATE is not implemented yet.
       val e = intercept[UnsupportedOperationException] {

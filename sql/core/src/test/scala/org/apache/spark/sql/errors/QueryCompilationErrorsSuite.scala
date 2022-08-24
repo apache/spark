@@ -407,8 +407,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "UNRESOLVED_MAP_KEY",
       parameters = Map("columnName" -> "`a`",
-        "proposal" ->
-          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"))
+        "suggestion" -> (" Otherwise did you mean one of the following column(s)? " +
+          "[`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`]")))
   }
 
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
@@ -435,7 +435,11 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "UNRESOLVED_COLUMN",
-      parameters = Map("objectName" -> "`struct`.`a`", "objectList" -> "`a`, `b`"))
+      parameters = Map(
+        "objectName" -> "`struct`.`a`",
+        "suggestion" -> " Did you mean one of the following? [`a`, `b`]"
+      )
+    )
   }
 
   test("UNRESOLVED_COLUMN - SPARK-21335: support un-aliased subquery") {
@@ -448,7 +452,8 @@ class QueryCompilationErrorsSuite
         errorClass = "UNRESOLVED_COLUMN",
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "objectList" -> "`__auto_generated_subquery_name`.`i`"))
+          "suggestion" ->
+            " Did you mean one of the following? [`__auto_generated_subquery_name`.`i`]"))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }

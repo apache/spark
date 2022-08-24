@@ -888,7 +888,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               errorClass = "UNRESOLVED_COLUMN",
               parameters = Map(
                 "objectName" -> "`C1`",
-                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "suggestion" -> (" Did you mean one of the following? " +
+                  "[`spark_catalog`.`default`.`t`.`c1`]")))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -910,7 +911,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               errorClass = "UNRESOLVED_COLUMN",
               parameters = Map(
                 "objectName" -> "`a`",
-                "objectList" -> "`spark_catalog`.`default`.`t`.`c1`"))
+                "suggestion" ->
+                  " Did you mean one of the following? [`spark_catalog`.`default`.`t`.`c1`]"))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {

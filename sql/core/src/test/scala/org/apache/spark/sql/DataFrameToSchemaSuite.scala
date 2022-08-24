@@ -61,7 +61,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNRESOLVED_COLUMN",
       parameters = Map(
         "objectName" -> "`non_exist`",
-        "objectList" -> "`i`, `j`"))
+        "suggestion" -> " Did you mean one of the following? [`i`, `j`]"))
   }
 
   test("negative: ambiguous column") {
@@ -164,7 +164,7 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "fieldName" -> "`non_exist`",
         "columnPath" -> "`struct`",
-        "proposal" -> "`i`, `j`"))
+        "suggestion" -> " Did you mean one of the following? [`i`, `j`]"))
   }
 
   test("keep the nullability of the original field") {

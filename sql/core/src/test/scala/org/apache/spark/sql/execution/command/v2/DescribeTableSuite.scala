@@ -107,7 +107,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`key1`",
-          "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
+          "suggestion" -> (" Did you mean one of the following? " +
+            "[`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`]")))
     }
   }
 
@@ -132,7 +133,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           sqlState = "42000",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`"))
+            "suggestion" ->
+              " Did you mean one of the following? [`test_catalog`.`ns`.`tbl`.`key`]"))
       }
     }
   }

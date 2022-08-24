@@ -484,7 +484,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       checkError(ex,
         errorClass = "UNRESOLVED_COLUMN",
         parameters = Map("objectName" -> "`df1`.`timeStr`",
-          "objectList" -> "`df3`.`timeStr`, `df1`.`tsStr`"))
+          "suggestion" -> " Did you mean one of the following? [`df3`.`timeStr`, `df1`.`tsStr`]"))
     }
   }
 }

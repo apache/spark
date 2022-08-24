@@ -405,7 +405,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
     assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`invalid`", "`value`, `key`")))
+    assert(e.messageParameters.sameElements(
+      Array("`invalid`", " Did you mean one of the following? [`value`, `key`]")))
   }
 
   test("numerical aggregate functions on string column") {
