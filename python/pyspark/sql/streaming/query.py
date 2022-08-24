@@ -53,6 +53,11 @@ class StreamingQuery:
         There can only be one query with the same id active in a Spark cluster.
         Also see, `runId`.
 
+        Returns
+        -------
+        str
+            The unique id of query that persists across restarts from checkpoint data.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -73,6 +78,11 @@ class StreamingQuery:
         """
         Returns the unique id of this query that does not persist across restarts. That is, every
         query that is started (or restarted from checkpoint) will have a different runId.
+
+        Returns
+        -------
+        str
+            The unique id of query that does not persist across restarts.
 
         Examples
         --------
@@ -97,6 +107,11 @@ class StreamingQuery:
         as `dataframe.writeStream.queryName("query").start()`.
         This name, if set, must be unique across all active queries.
 
+        Returns
+        -------
+        str
+            The user-specified name of the query, or null if not specified.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -116,6 +131,11 @@ class StreamingQuery:
     def isActive(self) -> bool:
         """
         Whether this streaming query is currently active or not.
+
+        Returns
+        -------
+        bool
+            The result whether specified streaming query is currently active or not.
 
         Examples
         --------
@@ -142,6 +162,18 @@ class StreamingQuery:
 
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
 
+        Parameters
+        ----------
+        timeout : int, optional
+            default ``None``. The waiting time for specified streaming query to terminate.
+
+        Returns
+        -------
+        bool, optional
+            The result whether specified streaming query has terminated or not within the `timeout`
+            seconds if `timeout` is set. The :class:`StreamingQueryException` will be thrown if the
+            query has terminated with an exception.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -167,6 +199,11 @@ class StreamingQuery:
         """
         Returns the current status of the query.
 
+        Returns
+        -------
+        dict
+            The current status of the specified query.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -188,6 +225,12 @@ class StreamingQuery:
         Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
         The number of progress updates retained for each stream is configured by Spark session
         configuration `spark.sql.streaming.numRecentProgressUpdates`.
+
+        Returns
+        -------
+        list
+            List of dict which is the most recent :class:`StreamingQueryProgress` updates
+            for this query.
 
         Examples
         --------
@@ -213,7 +256,9 @@ class StreamingQuery:
 
         Returns
         -------
-        dict
+        dict, optional
+            The most recent :class:`StreamingQueryProgress` update of this streaming query or
+            None if there were no progress updates.
 
         Examples
         --------
@@ -360,6 +405,11 @@ class StreamingQueryManager:
 
         .. versionadded:: 2.0.0
 
+        Returns
+        -------
+        list
+            The active queries associated with this :class:`SparkSession`.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -381,10 +431,23 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> StreamingQuery:
         """
-        Returns an active query from this SparkSession or throws exception if an active query
-        with this name doesn't exist.
+        Returns an active query from this :class:`SparkSession`.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        id : str
+            The unique id of specified query.
+
+        Returns
+        -------
+        :class:`StreamingQuery`
+            An active query with `id` from this SparkSession.
+
+        Notes
+        -----
+        Exception will be thrown if an active query with this id does not exist.
 
         Examples
         --------
@@ -429,6 +492,18 @@ class StreamingQueryManager:
 
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
 
+        Parameters
+        ----------
+        timeout : int, optional
+            default ``None``. The waiting time for any streaming query to terminate.
+
+        Returns
+        -------
+        bool, optional
+            The result whether any streaming query has terminated or not within the `timeout`
+            seconds if `timeout` is set. The :class:`StreamingQueryException` will be thrown if any
+            query has terminated with an exception.
+
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
@@ -468,6 +543,12 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        Parameters
+        ----------
+        listener : :class:`StreamingQueryListener`
+            A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
+            :class:`~pyspark.sql.streaming.StreamingQuery`.
+
         Examples
         --------
         >>> from pyspark.sql.streaming import StreamingQueryListener
@@ -506,6 +587,14 @@ class StreamingQueryManager:
 
         .. versionadded:: 3.4.0
 
+        Parameters
+        ----------
+        listener : :class:`StreamingQueryListener`
+            A :class:`StreamingQueryListener` to receive up-calls for life cycle events of
+            :class:`~pyspark.sql.streaming.StreamingQuery`.
+
+        Examples
+        --------
         >>> from pyspark.sql.streaming import StreamingQueryListener
         >>> class TestListener(StreamingQueryListener):
         ...     def onQueryStarted(self, event):

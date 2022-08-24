@@ -73,15 +73,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       parameters = Map("ansiConfig" -> ansiConf))
   }
 
-  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
+  test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
     checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       sqlState = "22005",
       parameters = Map(
-        "value" -> "Decimal(expanded, 66666666666666.666, 17, 3)",
+        "value" -> "66666666666666.666",
         "precision" -> "8",
         "scale" -> "1",
         "config" -> ansiConf),

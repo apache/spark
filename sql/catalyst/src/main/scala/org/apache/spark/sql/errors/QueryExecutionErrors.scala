@@ -114,9 +114,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Array(
-        value.toDebugString,
+        value.toPlainString,
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
