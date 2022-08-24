@@ -730,20 +730,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
-  private def canPushLimitThroughProject(project: LogicalPlan): Boolean = {
-    project match {
-      case Project(projectList, _: LeafNode) =>
-        // Don't push down through the project avoid conflicting with ColumnPruning.
-        !projectList.forall{
-          case Alias(child, _) =>
-            child.isInstanceOf[AttributeReference] || child.isInstanceOf[ExtractValue]
-          case other =>
-            other.isInstanceOf[AttributeReference] || other.isInstanceOf[ExtractValue]
-        }
-      case _ => true
-    }
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(LIMIT, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
@@ -784,11 +770,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
 
-    case GlobalLimit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
+    case GlobalLimit(l, p @ Project(projectList, child))
+      if child.outputSet.subsetOf(p.references) =>
       Project(projectList, GlobalLimit(l, child))
-    case LocalLimit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
+    case LocalLimit(l, p @ Project(projectList, child))
+      if child.outputSet.subsetOf(p.references) =>
       Project(projectList, LocalLimit(l, child))
-    case Limit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
+    case Limit(l, p @ Project(projectList, child))
+      if child.outputSet.subsetOf(p.references) =>
       Project(projectList, Limit(l, child))
   }
 }
