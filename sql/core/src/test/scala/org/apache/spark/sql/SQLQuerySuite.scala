@@ -4371,6 +4371,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-40212: SparkSQL castPartValue does not properly handle byte & short") {
+    withTempDir { dir =>
+      val data = Seq[(Int, Byte, Short)](
+        (1, 2, 3)
+      )
+      data.toDF("a", "b", "c")
+        .write
+        .mode("overwrite")
+        .partitionBy("b", "c")
+        .parquet(dir.getCanonicalPath)
+      val res = spark.read
+        .schema("a INT, b BYTE, c SHORT")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(Row(1, 2, 3)))
+    }
+  }
+
   test("SPARK-39216: Don't collapse projects in CombineUnions if it hasCorrelatedSubquery") {
     checkAnswer(
       sql(
