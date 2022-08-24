@@ -29,7 +29,6 @@ import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.{Futures, SettableFuture}
 
 import org.apache.spark._
@@ -289,11 +288,6 @@ private[spark] class DAGScheduler(
   private val shuffleMergeFinalizeScheduler =
     ThreadUtils.newDaemonThreadPoolScheduledExecutor("shuffle-merge-finalizer",
       shuffleMergeFinalizeNumThreads)
-
-  private val cacheFinalizeBlackNodesInMs =
-    sc.conf.getTimeAsMs("spark.shuffle.push.cacheFinalizeBlackListInMs", "600s")
-  private val finalizeBlackNodes: Cache[String, String] = CacheBuilder.newBuilder()
-    .expireAfterWrite(cacheFinalizeBlackNodesInMs, TimeUnit.MILLISECONDS).build[String, String]()
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -2254,8 +2248,7 @@ private[spark] class DAGScheduler(
         shuffleMergeFinalizeScheduler.schedule(new Runnable {
           override def run(): Unit = {
             stage.shuffleDep.getMergerLocs.foreach {
-              case shuffleServiceLoc
-                if finalizeBlackNodes.getIfPresent(shuffleServiceLoc.host) == null =>
+              case shuffleServiceLoc =>
                 // Sends async request to shuffle service to finalize shuffle merge on that host.
                 // Since merge statuses will not be registered in this case,
                 // we pass a no-op listener.
@@ -2267,15 +2260,12 @@ private[spark] class DAGScheduler(
 
                     override def onShuffleMergeFailure(e: Throwable): Unit = {
                       if (e.isInstanceOf[IOException]) {
-                        logInfo(s"Failed to connect external shuffle service on " +
-                          s"${shuffleServiceLoc.host} and add it to blacklist")
+                        logInfo(s"Failed to connect external shuffle service " +
+                          s"${shuffleServiceLoc.hostPort}")
                         blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
-                        finalizeBlackNodes.put(shuffleServiceLoc.host, shuffleServiceLoc.host)
                       }
                     }
                   })
-
-              case _ =>
             }
           }
         }, 0, TimeUnit.SECONDS)
@@ -2283,8 +2273,7 @@ private[spark] class DAGScheduler(
         shuffleMergeFinalizeScheduler.schedule(new Runnable {
           override def run(): Unit = {
             stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
-              case (shuffleServiceLoc, index)
-                if finalizeBlackNodes.getIfPresent(shuffleServiceLoc.host) == null =>
+              case (shuffleServiceLoc, index) =>
                 // Sends async request to shuffle service to finalize shuffle merge on that host
                 // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
                 // TODO: during shuffleMergeFinalizeWaitSec
@@ -2305,16 +2294,13 @@ private[spark] class DAGScheduler(
                       // give up on waiting for merge results from the remaining shuffle services
                       // if one fails
                       if (e.isInstanceOf[IOException]) {
-                        logInfo(s"Failed to connect external shuffle service on " +
-                          s"${shuffleServiceLoc.host} and add it to blacklist")
+                        logInfo(s"Failed to connect external shuffle service " +
+                          s"${shuffleServiceLoc.hostPort}")
                         blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
-                        finalizeBlackNodes.put(shuffleServiceLoc.host, shuffleServiceLoc.host)
                       }
                       results(index).set(false)
                     }
                   })
-
-              case (_, index) => results(index).set(true)
             }
           }
         }, 0, TimeUnit.SECONDS)

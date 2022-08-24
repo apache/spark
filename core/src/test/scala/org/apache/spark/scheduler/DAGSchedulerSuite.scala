@@ -4440,7 +4440,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
-  test("SPARK-40096: Add external shuffle service to blacklist if connection creation fails") {
+  test("SPARK-40096: Remove shuffle push merger location if connection creation fails") {
     initPushBasedShuffleConfs(conf)
     // connectionCreationTimeout < shuffleMergeResultsTimeoutSec 10s by default
     conf.set("spark.shuffle.io.connectionCreationTimeout", "5s")
@@ -4457,7 +4457,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("SPARK-40096: Do not add external shuffle service to blacklist for InterruptedException") {
+  test("SPARK-40096: Do not remove shuffle push merger location for InterruptedException") {
     initPushBasedShuffleConfs(conf)
     // connectionCreationTimeout > shuffleMergeResultsTimeoutSec 10s by default
     conf.set("spark.shuffle.io.connectionCreationTimeout", "12s")
