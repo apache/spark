@@ -71,4 +71,20 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(input, expected)
     }
   }
+
+  test("Throw exceptions from children") {
+    val failingChild = Divide(Literal(1.0), Literal(0.0), EvalMode.ANSI)
+    Seq(
+      Add(failingChild, Literal(1.0), EvalMode.TRY),
+      Add(Literal(1.0), failingChild, EvalMode.TRY),
+      Subtract(failingChild, Literal(1.0), EvalMode.TRY),
+      Subtract(Literal(1.0), failingChild, EvalMode.TRY),
+      Multiply(failingChild, Literal(1.0), EvalMode.TRY),
+      Multiply(Literal(1.0), failingChild, EvalMode.TRY),
+      Divide(failingChild, Literal(1.0), EvalMode.TRY),
+      Divide(Literal(1.0), failingChild, EvalMode.TRY)
+    ).foreach { expr =>
+      checkExceptionInExpression[ArithmeticException](expr, "DIVIDE_BY_ZERO")
+    }
+  }
 }
