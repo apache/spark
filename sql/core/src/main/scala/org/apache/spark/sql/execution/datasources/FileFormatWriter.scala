@@ -55,12 +55,6 @@ object FileFormatWriter extends Logging {
       maxWriters: Int,
       createSorter: () => UnsafeExternalRowSorter)
 
-  /**
-   * A variable used in tests to check whether the output ordering of the query matches the
-   * required ordering of the write command.
-   */
-  private[sql] var outputOrderingMatched: Boolean = false
-
   // scalastyle:off argcount
   /**
    * Basic work flow of this command is:
@@ -177,7 +171,15 @@ object FileFormatWriter extends Logging {
     // 1) When the planned write config is disabled.
     // 2) When the concurrent writers are enabled (in this case the required ordering of a
     //    V1 write command will be empty).
-    if (Utils.isTesting) outputOrderingMatched = orderingMatched
+    if (Utils.isTesting) {
+      if (SQLConf.get.plannedWriteEnabled && !orderingMatched) {
+        // When testing, throw an exception if the ordering does not match to improve coverage.
+        // In production, we will inject an extra sort if the ordering does not match so it
+        // should be only a performance issue rather than a bug.
+        throw new IllegalStateException(
+          s"BUG: ordering should match when ${SQLConf.PLANNED_WRITE_ENABLED.key} is enabled.")
+      }
+    }
 
     try {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {

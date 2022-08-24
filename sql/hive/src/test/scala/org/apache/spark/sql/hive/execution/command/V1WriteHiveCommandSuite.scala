@@ -23,9 +23,9 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingleton {
 
   test("create hive table as select - no partition column") {
-    withPlannedWrite { enabled =>
+    withPlannedWrite { _ =>
       withTable("t") {
-        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+        executeAndCheckOrdering(hasLogicalSort = false) {
           sql("CREATE TABLE t AS SELECT * FROM t0")
         }
       }
@@ -37,7 +37,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
       withTable("t") {
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           executeAndCheckOrdering(
-            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+            hasLogicalSort = enabled, hasEmpty2Null = enabled) {
             sql(
               """
                 |CREATE TABLE t
@@ -61,7 +61,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             |""".stripMargin)
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           executeAndCheckOrdering(
-            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+            hasLogicalSort = enabled, hasEmpty2Null = enabled) {
             sql("INSERT INTO t SELECT * FROM t0")
           }
         }
@@ -80,7 +80,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             |AS SELECT * FROM t0
             |""".stripMargin)
           executeAndCheckOrdering(
-            hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+            hasLogicalSort = enabled, hasEmpty2Null = enabled) {
             sql("INSERT OVERWRITE t SELECT j AS i, i AS j, k FROM t0")
           }
         }
@@ -89,7 +89,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
   }
 
   test("insert into hive table with static partitions only") {
-    withPlannedWrite { enabled =>
+    withPlannedWrite { _ =>
       withTable("t") {
         sql(
           """
@@ -97,7 +97,7 @@ class V1WriteHiveCommandSuite extends V1WriteCommandSuiteBase with TestHiveSingl
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
         // No dynamic partition so no sort is needed.
-        executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
+        executeAndCheckOrdering(hasLogicalSort = false) {
           sql("INSERT INTO t PARTITION (k='0') SELECT i, j FROM t0 WHERE k = '0'")
         }
       }
