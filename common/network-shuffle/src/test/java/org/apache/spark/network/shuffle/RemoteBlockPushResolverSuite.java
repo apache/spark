@@ -193,7 +193,8 @@ public class RemoteBlockPushResolverSuite {
     // This should be deferred
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     assertEquals("cached bytes", 3L,
-        ((Counter) pushResolver.getMetrics().getMetrics().get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -219,7 +220,8 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[3]));
     assertEquals("cached bytes", 6L,
-        ((Counter) pushResolver.getMetrics().getMetrics().get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -420,7 +422,8 @@ public class RemoteBlockPushResolverSuite {
     // This should be deferred
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
     assertEquals("cached bytes", 5L,
-        ((Counter) pushResolver.getMetrics().getMetrics().get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
+      ((Counter) pushResolver.getMetrics().getMetrics()
+        .get(PushMergeMetrics.CACHED_BLOCKS_BYTES_METRIC)).getCount());
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
     BlockPushNonFatalFailure e = assertThrows(BlockPushNonFatalFailure.class,
       () -> stream3.onComplete(stream3.getID()));

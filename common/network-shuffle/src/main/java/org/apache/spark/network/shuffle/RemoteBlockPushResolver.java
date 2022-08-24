@@ -1996,8 +1996,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * A class that wraps all the push-based shuffle service metrics.
    */
   static class PushMergeMetrics implements MetricSet {
-    // couldNotFindOpportunityResponses tracks how many times a shuffle block collided because of another block for
-    // the same reduce partition was being written
+    // couldNotFindOpportunityResponses tracks how many times a shuffle block collided because
+    // of another block for the same reduce partition was being written
     static final String NO_OPPORTUNITY_RESPONSES_METRIC = "couldNotFindOpportunityResponses";
     // tooLateResponses tracks how many times a shuffle block push request is too late
     static final String TOO_LATE_RESPONSES_METRIC = "tooLateResponses";
