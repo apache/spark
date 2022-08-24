@@ -171,7 +171,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => throw new IllegalStateException("Illegal value found in in.list.")
       }
 
-      // return original expression when in.list contains only null values.
+      // return None when in.list contains only null values.
       if (canCastList.isEmpty && cannotCastList.isEmpty) {
         None
       } else {
