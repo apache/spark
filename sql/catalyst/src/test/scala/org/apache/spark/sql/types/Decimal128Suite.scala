@@ -63,6 +63,35 @@ class Decimal128Suite extends SparkFunSuite {
     assert(e.getMessage.contains("BigInteger out of Int128 range"))
   }
 
+  test("double and long values") {
+    /** Check that a Decimal converts to the given double and long values */
+    def checkValues(d: Decimal128, doubleValue: Double, longValue: Long): Unit = {
+      assert(d.toDouble === doubleValue)
+      assert(d.toLong === longValue)
+    }
+
+    checkValues(new Decimal128(), 0.0, 0L)
+    checkValues(Decimal128(BigDecimal("10.030")), 10.03, 10L)
+    checkValues(Decimal128(BigDecimal("10.030"), 1), 10.0, 10L)
+    checkValues(Decimal128(BigDecimal("-9.95"), 1), -10.0, -10L)
+    checkValues(Decimal128(10.03), 10.03, 10L)
+    checkValues(Decimal128(17L), 17.0, 17L)
+    checkValues(Decimal128(17), 17.0, 17L)
+    checkValues(Decimal128(0, 17, 1), 1.7, 1L)
+    checkValues(Decimal128(0, 170, 2), 1.7, 1L)
+    checkValues(Decimal128(1e16.toLong), 1e16, 1e16.toLong)
+    checkValues(Decimal128(1e17.toLong), 1e17, 1e17.toLong)
+    checkValues(Decimal128(1e18.toLong), 1e18, 1e18.toLong)
+    checkValues(Decimal128(2e18.toLong), 2e18, 2e18.toLong)
+    checkValues(Decimal128(Long.MaxValue), Long.MaxValue.toDouble, Long.MaxValue)
+    checkValues(Decimal128(Long.MinValue), Long.MinValue.toDouble, Long.MinValue)
+
+    val e1 = intercept[ArithmeticException](Decimal128(Double.MaxValue))
+    assert(e1.getMessage.contains("BigInteger out of Int128 range"))
+    val e2 = intercept[ArithmeticException](Decimal128(Double.MinValue))
+    assert(e2.getMessage.contains("BigInteger out of Int128 range"))
+  }
+
   test("hash code") {
     assert(Decimal128(123).hashCode() === (123).##)
     assert(Decimal128(-123).hashCode() === (122).##)

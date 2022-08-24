@@ -23,6 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.Int128Math
 
 @Unstable
@@ -105,8 +106,16 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
    * Set this Decimal128 to the given BigDecimal value, inheriting its precision and scale.
    */
   def set(decimal: BigDecimal): Decimal128 = {
-    set(decimal.underlying().unscaledValue())
-    this._scale = decimal.scale
+    var bigDecimal = decimal
+    var scale = 0
+    if (decimal.scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+      // set scale to 0 to correct unscaled value
+      bigDecimal = decimal.setScale(0)
+    } else {
+      scale = decimal.scale
+    }
+    set(bigDecimal.underlying().unscaledValue())
+    this._scale = scale
     this
   }
 
@@ -150,11 +159,15 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
-  def toDouble: Double = int128.toDouble
+  def toDouble: Double = toBigDecimal.doubleValue()
 
   def toFloat: Float = int128.toFloat
 
-  def toLong: Long = int128.toLong()
+  def toLong: Long = if (int128.eq(null)) {
+    longVal / POW_10(_scale)
+  } else {
+    toBigDecimal.longValue()
+  }
 
   def toInt: Int = int128.toInt
 
