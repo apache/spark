@@ -99,6 +99,7 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
         PandasScalarUDFType,
         PandasGroupedMapUDFType,
+        PandasGroupedBatchMapUDFType,
         PandasGroupedAggUDFType,
         PandasWindowAggUDFType,
         PandasScalarIterUDFType,
@@ -149,7 +150,7 @@ class PythonEvalType:
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
-    SQL_GROUPED_BATCH_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 209
+    SQL_GROUPED_BATCH_MAP_PANDAS_UDF: "PandasGroupedBatchMapUDFType" = 209
 
 
 def portable_hash(x: Hashable) -> int:

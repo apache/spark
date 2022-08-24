@@ -25,10 +25,13 @@ from pyspark.sql._typing import (
 )
 from pyspark.sql.pandas._typing import (
     GroupedMapPandasUserDefinedFunction,
+    GroupedBatchMapPandasUserDefinedFunction,
     PandasGroupedAggFunction,
     PandasGroupedAggUDFType,
     PandasGroupedMapFunction,
     PandasGroupedMapUDFType,
+    PandasGroupedBatchMapFunction,
+    PandasGroupedBatchMapUDFType,
     PandasScalarIterFunction,
     PandasScalarIterUDFType,
     PandasScalarToScalarFunction,
@@ -44,6 +47,7 @@ class PandasUDFType:
     SCALAR: PandasScalarUDFType
     SCALAR_ITER: PandasScalarIterUDFType
     GROUPED_MAP: PandasGroupedMapUDFType
+    GROUPED_BATCH_MAP: PandasGroupedBatchMapUDFType
     GROUPED_AGG: PandasGroupedAggUDFType
 
 @overload
@@ -100,6 +104,12 @@ def pandas_udf(
     returnType: Union[StructType, str],
     functionType: PandasGroupedMapUDFType,
 ) -> GroupedMapPandasUserDefinedFunction: ...
+@overload
+def pandas_udf(
+    f: PandasGroupedBatchMapFunction,
+    returnType: Union[StructType, str],
+    functionType: PandasGroupedBatchMapUDFType,
+) -> GroupedBatchMapPandasUserDefinedFunction: ...
 @overload
 def pandas_udf(
     f: Union[StructType, str], returnType: PandasGroupedMapUDFType

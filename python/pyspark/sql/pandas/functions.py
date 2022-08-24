@@ -439,13 +439,18 @@ def _create_pandas_udf(f, returnType, evalType):
             "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
         )
 
-    if evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                    PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF] and \
-            len(argspec.args) not in (1, 2):
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (1, 2):
         raise ValueError(
-            "Invalid function: pandas_udf with function type GROUPED_MAP or GROUPED_BATCH_MAP, or"
+            "Invalid function: pandas_udf with function type GROUPED_MAP or "
             "the function in groupby.applyInPandas "
             "must take either one argument (data) or two arguments (key, data)."
+        )
+
+    if evalType == PythonEvalType.SQL_GROUPED_BATCH_MAP_PANDAS_UDF and len(argspec.args) != 1:
+        raise ValueError(
+            "Invalid function: pandas_udf with function type GROUPED_BATCH_MAP or "
+            "the function in groupby.applyInPandas with batch size "
+            "must take one argument (grouped data)."
         )
 
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):

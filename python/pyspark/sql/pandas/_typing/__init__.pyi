@@ -32,6 +32,7 @@ from types import FunctionType
 from pyspark.sql._typing import LiteralType
 from pyspark.sql.streaming.state import GroupState
 from pandas.core.frame import DataFrame as PandasDataFrame
+from pandas.core.groupby import DataFrameGroupBy as PandasDataFrameGroupBy
 from pandas.core.series import Series as PandasSeries
 from numpy import ndarray as NDArray
 
@@ -53,6 +54,7 @@ PandasMapIterUDFType = Literal[205]
 PandasCogroupedMapUDFType = Literal[206]
 ArrowMapIterUDFType = Literal[207]
 PandasGroupedMapUDFWithStateType = Literal[208]
+PandasGroupedBatchMapUDFType = Literal[209]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
@@ -262,6 +264,8 @@ PandasGroupedMapFunctionWithState = Callable[
     [Any, Iterable[DataFrameLike], GroupState], Iterable[DataFrameLike]
 ]
 
+PandasGroupedBatchMapFunction = Callable[[PandasDataFrameGroupBy], DataFrameLike]
+
 class PandasVariadicGroupedAggFunction(Protocol):
     def __call__(self, *_: SeriesLike) -> LiteralType: ...
 
@@ -342,3 +346,6 @@ PandasCogroupedMapFunction = Union[
 ]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
+GroupedBatchMapPandasUserDefinedFunction = NewType(
+    "GroupedBatchMapPandasUserDefinedFunction", FunctionType
+)

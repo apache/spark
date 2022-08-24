@@ -740,20 +740,23 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
+    # TODO: group by expression that has same label as existing column
     def test_grouped_batch(self):
         ids = self.spark.range(1, 10, 1)
         cards = self.spark.range(10).withColumnRenamed("id", "card")
 
-        # group with id i has same number of rows, size of 2*rows
-        groups = ids.join(cards, col("card") < col("id")) \
-            .groupby("id") \
-            .applyInPandas(
-                lambda k, df: pd.DataFrame({'id': [k[0]], 'size': [df.size]}),
-                "id integer, size integer",
-                5) \
-            .collect()
+        def gdf_func(gdf):
+            return gdf.apply(lambda df: df.size).to_frame("size").reset_index()
 
-        expected = [Row(id=i, size=i*2) for i in range(1, 10, 1)]
+        # group with id i has same number of rows, size of 2*rows
+        groups = (
+            ids.join(cards, col("card") < col("id"))
+            .groupby("id")
+            .applyInPandasBatched(gdf_func, "id integer, size integer", 5)
+            .collect()
+        )
+
+        expected = [Row(id=i, size=i * 2) for i in range(1, 10, 1)]
         self.assertEqual(groups, expected)
 
 

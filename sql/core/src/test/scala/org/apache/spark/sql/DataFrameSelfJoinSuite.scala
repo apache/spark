@@ -397,7 +397,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         Seq.empty,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         true)
-      df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF, Some(10000)).collect()
+      df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF, 10000).collect()
     }
 
     // Test for FlatMapCoGroupsInPandas
