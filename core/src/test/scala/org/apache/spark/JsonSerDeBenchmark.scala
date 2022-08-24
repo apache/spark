@@ -177,7 +177,7 @@ object JsonSerDeBenchmark extends BenchmarkBase {
   }
 
   private def fromJsonString(json: String,
-      name: String , valuesPerIteration: Int): Unit = {
+      name: String, valuesPerIteration: Int): Unit = {
     val benchmark = new Benchmark(
       s"Test from Json $name",
       valuesPerIteration,
