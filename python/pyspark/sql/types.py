@@ -23,6 +23,7 @@ import calendar
 import json
 import re
 import base64
+import platform
 from array import array
 import ctypes
 
@@ -176,14 +177,36 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt):
         if dt is not None:
-            seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
-                       else time.mktime(dt.timetuple()))
+            if platform.system().lower() == "windows":
+                """
+                On Windows, the current value is converted to a timestamp
+                when the current value is less than 1970
+                """
+                c_dt = datetime.datetime.fromtimestamp(int(time.localtime(0).tm_sec) / 1000)
+                if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                    c_dt = c_dt.replace(tzinfo=None)
+                elif c_dt.tzinfo is None or c_dt.tzinfo.utcoffset(c_dt) is None:
+                    c_dt = c_dt.replace(tzinfo=dt.tzinfo)
+
+                seconds = (dt - c_dt).total_seconds()
+            else:
+                seconds = (
+                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+                )
+
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
         if ts is not None:
-            # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            if platform.system().lower() == "windows":
+                return datetime.datetime.fromtimestamp(
+                    int(time.localtime(0).tm_sec) / 1000
+                ) + datetime.timedelta(microseconds=ts)
+            else:
+                # using int to avoid precision loss in float
+                return datetime.datetime.fromtimestamp(ts // 1000000).replace(
+                    microsecond=ts % 1000000
+                )
 
 
 class DecimalType(FractionalType):
@@ -398,9 +421,9 @@ class StructField(DataType):
         name of the field.
     dataType : :class:`DataType`
         :class:`DataType` of the field.
-    nullable : bool, optional
+    nullable : bool
         whether the field can be null (None) or not.
-    metadata : dict, optional
+    metadata : dict
         a dict from string to simple type that can be toInternald to JSON automatically
 
     Examples
@@ -498,20 +521,20 @@ class StructType(DataType):
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a :class:`StructType` by adding new elements to it, to define the schema.
+        Construct a StructType by adding new elements to it, to define the schema.
         The method accepts either:
 
-            a) A single parameter which is a :class:`StructField` object.
+            a) A single parameter which is a StructField object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
                metadata(optional). The data_type parameter may be either a String or a
-               :class:`DataType` object.
+               DataType object.
 
         Parameters
         ----------
         field : str or :class:`StructField`
-            Either the name of the field or a :class:`StructField` object
+            Either the name of the field or a StructField object
         data_type : :class:`DataType`, optional
-            If present, the DataType of the :class:`StructField` to create
+            If present, the DataType of the StructField to create
         nullable : bool, optional
             Whether the field to add should be nullable (default True)
         metadata : dict, optional
