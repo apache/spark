@@ -51,6 +51,7 @@ from pyspark.sql.functions import (
     size,
     slice,
     least,
+    regexp_replace,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -958,6 +959,20 @@ class FunctionsTests(ReusedSQLTestCase):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)
         actual = self.spark.range(1).select(lit(td)).first()[0]
         self.assertEqual(actual, td)
+
+    # Test added for SPARK-39832; change Python API to accept both col & str as input
+    def test_regexp_replace(self):
+        df = self.spark.createDataFrame(
+            [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
+        )
+        self.assertTrue(
+            all(
+                df.select(
+                    regexp_replace("str", r"(\d+)", "--") == "-----",
+                    regexp_replace("str", col("pattern"), col("replacement")) == "-----",
+                ).first()
+            )
+        )
 
 
 if __name__ == "__main__":

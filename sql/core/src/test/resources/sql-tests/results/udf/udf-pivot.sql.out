@@ -229,7 +229,14 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `year` cannot be resolved. Did you mean one of the following? [`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`]; line 4 pos 0
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`year`",
+    "objectList" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+  }
+}
 
 
 -- !query
@@ -310,7 +317,15 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[PIVOT_VALUE_DATA_TYPE_MISMATCH] Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
+{
+  "errorClass" : "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "value" : "dotNET",
+    "valueType" : "string",
+    "pivotType" : "struct<course:string,year:int>"
+  }
+}
 
 
 -- !query
@@ -323,7 +338,14 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `s` cannot be resolved. Did you mean one of the following? [`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`]; line 4 pos 15
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`s`",
+    "objectList" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+  }
+}
 
 
 -- !query
@@ -336,7 +358,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[NON_LITERAL_PIVOT_VALUES] Literal expressions required for pivot values, found "course".
+{
+  "errorClass" : "NON_LITERAL_PIVOT_VALUES",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"course\""
+  }
+}
 
 
 -- !query
@@ -421,7 +449,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column `__auto_generated_subquery_name`.`m`. Pivot columns must be comparable.
+{
+  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "columnName" : "`__auto_generated_subquery_name`.`m`"
+  }
+}
 
 
 -- !query
@@ -438,7 +472,13 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column `named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`. Pivot columns must be comparable.
+{
+  "errorClass" : "INCOMPARABLE_PIVOT_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "columnName" : "`named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`"
+  }
+}
 
 
 -- !query

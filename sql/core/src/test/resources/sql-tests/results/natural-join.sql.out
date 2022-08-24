@@ -229,7 +229,14 @@ SELECT nt2.k FROM (SELECT * FROM nt1 natural join nt2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `nt2`.`k` cannot be resolved. Did you mean one of the following? [`__auto_generated_subquery_name`.`k`, `__auto_generated_subquery_name`.`v1`, `__auto_generated_subquery_name`.`v2`]; line 1 pos 7
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`nt2`.`k`",
+    "objectList" : "`__auto_generated_subquery_name`.`k`, `__auto_generated_subquery_name`.`v1`, `__auto_generated_subquery_name`.`v2`"
+  }
+}
 
 
 -- !query

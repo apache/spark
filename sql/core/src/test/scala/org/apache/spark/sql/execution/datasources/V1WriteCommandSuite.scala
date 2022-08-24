@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -51,9 +51,14 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
     }
   }
 
-  // Execute a write query and check ordering of the plan.
+  /**
+   * Execute a write query and check ordering of the plan. Return the optimized logical write
+   * query plan.
+   */
   protected def executeAndCheckOrdering(
-      hasLogicalSort: Boolean, orderingMatched: Boolean)(query: => Unit): Unit = {
+      hasLogicalSort: Boolean,
+      orderingMatched: Boolean,
+      hasEmpty2Null: Boolean = false)(query: => Unit): Unit = {
     var optimizedPlan: LogicalPlan = null
 
     val listener = new QueryExecutionListener {
@@ -80,6 +85,14 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
     if (optimizedPlan != null) {
       assert(optimizedPlan.isInstanceOf[Sort] == hasLogicalSort,
         s"Expect hasLogicalSort: $hasLogicalSort, Actual: ${optimizedPlan.isInstanceOf[Sort]}")
+
+      // Check empty2null conversion.
+      val projection = optimizedPlan.collectFirst {
+        case p: Project
+          if p.projectList.exists(_.exists(_.isInstanceOf[V1WritesUtils.Empty2Null])) => p
+      }
+      assert(projection.isDefined == hasEmpty2Null,
+        s"Expect hasEmpty2Null: $hasEmpty2Null, Actual: ${projection.isDefined}")
     }
 
     spark.listenerManager.unregister(listener)
@@ -113,7 +126,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
   test("v1 write with string partition columns") {
     withPlannedWrite { enabled =>
       withTable("t") {
-        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql("CREATE TABLE t USING PARQUET PARTITIONED BY (k) AS SELECT * FROM t0")
         }
       }
@@ -129,7 +143,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |PARTITIONED BY (k STRING)
             |CLUSTERED BY (i, j) SORTED BY (j) INTO 2 BUCKETS
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql("INSERT INTO t SELECT * FROM t0")
         }
       }
@@ -164,7 +179,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
             |CREATE TABLE t(i INT, j INT) USING PARQUET
             |PARTITIONED BY (k STRING)
             |""".stripMargin)
-        executeAndCheckOrdering(hasLogicalSort = true, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = true, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql("INSERT INTO t SELECT * FROM t0 ORDER BY k")
         }
       }
@@ -174,7 +190,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
   test("v1 write with null and empty string column values") {
     withPlannedWrite { enabled =>
       withTempPath { path =>
-        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           Seq((0, None), (1, Some("")), (2, None), (3, Some("x")))
             .toDF("id", "p")
             .write
@@ -239,7 +256,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
         }
 
         // one static partition column and one dynamic partition column
-        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql(
             """
               |INSERT INTO t PARTITION(p1=1, p2)
@@ -248,7 +266,8 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
         }
 
         // partition columns are dynamic
-        executeAndCheckOrdering(hasLogicalSort = enabled, orderingMatched = enabled) {
+        executeAndCheckOrdering(
+          hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
           sql(
             """
               |INSERT INTO t PARTITION(p1, p2)
