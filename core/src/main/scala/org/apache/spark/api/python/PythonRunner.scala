@@ -84,9 +84,9 @@ private object BasePythonRunner {
  * functions (from bottom to top).
  */
 private[spark] abstract class BasePythonRunner[IN, OUT](
-    funcs: Seq[ChainedPythonFunctions],
-    evalType: Int,
-    argOffsets: Array[Array[Int]])
+    protected val funcs: Seq[ChainedPythonFunctions],
+    protected val evalType: Int,
+    protected val argOffsets: Array[Array[Int]])
   extends Logging {
 
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
@@ -556,7 +556,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val obj = new Array[Byte](exLength)
       stream.readFully(obj)
       new PythonException(new String(obj, StandardCharsets.UTF_8),
-        writerThread.exception.getOrElse(null))
+        writerThread.exception.orNull)
     }
 
     protected def handleEndOfDataSection(): Unit = {

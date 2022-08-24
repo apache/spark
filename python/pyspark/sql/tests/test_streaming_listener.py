@@ -245,9 +245,9 @@ class StreamingListenerTests(ReusedSQLTestCase):
         except Exception:
             self.fail("'%s' is not a valid JSON.")
         self.assertTrue(isinstance(progress.description, str))
-        self.assertTrue(isinstance(progress.startOffset, str))
-        self.assertTrue(isinstance(progress.endOffset, str))
-        self.assertTrue(isinstance(progress.latestOffset, str))
+        self.assertTrue(isinstance(progress.startOffset, (str, type(None))))
+        self.assertTrue(isinstance(progress.endOffset, (str, type(None))))
+        self.assertTrue(isinstance(progress.latestOffset, (str, type(None))))
         self.assertTrue(isinstance(progress.numInputRows, int))
         self.assertTrue(isinstance(progress.inputRowsPerSecond, float))
         self.assertTrue(isinstance(progress.processedRowsPerSecond, float))

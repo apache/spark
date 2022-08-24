@@ -159,6 +159,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean skip(long n) {
+    if (closed) return false;
+
     long skipped = 0;
     while (skipped < n) {
       if (next != null) {
@@ -189,6 +191,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     if (!closed) {
       it.close();
       closed = true;
+      next = null;
     }
   }
 

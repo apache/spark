@@ -25,6 +25,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -74,7 +75,8 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
-    stateFormatVersion: Int) extends Logging {
+    stateFormatVersion: Int,
+    skippedNullValueCount: Option[SQLMetric] = None) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -175,7 +177,7 @@ class SymmetricHashJoinStateManager(
 
         // We only reach here if there were no satisfying keys left, which means we're done.
         finished = true
-        return null
+        null
       }
 
       override def close(): Unit = {}
@@ -259,7 +261,7 @@ class SymmetricHashJoinStateManager(
         }
 
         // We tried and failed to find the next value.
-        return null
+        null
       }
 
       /**
@@ -321,7 +323,7 @@ class SymmetricHashJoinStateManager(
         numValues -= 1
         valueRemoved = true
 
-        return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
+        reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
       override def close(): Unit = {}
@@ -617,6 +619,7 @@ class SymmetricHashJoinStateManager(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else {
               keyWithIndexAndValue.withNew(key, index, valuePair)
@@ -626,7 +629,7 @@ class SymmetricHashJoinStateManager(
           }
 
           finished = true
-          return null
+          null
         }
 
         override protected def close(): Unit = {}

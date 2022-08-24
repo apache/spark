@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.atomic.LongAdder
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.ArgumentMatchers.any
@@ -937,5 +939,37 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       worker.unregisterShuffle(20)
       assert(worker.shufflePushMergerLocations.isEmpty)
     }
+  }
+
+  test("SPARK-39553: Multi-thread unregister shuffle shouldn't throw NPE") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    val shuffleIdRange = 0 until 100
+    shuffleIdRange.foreach { shuffleId =>
+      tracker.registerShuffle(shuffleId, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    }
+    val npeCounter = new LongAdder()
+    // More threads will help to reproduce the problem
+    val threads = new Array[Thread](5)
+    threads.indices.foreach { i =>
+      threads(i) = new Thread() {
+        override def run(): Unit = {
+          shuffleIdRange.foreach { shuffleId =>
+            try {
+              tracker.unregisterShuffle(shuffleId)
+            } catch {
+              case _: NullPointerException => npeCounter.increment()
+            }
+          }
+        }
+      }
+    }
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+    tracker.stop()
+    rpcEnv.shutdown()
+    assert(npeCounter.intValue() == 0)
   }
 }

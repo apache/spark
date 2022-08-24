@@ -89,6 +89,10 @@ private[scheduler] case class WorkerRemoved(workerId: String, host: String, mess
   extends DAGSchedulerEvent
 
 private[scheduler]
+case class StageFailed(stageId: Int, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
+
+private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 

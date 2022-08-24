@@ -138,33 +138,33 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
           "att1", $"id",
           "att2", $"id" * $"id")),
         CreateNamedStruct(Seq(
-          "att1", $"id" + 1,
-          "att2", ($"id" + 1) * ($"id" + 1))
+          "att1", $"id" + 1L,
+          "att2", $"id")
        ))
       ) as "arr"
     )
-    val query = rel
-      .select(
-        GetArrayStructFields($"arr", StructField("att1", LongType, false), 0, 1, false) as "a1",
-        GetArrayItem($"arr", 1) as "a2",
-        GetStructField(GetArrayItem($"arr", 1), 0, None) as "a3",
-        GetArrayItem(
-          GetArrayStructFields($"arr",
-            StructField("att1", LongType, false),
-            0,
-            1,
-            false),
-          1) as "a4")
+    val field = StructField("att1", LongType, false)
 
-    val expected = relation
-      .select(
-        CreateArray(Seq($"id", $"id" + 1L)) as "a1",
-        CreateNamedStruct(Seq(
-          "att1", ($"id" + 1L),
-          "att2", (($"id" + 1L) * ($"id" + 1L)))) as "a2",
-        ($"id" + 1L) as "a3",
-        ($"id" + 1L) as "a4")
-    checkRule(query, expected)
+    // Can simplify as both the two extractions result to cheap expression: $"id"
+    val query1 = rel.select(
+      GetArrayStructFields($"arr", field, 0, 1, false).getItem(0) as "a1",
+      $"arr".getItem(1).getField("att2") as "a2")
+    val expected1 = relation.select($"id" as "a1", $"id" as "a2")
+    checkRule(query1, expected1)
+
+    // Can simplify as only one extraction results to non-cheap expression: array($"id", $"id" + 1)
+    val query2 = rel.select(
+      GetArrayStructFields($"arr", field, 0, 1, false) as "a1",
+      $"arr".getItem(1).getField("att2") as "a2")
+    val expected2 = relation.select(CreateArray(Seq($"id", $"id" + 1L)) as "a1", $"id" as "a2")
+    checkRule(query2, expected2)
+
+    // Cannot simplify as both extraction result to non-cheap expression:
+    //   array($"id", $"id" + 1), $"id" + 1
+    val query3 = rel.select(
+      GetArrayStructFields($"arr", field, 0, 1, false) as "a1",
+      $"arr".getItem(1).getField("att1") as "a2")
+    checkRule(query3, query3)
   }
 
   test("SPARK-22570: CreateArray should not create a lot of global variables") {
@@ -182,27 +182,39 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val rel = relation
       .select(
         CreateMap(Seq(
-          "r1", CreateNamedStruct(Seq("att1", $"id")),
-          "r2", CreateNamedStruct(Seq("att1", ($"id" + 1L))))) as "m")
-    val query = rel
-      .select(
-        GetMapValue($"m", "r1") as "a1",
-        GetStructField(GetMapValue($"m", "r1"), 0, None) as "a2",
-        GetMapValue($"m", "r32") as "a3",
-        GetStructField(GetMapValue($"m", "r32"), 0, None) as "a4")
+          "r1", CreateNamedStruct(Seq("att1", $"id", "att2", $"id" + 1L)),
+          "r2", CreateNamedStruct(Seq("att1", $"id" + 1L, "att2", $"id")))) as "m")
+    val structType = new StructType().add("att1", LongType, false).add("att2", LongType, false)
 
-    val expected =
-      relation.select(
-        CreateNamedStruct(Seq("att1", $"id")) as "a1",
-        $"id" as "a2",
-        Literal.create(
-          null,
-          StructType(
-            StructField("att1", LongType, nullable = false) :: Nil
-          )
-        ) as "a3",
-        Literal.create(null, LongType) as "a4")
-    checkRule(query, expected)
+    // Can simplify as both the two extractions result to cheap expression: $"id"
+    val query1 = rel.select(
+      GetMapValue($"m", "r1").getField("att1") as "a1",
+      GetMapValue($"m", "r2").getField("att2") as "a2")
+    val expected1 = relation.select($"id" as "a1", $"id" as "a2")
+    checkRule(query1, expected1)
+
+    // Can simplify as only one extraction results to non-cheap expression: $"id" + 1
+    val query2 = rel.select(
+      GetMapValue($"m", "r1").getField("att1") as "a1",
+      GetMapValue($"m", "r2").getField("att1") as "a2")
+    val expected2 = relation.select($"id" as "a1", ($"id" + 1L) as "a2")
+    checkRule(query2, expected2)
+
+    // Can simplify as only one extraction results to non-cheap expression: $"id" + 1
+    val query3 = rel.select(
+      // key "r3" does not exist, so this extraction leads to null (or failure with ANSI mode)
+      // which is a cheap expression.
+      GetMapValue($"m", "r3") as "a1",
+      GetMapValue($"m", "r2").getField("att1") as "a2")
+    val expected3 = relation.select(Literal(null, structType) as "a1", ($"id" + 1L) as "a2")
+    checkRule(query3, expected3)
+
+    // Cannot simplify as both extraction result to non-cheap expression:
+    //   struct($"id", $"id" + 1), $"id" + 1
+    val query4 = rel.select(
+      GetMapValue($"m", "r1") as "a1",
+      GetMapValue($"m", "r2").getField("att1") as "a2")
+    checkRule(query4, query4)
   }
 
   test("simplify map ops, constant lookup, dynamic keys") {
@@ -329,7 +341,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
             "att1", $"id",
             "att2", $"id" * $"id")),
           CreateNamedStruct(Seq(
-            "att1", $"id" + 1,
+            "att1", $"id",
             "att2", ($"id" + 1) * ($"id" + 1))
           ))
         ) as "arr")
@@ -346,8 +358,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     val expected = LocalRelation($"id".long)
       .select(
-        ($"id" + 1L) as "a1",
-        ($"id" + 1L) as "a2")
+        $"id" as "a1",
+        $"id" as "a2")
       .orderBy($"id".asc)
     checkRule(query, expected)
   }
@@ -415,12 +427,12 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       testRelation
         .select(
           namedStruct("col1", $"b", "col2", $"c").as("s1"), $"a", $"b")
-        .select($"s1" getField "col2" as Symbol("s1Col2"),
+        .select($"s1" getField "col2" as "s1Col2",
           namedStruct("col1", $"a", "col2", $"b").as("s2"))
-        .select($"s1Col2", $"s2" getField "col2" as Symbol("s2Col2"))
+        .select($"s1Col2", $"s2" getField "col2" as "s2Col2")
     val correctAnswer =
       testRelation
-        .select($"c" as Symbol("s1Col2"), $"b" as Symbol("s2Col2"))
+        .select($"c" as "s1Col2", $"b" as "s2Col2")
     checkRule(originalQuery, correctAnswer)
   }
 
@@ -428,11 +440,11 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val originalQuery =
       testRelation
         .select(
-          namedStruct("col1", $"b", "col2", $"c") getField "col2" as Symbol("sCol2"),
-          namedStruct("col1", $"a", "col2", $"c") getField "col1" as Symbol("sCol1"))
+          namedStruct("col1", $"b", "col2", $"c") getField "col2" as "sCol2",
+          namedStruct("col1", $"a", "col2", $"c") getField "col1" as "sCol1")
     val correctAnswer =
       testRelation
-        .select($"c" as Symbol("sCol2"), $"a" as Symbol("sCol1"))
+        .select($"c" as "sCol2", $"a" as "sCol1")
     checkRule(originalQuery, correctAnswer)
   }
 

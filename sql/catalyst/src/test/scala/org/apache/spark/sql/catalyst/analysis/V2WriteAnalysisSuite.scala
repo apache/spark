@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, AttributeReference, Cast, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -122,7 +122,10 @@ abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
-      case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
+      case c: Cast =>
+        val cast = Cast(c.child, c.dataType, c.timeZoneId, ansiEnabled = true)
+        cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+        cast
       case other => other
     }
 
@@ -685,7 +688,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(parsedPlan, "MISSING_COLUMN", Array("a", "x, y"))
+    assertAnalysisErrorClass(parsedPlan, "UNRESOLVED_COLUMN", Array("`a`", "`x`, `y`"))
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
@@ -694,7 +697,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
     assertNotResolved(parsedPlan2)
-    assertAnalysisErrorClass(parsedPlan2, "MISSING_COLUMN", Array("a", "x, y"))
+    assertAnalysisErrorClass(parsedPlan2, "UNRESOLVED_COLUMN", Array("`a`", "`x`, `y`"))
   }
 
   test("SPARK-36498: reorder inner fields with byName mode") {

@@ -221,10 +221,10 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Gets the average bucket list iterations per lookup in the underlying `BytesToBytesMap`.
+   * Gets the average number of hash probes per key lookup in the underlying `BytesToBytesMap`.
    */
-  public double getAvgHashProbeBucketListIterations() {
-    return map.getAvgHashProbeBucketListIterations();
+  public double getAvgHashProbesPerKey() {
+    return map.getAvgHashProbesPerKey();
   }
 
   /**

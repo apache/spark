@@ -725,8 +725,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
     val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
-    assert(error.getErrorClass == "MISSING_COLUMN")
-    assert(error.messageParameters.sameElements(Array("b", "a")))
+    assert(error.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(error.messageParameters.sameElements(Array("`b`", "`a`")))
   }
 
   test("wrong order of input fields for case class") {

@@ -196,6 +196,10 @@ class JDBCOptions(
   // This only applies to Data Source V2 JDBC
   val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
 
+  // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
+
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
   val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
@@ -226,6 +230,9 @@ class JDBCOptions(
   // The prefix that is added to the query sent to the JDBC database.
   // This is required to support some complex queries with some JDBC databases.
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
+
+  // Infers timestamp values as TimestampNTZ type when reading data.
+  val inferTimestampNTZType = parameters.getOrElse(JDBC_INFER_TIMESTAMP_NTZ, "false").toBoolean
 }
 
 class JdbcOptionsInWrite(
@@ -280,6 +287,7 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
   val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
+  val JDBC_PUSHDOWN_OFFSET = newOption("pushDownOffset")
   val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
@@ -287,4 +295,5 @@ object JDBCOptions {
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
+  val JDBC_INFER_TIMESTAMP_NTZ = newOption("inferTimestampNTZType")
 }

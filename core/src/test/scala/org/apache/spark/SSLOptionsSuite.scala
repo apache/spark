@@ -23,11 +23,10 @@ import javax.net.ssl.SSLContext
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.alias.{CredentialProvider, CredentialProviderFactory}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.SparkConfWithEnv
 
-class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class SSLOptionsSuite extends SparkFunSuite {
 
   test("test resolving property file as spark conf ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath

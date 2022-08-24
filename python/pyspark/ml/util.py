@@ -536,10 +536,8 @@ class DefaultParamsReader(MLReader[RL]):
         """
         parts = clazz.split(".")
         module = ".".join(parts[:-1])
-        m = __import__(module)
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
+        m = __import__(module, fromlist=[parts[-1]])
+        return getattr(m, parts[-1])
 
     def load(self, path: str) -> RL:
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
@@ -696,9 +694,7 @@ class MetaAlgorithmReadWrite:
         elif isinstance(pyInstance, OneVsRest):
             pySubStages = [pyInstance.getClassifier()]
         elif isinstance(pyInstance, OneVsRestModel):
-            pySubStages = [
-                pyInstance.getClassifier()
-            ] + pyInstance.models  # type: ignore[assignment, operator]
+            pySubStages = [pyInstance.getClassifier()] + pyInstance.models  # type: ignore[operator]
         else:
             pySubStages = []
 

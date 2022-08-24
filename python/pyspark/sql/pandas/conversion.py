@@ -596,7 +596,7 @@ class SparkConversionMixin:
             ]
 
         # Slice the DataFrame to be batched
-        step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
+        step = self._jconf.arrowMaxRecordsPerBatch()
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, type) for serializer dump_stream
@@ -613,16 +613,16 @@ class SparkConversionMixin:
 
         @no_type_check
         def reader_func(temp_filename):
-            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsparkSession, temp_filename)
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(temp_filename)
 
         @no_type_check
-        def create_RDD_server():
-            return self._jvm.ArrowRDDServer(jsparkSession)
+        def create_iter_server():
+            return self._jvm.ArrowIteratorServer()
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
+        jiter = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_iter_server)
         assert self._jvm is not None
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsparkSession)
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jiter, schema.json(), jsparkSession)
         df = DataFrame(jdf, self)
         df._schema = schema
         return df

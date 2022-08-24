@@ -76,10 +76,12 @@ ability to generate logical and physical plan for a given query using
    * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
    * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
    * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+   * [Aggregate Function](sql-ref-syntax-qry-select-aggregate.html)
    * [Window Function](sql-ref-syntax-qry-select-window.html)
    * [CASE Clause](sql-ref-syntax-qry-select-case.html)
    * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
    * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
+   * [LATERAL SUBQUERY](sql-ref-syntax-qry-select-lateral-subquery.html)
    * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 

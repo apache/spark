@@ -22,7 +22,6 @@ import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
@@ -35,13 +34,12 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 /**
  * A reasonable complete test suite (i.e. behaviors) for a [[ExternalCatalog]].
  *
  * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
-abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEach {
+abstract class ExternalCatalogSuite extends SparkFunSuite {
   protected val utils: CatalogTestUtils
   import utils._
 
@@ -279,8 +277,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   }
 
   test("get tables by name") {
-    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", "tbl2"))
-      .map(_.identifier.table) == Seq("tbl1", "tbl2"))
+    val catalog = newBasicCatalog()
+    val tables = catalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
+    assert(tables.map(_.identifier.table).sorted == Seq("tbl1", "tbl2"))
+
+    catalog.renameTable("db2", "tbl1", "tblone")
+    val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
+    assert(tables2.map(_.identifier.table).sorted == Seq("tbl2", "tblone"))
   }
 
   test("get tables by name when some tables do not exists") {
@@ -768,8 +771,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("get function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1") ==
-      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
-        Seq.empty[FunctionResource]))
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")),
+        funcClass, Seq.empty[FunctionResource]))
     intercept[NoSuchFunctionException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -1039,7 +1042,8 @@ abstract class CatalogTestUtils {
           .add("col2", "string")
           .add("a", IntegerType, nullable = true,
             new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
+              .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "41").build())
           .add("b", StringType, nullable = false,
             new MetadataBuilder().putString(
               ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())

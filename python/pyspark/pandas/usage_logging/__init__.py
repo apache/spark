@@ -48,6 +48,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
     MissingPandasLikeExponentialMoving,
+    MissingPandasLikeExponentialMovingGroupby,
 )
 from pyspark.pandas.series import Series
 from pyspark.pandas.spark.accessors import (
@@ -56,7 +57,14 @@ from pyspark.pandas.spark.accessors import (
     SparkIndexOpsMethods,
 )
 from pyspark.pandas.strings import StringMethods
-from pyspark.pandas.window import Expanding, ExpandingGroupby, Rolling, RollingGroupby
+from pyspark.pandas.window import (
+    Expanding,
+    ExpandingGroupby,
+    Rolling,
+    RollingGroupby,
+    ExponentialMoving,
+    ExponentialMovingGroupby,
+)
 from pyspark.instrumentation_utils import _attach
 
 
@@ -93,6 +101,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         ExpandingGroupby,
         Rolling,
         RollingGroupby,
+        ExponentialMoving,
+        ExponentialMovingGroupby,
         CachedSparkFrameMethods,
         SparkFrameMethods,
         SparkIndexOpsMethods,
@@ -124,6 +134,10 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
         (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
+        (
+            pd.core.window.ExponentialMovingWindowGroupby,  # type: ignore[attr-defined]
+            MissingPandasLikeExponentialMovingGroupby,
+        ),
     ]
 
-    _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]
+    _attach(logger_module, modules, classes, missings)

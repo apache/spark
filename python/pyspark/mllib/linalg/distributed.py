@@ -424,7 +424,7 @@ class RowMatrix(DistributedMatrix):
         >>> svd_model.s
         DenseVector([3.4641, 3.1623])
         >>> svd_model.V
-        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, ...0.0], 0)
         """
         j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
@@ -858,7 +858,7 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> svd_model.s
         DenseVector([3.4641, 3.1623])
         >>> svd_model.V
-        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, ...0.0], 0)
         """
         j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)

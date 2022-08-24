@@ -42,7 +42,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private val UPLOAD_CHUNK_SIZE = 1024 * 1024
   private val UPLOAD_INTERVAL_IN_SECS = 5
-  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
+  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   private val localLogFile: String = FileUtils.getFile(
@@ -66,7 +66,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
       val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
       builder.withAppend(false)
-      builder.withBufferedIo(false)
+      builder.setBufferedIo(false)
       builder.setConfiguration(config)
       builder.withFileName(localLogFile)
       builder.setIgnoreExceptions(false)

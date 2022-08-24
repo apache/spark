@@ -36,6 +36,21 @@ from pyspark.sql.types import (
 )
 
 
+def skew(col: Column) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+
+
+def kurt(col: Column) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+
+
+def mode(col: Column, dropna: bool) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+
+
 def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.

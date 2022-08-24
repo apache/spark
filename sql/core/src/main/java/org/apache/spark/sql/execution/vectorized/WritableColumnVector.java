@@ -19,9 +19,13 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -690,6 +694,105 @@ public abstract class WritableColumnVector extends ColumnVector {
     return elementsAppended;
   }
 
+  /**
+   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
+   * above.
+   * @param length: The number of instances to append
+   * @param value value to append to the vector
+   * @return the number of values appended if the value maps to one of the append* methods above,
+   * or Optional.empty() otherwise.
+   */
+  public Optional<Integer> appendObjects(int length, Object value) {
+    if (value instanceof Boolean) {
+      return Optional.of(appendBooleans(length, (Boolean) value));
+    }
+    if (value instanceof Byte) {
+      return Optional.of(appendBytes(length, (Byte) value));
+    }
+    if (value instanceof Decimal) {
+      Decimal decimal = (Decimal) value;
+      long unscaled = decimal.toUnscaledLong();
+      if (decimal.precision() < 10) {
+        return Optional.of(appendInts(length, (int) unscaled));
+      } else {
+        return Optional.of(appendLongs(length, unscaled));
+      }
+    }
+    if (value instanceof Double) {
+      return Optional.of(appendDoubles(length, (Double) value));
+    }
+    if (value instanceof Float) {
+      return Optional.of(appendFloats(length, (Float) value));
+    }
+    if (value instanceof Integer) {
+      return Optional.of(appendInts(length, (Integer) value));
+    }
+    if (value instanceof Long) {
+      return Optional.of(appendLongs(length, (Long) value));
+    }
+    if (value instanceof Short) {
+      return Optional.of(appendShorts(length, (Short) value));
+    }
+    if (value instanceof UTF8String) {
+      UTF8String utf8 = (UTF8String) value;
+      byte[] bytes = utf8.getBytes();
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        result += appendByteArray(bytes, 0, bytes.length);
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericArrayData) {
+      GenericArrayData arrayData = (GenericArrayData) value;
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendArray(arrayData.numElements());
+        for (Object element : arrayData.array()) {
+          if (!arrayData().appendObjects(1, element).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += arrayData.numElements();
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericInternalRow) {
+      GenericInternalRow row = (GenericInternalRow) value;
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendStruct(false);
+        for (int j = 0; j < row.values().length; ++j) {
+          Object element = row.values()[j];
+          if (!childColumns[j].appendObjects(1, element).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += row.values().length;
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof ArrayBasedMapData) {
+      ArrayBasedMapData data = (ArrayBasedMapData) value;
+      appendArray(length);
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        for (Object key : data.keyArray().array()) {
+          if (!childColumns[0].appendObjects(1, key).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        for (Object val: data.valueArray().array()) {
+          if (!childColumns[1].appendObjects(1, val).isPresent()) {
+            return Optional.empty();
+          }
+        }
+        result += data.keyArray().numElements();
+      }
+      return Optional.of(result);
+    }
+    return Optional.empty();
+  }
+
   // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
   // array offsets and lengths in the current column vector.
   @Override
@@ -816,8 +919,8 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected WritableColumnVector(int capacity, DataType type) {
-    super(type);
+  protected WritableColumnVector(int capacity, DataType dataType) {
+    super(dataType);
     this.capacity = capacity;
 
     if (isArray()) {

@@ -474,7 +474,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         )
         val expected_plan_fragment1 =
           s"""
-             |\\(1\\) BatchScan
+             |\\(1\\) BatchScan $fmt file:$basePath
              |Output \\[2\\]: \\[value#x, id#x\\]
              |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
              |Format: $fmt
@@ -526,6 +526,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(
         sql("CREATE TEMPORARY VIEW test AS SELECT 1"),
         "== Analyzed Logical Plan ==\nCreateViewCommand")
+    }
+  }
+
+  test("SPARK-39112: UnsupportedOperationException if explain cost command using v2 command") {
+    withTempDir { dir =>
+      sql("EXPLAIN COST CREATE DATABASE tmp")
+      sql("EXPLAIN COST DESC DATABASE tmp")
+      sql(s"EXPLAIN COST ALTER DATABASE tmp SET LOCATION '${dir.toURI.toString}'")
+      sql("EXPLAIN COST USE tmp")
+      sql("EXPLAIN COST CREATE TABLE t(c1 int) USING PARQUET")
+      sql("EXPLAIN COST SHOW TABLES")
+      sql("EXPLAIN COST SHOW CREATE TABLE t")
+      sql("EXPLAIN COST SHOW TBLPROPERTIES t")
+      sql("EXPLAIN COST DROP TABLE t")
+      sql("EXPLAIN COST DROP DATABASE tmp")
     }
   }
 }
@@ -584,6 +599,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |(16) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
+        |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """

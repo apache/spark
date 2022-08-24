@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -172,7 +172,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
-        AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
+        Count(UnresolvedAttribute("b")).toAggregateExpression(isDistinct = true),
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
@@ -183,11 +183,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "window aggregate function with filter predicate",
     testRelation2.select(
       WindowExpression(
-        AggregateExpression(
-          Count(UnresolvedAttribute("b")),
-          Complete,
-          isDistinct = false,
-          filter = Some(UnresolvedAttribute("b") > 1)),
+        Count(UnresolvedAttribute("b"))
+          .toAggregateExpression(isDistinct = false, filter = Some(UnresolvedAttribute("b") > 1)),
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
@@ -249,10 +246,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "nested aggregate functions",
     testRelation.groupBy($"a")(
-      AggregateExpression(
-        Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
-        Complete,
-        isDistinct = false)),
+      Max(Count(Literal(1)).toAggregateExpression()).toAggregateExpression()),
     "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
   )
 
@@ -297,16 +291,16 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "unresolved attributes",
     testRelation.select($"abcd"),
-    "MISSING_COLUMN",
-    Array("abcd", "a"))
+    "UNRESOLVED_COLUMN",
+    Array("`abcd`", "`a`"))
 
   errorClassTest(
     "unresolved attributes with a generated name",
     testRelation2.groupBy($"a")(max($"b"))
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
-    "MISSING_COLUMN",
-    Array("havingCondition", "max(b)"))
+    "UNRESOLVED_COLUMN",
+    Array("`havingCondition`", "`max(b)`"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -321,8 +315,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
-    "MISSING_COLUMN",
-    Array("b", "a, c, a3"))
+    "UNRESOLVED_COLUMN",
+    Array("`b`", "`a`, `c`, `a3`"))
 
   errorTest(
     "non-boolean filters",
@@ -415,8 +409,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "MISSING_COLUMN",
-    Array("bad_column", "a, b, c, d, e"))
+    "UNRESOLVED_COLUMN",
+    Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
     "slide duration greater than window in time window",
@@ -484,7 +478,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode($"list") + 1),
-    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+    """The generator is not supported: nested in expressions "(explode(list) + 1)""""
       :: Nil
   )
 
@@ -495,29 +489,29 @@ class AnalysisErrorSuite extends AnalysisTest {
         AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
       nestedListRelation.select(Explode(Explode($"nestedList")))
     },
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "explode(explode(nestedList))" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(nestedList))"""" :: Nil
   )
 
   errorTest(
     "SPARK-30998: unsupported nested inner generators for aggregates",
     testRelation.select(Explode(Explode(
       CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "explode(explode(array(array(min(a), max(a)))))" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"explode(explode(array(array(min(a), max(a)))))"""" :: Nil
   )
 
   errorTest(
     "generator nested in expressions for aggregates",
     testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
-    "Generators are not supported when it's nested in expressions, but got: " +
-      "(explode(array(min(a), max(a))) + 1)" :: Nil
+    "The generator is not supported: nested in expressions " +
+      """"(explode(array(min(a), max(a))) + 1)"""" :: Nil
   )
 
   errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode($"list").asc),
-    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+    "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
   )
 
   errorTest(
@@ -557,20 +551,6 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
-    "OFFSET clause is outermost node",
-    testRelation.offset(Literal(10, IntegerType)),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause is found to be the outermost node." :: Nil
-  )
-
-  errorTest(
-    "OFFSET clause in other node",
-    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
-    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
-      " clause found in: Filter." :: Nil
-  )
-
-  errorTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
     "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
@@ -581,15 +561,16 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "more than one generators in SELECT",
     listRelation.select(Explode($"list"), Explode($"list")),
-    "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(list)", "explode(list)"""" :: Nil
   )
 
   errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "Only one generator allowed per select clause but found 2: " +
-      "explode(array(min(a))), explode(array(max(a)))" :: Nil
+    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+      """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
 
   errorTest(
@@ -849,7 +830,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "Column 'bad_column' does not exist. Did you mean one of the following? [a, b, c, d, e]"
+    "[UNRESOLVED_COLUMN] A column or function parameter with name `bad_column` cannot be " +
+      "resolved. Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"
       :: Nil)
 
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {

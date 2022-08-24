@@ -360,12 +360,17 @@ private[storage] class BlockInfoManager extends Logging {
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)
       } else {
-        assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
-        info.readerCount -= 1
+        // There can be a race between unlock and releaseAllLocksForTask which causes negative
+        // reader counts. We need to check if the readLocksByTask per tasks are present, if they
+        // are not then we know releaseAllLocksForTask has already cleaned up the read lock.
         val countsForTask = readLocksByTask.get(taskAttemptId)
-        val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
-        assert(newPinCountForTask >= 0,
-          s"Task $taskAttemptId release lock on block $blockId more times than it acquired it")
+        if (countsForTask != null) {
+          assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
+          info.readerCount -= 1
+          val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
+          assert(newPinCountForTask >= 0,
+            s"Task $taskAttemptId release lock on block $blockId more times than it acquired it")
+        }
       }
       condition.signalAll()
     }

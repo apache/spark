@@ -184,6 +184,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Also, the data to process in the next trigger is added *before* starting the stream in
     // Trigger.Once to ensure that first and only trigger picks up the new data.
 
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
+
     testStream(aggWithWatermark)(
       StartStream(Trigger.Once),  // to make sure the query is not running when adding data 1st time
       awaitTermination(),
@@ -261,28 +263,24 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // Offset log should have watermark recorded as 5.
       */
 
-      StartStream(Trigger.Once),
+      StartStream(Trigger.AvailableNow),
       awaitTermination(),
 
       AddData(inputData, 25),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer(),
-      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5),
-      // watermark should be updated to 25 - 10 = 15
+      CheckNewAnswer((10, 3)), // watermark should be updated to 25 - 10 = 15
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer((10, 3)),   // watermark = 15 is used to generate this
-      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 15),
-      // watermark should be updated to 50 - 10 = 40
+      CheckNewAnswer((15, 1), (25, 1)), // watermark should be updated to 50 - 10 = 40
 
       AddData(inputData, 50),
-      StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
+      StartStream(Trigger.AvailableNow, checkpointLocation = checkpointDir.getAbsolutePath),
       awaitTermination(),
-      CheckNewAnswer((15, 1), (25, 1)), // watermark = 40 is used to generate this
-      assertEventStats(min = 50, max = 50, avg = 50, wtrmark = 40))
+      CheckNewAnswer()
+    )
   }
 
   test("append mode") {

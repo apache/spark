@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -29,7 +27,7 @@ import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _

@@ -53,11 +53,12 @@ object ArrayType extends AbstractDataType {
  * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
- * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
- * array elements. The field of `containsNull` is used to specify if the array has `null` values.
+ * `containsNull: Boolean`.
+ * The field of `elementType` is used to specify the type of array elements.
+ * The field of `containsNull` is used to specify if the array can have `null` values.
  *
  * @param elementType The data type of values.
- * @param containsNull Indicates if values have `null` values
+ * @param containsNull Indicates if the array can have `null` values
  *
  * @since 1.3.0
  */
@@ -139,11 +140,11 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
         i += 1
       }
       if (leftArray.numElements() < rightArray.numElements()) {
-        return -1
+        -1
       } else if (leftArray.numElements() > rightArray.numElements()) {
-        return 1
+        1
       } else {
-        return 0
+        0
       }
     }
   }

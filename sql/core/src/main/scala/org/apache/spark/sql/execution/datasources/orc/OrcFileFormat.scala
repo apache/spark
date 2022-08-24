@@ -33,10 +33,9 @@ import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -80,12 +79,14 @@ class OrcFileFormat
     conf.asInstanceOf[JobConf]
       .setOutputFormat(classOf[org.apache.orc.mapred.OrcOutputFormat[OrcStruct]])
 
+    val batchSize = sparkSession.sessionState.conf.orcVectorizedWriterBatchSize
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, dataSchema, context)
+        new OrcOutputWriter(path, dataSchema, context, batchSize)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -134,7 +135,6 @@ class OrcFileFormat
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
-    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -153,10 +153,9 @@ class OrcFileFormat
       } else {
         // ORC predicate pushdown
         if (orcFilterPushDown && filters.nonEmpty) {
-          OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
-            OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-              OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
-            }
+          val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
+          OrcFilters.createFilter(fileSchema, filters).foreach { f =>
+            OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
           }
         }
 

@@ -61,14 +61,14 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(s"Failed to create index $indexName in $name",
         JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
-          conn, indexName, name, columns, columnsProperties, properties, jdbcOptions)
+          conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
     }
   }
 
   override def indexExists(indexName: String): Boolean = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
-      JdbcUtils.indexExists(conn, indexName, name, jdbcOptions)
+      JdbcUtils.indexExists(conn, indexName, ident, jdbcOptions)
     }
   }
 
@@ -76,14 +76,14 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(s"Failed to drop index $indexName in $name",
         JdbcDialects.get(jdbcOptions.url)) {
-        JdbcUtils.dropIndex(conn, indexName, name, jdbcOptions)
+        JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }
   }
 
   override def listIndexes(): Array[TableIndex] = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
-      JdbcUtils.listIndexes(conn, name, jdbcOptions)
+      JdbcUtils.listIndexes(conn, ident, jdbcOptions)
     }
   }
 }

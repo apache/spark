@@ -435,6 +435,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
     checkAnswer(
+      df1.select(array_sort(col("a"), (x, y) => call_udf("fAsc", x, y))),
+      Seq(
+        Row(Seq(1, 2, 2, 3, 5)))
+    )
+
+    checkAnswer(
+      df1.select(array_sort(col("a"), (x, y) => call_udf("fDesc", x, y))),
+      Seq(
+        Row(Seq(5, 3, 2, 2, 1)))
+    )
+
+    checkAnswer(
       df1.selectExpr("array_sort(a, (x, y) -> fAsc(x, y))"),
       Seq(
         Row(Seq(1, 2, 2, 3, 5)))
@@ -448,12 +460,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
     checkAnswer(
+      df2.select(array_sort(col("a"), (x, y) => call_udf("fString", x, y))),
+      Seq(
+        Row(Seq("dc", "bc", "ab")))
+    )
+
+    checkAnswer(
       df2.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
       Seq(
         Row(Seq("dc", "bc", "ab")))
     )
 
     val df3 = Seq(Array[String]("a", "abcd", "abc")).toDF("a")
+    checkAnswer(
+      df3.select(array_sort(col("a"), (x, y) => call_udf("fStringLength", x, y))),
+      Seq(
+        Row(Seq("a", "abc", "abcd")))
+    )
+
     checkAnswer(
       df3.selectExpr("array_sort(a, (x, y) -> fStringLength(x, y))"),
       Seq(
@@ -463,12 +487,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4),
       Array(1, 2)), "x")).toDF("a", "b")
     checkAnswer(
+      df4.select(array_sort(col("a"), (x, y) => call_udf("fAsc", size(x), size(y)))),
+      Seq(
+        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
+    )
+
+    checkAnswer(
       df4.selectExpr("array_sort(a, (x, y) -> fAsc(cardinality(x), cardinality(y)))"),
       Seq(
         Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
     )
 
     val df5 = Seq(Array[String]("bc", null, "ab", "dc")).toDF("a")
+    checkAnswer(
+      df5.select(array_sort(col("a"), (x, y) => call_udf("fString", x, y))),
+      Seq(
+        Row(Seq("dc", "bc", "ab", null)))
+    )
+
     checkAnswer(
       df5.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
       Seq(
@@ -484,6 +520,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-38130: array_sort with lambda of non-orderable items") {
     val df6 = Seq((Array[Map[String, Int]](Map("a" -> 1), Map("b" -> 2, "c" -> 3),
       Map()), "x")).toDF("a", "b")
+    checkAnswer(
+      df6.select(array_sort(col("a"), (x, y) => size(x) - size(y))),
+      Seq(
+        Row(Seq[Map[String, Int]](Map(), Map("a" -> 1), Map("b" -> 2, "c" -> 3))))
+    )
+
     checkAnswer(
       df6.selectExpr("array_sort(a, (x, y) -> cardinality(x) - cardinality(y))"),
       Seq(
@@ -2437,8 +2479,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
-    assert(ex3.getErrorClass == "MISSING_COLUMN")
-    assert(ex3.messageParameters.head == "a")
+    assert(ex3.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex3.messageParameters.head == "`a`")
   }
 
   test("map_filter") {
@@ -2509,8 +2551,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4.messageParameters.head == "`a`")
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2669,8 +2711,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
     }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4.messageParameters.head == "`a`")
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2802,8 +2844,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
     }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4.messageParameters.head == "`a`")
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2949,14 +2991,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4.messageParameters.head == "`a`")
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
-    assert(ex4a.getErrorClass == "MISSING_COLUMN")
-    assert(ex4a.messageParameters.head == "a")
+    assert(ex4a.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4a.messageParameters.head == "`a`")
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -3133,8 +3175,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
-    assert(ex5.getErrorClass == "MISSING_COLUMN")
-    assert(ex5.messageParameters.head == "a")
+    assert(ex5.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex5.messageParameters.head == "`a`")
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3687,8 +3729,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    assert(ex4.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(ex4.messageParameters.head == "`a`")
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

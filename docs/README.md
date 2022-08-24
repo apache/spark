@@ -59,9 +59,9 @@ See also https://github.com/sphinx-doc/sphinx/issues/7551.
 TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
 See also https://issues.apache.org/jira/browse/SPARK-35375.
 -->
-
+Run the following command from $SPARK_HOME:
 ```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc sphinx-plotly-directive 'jinja2<3.0.0'
+$ sudo pip install -r dev/requirements.txt
 ```
 
 ### R API Documentation (Optional)

@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException, SparkNoSuchElementException}
+import org.apache.spark._
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.{Cast, CheckOverflowInTableInsert, Literal}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
@@ -26,102 +28,151 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
 
-  test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
-    checkErrorClass(
+  test("CAST_OVERFLOW: from timestamp to int") {
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
       },
-      errorClass = "CAST_CAUSES_OVERFLOW",
-      msg =
-        "Casting TIMESTAMP '9999-12-.*.56789' to \"INT\" causes overflow. " +
-        "To return NULL instead, use 'try_cast'. " +
-        s"If necessary set $ansiConf to false to bypass this error.",
-      sqlState = Some("22005"),
-      matchMsg = true)
+      errorClass = "CAST_OVERFLOW",
+      parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
+        "sourceType" -> "\"TIMESTAMP\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> ansiConf),
+      sqlState = "22005")
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select 6/0").collect()
       },
       errorClass = "DIVIDE_BY_ZERO",
-      msg =
-        "Division by zero. To return NULL instead, use `try_divide`. If necessary set " +
-        s"$ansiConf to false (except for ANSI interval type) to bypass this error." +
-        """
-          |== SQL(line 1, position 7) ==
-          |select 6/0
-          |       ^^^
-          |""".stripMargin,
-      sqlState = Some("22012"))
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "6/0", start = 7, stop = 9))
+  }
+
+  test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select interval 1 day / 0").collect()
+      },
+      errorClass = "INTERVAL_DIVIDED_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map.empty[String, String],
+      context = ExpectedContext(fragment = "interval 1 day / 0", start = 7, stop = 24))
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkDateTimeException] {
         sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
       },
       errorClass = "INVALID_FRACTION_OF_SECOND",
-      msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
-        s"If necessary set $ansiConf to false to bypass this error. ",
-      sqlState = Some("22023"))
+      sqlState = "22023",
+      parameters = Map("ansiConfig" -> ansiConf))
   }
 
-  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
-    checkErrorClass(
+  test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
+    checkError(
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
-      msg =
-        "Decimal(expanded, 66666666666666.666, 17, 3) cannot be represented as Decimal(8, 1). " +
-        s"If necessary set $ansiConf to false to bypass this error." +
-        """
-          |== SQL(line 1, position 7) ==
-          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin,
-      sqlState = Some("22005"))
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      sqlState = "22005",
+      parameters = Map(
+        "value" -> "66666666666666.666",
+        "precision" -> "8",
+        "scale" -> "1",
+        "config" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "CAST('66666666666666.666' AS DECIMAL(8, 1))",
+        start = 7,
+        stop = 49))
   }
 
   test("INVALID_ARRAY_INDEX: get element from array") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX",
-      msg = "The index 8 is out of bounds. The array has 5 elements. " +
-        s"If necessary set $ansiConf to false to bypass this error."
-    )
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
-    checkErrorClass(
+    checkError(
       exception = intercept[SparkArrayIndexOutOfBoundsException] {
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      msg = "The index 8 is out of bounds. The array has 5 elements. " +
-        "To return NULL instead, use `try_element_at`. " +
-        s"If necessary set $ansiConf to false to bypass this error."
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
+        start = 7,
+        stop = 41))
+  }
+
+  test("CAST_INVALID_INPUT: cast string to double") {
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        sql("select CAST('111111111111xe23' AS DOUBLE)").collect()
+      },
+      errorClass = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'111111111111xe23'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
+      context = ExpectedContext(
+        fragment = "CAST('111111111111xe23' AS DOUBLE)",
+        start = 7,
+        stop = 40))
+  }
+
+  test("CANNOT_PARSE_TIMESTAMP: parse string to timestamp") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select to_timestamp('abc', 'yyyy-MM-dd HH:mm:ss')").collect()
+      },
+      errorClass = "CANNOT_PARSE_TIMESTAMP",
+      parameters = Map(
+        "message" -> "Text 'abc' could not be parsed at index 0",
+        "ansiConfig" -> ansiConf)
     )
   }
 
-  test("MAP_KEY_DOES_NOT_EXIST: key does not exist in element_at") {
-    val e = intercept[SparkNoSuchElementException] {
-      sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
+  test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
+    Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(7,2)").foreach { targetType =>
+      val tableName = "overflowTable"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
+        checkError(
+          exception = intercept[SparkException] {
+            sql(s"insert into $tableName values 12345678901234567890D")
+          }.getCause.getCause.getCause.asInstanceOf[SparkThrowable],
+          errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+          parameters = Map(
+            "sourceType" -> "\"DOUBLE\"",
+            "targetType" -> ("\"" + targetType + "\""),
+            "columnName" -> "`i`")
+        )
+      }
     }
-    checkErrorClass(
-      exception = e,
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      msg = "Key 3 does not exist. To return NULL instead, use 'try_element_at'. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
-        """
-          |== SQL(line 1, position 7) ==
-          |select element_at(map(1, 'a', 2, 'b'), 3)
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin
+  }
+
+  test("SPARK-39981: interpreted CheckOverflowInTableInsert should throw an exception") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        CheckOverflowInTableInsert(
+          Cast(Literal.apply(12345678901234567890D), ByteType), "col").eval(null)
+      }.asInstanceOf[SparkThrowable],
+      errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
+      parameters = Map(
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> ("\"TINYINT\""),
+        "columnName" -> "`col`")
     )
   }
 }

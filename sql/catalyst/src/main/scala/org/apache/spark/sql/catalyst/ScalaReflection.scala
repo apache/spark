@@ -990,11 +990,7 @@ trait ScalaReflection extends Logging {
   }
 
   private def isValueClass(tpe: Type): Boolean = {
-    tpe.typeSymbol.asClass.isDerivedValueClass
-  }
-
-  private def isTypeParameter(tpe: Type): Boolean = {
-    tpe.typeSymbol.isParameter
+    tpe.typeSymbol.isClass && tpe.typeSymbol.asClass.isDerivedValueClass
   }
 
   /** Returns the name and type of the underlying parameter of value class `tpe`. */
@@ -1015,15 +1011,11 @@ trait ScalaReflection extends Logging {
     val params = constructParams(dealiasedTpe)
     params.map { p =>
       val paramTpe = p.typeSignature
-      if (isTypeParameter(paramTpe)) {
-        // if there are type variables to fill in, do the substitution
-        // (SomeClass[T] -> SomeClass[Int])
-        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
-      } else if (isValueClass(paramTpe)) {
+      if (isValueClass(paramTpe)) {
         // Replace value class with underlying type
         p.name.decodedName.toString -> getUnderlyingTypeOfValueClass(paramTpe)
       } else {
-        p.name.decodedName.toString -> paramTpe
+        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
       }
     }
   }

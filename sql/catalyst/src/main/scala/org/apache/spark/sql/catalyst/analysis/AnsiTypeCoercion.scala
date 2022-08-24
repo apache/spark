@@ -74,6 +74,7 @@ import org.apache.spark.sql.types._
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
       InConversion ::
@@ -223,7 +224,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
+  override def canCast(from: DataType, to: DataType): Boolean = Cast.canAnsiCast(from, to)
 
   object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {

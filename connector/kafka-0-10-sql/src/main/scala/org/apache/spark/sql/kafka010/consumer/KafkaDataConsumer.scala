@@ -267,20 +267,18 @@ private[kafka010] class KafkaDataConsumer(
    * within [offset, untilOffset).
    *
    * This method also will try its best to detect data loss. If `failOnDataLoss` is `true`, it will
-   * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `false`, this
-   * method will try to fetch next available record within [offset, untilOffset).
-   *
-   * When this method tries to skip offsets due to either invisible messages or data loss and
-   * reaches `untilOffset`, it will return `null`.
+   * throw an exception when it detects an unavailable offset. If `failOnDataLoss` is `false`, this
+   * method will try to fetch next available record within [offset, untilOffset). When this method
+   * reaches `untilOffset` and still can't find an available record, it will return `null`.
    *
    * @param offset         the offset to fetch.
    * @param untilOffset    the max offset to fetch. Exclusive.
    * @param pollTimeoutMs  timeout in milliseconds to poll data from Kafka.
    * @param failOnDataLoss When `failOnDataLoss` is `true`, this method will either return record at
-   *                       offset if available, or throw exception.when `failOnDataLoss` is `false`,
-   *                       this method will either return record at offset if available, or return
-   *                       the next earliest available record less than untilOffset, or null. It
-   *                       will not throw any exception.
+   *                       offset if available, or throw an exception. When `failOnDataLoss` is
+   *                       `false`, this method will return record at offset if available, or return
+   *                       the record at the next earliest available offset that is less than
+   *                       untilOffset, otherwise null.
    */
   def get(
       offset: Long,
@@ -298,9 +296,10 @@ private[kafka010] class KafkaDataConsumer(
       s"requested $offset")
 
     // The following loop is basically for `failOnDataLoss = false`. When `failOnDataLoss` is
-    // `false`, first, we will try to fetch the record at `offset`. If no such record exists, then
-    // we will move to the next available offset within `[offset, untilOffset)` and retry.
-    // If `failOnDataLoss` is `true`, the loop body will be executed only once.
+    // `false`, we will try to fetch the record at `offset`, if the record does not exist, we will
+    // try to fetch next available record within [offset, untilOffset).
+    // If `failOnDataLoss` is `true`, the loop body will be executed only once, either return the
+    // record at `offset` or throw an exception when the record does not exist.
     var toFetchOffset = offset
     var fetchedRecord: FetchedRecord = null
     // We want to break out of the while loop on a successful fetch to avoid using "return"
@@ -452,7 +451,7 @@ private[kafka010] class KafkaDataConsumer(
   /**
    * Get the fetched record for the given offset if available.
    *
-   * If the record is invisible (either a  transaction message, or an aborted message when the
+   * If the record is invisible (either a transaction message, or an aborted message when the
    * consumer's `isolation.level` is `read_committed`), it will return a `FetchedRecord` with the
    * next offset to fetch.
    *

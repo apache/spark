@@ -61,6 +61,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             self.assert_eq(psdf.index, pdf.index)
             self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
 
+        self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
+        with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
+            bool(ps.Index([1]))
+
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
         psser = ps.from_pandas(pser)
@@ -89,6 +93,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index(psidx), pd.Index(pidx))
         self.assert_eq(ps.Index(psidx, dtype="float"), pd.Index(pidx, dtype="float"))
         self.assert_eq(ps.Index(psidx, name="x"), pd.Index(pidx, name="x"))
+        self.assert_eq(ps.Index(psidx, copy=True), pd.Index(pidx, copy=True))
 
         self.assert_eq(ps.Int64Index(psidx), pd.Int64Index(pidx))
         self.assert_eq(ps.Float64Index(psidx), pd.Float64Index(pidx))
@@ -1512,6 +1517,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
         self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
         self.assert_eq(psidx1.union(psidx3), pidx1.union(pidx3))
+        # Deprecated case, but adding to track if pandas stop supporting union
+        # as a set operation. It should work fine until stop supporting anyway.
+        self.assert_eq(pidx1 | pidx2, psidx1 | psidx2)
 
         self.assert_eq(psidx1.union([3, 4, 5, 6]), pidx1.union([3, 4, 5, 6]), almost=True)
         self.assert_eq(psidx2.union([1, 2, 3, 4]), pidx2.union([1, 2, 3, 4]), almost=True)
@@ -1827,6 +1835,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(
             (pidx + 1).intersection(pidx_other), (psidx + 1).intersection(psidx_other).sort_values()
         )
+        # Deprecated case, but adding to track if pandas stop supporting intersection
+        # as a set operation. It should work fine until stop supporting anyway.
+        self.assert_eq(pidx & pidx_other, (psidx & psidx_other).sort_values())
 
         pidx_other_different_name = pd.Index([3, 4, 5, 6], name="Databricks")
         psidx_other_different_name = ps.from_pandas(pidx_other_different_name)

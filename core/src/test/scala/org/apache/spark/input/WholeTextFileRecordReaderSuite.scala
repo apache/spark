@@ -26,17 +26,15 @@ import scala.collection.immutable.IndexedSeq
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
 
 /**
  * Tests the correctness of
  * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
-class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class WholeTextFileRecordReaderSuite extends SparkFunSuite {
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 

@@ -81,10 +81,8 @@ class MissingPandasLikeExpanding:
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    kurt = _unsupported_function_expanding("kurt")
     median = _unsupported_function_expanding("median")
     quantile = _unsupported_function_expanding("quantile")
-    skew = _unsupported_function_expanding("skew")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -102,10 +100,8 @@ class MissingPandasLikeRolling:
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    kurt = _unsupported_function_rolling("kurt")
     median = _unsupported_function_rolling("median")
     quantile = _unsupported_function_rolling("quantile")
-    skew = _unsupported_function_rolling("skew")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -123,10 +119,8 @@ class MissingPandasLikeExpandingGroupby:
     apply = _unsupported_function_expanding("apply")
     corr = _unsupported_function_expanding("corr")
     cov = _unsupported_function_expanding("cov")
-    kurt = _unsupported_function_expanding("kurt")
     median = _unsupported_function_expanding("median")
     quantile = _unsupported_function_expanding("quantile")
-    skew = _unsupported_function_expanding("skew")
     validate = _unsupported_function_expanding("validate")
 
     exclusions = _unsupported_property_expanding("exclusions")
@@ -144,10 +138,8 @@ class MissingPandasLikeRollingGroupby:
     apply = _unsupported_function_rolling("apply")
     corr = _unsupported_function_rolling("corr")
     cov = _unsupported_function_rolling("cov")
-    kurt = _unsupported_function_rolling("kurt")
     median = _unsupported_function_rolling("median")
     quantile = _unsupported_function_rolling("quantile")
-    skew = _unsupported_function_rolling("skew")
     validate = _unsupported_function_rolling("validate")
 
     exclusions = _unsupported_property_rolling("exclusions")
@@ -157,6 +149,18 @@ class MissingPandasLikeRollingGroupby:
 
 
 class MissingPandasLikeExponentialMoving:
+    sum = _unsupported_function_exponential_moving("sum")
+    var = _unsupported_function_exponential_moving("var")
+    std = _unsupported_function_exponential_moving("std")
+    cov = _unsupported_function_exponential_moving("cov")
+    corr = _unsupported_function_exponential_moving("corr")
+
+    adjust = _unsupported_property_exponential_moving("adjust")
+    axis = _unsupported_property_exponential_moving("axis")
+    method = _unsupported_property_exponential_moving("method")
+
+
+class MissingPandasLikeExponentialMovingGroupby:
     sum = _unsupported_function_exponential_moving("sum")
     var = _unsupported_function_exponential_moving("var")
     std = _unsupported_function_exponential_moving("std")

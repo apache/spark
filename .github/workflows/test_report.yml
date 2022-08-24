@@ -20,7 +20,7 @@
 name: Report test results
 on:
   workflow_run:
-    workflows: ["Build and test", "Build and test (ANSI)"]
+    workflows: ["Build"]
     types:
       - completed
 

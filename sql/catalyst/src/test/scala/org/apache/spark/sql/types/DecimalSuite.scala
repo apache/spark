@@ -194,6 +194,13 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100) % Decimal(0) === null)
   }
 
+  test("longVal arithmetic") {
+    assert(Decimal(10, 2, 0) + Decimal(10, 2, 0) === Decimal(20, 3, 0))
+    assert(Decimal(10, 2, 0) + Decimal(90, 2, 0) === Decimal(100, 3, 0))
+    assert(Decimal(10, 2, 0) - Decimal(-10, 2, 0) === Decimal(20, 3, 0))
+    assert(Decimal(10, 2, 0) - Decimal(-90, 2, 0) === Decimal(100, 3, 0))
+  }
+
   // regression test for SPARK-8359
   test("accurate precision after multiplication") {
     val decimal = (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal
@@ -284,8 +291,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     assert(Decimal.fromString(UTF8String.fromString("str")) === null)
     val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
-    assert(e.getMessage.contains("Invalid input syntax for type " +
-      s""""${DecimalType.USER_DEFAULT.sql}": 'str'"""))
+    assert(e.getMessage.contains(
+      """The value 'str' of the type "STRING" cannot be cast to "DECIMAL(10,0)""""))
   }
 
   test("SPARK-35841: Casting string to decimal type doesn't work " +

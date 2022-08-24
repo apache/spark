@@ -28,12 +28,10 @@ import scala.language.reflectiveCalls
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
@@ -48,8 +46,8 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 }
 
-class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
-    with Logging with MockitoSugar with Eventually {
+class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
+  with MockitoSugar with Eventually {
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -2085,6 +2083,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskSetManager != null)
     assert(0 == taskSetManager.tasksSuccessful)
     assert(!taskSetManager.successful(taskDescriptions(0).index))
+  }
+
+  Seq(true, false).foreach { hasLaunched =>
+    val testName = if (hasLaunched) {
+      "executor lost could fail task set if task is running"
+    } else {
+      "executor lost should not fail task set if task is launching"
+    }
+    test(s"SPARK-39955: $testName") {
+      val taskCpus = 2
+      val taskScheduler = setupSchedulerWithMaster(
+        s"local[$taskCpus]",
+        config.TASK_MAX_FAILURES.key -> "1")
+      taskScheduler.initialize(new FakeSchedulerBackend)
+      // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+      new DAGScheduler(sc, taskScheduler) {
+        override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+        override def executorAdded(execId: String, host: String): Unit = {}
+      }
+
+      val workerOffer = IndexedSeq(
+        WorkerOffer("executor0", "host0", 1))
+      val taskSet = FakeTask.createTaskSet(1)
+      // submit tasks, offer resources, task gets scheduled
+      taskScheduler.submitTasks(taskSet)
+      var tsm: Option[TaskSetManager] = None
+      eventually(timeout(10.seconds)) {
+        tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId)
+        assert(tsm.isDefined && !tsm.get.isZombie)
+      }
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffer)
+      assert(1 === taskDescriptions.length)
+      assert(taskScheduler.runningTasksByExecutors("executor0") === 1)
+      if (hasLaunched) {
+        taskScheduler.statusUpdate(
+          0,
+          TaskState.RUNNING,
+          ByteBuffer.allocate(0))
+        eventually(timeout(10.seconds)) {
+          assert(!tsm.get.taskInfos(0).launching)
+        }
+      }
+      taskScheduler.executorLost("executor0", ExecutorProcessLost())
+      eventually(timeout(10.seconds)) {
+        assert(tsm.get.isZombie === hasLaunched)
+      }
+    }
   }
 
   /**

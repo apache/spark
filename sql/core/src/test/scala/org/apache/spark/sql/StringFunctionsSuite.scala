@@ -346,53 +346,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("???hi", "hi???", "h", "h"))
   }
 
-  test("string parse_url function") {
-
-    def testUrl(url: String, expected: Row): Unit = {
-      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
-        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
-        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
-        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
-        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
-        "parse_url(url, 'QUERY', 'query')"), expected)
-    }
-
-    testUrl(
-      "http://userinfo@spark.apache.org/path?query=1#Ref",
-      Row("spark.apache.org", "/path", "query=1", "Ref",
-        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
-
-    testUrl(
-      "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
-      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
-        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
-        "use%20r:pas%20s", "x%20y"))
-
-    testUrl(
-      "http://user:pass@host",
-      Row("host", "", null, null, "http", "", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/",
-      Row("host", "/", null, null, "http", "/", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/?#",
-      Row("host", "/", "", "", "http", "/?", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/file;param?query;p2",
-      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
-        "user:pass@host", "user:pass", null))
-
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      testUrl(
-        "inva lid://user:pass@host/file;param?query;p2",
-        Row(null, null, null, null, null, null, null, null, null))
-    }
-
-  }
-
   test("string repeat function") {
     val df = Seq(("hi", 2)).toDF("a", "b")
 

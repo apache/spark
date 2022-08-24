@@ -410,7 +410,7 @@ class GenTPCDSDataConfig(args: Array[String]) {
  *
  * To run this:
  * {{{
- *   build/sbt "sql/test:runMain <this class> --dsdgenDir <path> --location <path> --scaleFactor 1"
+ *   build/sbt "sql/Test/runMain <this class> --dsdgenDir <path> --location <path> --scaleFactor 1"
  * }}}
  */
 object GenTPCDSData {

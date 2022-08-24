@@ -26,7 +26,7 @@ TakeOrderedAndProject [i_category,i_class,i_item_id,i_item_desc,revenueratio,i_c
                                                   Filter [ws_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.web_sales [ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                        Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
                                                           SubqueryBroadcast [d_date_sk] #1
                                                             BroadcastExchange #4
                                                               WholeStageCodegen (1)
@@ -34,7 +34,7 @@ TakeOrderedAndProject [i_category,i_class,i_item_id,i_item_desc,revenueratio,i_c
                                                                   Filter [d_date,d_date_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.date_dim [d_date_sk,d_date]
+                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
                                       InputAdapter
                                         WholeStageCodegen (4)
                                           Sort [i_item_sk]
@@ -44,6 +44,6 @@ TakeOrderedAndProject [i_category,i_class,i_item_id,i_item_desc,revenueratio,i_c
                                                   Filter [i_category,i_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.item [i_item_sk,i_item_id,i_item_desc,i_current_price,i_class,i_category]
+                                                        Scan parquet spark_catalog.default.item [i_item_sk,i_item_id,i_item_desc,i_current_price,i_class,i_category]
                                   InputAdapter
                                     ReusedExchange [d_date_sk] #4

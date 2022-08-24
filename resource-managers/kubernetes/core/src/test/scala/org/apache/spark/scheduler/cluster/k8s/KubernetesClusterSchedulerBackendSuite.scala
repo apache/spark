@@ -131,6 +131,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       pollEvents)
   }
 
+  after {
+    ResourceProfile.clearDefaultProfile()
+  }
+
   test("Start all components") {
     schedulerBackendUnderTest.start()
     verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))

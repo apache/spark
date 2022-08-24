@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.{broadcast, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -189,7 +189,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def execute(): RDD[InternalRow] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
     doExecute()
   }
@@ -202,7 +202,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
     doExecuteBroadcast()
   }
@@ -216,7 +216,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw SparkException.internalError("A canonicalized plan is not supposed to be executed.")
     }
     doExecuteColumnar()
   }
@@ -318,7 +318,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * when it is no longer needed. This allows input formats to be able to reuse batches if needed.
    */
   protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
+    throw SparkException.internalError(s"Internal Error ${this.getClass} has column support" +
       s" mismatch:\n${this}")
   }
 

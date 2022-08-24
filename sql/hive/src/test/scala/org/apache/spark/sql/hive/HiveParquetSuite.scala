@@ -123,8 +123,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
              |)
           """.stripMargin)
       }
-      assert(ex.getErrorClass == "MISSING_COLUMN")
-      assert(ex.messageParameters.head == "c3")
+      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(ex.messageParameters.head == "`c3`")
     }
   }
 

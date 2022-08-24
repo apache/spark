@@ -50,10 +50,12 @@ build_script:
   # See SPARK-28759.
   # Ideally we should check the tests related to Hive in SparkR as well (SPARK-31745).
   - cmd: set SBT_MAVEN_PROFILES=-Psparkr
-  - cmd: set SBT_OPTS=-Djna.nosys=true -Dfile.encoding=UTF-8 -Xms4096m -Xms4096m -XX:ReservedCodeCacheSize=128m
+  - cmd: set SBT_OPTS=-Djna.nosys=true -Dfile.encoding=UTF-8 -XX:ReservedCodeCacheSize=128m
+  - cmd: set JAVA_OPTS=-Xms4096m -Xms4096m
   - cmd: sbt package
   - cmd: set SBT_MAVEN_PROFILES=
   - cmd: set SBT_OPTS=
+  - cmd: set JAVA_OPTS=
 
 environment:
   NOT_CRAN: true

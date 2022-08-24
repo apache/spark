@@ -57,7 +57,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
           |}
       """.stripMargin
 
-      val reconstructedEvent = JsonProtocol.sparkEventFromJson(parse(SQLExecutionStartJsonString))
+      val reconstructedEvent = JsonProtocol.sparkEventFromJson(SQLExecutionStartJsonString)
       if (newExecutionStartEvent) {
         val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail",
           "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
@@ -79,8 +79,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     event.executionName = Some("test")
     event.qe = qe
     event.executionFailure = Some(new RuntimeException("test"))
-    val json = JsonProtocol.sparkEventToJson(event)
-    assert(json == parse(
+    val json = JsonProtocol.sparkEventToJsonString(event)
+    assert(parse(json) == parse(
       """
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",

@@ -104,3 +104,45 @@ select cast('a' as timestamp_ntz);
 
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
+
+-- cast ANSI intervals to integrals
+select cast(interval '1' year as tinyint);
+select cast(interval '-10-2' year to month as smallint);
+select cast(interval '1000' month as int);
+select cast(interval -'10.123456' second as tinyint);
+select cast(interval '23:59:59' hour to second as smallint);
+select cast(interval -'1 02:03:04.123' day to second as int);
+select cast(interval '10' day as bigint);
+
+select cast(interval '-1000' month as tinyint);
+select cast(interval '1000000' second as smallint);
+
+-- cast integrals to ANSI intervals
+select cast(1Y as interval year);
+select cast(-122S as interval year to month);
+select cast(ym as interval year to month) from values(-122S) as t(ym);
+select cast(1000 as interval month);
+select cast(-10L as interval second);
+select cast(100Y as interval hour to second);
+select cast(dt as interval hour to second) from values(100Y) as t(dt);
+select cast(-1000S as interval day to second);
+select cast(10 as interval day);
+
+select cast(2147483647 as interval year);
+select cast(-9223372036854775808L as interval day);
+
+-- cast ANSI intervals to decimals
+select cast(interval '-1' year as decimal(10, 0));
+select cast(interval '1.000001' second as decimal(10, 6));
+select cast(interval '08:11:10.001' hour to second as decimal(10, 4));
+select cast(interval '1 01:02:03.1' day to second as decimal(8, 1));
+select cast(interval '10.123' second as decimal(4, 2));
+select cast(interval '10.005' second as decimal(4, 2));
+select cast(interval '10.123' second as decimal(5, 2));
+select cast(interval '10.123' second as decimal(1, 0));
+
+-- cast decimals to ANSI intervals
+select cast(10.123456BD as interval day to second);
+select cast(80.654321BD as interval hour to minute);
+select cast(-10.123456BD as interval year to month);
+select cast(10.654321BD as interval month);

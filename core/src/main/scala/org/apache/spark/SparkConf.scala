@@ -606,6 +606,8 @@ private[spark] object SparkConf extends Logging {
         "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.numRetries", "2.2.0", "Not used anymore"),
+      DeprecatedConfig("spark.rpc.retry.wait", "2.2.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
         "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
       DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
@@ -636,9 +638,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
-      DeprecatedConfig("spark.kubernetes.memoryOverheadFactor", "3.3.0",
-        "Please use spark.driver.memoryOverheadFactor and spark.executor.memoryOverheadFactor")
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -682,10 +682,6 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    RPC_NUM_RETRIES.key -> Seq(
-      AlternateConfig("spark.akka.num.retries", "1.4")),
-    RPC_RETRY_WAIT.key -> Seq(
-      AlternateConfig("spark.akka.retry.wait", "1.4")),
     RPC_ASK_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
     RPC_LOOKUP_TIMEOUT.key -> Seq(

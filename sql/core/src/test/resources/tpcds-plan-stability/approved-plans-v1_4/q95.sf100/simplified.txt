@@ -33,7 +33,7 @@ WholeStageCodegen (21)
                                                                 Filter [ca_state,ca_address_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                                                     Subquery #2
                                                       ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(web_site_sk, 42), 4, 32, 0, 0),bloomFilter,buf]
                                                         Exchange #4
@@ -43,7 +43,7 @@ WholeStageCodegen (21)
                                                                 Filter [web_company_name,web_site_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.web_site [web_site_sk,web_company_name]
+                                                                      Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
                                                     Subquery #3
                                                       ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 584392, 0, 0),bloomFilter,buf]
                                                         Exchange #5
@@ -53,10 +53,10 @@ WholeStageCodegen (21)
                                                                 Filter [d_date,d_date_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.date_dim [d_date_sk,d_date]
+                                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.web_sales [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit,ws_sold_date_sk]
+                                                        Scan parquet spark_catalog.default.web_sales [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit,ws_sold_date_sk]
                                     InputAdapter
                                       WholeStageCodegen (7)
                                         Project [ws_order_number]
@@ -71,7 +71,7 @@ WholeStageCodegen (21)
                                                           Filter [ws_order_number,ws_warehouse_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.web_sales [ws_warehouse_sk,ws_order_number,ws_sold_date_sk]
+                                                                Scan parquet spark_catalog.default.web_sales [ws_warehouse_sk,ws_order_number,ws_sold_date_sk]
                                             InputAdapter
                                               WholeStageCodegen (6)
                                                 Sort [ws_order_number]
@@ -94,7 +94,7 @@ WholeStageCodegen (21)
                                                           Filter [wr_order_number]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.web_returns [wr_order_number,wr_returned_date_sk]
+                                                                Scan parquet spark_catalog.default.web_returns [wr_order_number,wr_returned_date_sk]
                                             InputAdapter
                                               WholeStageCodegen (12)
                                                 Sort [ws_order_number]
@@ -112,7 +112,7 @@ WholeStageCodegen (21)
                                     Filter [ca_state,ca_address_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                          Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state]
                         InputAdapter
                           BroadcastExchange #9
                             WholeStageCodegen (18)
@@ -120,7 +120,7 @@ WholeStageCodegen (21)
                                 Filter [web_company_name,web_site_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.web_site [web_site_sk,web_company_name]
+                                      Scan parquet spark_catalog.default.web_site [web_site_sk,web_company_name]
                     InputAdapter
                       BroadcastExchange #10
                         WholeStageCodegen (19)
@@ -128,4 +128,4 @@ WholeStageCodegen (21)
                             Filter [d_date,d_date_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.date_dim [d_date_sk,d_date]
+                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]

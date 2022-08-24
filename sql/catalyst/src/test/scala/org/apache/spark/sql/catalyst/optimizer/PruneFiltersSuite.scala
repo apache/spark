@@ -42,8 +42,8 @@ class PruneFiltersSuite extends PlanTest {
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("Constraints of isNull + LeftOuter") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val query = x.where("x.b".attr.isNull).join(y, LeftOuter)
     val queryWithUselessFilter = query.where("x.b".attr.isNull)
@@ -72,8 +72,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Pruning multiple constraints in the same run") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
 
     val query = tr1
       .where("tr1.a".attr > 10 || "tr1.c".attr < 10)
@@ -92,8 +92,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Partial pruning") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
 
     // One of the filter condition does not exist in the constraints of its child
     // Thus, the filter is not removed
@@ -114,8 +114,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("No predicate is pruned") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val query = x.where("x.b".attr.isNull).join(y, LeftOuter)
     val queryWithExtraFilters = query.where("x.b".attr.isNotNull)
@@ -136,8 +136,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("No pruning when constraint propagation is disabled") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
 
     val query = tr1
       .where("tr1.a".attr > 10 || "tr1.c".attr < 10)
@@ -162,7 +162,7 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("SPARK-35273: CombineFilters support non-deterministic expressions") {
-    val x = testRelation.where(!$"a".attr.in(1, 3, 5)).subquery(Symbol("x"))
+    val x = testRelation.where(!$"a".attr.in(1, 3, 5)).subquery("x")
 
     comparePlans(
       Optimize.execute(x.where($"a".attr === 7 && Rand(10) > 0.1).analyze),

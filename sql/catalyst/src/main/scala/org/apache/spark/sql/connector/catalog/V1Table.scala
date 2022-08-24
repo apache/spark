@@ -74,15 +74,15 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 private[sql] object V1Table {
   def addV2TableProperties(v1Table: CatalogTable): Map[String, String] = {
     val external = v1Table.tableType == CatalogTableType.EXTERNAL
+    val managed = v1Table.tableType == CatalogTableType.MANAGED
 
     v1Table.properties ++
       v1Table.storage.properties.map { case (key, value) =>
         TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      (if (external) {
-        v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString)
-      } else None) ++
+      v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString) ++
+      (if (managed) Some(TableCatalog.PROP_IS_MANAGED_LOCATION -> "true") else None) ++
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)
   }

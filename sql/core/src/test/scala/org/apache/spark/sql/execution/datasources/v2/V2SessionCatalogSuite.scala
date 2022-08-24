@@ -850,7 +850,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
   test("loadNamespaceMetadata: fail missing namespace") {
     val catalog = newCatalog()
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.loadNamespaceMetadata(testNs)
     }
 

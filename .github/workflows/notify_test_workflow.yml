@@ -46,7 +46,7 @@ jobs:
             const params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
-              id: 'build_and_test.yml',
+              id: 'build_main.yml',
               branch: context.payload.pull_request.head.ref,
             }
             const check_run_params = {
@@ -69,7 +69,7 @@ jobs:
               // Assume that runs were not found.
             }
 
-            const name = 'Build and test'
+            const name = 'Build'
             const head_sha = context.payload.pull_request.head.sha
             let status = 'queued'
 
@@ -113,7 +113,7 @@ jobs:
 
               // Here we get check run ID to provide Check run view instead of Actions view, see also SPARK-37879.
               const check_runs = await github.request(check_run_endpoint, check_run_params)
-              const check_run_head = check_runs.data.check_runs.filter(r => r.name === "Configure jobs")[0]
+              const check_run_head = check_runs.data.check_runs.filter(r => r.name === "Run / Check changes")[0]
 
               if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
                 throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');

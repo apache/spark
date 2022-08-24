@@ -158,6 +158,7 @@ Computations / Descriptive Stats
    DataFrame.mean
    DataFrame.min
    DataFrame.median
+   DataFrame.mode
    DataFrame.pct_change
    DataFrame.prod
    DataFrame.product
@@ -260,6 +261,7 @@ Time series-related
 .. autosummary::
    :toctree: api/
 
+   DataFrame.resample
    DataFrame.shift
    DataFrame.first_valid_index
    DataFrame.last_valid_index

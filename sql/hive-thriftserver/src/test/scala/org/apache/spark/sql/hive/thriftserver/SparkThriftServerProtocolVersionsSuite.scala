@@ -40,8 +40,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
   def testExecuteStatementWithProtocolVersion(
       version: TProtocolVersion,
       sql: String)(f: HiveQueryResultSet => Unit): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
@@ -77,8 +77,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
   }
 
   def testGetInfoWithProtocolVersion(version: TProtocolVersion): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
     transport.open()
@@ -107,8 +107,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
       schema: String,
       tableNamePattern: String,
       tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
     transport.open()

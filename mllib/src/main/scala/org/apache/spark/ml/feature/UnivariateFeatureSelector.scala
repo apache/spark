@@ -164,7 +164,7 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
   @Since("3.1.1")
   override def fit(dataset: Dataset[_]): UnivariateFeatureSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
     var threshold = Double.NaN
     if (isSet(selectionThreshold)) {

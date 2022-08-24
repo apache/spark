@@ -38,8 +38,8 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp, toJavaTimestampNoRebase}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -150,6 +150,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
       case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
+      // This is a common case of timestamp without time zone. Most of the databases either only
+      // support TIMESTAMP type or use TIMESTAMP as an alias for TIMESTAMP WITHOUT TIME ZONE.
+      // Note that some dialects override this setting, e.g. as SQL Server.
+      case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
@@ -173,7 +177,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       sqlType: Int,
       precision: Int,
       scale: Int,
-      signed: Boolean): DataType = {
+      signed: Boolean,
+      isTimestampNTZ: Boolean): DataType = {
     val answer = sqlType match {
       // scalastyle:off
       case java.sql.Types.ARRAY         => null
@@ -215,6 +220,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
                                         => null
+      case java.sql.Types.TIMESTAMP
+        if isTimestampNTZ               => TimestampNTZType
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
                                         => null
@@ -243,7 +250,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect))
+        Some(getSchema(statement.executeQuery(), dialect,
+          isTimestampNTZ = options.inferTimestampNTZType))
       } catch {
         case _: SQLException => None
       } finally {
@@ -258,13 +266,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
    * @param alwaysNullable If true, all the columns are nullable.
+   * @param isTimestampNTZ If true, all timestamp columns are interpreted as TIMESTAMP_NTZ.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
       resultSet: ResultSet,
       dialect: JdbcDialect,
-      alwaysNullable: Boolean = false): StructType = {
+      alwaysNullable: Boolean = false,
+      isTimestampNTZ: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -306,7 +316,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-          getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+          getCatalystType(dataType, fieldSize, fieldScale, isSigned, isTimestampNTZ))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
@@ -472,6 +482,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
           row.update(pos, null)
         }
 
+    case TimestampNTZType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val t = rs.getTimestamp(pos + 1)
+        if (t != null) {
+          row.setLong(pos, DateTimeUtils.fromJavaTimestampNoRebase(t))
+        } else {
+          row.update(pos, null)
+        }
+
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
@@ -582,6 +601,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
+
+    case TimestampNTZType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
+        stmt.setTimestamp(pos + 1, toJavaTimestampNoRebase(micros))
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {
@@ -1009,14 +1033,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def createIndex(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options,
-      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
+      dialect.createIndex(indexName, tableIdent, columns, columnsProperties, properties))
   }
 
   /**
@@ -1025,10 +1049,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.indexExists(conn, indexName, tableName, options)
+    dialect.indexExists(conn, indexName, tableIdent, options)
   }
 
   /**
@@ -1037,10 +1061,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def dropIndex(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.dropIndex(indexName, tableName))
+    executeStatement(conn, options, dialect.dropIndex(indexName, tableIdent))
   }
 
   /**
@@ -1048,10 +1072,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.listIndexes(conn, tableName, options)
+    dialect.listIndexes(conn, tableIdent, options)
   }
 
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
@@ -1090,10 +1114,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def processIndexProperties(
       properties: util.Map[String, String],
-      catalogName: String): (String, Array[String]) = {
+      dialectName: String): (String, Array[String]) = {
     var indexType = ""
     val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
-    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
+    val supportedIndexTypeList = getSupportedIndexTypeList(dialectName)
 
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
@@ -1123,8 +1147,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     false
   }
 
-  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
-    catalogName match {
+  def getSupportedIndexTypeList(dialectName: String): Array[String] = {
+    dialectName match {
       case "mysql" => Array("BTREE", "HASH")
       case "postgresql" => Array("BTREE", "HASH", "BRIN")
       case _ => Array.empty

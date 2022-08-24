@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -307,6 +308,43 @@ trait AlterTableTests extends SharedSparkSession {
           StructField("x", DoubleType),
           StructField("y", DoubleType),
           StructField("z", DoubleType))))))
+    }
+  }
+
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD/ALTER COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = s"${catalogAndNamespace}table_name"
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
+
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+
+        assert(table.name === tableName)
+        assert(table.schema === new StructType()
+          .add("a", StringType)
+          .add(StructField("b", IntegerType)
+            .withCurrentDefaultValue("2 + 3")
+            .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b set default 2 + 3")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withCurrentDefaultValue("2 + 3")
+              .withExistenceDefaultValue("5")))
+
+        sql(s"alter table $t alter column b drop default")
+
+        assert(
+          getTableMetadata(tableName).schema === new StructType()
+            .add("a", StringType)
+            .add(StructField("b", IntegerType)
+              .withExistenceDefaultValue("5")))
+      }
     }
   }
 
@@ -1119,34 +1157,6 @@ trait AlterTableTests extends SharedSparkSession {
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType()
         .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
-    }
-  }
-
-  test("AlterTable: set location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
-
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
-    }
-  }
-
-  test("AlterTable: set partition location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(exc.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
     }
   }
 

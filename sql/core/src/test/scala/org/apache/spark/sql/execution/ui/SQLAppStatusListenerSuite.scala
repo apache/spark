@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource}
+import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource, TestLocalScanTable}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -608,8 +608,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
-    val json = JsonProtocol.sparkEventToJson(event)
-    assertValidDataInJson(json,
+    val json = JsonProtocol.sparkEventToJsonString(event)
+    assertValidDataInJson(parse(json),
       parse("""
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
@@ -627,14 +627,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     }
 
     // Test a case where the numbers in the JSON can only fit in longs:
-    val longJson = parse(
+    val longJson =
       """
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
         |  "executionId": 4294967294,
         |  "accumUpdates": [[4294967294,3]]
         |}
-      """.stripMargin)
+      """.stripMargin
     JsonProtocol.sparkEventFromJson(longJson) match {
       case SparkListenerDriverAccumUpdates(executionId, accums) =>
         assert(executionId == 4294967294L)
@@ -840,7 +840,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder(), Seq.empty)
+    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder(), Seq.empty,
+      table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
@@ -871,6 +872,41 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics(expectedMetric.id) === expectedValue)
     assert(metrics.contains(innerMetric.id))
     assert(metrics(innerMetric.id) === expectedInnerValue)
+  }
+
+  test("SPARK-39635: Report driver metrics from Datasource v2 scan") {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    val schema = new StructType().add("i", "int").add("j", "int")
+    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomDriverMetricScanBuilder(),
+      Seq.empty, table = new TestLocalScanTable("fake"))
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val expectedMetric = physicalPlan.metrics("custom_driver_metric_partition_count")
+    val expectedValue = "2"
+    assert(metrics.contains(expectedMetric.id))
+    assert(metrics(expectedMetric.id) === expectedValue)
   }
 
   test("SPARK-36030: Report metrics from Datasource v2 write") {
@@ -1037,6 +1073,19 @@ class SimpleCustomMetric extends CustomMetric {
   }
 }
 
+class SimpleCustomDriverMetric extends CustomMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def description(): String = "Simple custom driver metrics - partition count"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    taskMetrics.sum.toString
+  }
+}
+
+class SimpleCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def value(): Long = value
+}
+
 class BytesWrittenCustomMetric extends CustomMetric {
   override def name(): String = "bytesWritten"
   override def description(): String = "bytesWritten metric"
@@ -1094,6 +1143,28 @@ class CustomMetricScanBuilder extends SimpleScanBuilder {
   }
 
   override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+}
+
+class CustomDriverMetricScanBuilder extends SimpleScanBuilder {
+
+  var partitionCount: Long = 0L
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val partitions: Array[InputPartition] = Array(RangeInputPartition(0, 5),
+      RangeInputPartition(5, 10))
+    partitionCount = partitions.length
+    partitions
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+
+  override def supportedCustomMetrics(): Array[CustomMetric] = {
+    Array(new SimpleCustomDriverMetric)
+  }
+
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+    Array(new SimpleCustomDriverTaskMetric(partitionCount))
+  }
 }
 
 class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWriter(fs, file) {
