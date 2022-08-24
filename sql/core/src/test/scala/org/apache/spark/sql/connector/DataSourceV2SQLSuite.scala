@@ -1807,8 +1807,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
-    assert(e.message.contains(
-      "global_temp.ns1.ns2.tbl is not a valid TableIdentifier as it has more than 2 name parts."))
+    assert(e.message.contains("requires a single-part namespace"))
   }
 
   test("table name same as catalog can be used") {

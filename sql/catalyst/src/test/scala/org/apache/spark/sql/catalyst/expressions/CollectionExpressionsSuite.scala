@@ -1535,6 +1535,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     }
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
+
+    // test defaultValueOutOfBound
+    val delimiter = Literal.create(".", StringType)
+    val str = StringSplitSQL(Literal.create("11.12.13", StringType), delimiter)
+    val outOfBoundValue = Some(Literal.create("", StringType))
+
+    checkEvaluation(ElementAt(str, Literal(3), outOfBoundValue), UTF8String.fromString("13"))
+    checkEvaluation(ElementAt(str, Literal(1), outOfBoundValue), UTF8String.fromString("11"))
+    checkEvaluation(ElementAt(str, Literal(10), outOfBoundValue), UTF8String.fromString(""))
+    checkEvaluation(ElementAt(str, Literal(-10), outOfBoundValue), UTF8String.fromString(""))
+
+    checkEvaluation(ElementAt(StringSplitSQL(Literal.create(null, StringType), delimiter),
+      Literal(1), outOfBoundValue), null)
+    checkEvaluation(ElementAt(StringSplitSQL(Literal.create("11.12.13", StringType),
+      Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
+
+    checkExceptionInExpression[Exception](
+      ElementAt(str, Literal(0), outOfBoundValue), "The index 0 is invalid")
   }
 
   test("correctly handles ElementAt nullability for arrays") {

@@ -74,10 +74,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 10000000000000000000000000000000000000.1, 39, 1)",
+    "value" : "10000000000000000000000000000000000000.1",
     "precision" : "38",
     "scale" : "1",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -99,10 +99,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, -11000000000000000000000000000000000000.1, 39, 1)",
+    "value" : "-11000000000000000000000000000000000000.1",
     "precision" : "38",
     "scale" : "1",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -124,10 +124,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 152415787532388367501905199875019052100, 39, 0)",
+    "value" : "152415787532388367501905199875019052100",
     "precision" : "38",
     "scale" : "2",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -149,10 +149,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 1000000000000000000000000000000000000.00000000000000000000000000000000000000, 75, 38)",
+    "value" : "1000000000000000000000000000000000000.00000000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -198,10 +198,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 10123456789012345678901234567890123456.00000000000000000000000000000000000000, 76, 38)",
+    "value" : "10123456789012345678901234567890123456.00000000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -223,10 +223,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 101234567890123456789012345678901234.56000000000000000000000000000000000000, 74, 38)",
+    "value" : "101234567890123456789012345678901234.56000000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -248,10 +248,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 10123456789012345678901234567890123.45600000000000000000000000000000000000, 73, 38)",
+    "value" : "10123456789012345678901234567890123.45600000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -273,10 +273,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 1012345678901234567890123456789012.34560000000000000000000000000000000000, 72, 38)",
+    "value" : "1012345678901234567890123456789012.34560000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -298,10 +298,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)",
+    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""
@@ -331,10 +331,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CANNOT_CHANGE_DECIMAL_PRECISION",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "Decimal(expanded, 101234567890123456789012345678901.23456000000000000000000000000000000000, 71, 38)",
+    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000",
     "precision" : "38",
     "scale" : "6",
     "config" : "\"spark.sql.ansi.enabled\""

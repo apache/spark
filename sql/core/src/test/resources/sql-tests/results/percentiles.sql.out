@@ -424,20 +424,20 @@ Cannot specify order by or frame for 'median'.
 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW intervals AS SELECT * FROM VALUES
-(0, INTERVAL '0' MONTH, INTERVAL '0' SECOND),
-(0, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
-(0, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
-(0, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
-(0, INTERVAL '40' MONTH, INTERVAL '40' SECOND),
-(1, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
-(1, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
-(2, INTERVAL '10' MONTH, INTERVAL '10' SECOND),
-(2, INTERVAL '20' MONTH, INTERVAL '20' SECOND),
-(2, INTERVAL '25' MONTH, INTERVAL '25' SECOND),
-(2, INTERVAL '30' MONTH, INTERVAL '30' SECOND),
-(3, INTERVAL '60' MONTH, INTERVAL '60' SECOND),
-(4, null, null)
-AS intervals(k, dt, ym)
+(0, INTERVAL '0' MONTH, INTERVAL '0' SECOND, INTERVAL '0' MINUTE),
+(0, INTERVAL '10' MONTH, INTERVAL '10' SECOND, INTERVAL '10' MINUTE),
+(0, INTERVAL '20' MONTH, INTERVAL '20' SECOND, INTERVAL '20' MINUTE),
+(0, INTERVAL '30' MONTH, INTERVAL '30' SECOND, INTERVAL '30' MINUTE),
+(0, INTERVAL '40' MONTH, INTERVAL '40' SECOND, INTERVAL '40' MINUTE),
+(1, INTERVAL '10' MONTH, INTERVAL '10' SECOND, INTERVAL '10' MINUTE),
+(1, INTERVAL '20' MONTH, INTERVAL '20' SECOND, INTERVAL '20' MINUTE),
+(2, INTERVAL '10' MONTH, INTERVAL '10' SECOND, INTERVAL '10' MINUTE),
+(2, INTERVAL '20' MONTH, INTERVAL '20' SECOND, INTERVAL '20' MINUTE),
+(2, INTERVAL '25' MONTH, INTERVAL '25' SECOND, INTERVAL '25' MINUTE),
+(2, INTERVAL '30' MONTH, INTERVAL '30' SECOND, INTERVAL '30' MINUTE),
+(3, INTERVAL '60' MONTH, INTERVAL '60' SECOND, INTERVAL '60' MINUTE),
+(4, null, null, null)
+AS intervals(k, dt, ym, dt2)
 -- !query schema
 struct<>
 -- !query output
@@ -450,7 +450,7 @@ SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query schema
-struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval month,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval month>
+struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval year to month,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval year to month>
 -- !query output
 0-10	2-6
 
@@ -464,7 +464,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval second>
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
 -- !query output
 0	0 00:00:10.000000000	0 00:00:30.000000000
 1	0 00:00:12.500000000	0 00:00:17.500000000
@@ -475,11 +475,29 @@ struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval second,per
 
 -- !query
 SELECT
+  k,
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2 DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+-- !query output
+0	0 00:10:00.000000000	0 00:30:00.000000000
+1	0 00:12:30.000000000	0 00:17:30.000000000
+2	0 00:17:30.000000000	0 00:26:15.000000000
+3	0 01:00:00.000000000	0 01:00:00.000000000
+4	NULL	NULL
+
+
+-- !query
+SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY dt),
   percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query schema
-struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval month,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval month>
+struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval year to month,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval year to month>
 -- !query output
 0-10	2-6
 
@@ -493,7 +511,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval second>
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
 -- !query output
 0	0 00:00:10.000000000	0 00:00:30.000000000
 1	0 00:00:10.000000000	0 00:00:20.000000000
@@ -504,12 +522,30 @@ struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval second,per
 
 -- !query
 SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2 DESC)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+-- !query output
+0	0 00:10:00.000000000	0 00:30:00.000000000
+1	0 00:10:00.000000000	0 00:20:00.000000000
+2	0 00:10:00.000000000	0 00:30:00.000000000
+3	0 01:00:00.000000000	0 01:00:00.000000000
+4	NULL	NULL
+
+
+-- !query
+SELECT
   median(dt),
   percentile(dt, 0.5),
   percentile_cont(0.5) WITHIN GROUP (ORDER BY dt)
 FROM intervals
 -- !query schema
-struct<median(dt):interval month,percentile(dt, 0.5, 1):interval month,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval month>
+struct<median(dt):interval year to month,percentile(dt, 0.5, 1):interval year to month,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval year to month>
 -- !query output
 1-8	1-8	1-8
 
@@ -524,10 +560,29 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,median(ym):interval second,percentile(ym, 0.5, 1):interval second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval second>
+struct<k:int,median(ym):interval day to second,percentile(ym, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval day to second>
 -- !query output
 0	0 00:00:20.000000000	0 00:00:20.000000000	0 00:00:20.000000000
 1	0 00:00:15.000000000	0 00:00:15.000000000	0 00:00:15.000000000
 2	0 00:00:22.500000000	0 00:00:22.500000000	0 00:00:22.500000000
 3	0 00:01:00.000000000	0 00:01:00.000000000	0 00:01:00.000000000
+4	NULL	NULL	NULL
+
+
+-- !query
+SELECT
+  k,
+  median(dt2),
+  percentile(dt2, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY dt2)
+FROM intervals
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,median(dt2):interval day to second,percentile(dt2, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval day to second>
+-- !query output
+0	0 00:20:00.000000000	0 00:20:00.000000000	0 00:20:00.000000000
+1	0 00:15:00.000000000	0 00:15:00.000000000	0 00:15:00.000000000
+2	0 00:22:30.000000000	0 00:22:30.000000000	0 00:22:30.000000000
+3	0 01:00:00.000000000	0 01:00:00.000000000	0 01:00:00.000000000
 4	NULL	NULL	NULL

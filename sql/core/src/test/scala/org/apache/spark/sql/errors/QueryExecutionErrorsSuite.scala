@@ -29,7 +29,7 @@ import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -675,6 +675,19 @@ class QueryExecutionErrorsSuite
           sqlState = "22005")
       }
     }
+  }
+
+  test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        val row = spark.sparkContext.parallelize(Seq(1, 2)).map(Row(_))
+        spark.sqlContext.createDataFrame(row, StructType.fromString("StructType()"))
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
+      ),
+      sqlState = "0A000")
   }
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
