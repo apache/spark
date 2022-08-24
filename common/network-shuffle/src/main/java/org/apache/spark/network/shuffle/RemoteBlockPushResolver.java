@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
@@ -133,6 +138,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<String, ShuffleIndexInformation> indexCache;
 
+  private final PushMergeMetrics pushMergeMetrics;
+
   @VisibleForTesting
   final File recoveryFile;
 
@@ -171,6 +178,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
       reloadAndCleanUpAppShuffleInfo(db);
     }
+    this.pushMergeMetrics = new PushMergeMetrics();
   }
 
   @VisibleForTesting
@@ -504,6 +512,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
+  public MetricSet getMetrics() {
+    return pushMergeMetrics;
+  }
+
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
@@ -571,6 +583,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // getting killed. When this happens, we need to distinguish the duplicate blocks as they
     // arrive. More details on this is explained in later comments.
 
+    // Track if the block is received after shuffle merge finalize
+    final boolean isTooLate = partitionInfoBeforeCheck == null;
     // Check if the given block is already merged by checking the bitmap against the given map
     // index
     final AppShufflePartitionInfo partitionInfo = failure != null ? null :
@@ -596,6 +610,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
         @Override
         public void onComplete(String streamId) {
+          if (isTooLate) {
+            pushMergeMetrics.tooLateResponses.mark();
+          }
           // Throw non-fatal failure here so the block data is drained from channel and server
           // responds the error code to the client.
           if (finalFailure != null) {
@@ -1137,7 +1154,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         long updatedPos = partitionInfo.getDataFilePos() + length;
         logger.debug("{} current pos {} updated pos {}", partitionInfo,
           partitionInfo.getDataFilePos(), updatedPos);
-        length += partitionInfo.dataChannel.write(buf, updatedPos);
+        int bytesWritten = partitionInfo.dataChannel.write(buf, updatedPos);
+        length += bytesWritten;
+        mergeManager.pushMergeMetrics.pushedBytesWritten.mark(bytesWritten);
       }
     }
 
@@ -1174,8 +1193,22 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      * block parts buffered in memory.
      */
     private void writeDeferredBufs() throws IOException {
+      long totalSize = 0;
       for (ByteBuffer deferredBuf : deferredBufs) {
+        totalSize += deferredBuf.limit();
         writeBuf(deferredBuf);
+      }
+      mergeManager.pushMergeMetrics.cachedBlockBytes.dec(totalSize);
+      deferredBufs = null;
+    }
+
+    private void freeDeferredBufs() {
+      if (deferredBufs != null && !deferredBufs.isEmpty()) {
+        long totalSize = 0;
+        for (ByteBuffer deferredBuf : deferredBufs) {
+          totalSize += deferredBuf.limit();
+        }
+        mergeManager.pushMergeMetrics.cachedBlockBytes.dec(totalSize);
       }
       deferredBufs = null;
     }
@@ -1301,10 +1334,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // Write the buffer to the in-memory deferred cache. Since buf is a slice of a larger
           // byte buffer, we cache only the relevant bytes not the entire large buffer to save
           // memory.
-          ByteBuffer deferredBuf = ByteBuffer.allocate(buf.remaining());
+          int deferredLen = buf.remaining();
+          ByteBuffer deferredBuf = ByteBuffer.allocate(deferredLen);
           deferredBuf.put(buf);
           deferredBuf.flip();
           deferredBufs.add(deferredBuf);
+          mergeManager.pushMergeMetrics.cachedBlockBytes.inc(deferredLen);
         }
       }
     }
@@ -1321,13 +1356,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         AppShuffleMergePartitionsInfo info =
             appShuffleInfo.shuffles.get(partitionInfo.appAttemptShuffleMergeId.shuffleId);
         if (isTooLate(info, partitionInfo.reduceId)) {
-          deferredBufs = null;
+          freeDeferredBufs();
+          mergeManager.pushMergeMetrics.tooLateResponses.mark();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_LATE_BLOCK_PUSH));
         }
         if (isStale(info, partitionInfo.appAttemptShuffleMergeId.shuffleMergeId)) {
-          deferredBufs = null;
+          freeDeferredBufs();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
             BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.STALE_BLOCK_PUSH));
@@ -1338,7 +1374,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // Identify duplicate block generated by speculative tasks. We respond success to
           // the client in cases of duplicate even though no data is written.
           if (isDuplicateBlock()) {
-            deferredBufs = null;
+            freeDeferredBufs();
             return;
           }
           if (partitionInfo.getCurrentMapIndex() < 0) {
@@ -1378,7 +1414,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             partitionInfo.resetChunkTracker();
           }
         } else {
-          deferredBufs = null;
+          freeDeferredBufs();
+          mergeManager.pushMergeMetrics.noOpportunityResponses.mark();
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), streamId)
               .toByteBuffer(), BlockPushNonFatalFailure.getErrorMsg(
@@ -1952,6 +1989,44 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     @VisibleForTesting
     long getPos() {
       return pos;
+    }
+  }
+
+  /**
+   * A class that wraps all the push-based shuffle service metrics.
+   */
+  static class PushMergeMetrics implements MetricSet {
+    // couldNotFindOpportunityResponses tracks how many times a shuffle block collided because of another block for
+    // the same reduce partition was being written
+    static final String NO_OPPORTUNITY_RESPONSES_METRIC = "couldNotFindOpportunityResponses";
+    // tooLateResponses tracks how many times a shuffle block push request is too late
+    static final String TOO_LATE_RESPONSES_METRIC = "tooLateResponses";
+    // pushedBytesWritten tracks the length of the pushed block data written to file in bytes
+    static final String PUSHED_BYTES_WRITTEN_METRIC = "pushedBytesWritten";
+    // cachedBlocksBytes tracks the size of the current deferred block parts buffered in memory.
+    static final String CACHED_BLOCKS_BYTES_METRIC = "cachedBlocksBytes";
+
+    private final Map<String, Metric> allMetrics;
+    private final Meter noOpportunityResponses;
+    private final Meter tooLateResponses;
+    private final Meter pushedBytesWritten;
+    private final Counter cachedBlockBytes;
+
+    private PushMergeMetrics() {
+      allMetrics = new HashMap<>();
+      noOpportunityResponses = new Meter();
+      allMetrics.put(NO_OPPORTUNITY_RESPONSES_METRIC, noOpportunityResponses);
+      tooLateResponses = new Meter();
+      allMetrics.put(TOO_LATE_RESPONSES_METRIC, tooLateResponses);
+      pushedBytesWritten = new Meter();
+      allMetrics.put(PUSHED_BYTES_WRITTEN_METRIC, pushedBytesWritten);
+      cachedBlockBytes = new Counter();
+      allMetrics.put(CACHED_BLOCKS_BYTES_METRIC, cachedBlockBytes);
+    }
+
+    @Override
+    public Map<String, Metric> getMetrics() {
+      return allMetrics;
     }
   }
 }
