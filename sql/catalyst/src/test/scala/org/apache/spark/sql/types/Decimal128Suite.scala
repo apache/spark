@@ -85,6 +85,7 @@ class Decimal128Suite extends SparkFunSuite {
     checkValues(Decimal128(2e18.toLong), 2e18, 2e18.toLong)
     checkValues(Decimal128(Long.MaxValue), Long.MaxValue.toDouble, Long.MaxValue)
     checkValues(Decimal128(Long.MinValue), Long.MinValue.toDouble, Long.MinValue)
+    checkValues(Decimal128(Double.MaxValue), Double.MaxValue, 0L)
 
     val e1 = intercept[ArithmeticException](Decimal128(Double.MaxValue))
     assert(e1.getMessage.contains("BigInteger out of Int128 range"))
@@ -156,6 +157,8 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128("10.0") / Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
     assert(Decimal128("15432.21543600") / Decimal128("57832.21543") ===
       Decimal128(BigDecimal("0.26684462")))
+    assert(Decimal128("57832.21543") / Decimal128("15432.21543600") ===
+      Decimal128(BigDecimal("3.74749923")))
     assert(Decimal128("15432.21543600787131") / Decimal128("57832.21543600787313") ===
       Decimal128(BigDecimal("0.26684461799814")))
     assert(Decimal128(100) / Decimal128(0) === null)
@@ -168,6 +171,18 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128(100) % Decimal128(3) === Decimal128(1))
     assert(Decimal128(-100) % Decimal128(3) === Decimal128(-1))
     assert(Decimal128(100) % Decimal128(0) === null)
+  }
+
+  test("quot") {
+    assert(Decimal128("15432.21543600").quot(Decimal128("57832.21543")) ===
+      Decimal128(BigDecimal("0")))
+    assert(Decimal128("57832.21543").quot(Decimal128("15432.21543600")) ===
+      Decimal128(BigDecimal("3")))
+  }
+
+  test("negate") {
+    assert(-Decimal128("15432.21543600") === Decimal128(BigDecimal("-15432.21543600")))
+    assert(-Decimal128("-57832.21543") === Decimal128(BigDecimal("57832.21543")))
   }
 
 }

@@ -281,6 +281,16 @@ object Int128Math {
     }
   }
 
+  def rescaleTruncate(high: Long, low: Long, rescale: Int): (Long, Long) = {
+    if (rescale == 0) {
+      (high, low)
+    } else if (rescale > 0) {
+      shiftLeftBy10(high, low, rescale)
+    } else {
+      scaleDownTruncate(high, low, -rescale)
+    }
+  }
+
   /**
    * Multiplies by 10^rescaleFactor. Only positive rescaleFactor values are allowed.
    */
@@ -415,6 +425,18 @@ object Int128Math {
     }
 
     scaleDown(high, low, rescale, true)
+  }
+
+  private def scaleDownTruncate(high: Long, low: Long, rescale: Int): (Long, Long) = {
+    // optimized path for smaller values
+    if (rescale <= MAX_POWER_OF_TEN_LONG && high == 0 && low >= 0) {
+      val divisor = LONG_POWERS_OF_TEN(rescale)
+      val newLow = low / divisor
+
+      return (0, newLow)
+    }
+
+    scaleDown(high, low, rescale, false)
   }
 
   private def scaleDown(high: Long, low: Long, rescale: Int, roundUp: Boolean): (Long, Long) = {

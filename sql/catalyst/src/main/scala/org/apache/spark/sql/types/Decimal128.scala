@@ -262,10 +262,16 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     Decimal128(Int128(newHigh, newLow), resultScale)
   }
 
-  def quot (that: Decimal128): Decimal128 = this / that
+  def quot (that: Decimal128): Decimal128 = {
+    val divided = this / that
+    val (high, low) = Int128Math.rescaleTruncate(divided.high, divided.low, -divided.scale)
+    Decimal128(Int128(high, low), 0)
+  }
 
-  def unary_- : Decimal128 = {
-    Decimal128(this.int128.unary_-, this._scale)
+  def unary_- : Decimal128 = if (int128.ne(null)) {
+    Decimal128(-int128, this._scale)
+  } else {
+    Decimal128(-longVal, this._scale)
   }
 
   override def compare(other: Decimal128): Int = {
