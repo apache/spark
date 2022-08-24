@@ -25,6 +25,7 @@ import javax.imageio.ImageIO
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.types._
  * Defines the image schema and methods to read and manipulate images.
  */
 @Since("2.3.0")
-object ImageSchema {
+object ImageSchema extends Logging {
 
   val undefinedImageType = "Undefined"
 
@@ -138,7 +139,9 @@ object ImageSchema {
       //   no real I/O exceptions are expected.
       // - `ImageIO.read` can throw `javax.imageio.IIOException` that is technically
       //   a runtime exception but it inherits IOException.
-      case _: Throwable => null
+      case _: Throwable =>
+        logWarning(s"origin = $origin, bytes = ${bytes.mkString("Array(", ", ", ")")}")
+        null
     }
 
     if (img == null) {
