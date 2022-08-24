@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, RepartitionOperation, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -730,6 +730,20 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
+  private def canPushLimitThroughProject(project: LogicalPlan): Boolean = {
+    project match {
+      case Project(projectList, _: LeafNode) =>
+        // Don't push down through the project avoid conflicting with ColumnPruning.
+        !projectList.forall{
+          case Alias(child, _) =>
+            child.isInstanceOf[AttributeReference] || child.isInstanceOf[ExtractValue]
+          case other =>
+            other.isInstanceOf[AttributeReference] || other.isInstanceOf[ExtractValue]
+        }
+      case _ => true
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(LIMIT, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
@@ -770,11 +784,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
 
-    case GlobalLimit(l, Project(projectList, child)) =>
+    case GlobalLimit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
       Project(projectList, GlobalLimit(l, child))
-    case LocalLimit(l, Project(projectList, child)) =>
+    case LocalLimit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
       Project(projectList, LocalLimit(l, child))
-    case Limit(l, Project(projectList, child)) =>
+    case Limit(l, proj @ Project(projectList, child)) if canPushLimitThroughProject(proj) =>
       Project(projectList, Limit(l, child))
   }
 }

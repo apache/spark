@@ -79,7 +79,7 @@ class LimitPushdownSuite extends PlanTest {
       Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.limit(1), testRelation2.limit(1).select($"d", $"e", $"f")).analyze
+      Union(testRelation.limit(1), testRelation2.select($"d", $"e", $"f").limit(1)).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -89,7 +89,7 @@ class LimitPushdownSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
       Limit(2, Union(
-        LocalLimit(2, testRelation), LocalLimit(2, testRelation2).select($"d", $"e", $"f"))).analyze
+        LocalLimit(2, testRelation), LocalLimit(2, testRelation2.select($"d", $"e", $"f")))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -296,5 +296,26 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
+  }
+
+  test("push down limit through Projection") {
+    val originalQuery =
+      testRelation
+        .select($"a")
+        .limit(2)
+        .select($"a", $"a" + 1)
+        .limit(5)
+        .select($"a" + 2)
+        .limit(7)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select($"a")
+        .limit(2)
+        .select($"a", $"a" + 1)
+        .select($"a" + 2).analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

@@ -63,8 +63,8 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .limit(5)
-        .select($"a").analyze
+        .select($"a")
+        .limit(5).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -80,8 +80,8 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .limit(2)
-        .select($"a").analyze
+        .select($"a")
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -97,28 +97,8 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .limit(2)
-        .select($"a").analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("limits: combines limits after Projection") {
-    val originalQuery =
-      testRelation
         .select($"a")
-        .limit(2)
-        .select($"a", $"a" + 1)
-        .limit(5)
-        .select($"a" + 2)
-        .limit(7)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .limit(2)
-        .select($"a")
-        .select($"a" + 2).analyze
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -136,7 +116,7 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized2, query2)
 
     // test child max row is none
-    val query3 = testRelation.limit(1).select($"a").analyze
+    val query3 = testRelation.select($"a").limit(1).analyze
     val optimized3 = Optimize.execute(query3)
     comparePlans(optimized3, query3)
 
@@ -166,7 +146,7 @@ class CombiningLimitsSuite extends PlanTest {
     )
     checkPlanAndMaxRow(
       Range(-1, Long.MaxValue, 1, None).select().limit(1),
-      Range(-1, Long.MaxValue, 1, None).limit(1).select(),
+      Range(-1, Long.MaxValue, 1, None).select().limit(1),
       1
     )
   }
