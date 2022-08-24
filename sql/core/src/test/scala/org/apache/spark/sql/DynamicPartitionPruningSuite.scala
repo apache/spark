@@ -1810,8 +1810,8 @@ abstract class DynamicPartitionPruningV2FilterSuite
     extends DynamicPartitionPruningV2Suite {
 
   override protected def initState(): Unit = {
+    super.initState()
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableWithV2FilterCatalog].getName)
-    spark.conf.set("spark.sql.defaultCatalog", "testcat")
   }
 }
 
