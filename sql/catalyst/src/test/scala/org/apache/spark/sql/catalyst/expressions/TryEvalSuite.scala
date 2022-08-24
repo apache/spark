@@ -28,7 +28,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Add(left, right, failOnError = true))
+      val input = Add(left, right, EvalMode.TRY)
       checkEvaluation(input, expected)
     }
   }
@@ -41,7 +41,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Divide(left, right, failOnError = true))
+      val input = Divide(left, right, EvalMode.TRY)
       checkEvaluation(input, expected)
     }
   }
@@ -54,7 +54,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Subtract(left, right, failOnError = true))
+      val input = Subtract(left, right, EvalMode.TRY)
       checkEvaluation(input, expected)
     }
   }
@@ -67,7 +67,7 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (a, b, expected) =>
       val left = Literal(a)
       val right = Literal(b)
-      val input = TryEval(Multiply(left, right, failOnError = true))
+      val input = Multiply(left, right, EvalMode.TRY)
       checkEvaluation(input, expected)
     }
   }
