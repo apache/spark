@@ -734,7 +734,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     df.createOrReplaceTempView("source")
 
     sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
-    
+
     checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
