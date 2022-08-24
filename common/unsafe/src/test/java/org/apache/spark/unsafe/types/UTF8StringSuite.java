@@ -413,7 +413,7 @@ public class UTF8StringSuite {
       new UTF8String[]{fromString("a"), fromString("b")},
       fromString("ab").split(fromString(""), 0));
     assertArrayEquals(
-      new UTF8String[]{fromString("a"), fromString("b"), fromString("")},
+      new UTF8String[]{fromString("a"), fromString("b")},
       fromString("ab").split(fromString(""), -1));
     assertArrayEquals(
       new UTF8String[]{fromString("")},

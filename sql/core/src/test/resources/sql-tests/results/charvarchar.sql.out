@@ -1054,7 +1054,7 @@ NetEase	NetEase	Spark-	NetEase
 -- !query
 select split(c7, 'e'), split(c8, 'e'), split(v, 'a'), split(s, 'e') from char_tbl4
 -- !query schema
-struct<split(c7, e, 0):array<string>,split(c8, e, 0):array<string>,split(v, a, 0):array<string>,split(s, e, 0):array<string>>
+struct<split(c7, e, -1):array<string>,split(c8, e, -1):array<string>,split(v, a, -1):array<string>,split(s, e, -1):array<string>>
 -- !query output
 NULL	NULL	NULL	NULL
 NULL	NULL	["S"]	NULL
