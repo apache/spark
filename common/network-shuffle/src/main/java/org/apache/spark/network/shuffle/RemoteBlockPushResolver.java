@@ -801,8 +801,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void close() {
     if (!mergedShuffleCleaner.isShutdown()) {
-      // Use two phases shutdown refer to
+      // SPARK-40186：Use two phases shutdown refer to
       // https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
+      // Use two phases shutdown can prevent new tasks and wait for executing tasks to
+      // complete gracefully, and once timeout is reached, we want to interrupt running tasks,
+      // so that they fail. This is to prevent updates to shuffle state db after it is closed.
       try {
         mergedShuffleCleaner.shutdown();
         // Wait a while for existing tasks to terminate
