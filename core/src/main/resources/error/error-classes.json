@@ -632,5 +632,12 @@
       "Writing job aborted"
     ],
     "sqlState" : "40000"
+  },
+  "CANNOT_DECODE_URL" : {
+    "message" : [
+      "Cannot decode url : <url>.",
+      "<details>"
+    ],
+    "sqlState" : "42000"
   }
 }
