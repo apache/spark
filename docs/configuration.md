@@ -1008,6 +1008,28 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.backend</code></td>
+  <td>LEVELDB</td>
+  <td>
+    When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based 
+    store used in shuffle state store. This supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value. 
+    This only affects standalone mode (yarn always has this behavior enabled). 
+    The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
   <td>Long.MAX_VALUE</td>
   <td>
