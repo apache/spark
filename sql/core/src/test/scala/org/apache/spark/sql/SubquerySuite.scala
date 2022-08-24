@@ -2177,6 +2177,46 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-40259: Merge non-correlated scalar subqueries with Parquet DSv2 sources") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        testData
+          .withColumn("partition", $"key" % 10)
+          .write
+          .mode(SaveMode.Overwrite)
+          .partitionBy("partition")
+          .parquet(path.getCanonicalPath)
+        withTempView("td") {
+          spark.read.parquet(path.getCanonicalPath).createOrReplaceTempView("td")
+          Seq(false).foreach { enableAQE =>
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+              val df = sql(
+                """
+                  |SELECT
+                  |  (SELECT sum(key) FROM td WHERE partition < 5),
+                  |  (SELECT sum(key) FROM td WHERE partition >= 5),
+                  |  (SELECT sum(value) FROM td WHERE partition < 5),
+                  |  (SELECT sum(value) FROM td WHERE partition >= 5)
+                """.stripMargin)
+
+              checkAnswer(df, Row(2450, 2600, 2450.0, 2600.0) :: Nil)
+
+              val plan = df.queryExecution.executedPlan
+              val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+              val reusedSubqueryIds = collectWithSubqueries(plan) {
+                case rs: ReusedSubqueryExec => rs.child.id
+              }
+
+              assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+              assert(reusedSubqueryIds.size == 2,
+                "Missing or unexpected reused ReusedSubqueryExec in the plan")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
     checkAnswer(
       sql("""

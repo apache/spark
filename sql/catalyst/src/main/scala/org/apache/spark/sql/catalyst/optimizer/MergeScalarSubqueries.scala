@@ -24,6 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.read.SupportsMerge
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -276,6 +279,42 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
               } else {
                 None
               }
+            }
+          }
+
+        case (
+          DataSourceV2ScanRelation(newRelation, newScan: SupportsMerge, newOutput,
+            newKeyGroupedPartitioning, newOrdering),
+          DataSourceV2ScanRelation(cachedRelation, cachedScan: SupportsMerge, cachedOutput,
+            cachedKeyGroupedPartitioning, cachedOrdering)) =>
+          checkIdenticalPlans(newRelation, cachedRelation).flatMap { outputMap =>
+            val mappedNewKeyGroupedPartitioning =
+              newKeyGroupedPartitioning.map(_.map(mapAttributes(_, outputMap)))
+            if (mappedNewKeyGroupedPartitioning.map(_.map(_.canonicalized)) ==
+              cachedKeyGroupedPartitioning.map(_.map(_.canonicalized))) {
+              val mappedNewOrdering = newOrdering.map(_.map(mapAttributes(_, outputMap)))
+              if (mappedNewOrdering.map(_.map(_.canonicalized)) ==
+                cachedOrdering.map(_.map(_.canonicalized))) {
+                Option(cachedScan.mergeWith(newScan,
+                  cachedRelation.table.asInstanceOf[SupportsRead]).orElse(null)).map { mergedScan =>
+                  // Keep the original attributes of cached in merged
+                  val mergedAttributes = mergedScan.readSchema().toAttributes
+                  val cachedOutputNameMap = cachedOutput.map(a => a.name -> a).toMap
+                  val mergedOutput = mergedAttributes.map {
+                    case a => cachedOutputNameMap.getOrElse(a.name, a)
+                  }
+                  // Build the map from new to merged
+                  val mergedOutputNameMap = mergedOutput.map(a => a.name -> a).toMap
+                  val newOutputMap =
+                    AttributeMap(newOutput.map(a => a -> mergedOutputNameMap(a.name).toAttribute))
+                  DataSourceV2ScanRelation(cachedRelation, mergedScan, mergedOutput,
+                    cachedKeyGroupedPartitioning, cachedOrdering) -> newOutputMap
+                }
+              } else {
+                None
+              }
+            } else {
+              None
             }
           }
 
