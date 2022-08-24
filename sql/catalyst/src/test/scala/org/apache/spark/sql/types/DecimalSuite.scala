@@ -182,12 +182,14 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("arithmetic") {
-    assert(Decimal(100) + Decimal(-100) === Decimal(0))
-    assert(Decimal(100) + Decimal(-100) === Decimal(0))
-    assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
-    assert(Decimal(1e13) * Decimal(1e13) === Decimal(1e26))
-    assert(Decimal(100) / Decimal(-100) === Decimal(-1))
-    assert(Decimal(100) / Decimal(0) === null)
+//    assert(Decimal(100) + Decimal(-100) === Decimal(0))
+//    assert(Decimal(100) + Decimal(-100) === Decimal(0))
+//    assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
+//    assert(Decimal(1e13) * Decimal(1e13) === Decimal(1e26))
+//    assert(Decimal(100) / Decimal(-100) === Decimal(-1))
+//    assert(Decimal(100) / Decimal(0) === null)
+    assert(Decimal("15432.21543600") / Decimal("57832.21543") ===
+      Decimal(BigDecimal("0.26684461802572864015214849949247396487")))
     assert(Decimal(100) % Decimal(-100) === Decimal(0))
     assert(Decimal(100) % Decimal(3) === Decimal(1))
     assert(Decimal(-100) % Decimal(3) === Decimal(-1))

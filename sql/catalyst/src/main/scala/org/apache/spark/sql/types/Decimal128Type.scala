@@ -46,6 +46,7 @@ case class Decimal128Type(scale: Int) extends FractionalType {
 @Stable
 object Decimal128Type extends AbstractDataType {
 
+  val MAX_PRECISION = 38
   val DEFAULT_SCALE = 18
   val SYSTEM_DEFAULT: Decimal128Type = Decimal128Type(DEFAULT_SCALE)
   val USER_DEFAULT: Decimal128Type = Decimal128Type(0)
