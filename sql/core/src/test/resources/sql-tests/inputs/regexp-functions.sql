@@ -80,14 +80,3 @@ SELECT regexp_instr('1a 2b 14m', '\\d{2}(a|b|m)');
 SELECT regexp_instr('abc', null);
 SELECT regexp_instr(null, 'b');
 SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0);
-
---split
-SELECT split('aa2bb3cc', '[1-9]+');
-SELECT split('aa2bb3cc', '[1-9]+', 2);
-SELECT split('aacbbcddc', 'c', 0);
-SELECT split('aacbbcddc', 'c', -1);
-SELECT split('hello', '');
-SELECT split('hello', '', -1);
-SELECT split('', '');
-SELECT split('abc', null);
-SELECT split(null, 'b');

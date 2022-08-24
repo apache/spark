@@ -142,7 +142,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 SELECT split('aa1cc2ee3', '[1-9]+')
 -- !query schema
-struct<split(aa1cc2ee3, [1-9]+, -1):array<string>>
+struct<split(aa1cc2ee3, [1-9]+, 0):array<string>>
 -- !query output
 ["aa","cc","ee",""]
 
@@ -153,6 +153,46 @@ SELECT split('aa1cc2ee3', '[1-9]+', 2)
 struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 -- !query output
 ["aa","cc2ee3"]
+
+
+-- !query
+SELECT split('hello', '')
+-- !query schema
+struct<split(hello, , 0):array<string>>
+-- !query output
+["h","e","l","l","o"]
+
+
+-- !query
+SELECT split('hello', '', -1)
+-- !query schema
+struct<split(hello, , -1):array<string>>
+-- !query output
+["h","e","l","l","o",""]
+
+
+-- !query
+SELECT split('', '')
+-- !query schema
+struct<split(, , 0):array<string>>
+-- !query output
+[""]
+
+
+-- !query
+SELECT split('abc', null)
+-- !query schema
+struct<split(abc, NULL, 0):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+SELECT split(null, 'b')
+-- !query schema
+struct<split(NULL, b, 0):array<string>>
+-- !query output
+NULL
 
 
 -- !query

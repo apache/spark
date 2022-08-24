@@ -287,7 +287,7 @@
 | org.apache.spark.sql.catalyst.expressions.StringRepeat | repeat | SELECT repeat('123', 2) | struct<repeat(123, 2):string> |
 | org.apache.spark.sql.catalyst.expressions.StringReplace | replace | SELECT replace('ABCabc', 'abc', 'DEF') | struct<replace(ABCabc, abc, DEF):string> |
 | org.apache.spark.sql.catalyst.expressions.StringSpace | space | SELECT concat(space(2), '1') | struct<concat(space(2), 1):string> |
-| org.apache.spark.sql.catalyst.expressions.StringSplit | split | SELECT split('oneAtwoBthreeC', '[ABC]') | struct<split(oneAtwoBthreeC, [ABC], -1):array<string>> |
+| org.apache.spark.sql.catalyst.expressions.StringSplit | split | SELECT split('oneAtwoBthreeC', '[ABC]') | struct<split(oneAtwoBthreeC, [ABC], 0):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.StringToMap | str_to_map | SELECT str_to_map('a:1,b:2,c:3', ',', ':') | struct<str_to_map(a:1,b:2,c:3, ,, :):map<string,string>> |
 | org.apache.spark.sql.catalyst.expressions.StringTranslate | translate | SELECT translate('AaBbCc', 'abc', '123') | struct<translate(AaBbCc, abc, 123):string> |
 | org.apache.spark.sql.catalyst.expressions.StringTrim | trim | SELECT trim('    SparkSQL   ') | struct<trim(    SparkSQL   ):string> |
