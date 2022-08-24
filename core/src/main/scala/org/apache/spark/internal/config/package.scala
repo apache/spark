@@ -2425,6 +2425,10 @@ package object config {
 
   private[spark] val HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT =
     ConfigBuilder("spark.driver.heartbeat.checkWorkerLastHeartbeat")
+      .doc("If this config is set to true, heartbeat receiver will check worker's heartbeat when" +
+        "the receiver does not receive any heartbeat from an executor during a period. In" +
+        "addition, this config is only for standalone scheduler. See [SPARK-39984] for more" +
+        "details.")
       .internal()
       .version("3.4.0")
       .booleanConf
