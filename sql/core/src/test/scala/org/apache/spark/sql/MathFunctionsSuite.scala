@@ -83,33 +83,110 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   private def testTwoToOneMathFunction(
-      c: (Column, Column) => Column,
-      d: (Column, Double) => Column,
+      cc: (Column, Column) => Column,
+      cd: (Column, Double) => Column,
+      dc: (Double, Column) => Column,
+      sc: (String, Column) => Column,
+      cs: (Column, String) => Column,
+      ss: (String, String) => Column,
+      sd: (String, Double) => Column,
+      ds: (Double, String) => Column,
+      dd: (Double, Double) => Column,
       f: (Double, Double) => Double): Unit = {
     checkAnswer(
-      nnDoubleData.select(c($"a", $"a")),
+      nnDoubleData.select(cc($"a", $"a")),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
 
     checkAnswer(
-      nnDoubleData.select(c($"a", $"b")),
+      nnDoubleData.select(cc($"a", $"b")),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
     )
 
     checkAnswer(
-      nnDoubleData.select(d($"a", 2.0)),
+      nnDoubleData.select(cd($"a", 2.0)),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), 2.0)))
     )
 
     checkAnswer(
-      nnDoubleData.select(d($"a", -0.5)),
+      nnDoubleData.select(cd($"a", -0.5)),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), -0.5)))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(dc(2.0, $"a")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(2.0, r.getDouble(0))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(dc(2.0, $"b")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(2.0, r.getDouble(1))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(sc("a", $"a")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(sc("a", $"b")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(cs($"a", "a")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(cs($"a", "b")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(ss("a", "a")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(ss("a", "b")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(sd("a", 2.0)),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), 2.0)))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(sd("a", -0.5)),
+      nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), -0.5)))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(ds(2.0, "a")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(2.0, r.getDouble(0))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(ds(2.0, "b")),
+      nnDoubleData.collect().toSeq.map(r => Row(f(2.0, r.getDouble(1))))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(dd(2.0, 3.0)).limit(1),
+      Seq(Row(f(2.0, 3.0)))
+    )
+
+    checkAnswer(
+      nnDoubleData.select(dd(2.0, -0.5)).limit(1),
+      Seq(Row(f(2.0, -0.5)))
     )
 
     val nonNull = nullDoubles.collect().toSeq.filter(r => r.get(0) != null)
 
     checkAnswer(
-      nullDoubles.select(c($"a", $"a")).orderBy($"a".asc),
+      nullDoubles.select(cc($"a", $"a")).orderBy($"a".asc),
       Row(null) +: nonNull.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
   }
@@ -427,7 +504,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("pow / power") {
-    testTwoToOneMathFunction(pow, pow, StrictMath.pow)
+    testTwoToOneMathFunction(pow, pow, pow, pow, pow, pow, pow, pow, pow,
+      StrictMath.pow)
 
     checkAnswer(
       sql("SELECT pow(1, 2), power(2, 1)"),
@@ -459,11 +537,18 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("hypot") {
-    testTwoToOneMathFunction(hypot, hypot, math.hypot)
+    testTwoToOneMathFunction(hypot, hypot, hypot, hypot, hypot, hypot, hypot, hypot, hypot,
+      math.hypot)
   }
 
   test("atan2") {
-    testTwoToOneMathFunction(atan2, atan2, math.atan2)
+    testTwoToOneMathFunction(atan2, atan2, atan2, atan2, atan2, atan2, atan2, atan2, atan2,
+      math.atan2)
+  }
+
+  test("pmod") {
+    testTwoToOneMathFunction(pmod, pmod, pmod, pmod, pmod, pmod, pmod, pmod, pmod,
+      (a: Double, b: Double) => (a % b).abs)
   }
 
   test("log / ln") {

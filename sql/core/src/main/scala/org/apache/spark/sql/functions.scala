@@ -1734,6 +1734,19 @@ object functions {
   def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
 
   /**
+   * @param yValue coordinate on y-axis
+   * @param xValue coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>, <i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
+   *         as if computed by `java.lang.Math.atan2`
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def atan2(yValue: Double, xValue: Double): Column = atan2(lit(yValue), lit(xValue))
+
+  /**
    * @return inverse hyperbolic tangent of `e`
    *
    * @group math_funcs
@@ -2043,9 +2056,17 @@ object functions {
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
+
+  /**
+   * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def hypot(l: Double, r: Double): Column = hypot(lit(l), lit(r))
 
   /**
    * Returns the least value of the list of values, skipping null values.
@@ -2214,6 +2235,14 @@ object functions {
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
   /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pow(l: Double, r: Double): Column = pow(lit(l), lit(r))
+
+  /**
    * Returns the positive value of dividend mod divisor.
    *
    * @group math_funcs
@@ -2221,6 +2250,86 @@ object functions {
    */
   def pmod(dividend: Column, divisor: Column): Column = withExpr {
     Pmod(dividend.expr, divisor.expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: String, divisor: Column): Column = withExpr {
+    Pmod(Column(dividend).expr, divisor.expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Column, divisor: String): Column = withExpr {
+    Pmod(dividend.expr, Column(divisor).expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: String, divisor: String): Column = withExpr {
+    Pmod(Column(dividend).expr, Column(divisor).expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: String, divisor: Double): Column = withExpr {
+    Pmod(Column(dividend).expr, lit(divisor).expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Double, divisor: String): Column = withExpr {
+    Pmod(lit(dividend).expr, Column(divisor).expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Double, divisor: Column): Column = withExpr {
+    Pmod(lit(dividend).expr, divisor.expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Column, divisor: Double): Column = withExpr {
+    Pmod(dividend.expr, lit(divisor).expr)
+  }
+
+  /**
+   * Returns the positive value of dividend mod divisor.
+   *
+   * @group math_funcs
+   * @since 3.4.0
+   */
+  def pmod(dividend: Double, divisor: Double): Column = withExpr {
+    Pmod(lit(dividend).expr, lit(divisor).expr)
   }
 
   /**
