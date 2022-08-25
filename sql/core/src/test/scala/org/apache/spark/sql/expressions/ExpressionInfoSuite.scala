@@ -261,7 +261,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
-  test("Check source for different kind of UDFs") {
+  test("Check source for Built-in and Scala UDF") {
     import org.apache.spark.sql.IntegratedUDFTestUtils
     val catalog = spark.sessionState.catalog
     assert(catalog.lookupFunctionInfo(FunctionIdentifier("sum")).getSource === "built-in")
@@ -270,7 +270,13 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     IntegratedUDFTestUtils.registerTestUDF(scalaUDF, spark)
     val scalaInfo = catalog.lookupFunctionInfo(FunctionIdentifier(scalaUDF.name))
     assert(scalaInfo.getSource === "scala_udf")
+  }
 
+  test("Check source for Python UDF") {
+    import org.apache.spark.sql.IntegratedUDFTestUtils
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+
+    val catalog = spark.sessionState.catalog
     val pythonUDF = IntegratedUDFTestUtils.TestPythonUDF("pythonUDF")
     IntegratedUDFTestUtils.registerTestUDF(pythonUDF, spark)
     val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
