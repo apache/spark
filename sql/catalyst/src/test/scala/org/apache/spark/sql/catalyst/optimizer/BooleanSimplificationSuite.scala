@@ -63,6 +63,11 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(actual, expected)
   }
 
+  private def checkCondition(input: LogicalPlan, expected: LogicalPlan): Unit = {
+    val actual = Optimize.execute(input)
+    comparePlans(actual, expected)
+  }
+
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
     val actual = Optimize.execute(plan)
@@ -276,6 +281,18 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
     checkCondition(!$"e" || $"e",
       testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
+  }
+
+  test("SPARK-40177: simplify (a == b) || (a == null and b == null) => a <=> b") {
+    checkCondition(testRelation.where(Or(EqualTo($"a", $"b"),
+      And($"a".isNull, $"b".isNull))).analyze,
+      testRelation.where(EqualNullSafe($"a", $"b")).analyze)
+
+    checkCondition(testRelation.where(Or(And($"a".isNull, $"b".isNull),
+      EqualTo($"a", $"b"))).analyze, testRelation.where(EqualNullSafe($"a", $"b")).analyze)
+
+    checkCondition(testRelation.where(Or(And($"a".isNull, $"b".isNull),
+      EqualTo($"b", $"a"))).analyze, testRelation.where(EqualNullSafe($"b", $"a")).analyze)
   }
 
   test("Complementation Laws - negative case") {

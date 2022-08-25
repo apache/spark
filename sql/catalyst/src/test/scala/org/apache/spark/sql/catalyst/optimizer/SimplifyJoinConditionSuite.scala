@@ -28,7 +28,7 @@ class SimplifyJoinConditionSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Simplify Join Condition", Once,
-        SimplifyJoinCondition)  :: Nil
+        BooleanSimplification)  :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
