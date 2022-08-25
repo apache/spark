@@ -347,4 +347,12 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
         "<POS_0>.<MAP_VALUE>.`f`")
     }
   }
+
+  test("SPARK-40199 Unexpected null handling should handle columns with special chars") {
+    val colName = "col_\"'`,.?$!&%@^~+*-\b\t\f\'\r\n+()[]<>{}|\\/_test"
+    testUnexpectedNullHandling(
+      new StructType().add(colName, StringType, nullable = false),
+      InternalRow(null),
+      s"<POS_0>.`$colName`")
+  }
 }

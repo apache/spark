@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -274,7 +276,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
        |try {
        |  ${inputExpr.trim}
        |} catch (NullPointerException npe) {
-       |  throw QueryExecutionErrors.valueCannotBeNullError("${descPath.mkString(".")}");
+       |  throw QueryExecutionErrors.valueCannotBeNullError(
+       |      "${descPath.map(StringEscapeUtils.escapeJava).mkString(".")}");
        |}
     """.stripMargin
 
