@@ -351,160 +351,160 @@ rectangle    16.0  2.348543e+108
 
 class DataFrame(Frame, Generic[T]):
     """
-     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
-     DataFrame internally.
+    pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
+    DataFrame internally.
 
-     :ivar _internal: an internal immutable Frame to manage metadata.
-     :type _internal: InternalFrame
+    :ivar _internal: an internal immutable Frame to manage metadata.
+    :type _internal: InternalFrame
 
-     Parameters
-     ----------
-     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame,
-         Spark DataFrame, pandas-on-Spark DataFrame or pandas-on-Spark Series.
-         Dict can contain Series, arrays, constants, or list-like objects
-     index : Index or array-like
-         Index to use for resulting frame. Will default to RangeIndex if
-         no indexing information part of input data and no index provided
-     columns : Index or array-like
-         Column labels to use for resulting frame. Will default to
-         RangeIndex (0, 1, 2, ..., n) if no column labels are provided
-     dtype : dtype, default None
-         Data type to force. Only a single dtype is allowed. If None, infer
-     copy : boolean, default False
-         Copy data from inputs. Only affects DataFrame / 2d ndarray input
+    Parameters
+    ----------
+    data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame,
+        Spark DataFrame, pandas-on-Spark DataFrame or pandas-on-Spark Series.
+        Dict can contain Series, arrays, constants, or list-like objects
+    index : Index or array-like
+        Index to use for resulting frame. Will default to RangeIndex if
+        no indexing information part of input data and no index provided
+    columns : Index or array-like
+        Column labels to use for resulting frame. Will default to
+        RangeIndex (0, 1, 2, ..., n) if no column labels are provided
+    dtype : dtype, default None
+        Data type to force. Only a single dtype is allowed. If None, infer
+    copy : boolean, default False
+        Copy data from inputs. Only affects DataFrame / 2d ndarray input
 
-     Notes
-     -----
-     Since 3.4.0, it support more cases that combine `data` and `index`:
-     1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
-     pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
-     the `index` if necessary, and then try to combine the `data` and `index`;
-     Note that in this case `compute.ops_on_diff_frames` should be turned on;
-     2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
-     it will first collect the `index` to driver if necessary, and then apply
-     the `Pandas.DataFrame(...)` creation internally;
+    Notes
+    -----
+    Since 3.4.0, it support more cases that combine `data` and `index`:
+    1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
+    pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
+    the `index` if necessary, and then try to combine the `data` and `index`;
+    Note that in this case `compute.ops_on_diff_frames` should be turned on;
+    2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
+    it will first collect the `index` to driver if necessary, and then apply
+    the `Pandas.DataFrame(...)` creation internally;
 
-     Examples
-     --------
-     Constructing DataFrame from a dictionary.
+    Examples
+    --------
+    Constructing DataFrame from a dictionary.
 
-     >>> d = {'col1': [1, 2], 'col2': [3, 4]}
-     >>> df = ps.DataFrame(data=d, columns=['col1', 'col2'])
-     >>> df
-        col1  col2
-     0     1     3
-     1     2     4
+    >>> d = {'col1': [1, 2], 'col2': [3, 4]}
+    >>> df = ps.DataFrame(data=d, columns=['col1', 'col2'])
+    >>> df
+       col1  col2
+    0     1     3
+    1     2     4
 
-     Constructing DataFrame from pandas DataFrame
+    Constructing DataFrame from pandas DataFrame
 
-     >>> df = ps.DataFrame(pd.DataFrame(data=d, columns=['col1', 'col2']))
-     >>> df
-        col1  col2
-     0     1     3
-     1     2     4
+    >>> df = ps.DataFrame(pd.DataFrame(data=d, columns=['col1', 'col2']))
+    >>> df
+       col1  col2
+    0     1     3
+    1     2     4
 
-     Notice that the inferred dtype is int64.
+    Notice that the inferred dtype is int64.
 
-     >>> df.dtypes
-     col1    int64
-     col2    int64
-     dtype: object
+    >>> df.dtypes
+    col1    int64
+    col2    int64
+    dtype: object
 
-     To enforce a single dtype:
+    To enforce a single dtype:
 
-     >>> df = ps.DataFrame(data=d, dtype=np.int8)
-     >>> df.dtypes
-     col1    int8
-     col2    int8
-     dtype: object
+    >>> df = ps.DataFrame(data=d, dtype=np.int8)
+    >>> df.dtypes
+    col1    int8
+    col2    int8
+    dtype: object
 
-     Constructing DataFrame from numpy ndarray:
+    Constructing DataFrame from numpy ndarray:
 
-     >>> import numpy as np
-     >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-     ...     columns=['a', 'b', 'c', 'd', 'e'])
-        a  b  c  d  e
-     0  1  2  3  4  5
-     1  6  7  8  9  0
+    >>> import numpy as np
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
+       a  b  c  d  e
+    0  1  2  3  4  5
+    1  6  7  8  9  0
 
-     Constructing DataFrame from numpy ndarray with Pandas index:
+    Constructing DataFrame from numpy ndarray with Pandas index:
 
-     >>> import numpy as np
-     >>> import pandas as pd
-     >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-     ...     index=pd.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
-        a  b  c  d  e
-     1  1  2  3  4  5
-     4  6  7  8  9  0
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     index=pd.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
+       a  b  c  d  e
+    1  1  2  3  4  5
+    4  6  7  8  9  0
 
-     Constructing DataFrame from numpy ndarray with pandas-on-Spark index:
+    Constructing DataFrame from numpy ndarray with pandas-on-Spark index:
 
-     >>> import numpy as np
-     >>> import pandas as pd
-     >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-     ...     index=ps.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
-        a  b  c  d  e
-     1  1  2  3  4  5
-     4  6  7  8  9  0
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     index=ps.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
+       a  b  c  d  e
+    1  1  2  3  4  5
+    4  6  7  8  9  0
 
-     Constructing DataFrame from Pandas DataFrame with Pandas index:
+    Constructing DataFrame from Pandas DataFrame with Pandas index:
 
-     >>> import numpy as np
-     >>> import pandas as pd
-     >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-     ...     columns=['a', 'b', 'c', 'd', 'e'])
-     >>> ps.DataFrame(data=pdf, index=pd.Index([1,4]))
-          a    b    c    d    e
-     1  6.0  7.0  8.0  9.0  0.0
-     4  NaN  NaN  NaN  NaN  NaN
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
+    >>> ps.DataFrame(data=pdf, index=pd.Index([1,4]))
+         a    b    c    d    e
+    1  6.0  7.0  8.0  9.0  0.0
+    4  NaN  NaN  NaN  NaN  NaN
 
-     Constructing DataFrame from Pandas DataFrame with pandas-on-Spark index:
+    Constructing DataFrame from Pandas DataFrame with pandas-on-Spark index:
 
-     >>> import numpy as np
-     >>> import pandas as pd
-     >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-     ...     columns=['a', 'b', 'c', 'd', 'e'])
-     >>> ps.DataFrame(data=pdf, index=ps.Index([1,4]))
-          a    b    c    d    e
-     1  6.0  7.0  8.0  9.0  0.0
-     4  NaN  NaN  NaN  NaN  NaN
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
+    >>> ps.DataFrame(data=pdf, index=ps.Index([1,4]))
+         a    b    c    d    e
+    1  6.0  7.0  8.0  9.0  0.0
+    4  NaN  NaN  NaN  NaN  NaN
 
-     Constructing DataFrame from SparkDataFrame with Pandas index:
+    Constructing DataFrame from SparkDataFrame with Pandas index:
 
-     >>> import pandas as pd
-     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-     >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
-     Traceback (most recent call last):
-       ...
-     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
+    >>> import pandas as pd
+    >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
+    >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+    Traceback (most recent call last):
+      ...
+    ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
 
-     Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
+    Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
 
-     >>> with ps.option_context("compute.ops_on_diff_frames", True):
-     ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
-             x    y
-     0    Data  1.0
-     1  Bricks  2.0
-     2    None  NaN
+    >>> with ps.option_context("compute.ops_on_diff_frames", True):
+    ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+            x    y
+    0    Data  1.0
+    1  Bricks  2.0
+    2    None  NaN
 
-     Constructing DataFrame from SparkDataFrame with pandas-on-Spark index:
+    Constructing DataFrame from SparkDataFrame with pandas-on-Spark index:
 
-     >>> import pandas as pd
-     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-     >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
-     Traceback (most recent call last):
-       ...
-     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
+    >>> import pandas as pd
+    >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
+    >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+    Traceback (most recent call last):
+      ...
+    ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
 
-     Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
+    Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
 
-     >>> with ps.option_context("compute.ops_on_diff_frames", True):
-     ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
-             x    y
-     0    Data  1.0
-     1  Bricks  2.0
-     2    None  NaN
-     """
+    >>> with ps.option_context("compute.ops_on_diff_frames", True):
+    ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+            x    y
+    0    Data  1.0
+    1  Bricks  2.0
+    2    None  NaN
+    """
 
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
