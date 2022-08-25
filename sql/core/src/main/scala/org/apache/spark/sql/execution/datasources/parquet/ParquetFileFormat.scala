@@ -70,7 +70,7 @@ class ParquetFileFormat
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val sqlConf = sparkSession.sessionState.conf
-    val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
+    val parquetOptions = new ParquetOptions(options, sqlConf)
     ParquetUtils.prepareWrite(sqlConf, job, dataSchema, parquetOptions)
   }
 
