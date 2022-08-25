@@ -2087,6 +2087,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   /**
    * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
+   * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
