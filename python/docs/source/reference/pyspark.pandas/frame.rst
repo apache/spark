@@ -158,6 +158,7 @@ Computations / Descriptive Stats
    DataFrame.mean
    DataFrame.min
    DataFrame.median
+   DataFrame.mode
    DataFrame.pct_change
    DataFrame.prod
    DataFrame.product

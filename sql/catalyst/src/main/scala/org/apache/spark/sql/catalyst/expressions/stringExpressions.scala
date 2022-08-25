@@ -250,6 +250,8 @@ case class ConcatWs(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
+      > SELECT _FUNC_(2, 'a', 1);
+       1
   """,
   since = "2.0.0",
   group = "string_funcs")
@@ -1865,6 +1867,8 @@ case class StringSpace(child: Expression)
        SQL
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
+       k SQL
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1956,6 +1960,8 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 3);
+       Spa
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -1988,6 +1994,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
     Examples:
       > SELECT _FUNC_('Spark SQL ');
        10
+      > SELECT _FUNC_(x'537061726b2053514c');
+       9
       > SELECT CHAR_LENGTH('Spark SQL ');
        10
       > SELECT CHARACTER_LENGTH('Spark SQL ');
@@ -2025,6 +2033,8 @@ case class Length(child: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
+      > SELECT _FUNC_(x'537061726b2053514c');
+       72
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2060,6 +2070,8 @@ case class BitLength(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       9
+      > SELECT _FUNC_(x'537061726b2053514c');
        9
   """,
   since = "2.3.0",
@@ -2167,9 +2179,10 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any = {
-    val bytes = string.asInstanceOf[UTF8String].getBytes
-    if (bytes.length > 0) {
-      bytes(0).asInstanceOf[Int]
+    // only pick the first character to reduce the `toString` cost
+    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
+    if (firstCharStr.numChars > 0) {
+      firstCharStr.toString.codePointAt(0)
     } else {
       0
     }
@@ -2177,11 +2190,11 @@ case class Ascii(child: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      val bytes = ctx.freshName("bytes")
+      val firstCharStr = ctx.freshName("firstCharStr")
       s"""
-        byte[] $bytes = $child.getBytes();
-        if ($bytes.length > 0) {
-          ${ev.value} = (int) $bytes[0];
+        UTF8String $firstCharStr = $child.substring(0, 1);
+        if ($firstCharStr.numChars() > 0) {
+          ${ev.value} = $firstCharStr.toString().codePointAt(0);
         } else {
           ${ev.value} = 0;
         }
@@ -2249,6 +2262,8 @@ case class Chr(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
+       U3BhcmsgU1FM
+      > SELECT _FUNC_(x'537061726b2053514c');
        U3BhcmsgU1FM
   """,
   since = "1.5.0",

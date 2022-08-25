@@ -1511,16 +1511,31 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
-   * The variable will be sent to each cluster only once.
+   * The variable will be sent to each executor only once.
    *
    * @param value value to broadcast to the Spark nodes
    * @return `Broadcast` object, a read-only variable cached on each machine
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
+    broadcastInternal(value, serializedOnly = false)
+  }
+
+  /**
+   * Internal version of broadcast - broadcast a read-only variable to the cluster, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each executor only once.
+   *
+   * @param value value to broadcast to the Spark nodes
+   * @param serializedOnly if true, do not cache the unserialized value on the driver
+   * @return `Broadcast` object, a read-only variable cached on each machine
+   */
+  private[spark] def broadcastInternal[T: ClassTag](
+      value: T,
+      serializedOnly: Boolean): Broadcast[T] = {
     assertNotStopped()
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal, serializedOnly)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))

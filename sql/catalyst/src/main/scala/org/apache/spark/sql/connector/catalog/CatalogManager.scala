@@ -84,7 +84,7 @@ class CatalogManager(
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
       catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-    }.getOrElse(defaultSessionCatalog)
+    }.getOrElse(catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, defaultSessionCatalog))
   }
 
   private var _currentNamespace: Option[Array[String]] = None

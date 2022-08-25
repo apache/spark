@@ -273,7 +273,6 @@ class DecisionTree:
            Predict: 0.0
           Else (feature 0 > 0.5)
            Predict: 1.0
-        <BLANKLINE>
         >>> model.predict(array([1.0]))
         1.0
         >>> model.predict(array([0.0]))
@@ -511,10 +510,8 @@ class RandomForest:
         7
         >>> print(model)
         TreeEnsembleModel classifier with 3 trees
-        <BLANKLINE>
         >>> print(model.toDebugString())
         TreeEnsembleModel classifier with 3 trees
-        <BLANKLINE>
           Tree 0:
             Predict: 1.0
           Tree 1:
@@ -527,7 +524,6 @@ class RandomForest:
              Predict: 0.0
             Else (feature 0 > 1.5)
              Predict: 1.0
-        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -764,7 +760,6 @@ class GradientBoostedTrees:
         30
         >>> print(model)  # it already has newline
         TreeEnsembleModel classifier with 10 trees
-        <BLANKLINE>
         >>> model.predict([2.0])
         1.0
         >>> model.predict([0.0])
@@ -881,7 +876,9 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("mllib.tree tests").getOrCreate()
     globs["sc"] = spark.sparkContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

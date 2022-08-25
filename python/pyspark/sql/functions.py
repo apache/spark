@@ -37,7 +37,7 @@ from typing import (
     ValuesView,
 )
 
-from pyspark import since, SparkContext
+from pyspark import SparkContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
@@ -129,18 +129,45 @@ def lit(col: Any) -> Column:
 
     .. versionadded:: 1.3.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or Python primitive type.
+        the value to make it as a PySpark literal. If a column is passed,
+        it returns the column as is.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the literal instance.
+
     Examples
     --------
-    >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
-    [Row(height=5, spark_user=True)]
+    >>> df = spark.range(1)
+    >>> df.select(lit(5).alias('height'), df.id).show()
+    +------+---+
+    |height| id|
+    +------+---+
+    |     5|  0|
+    +------+---+
     """
     return col if isinstance(col, Column) else _invoke_function("lit", col)
 
 
-@since(1.3)
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : str
+        the name for the column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the corresponding column instance.
 
     Examples
     --------
@@ -155,50 +182,235 @@ def col(col: str) -> Column:
 column = col
 
 
-@since(1.3)
 def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given column name.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the ascending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    Sort by the column 'id' in the descending order.
+
+    >>> df = spark.range(5)
+    >>> df = df.sort(desc("id"))
+    >>> df.show()
+    +---+
+    | id|
+    +---+
+    |  4|
+    |  3|
+    |  2|
+    |  1|
+    |  0|
+    +---+
+
+    Sort by the column 'id' in the ascending order.
+
+    >>> df.orderBy(asc("id")).show()
+    +---+
+    | id|
+    +---+
+    |  0|
+    |  1|
+    |  2|
+    |  3|
+    |  4|
+    +---+
     """
     return col.asc() if isinstance(col, Column) else _invoke_function("asc", col)
 
 
-@since(1.3)
 def desc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given column name.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the descending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    Sort by the column 'id' in the descending order.
+
+    >>> spark.range(5).orderBy(desc("id")).show()
+    +---+
+    | id|
+    +---+
+    |  4|
+    |  3|
+    |  2|
+    |  1|
+    |  0|
+    +---+
     """
     return col.desc() if isinstance(col, Column) else _invoke_function("desc", col)
 
 
-@since(1.3)
 def sqrt(col: "ColumnOrName") -> Column:
     """
     Computes the square root of the specified float value.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(sqrt(lit(4))).show()
+    +-------+
+    |SQRT(4)|
+    +-------+
+    |    2.0|
+    +-------+
     """
     return _invoke_function_over_columns("sqrt", col)
 
 
-@since(1.3)
 def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(abs(lit(-1))).show()
+    +-------+
+    |abs(-1)|
+    +-------+
+    |      1|
+    +-------+
     """
     return _invoke_function_over_columns("abs", col)
 
 
-@since(1.3)
+def mode(col: "ColumnOrName") -> Column:
+    """
+    Returns the most frequent value in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the most frequent value in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(mode("year")).show()
+    +------+----------+
+    |course|mode(year)|
+    +------+----------+
+    |  Java|      2012|
+    |dotNET|      2012|
+    +------+----------+
+    """
+    return _invoke_function_over_columns("mode", col)
+
+
 def max(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the maximum value of the expression in a group.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(max(col("id"))).show()
+    +-------+
+    |max(id)|
+    +-------+
+    |      9|
+    +-------+
     """
     return _invoke_function_over_columns("max", col)
 
 
-@since(1.3)
 def min(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the minimum value of the expression in a group.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(min(df.id)).show()
+    +-------+
+    |min(id)|
+    +-------+
+    |      0|
+    +-------+
     """
     return _invoke_function_over_columns("min", col)
 
@@ -212,7 +424,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column that the value will be returned
+        target column to compute on.
     ord : :class:`~pyspark.sql.Column` or str
         column to be maximized
 
@@ -247,7 +459,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        target column that the value will be returned
+        target column to compute on.
     ord : :class:`~pyspark.sql.Column` or str
         column to be minimized
 
@@ -273,42 +485,164 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("min_by", col, ord)
 
 
-@since(1.3)
 def count(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the number of items in a group.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        column for computed results.
+
+    Examples
+    --------
+    Count by all columns (start), and by a column that does not count ``None``.
+
+    >>> df = spark.createDataFrame([(None,), ("a",), ("b",), ("c",)], schema=["alphabets"])
+    >>> df.select(count(expr("*")), count(df.alphabets)).show()
+    +--------+----------------+
+    |count(1)|count(alphabets)|
+    +--------+----------------+
+    |       4|               3|
+    +--------+----------------+
     """
     return _invoke_function_over_columns("count", col)
 
 
-@since(1.3)
 def sum(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of all values in the expression.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(sum(df["id"])).show()
+    +-------+
+    |sum(id)|
+    +-------+
+    |     45|
+    +-------+
     """
     return _invoke_function_over_columns("sum", col)
 
 
-@since(1.3)
 def avg(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
+
+    .. versionadded:: 1.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(avg(col("id"))).show()
+    +-------+
+    |avg(id)|
+    +-------+
+    |    4.5|
+    +-------+
     """
     return _invoke_function_over_columns("avg", col)
 
 
-@since(1.3)
 def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
+    An alias of :func:`avg`.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(mean(df.id)).show()
+    +-------+
+    |avg(id)|
+    +-------+
+    |    4.5|
+    +-------+
     """
     return _invoke_function_over_columns("mean", col)
 
 
-@since(1.3)
+def median(col: "ColumnOrName") -> Column:
+    """
+    Returns the median of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the median of the values in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(median("earnings")).show()
+    +------+----------------+
+    |course|median(earnings)|
+    +------+----------------+
+    |  Java|         22000.0|
+    |dotNET|         10000.0|
+    +------+----------------+
+    """
+    return _invoke_function_over_columns("median", col)
+
+
 def sumDistinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 1.3.0
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
@@ -317,10 +651,31 @@ def sumDistinct(col: "ColumnOrName") -> Column:
     return sum_distinct(col)
 
 
-@since(3.2)
 def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
+    >>> df.select(sum_distinct(col("numbers"))).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    3|
+    +---------------------+
     """
     return _invoke_function_over_columns("sum_distinct", col)
 
@@ -336,6 +691,11 @@ def product(col: "ColumnOrName") -> Column:
     col : str, :class:`Column`
         column containing values to be multiplied together
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
     Examples
     --------
     >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
@@ -348,7 +708,6 @@ def product(col: "ColumnOrName") -> Column:
     |   1|   28.0|
     |   2|   80.0|
     +----+-------+
-
     """
     return _invoke_function_over_columns("product", col)
 
@@ -359,10 +718,26 @@ def acos(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
         inverse cosine of `col`, as if computed by `java.lang.Math.acos()`
+
+    Examples
+    --------
+    >>> df = spark.range(1, 3)
+    >>> df.select(acos(df.id)).show()
+    +--------+
+    |ACOS(id)|
+    +--------+
+    |     0.0|
+    |     NaN|
+    +--------+
     """
     return _invoke_function_over_columns("acos", col)
 
@@ -373,9 +748,26 @@ def acosh(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(2)
+    >>> df.select(acosh(col("id"))).show()
+    +---------+
+    |ACOSH(id)|
+    +---------+
+    |      NaN|
+    |      0.0|
+    +---------+
     """
     return _invoke_function_over_columns("acosh", col)
 
@@ -384,13 +776,28 @@ def asin(col: "ColumnOrName") -> Column:
     """
     Computes inverse sine of the input column.
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         inverse sine of `col`, as if computed by `java.lang.Math.asin()`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,), (2,)])
+    >>> df.select(asin(df.schema.fieldNames()[0])).show()
+    +--------+
+    |ASIN(_1)|
+    +--------+
+    |     0.0|
+    |     NaN|
+    +--------+
     """
     return _invoke_function_over_columns("asin", col)
 
@@ -401,9 +808,25 @@ def asinh(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(asinh(col("id"))).show()
+    +---------+
+    |ASINH(id)|
+    +---------+
+    |      0.0|
+    +---------+
     """
     return _invoke_function_over_columns("asinh", col)
 
@@ -414,10 +837,25 @@ def atan(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(atan(df.id)).show()
+    +--------+
+    |ATAN(id)|
+    +--------+
+    |     0.0|
+    +--------+
     """
     return _invoke_function_over_columns("atan", col)
 
@@ -428,25 +866,84 @@ def atanh(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
     Returns
     -------
     :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0,), (2,)], schema=["numbers"])
+    >>> df.select(atanh(df["numbers"])).show()
+    +--------------+
+    |ATANH(numbers)|
+    +--------------+
+    |           0.0|
+    |           NaN|
+    +--------------+
     """
     return _invoke_function_over_columns("atanh", col)
 
 
-@since(1.4)
 def cbrt(col: "ColumnOrName") -> Column:
     """
     Computes the cube-root of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(cbrt(lit(27))).show()
+    +--------+
+    |CBRT(27)|
+    +--------+
+    |     3.0|
+    +--------+
     """
     return _invoke_function_over_columns("cbrt", col)
 
 
-@since(1.4)
 def ceil(col: "ColumnOrName") -> Column:
     """
     Computes the ceiling of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(ceil(lit(-0.1))).show()
+    +----------+
+    |CEIL(-0.1)|
+    +----------+
+    |         0|
+    +----------+
     """
     return _invoke_function_over_columns("ceil", col)
 
@@ -466,6 +963,13 @@ def cos(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         cosine of the angle, as if computed by `java.lang.Math.cos()`.
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(cos(lit(math.pi))).first()
+    Row(COS(3.14159...)=-1.0)
     """
     return _invoke_function_over_columns("cos", col)
 
@@ -485,6 +989,12 @@ def cosh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(cosh(lit(1))).first()
+    Row(COSH(1)=1.54308...)
     """
     return _invoke_function_over_columns("cosh", col)
 
@@ -498,12 +1008,19 @@ def cot(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        Angle in radians
+        angle in radians.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        Cotangent of the angle.
+        cotangent of the angle.
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(cot(lit(math.radians(45)))).first()
+    Row(COT(0.78539...)=1.00000...)
     """
     return _invoke_function_over_columns("cot", col)
 
@@ -517,69 +1034,225 @@ def csc(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        Angle in radians
+        angle in radians.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        Cosecant of the angle.
+        cosecant of the angle.
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(csc(lit(math.radians(90)))).first()
+    Row(CSC(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("csc", col)
 
 
-@since(1.4)
 def exp(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate exponential for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        exponential of the given value.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(exp(lit(0))).show()
+    +------+
+    |EXP(0)|
+    +------+
+    |   1.0|
+    +------+
     """
     return _invoke_function_over_columns("exp", col)
 
 
-@since(1.4)
 def expm1(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value minus one.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate exponential for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        exponential less one.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(expm1(lit(1))).first()
+    Row(EXPM1(1)=1.71828...)
     """
     return _invoke_function_over_columns("expm1", col)
 
 
-@since(1.4)
 def floor(col: "ColumnOrName") -> Column:
     """
     Computes the floor of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to find floor for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        neares integer that is less than or equal to given value.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(floor(lit(2.5))).show()
+    +----------+
+    |FLOOR(2.5)|
+    +----------+
+    |         2|
+    +----------+
     """
     return _invoke_function_over_columns("floor", col)
 
 
-@since(1.4)
 def log(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate natural logarithm for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        natural logarithm of the given value.
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(log(lit(math.e))).first()
+    Row(ln(2.71828...)=1.0)
     """
     return _invoke_function_over_columns("log", col)
 
 
-@since(1.4)
 def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate logarithm for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        logarithm of the given value in Base 10.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(log10(lit(100))).show()
+    +----------+
+    |LOG10(100)|
+    +----------+
+    |       2.0|
+    +----------+
     """
     return _invoke_function_over_columns("log10", col)
 
 
-@since(1.4)
 def log1p(col: "ColumnOrName") -> Column:
     """
-    Computes the natural logarithm of the given value plus one.
+    Computes the natural logarithm of the "given value plus one".
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate natural logarithm for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        natural logarithm of the "given value plus one".
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(log1p(lit(math.e))).first()
+    Row(LOG1P(2.71828...)=1.31326...)
+
+    Same as:
+
+    >>> df.select(log(lit(math.e+1))).first()
+    Row(ln(3.71828...)=1.31326...)
     """
     return _invoke_function_over_columns("log1p", col)
 
 
-@since(1.4)
 def rint(col: "ColumnOrName") -> Column:
     """
     Returns the double value that is closest in value to the argument and
     is equal to a mathematical integer.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(rint(lit(10.6))).show()
+    +----------+
+    |rint(10.6)|
+    +----------+
+    |      11.0|
+    +----------+
+
+    >>> df.select(rint(lit(10.3))).show()
+    +----------+
+    |rint(10.3)|
+    +----------+
+    |      10.0|
+    +----------+
     """
     return _invoke_function_over_columns("rint", col)
 
@@ -599,14 +1272,48 @@ def sec(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         Secant of the angle.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(sec(lit(1.5))).first()
+    Row(SEC(1.5)=14.13683...)
     """
     return _invoke_function_over_columns("sec", col)
 
 
-@since(1.4)
 def signum(col: "ColumnOrName") -> Column:
     """
     Computes the signum of the given value.
+
+    .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(signum(lit(-5))).show()
+    +----------+
+    |SIGNUM(-5)|
+    +----------+
+    |      -1.0|
+    +----------+
+
+    >>> df.select(signum(lit(6))).show()
+    +---------+
+    |SIGNUM(6)|
+    +---------+
+    |      1.0|
+    +---------+
     """
     return _invoke_function_over_columns("signum", col)
 
@@ -620,11 +1327,19 @@ def sin(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         sine of the angle, as if computed by `java.lang.Math.sin()`
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(sin(lit(math.radians(90)))).first()
+    Row(SIN(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("sin", col)
 
@@ -638,13 +1353,19 @@ def sinh(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        hyperbolic angle
+        hyperbolic angle.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         hyperbolic sine of the given value,
         as if computed by `java.lang.Math.sinh()`
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(sinh(lit(1.1))).first()
+    Row(SINH(1.1)=1.33564...)
     """
     return _invoke_function_over_columns("sinh", col)
 
@@ -664,6 +1385,13 @@ def tan(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         tangent of the given value, as if computed by `java.lang.Math.tan()`
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(tan(lit(math.radians(45)))).first()
+    Row(TAN(0.78539...)=0.99999...)
     """
     return _invoke_function_over_columns("tan", col)
 
@@ -684,13 +1412,21 @@ def tanh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic tangent of the given value
         as if computed by `java.lang.Math.tanh()`
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(tanh(lit(math.radians(90)))).first()
+    Row(TANH(1.57079...)=0.91715...)
     """
     return _invoke_function_over_columns("tanh", col)
 
 
-@since(1.4)
 def toDegrees(col: "ColumnOrName") -> Column:
     """
+    .. versionadded:: 1.4.0
+
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
     """
@@ -698,9 +1434,10 @@ def toDegrees(col: "ColumnOrName") -> Column:
     return degrees(col)
 
 
-@since(1.4)
 def toRadians(col: "ColumnOrName") -> Column:
     """
+    .. versionadded:: 1.4.0
+
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
     """
@@ -708,10 +1445,11 @@ def toRadians(col: "ColumnOrName") -> Column:
     return radians(col)
 
 
-@since(1.4)
 def bitwiseNOT(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
+
+    .. versionadded:: 1.4.0
 
     .. deprecated:: 3.2.0
         Use :func:`bitwise_not` instead.
@@ -720,19 +1458,72 @@ def bitwiseNOT(col: "ColumnOrName") -> Column:
     return bitwise_not(col)
 
 
-@since(3.2)
 def bitwise_not(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for computed results.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(bitwise_not(lit(0))).show()
+    +---+
+    | ~0|
+    +---+
+    | -1|
+    +---+
+    >>> df.select(bitwise_not(lit(1))).show()
+    +---+
+    | ~1|
+    +---+
+    | -2|
+    +---+
     """
     return _invoke_function_over_columns("bitwise_not", col)
 
 
-@since(2.4)
 def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the ascending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    >>> df1 = spark.createDataFrame([(1, "Bob"),
+    ...                              (0, None),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(asc_nulls_first(df1.name)).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  0| null|
+    |  2|Alice|
+    |  1|  Bob|
+    +---+-----+
+
     """
     return (
         col.asc_nulls_first()
@@ -741,22 +1532,74 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
-@since(2.4)
 def asc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the ascending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(asc_nulls_last(df1.name)).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  2|Alice|
+    |  1|  Bob|
+    |  0| null|
+    +---+-----+
+
     """
     return (
         col.asc_nulls_last() if isinstance(col, Column) else _invoke_function("asc_nulls_last", col)
     )
 
 
-@since(2.4)
 def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the descending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(desc_nulls_first(df1.name)).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  0| null|
+    |  1|  Bob|
+    |  2|Alice|
+    +---+-----+
+
     """
     return (
         col.desc_nulls_first()
@@ -765,11 +1608,37 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     )
 
 
-@since(2.4)
 def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
+
+    .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to sort by in the descending order.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column specifying the order.
+
+    Examples
+    --------
+    >>> df1 = spark.createDataFrame([(0, None),
+    ...                              (1, "Bob"),
+    ...                              (2, "Alice")], ["age", "name"])
+    >>> df1.sort(desc_nulls_last(df1.name)).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  1|  Bob|
+    |  2|Alice|
+    |  0| null|
+    +---+-----+
+
     """
     return (
         col.desc_nulls_last()
@@ -778,69 +1647,217 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     )
 
 
-@since(1.6)
 def stddev(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for stddev_samp.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        standard deviation of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(stddev(df.id)).first()
+    Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev", col)
 
 
-@since(1.6)
 def stddev_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample standard deviation of
     the expression in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        standard deviation of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(stddev_samp(df.id)).first()
+    Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev_samp", col)
 
 
-@since(1.6)
 def stddev_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns population standard deviation of
     the expression in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        standard deviation of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(stddev_pop(df.id)).first()
+    Row(stddev_pop(id)=1.70782...)
     """
     return _invoke_function_over_columns("stddev_pop", col)
 
 
-@since(1.6)
 def variance(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for var_samp
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        variance of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(variance(df.id)).show()
+    +------------+
+    |var_samp(id)|
+    +------------+
+    |         3.5|
+    +------------+
     """
     return _invoke_function_over_columns("variance", col)
 
 
-@since(1.6)
 def var_samp(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the unbiased sample variance of
     the values in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        variance of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(var_samp(df.id)).show()
+    +------------+
+    |var_samp(id)|
+    +------------+
+    |         3.5|
+    +------------+
     """
     return _invoke_function_over_columns("var_samp", col)
 
 
-@since(1.6)
 def var_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the population variance of the values in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        variance of given column.
+
+    Examples
+    --------
+    >>> df = spark.range(6)
+    >>> df.select(var_pop(df.id)).first()
+    Row(var_pop(id)=2.91666...)
     """
     return _invoke_function_over_columns("var_pop", col)
 
 
-@since(1.6)
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        skewness of given column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(skewness(df.c)).first()
+    Row(skewness(c)=0.70710...)
     """
     return _invoke_function_over_columns("skewness", col)
 
 
-@since(1.6)
 def kurtosis(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the kurtosis of the values in a group.
+
+    .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        kurtosis of given column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(kurtosis(df.c)).show()
+    +-----------+
+    |kurtosis(c)|
+    +-----------+
+    |       -1.5|
+    +-----------+
     """
     return _invoke_function_over_columns("kurtosis", col)
 
@@ -855,6 +1872,16 @@ def collect_list(col: "ColumnOrName") -> Column:
     -----
     The function is non-deterministic because the order of collected results depends
     on the order of the rows which may be non-deterministic after a shuffle.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        list of objects with duplicates.
 
     Examples
     --------
@@ -875,6 +1902,16 @@ def collect_set(col: "ColumnOrName") -> Column:
     -----
     The function is non-deterministic because the order of collected results depends
     on the order of the rows which may be non-deterministic after a shuffle.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        list of objects with no duplicates.
 
     Examples
     --------
@@ -978,10 +2015,11 @@ def hypot(col1: "ColumnOrName", col2: float) -> Column:
     ...
 
 
-@since(1.4)
 def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
+
+    .. versionadded:: 1.4.0
     """
     return _invoke_binary_math_function("hypot", col1, col2)
 
@@ -1001,23 +2039,63 @@ def pow(col1: "ColumnOrName", col2: float) -> Column:
     ...
 
 
-@since(1.4)
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Returns the value of the first argument raised to the power of the second argument.
+
+    .. versionadded:: 1.4.0
     """
     return _invoke_binary_math_function("pow", col1, col2)
 
 
-@since(1.6)
+def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
+    """
+    Returns the positive value of dividend mod divisor.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    dividend : str, :class:`~pyspark.sql.Column` or float
+        the column that contains dividend, or the specified dividend value
+    divisor : str, :class:`~pyspark.sql.Column` or float
+        the column that contains divisor, or the specified divisor value
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import pmod
+    >>> df = spark.createDataFrame([
+    ...     (1.0, float('nan')), (float('nan'), 2.0), (10.0, 3.0),
+    ...     (float('nan'), float('nan')), (-3.0, 4.0), (-10.0, 3.0),
+    ...     (-5.0, -6.0), (7.0, -8.0), (1.0, 2.0)],
+    ...     ("a", "b"))
+    >>> df.select(pmod("a", "b")).show()
+    +----------+
+    |pmod(a, b)|
+    +----------+
+    |       NaN|
+    |       NaN|
+    |       1.0|
+    |       NaN|
+    |       1.0|
+    |       2.0|
+    |      -5.0|
+    |       7.0|
+    |       1.0|
+    +----------+
+    """
+    return _invoke_binary_math_function("pmod", dividend, divisor)
+
+
 def row_number() -> Column:
     """
     Window function: returns a sequential number starting at 1 within a window partition.
+
+    .. versionadded:: 1.6.0
     """
     return _invoke_function("row_number")
 
 
-@since(1.6)
 def dense_rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition, without any gaps.
@@ -1029,11 +2107,12 @@ def dense_rank() -> Column:
     the person that came in third place (after the ties) would register as coming in fifth.
 
     This is equivalent to the DENSE_RANK function in SQL.
+
+    .. versionadded:: 1.6.0
     """
     return _invoke_function("dense_rank")
 
 
-@since(1.6)
 def rank() -> Column:
     """
     Window function: returns the rank of rows within a window partition.
@@ -1045,30 +2124,35 @@ def rank() -> Column:
     the person that came in third place (after the ties) would register as coming in fifth.
 
     This is equivalent to the RANK function in SQL.
+
+    .. versionadded:: 1.6.0
     """
     return _invoke_function("rank")
 
 
-@since(1.6)
 def cume_dist() -> Column:
     """
     Window function: returns the cumulative distribution of values within a window partition,
     i.e. the fraction of rows that are below the current row.
+
+    .. versionadded:: 1.6.0
     """
     return _invoke_function("cume_dist")
 
 
-@since(1.6)
 def percent_rank() -> Column:
     """
     Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
+
+    .. versionadded:: 1.6.0
     """
     return _invoke_function("percent_rank")
 
 
-@since(1.3)
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """
+    .. versionadded:: 1.3.0
+
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
     """
@@ -1100,9 +2184,12 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
         return _invoke_function("approx_count_distinct", _to_java_column(col), rsd)
 
 
-@since(1.6)
 def broadcast(df: DataFrame) -> DataFrame:
-    """Marks a DataFrame as small enough for use in broadcast joins."""
+    """
+    Marks a DataFrame as small enough for use in broadcast joins.
+
+    .. versionadded:: 1.6.0
+    """
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
@@ -1304,9 +2391,12 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("grouping_id", cols)
 
 
-@since(1.6)
 def input_file_name() -> Column:
-    """Creates a string column for the file name of the current Spark task."""
+    """
+    Creates a string column for the file name of the current Spark task.
+
+    .. versionadded:: 1.6.0
+    """
     return _invoke_function("input_file_name")
 
 
@@ -1912,11 +3002,12 @@ def ntile(n: int) -> Column:
 # ---------------------- Date/Timestamp functions ------------------------------
 
 
-@since(1.5)
 def current_date() -> Column:
     """
     Returns the current date at the start of query evaluation as a :class:`DateType` column.
     All calls of current_date within the same query return the same value.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function("current_date")
 
@@ -1925,8 +3016,32 @@ def current_timestamp() -> Column:
     """
     Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
     column. All calls of current_timestamp within the same query return the same value.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function("current_timestamp")
+
+
+def localtimestamp() -> Column:
+    """
+    Returns the current timestamp without time zone at the start of query evaluation
+    as a timestamp without time zone column. All calls of localtimestamp within the
+    same query return the same value.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import localtimestamp
+    >>> df = spark.range(0, 100)
+    >>> df.select(localtimestamp()).distinct().show()
+    +--------------------+
+    |    localtimestamp()|
+    +--------------------+
+    |20...-...-... ...:...:...|
+    +--------------------+
+    """
+    return _invoke_function("localtimestamp")
 
 
 def date_format(date: "ColumnOrName", format: str) -> Column:
@@ -2804,10 +3919,11 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     return _invoke_function("assert_true", _to_java_column(col), errMsg)
 
 
-@since(3.1)
 def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     Throws an exception with the provided error message.
+
+    .. versionadded:: 3.1.0
 
     Parameters
     ----------
@@ -2826,66 +3942,74 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 # ---------------------- String/Binary functions ------------------------------
 
 
-@since(1.5)
 def upper(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to upper case.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("upper", col)
 
 
-@since(1.5)
 def lower(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to lower case.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("lower", col)
 
 
-@since(1.5)
 def ascii(col: "ColumnOrName") -> Column:
     """
     Computes the numeric value of the first character of the string column.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("ascii", col)
 
 
-@since(1.5)
 def base64(col: "ColumnOrName") -> Column:
     """
     Computes the BASE64 encoding of a binary column and returns it as a string column.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("base64", col)
 
 
-@since(1.5)
 def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("unbase64", col)
 
 
-@since(1.5)
 def ltrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from left end for the specified string value.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("ltrim", col)
 
 
-@since(1.5)
 def rtrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from right end for the specified string value.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("rtrim", col)
 
 
-@since(1.5)
 def trim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from both ends for the specified string column.
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function_over_columns("trim", col)
 
@@ -2908,20 +4032,22 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
 
-@since(1.5)
 def decode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a string from a binary using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function("decode", _to_java_column(col), charset)
 
 
-@since(1.5)
 def encode(col: "ColumnOrName", charset: str) -> Column:
     """
     Computes the first argument into a binary from a string using the provided character set
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+
+    .. versionadded:: 1.5.0
     """
     return _invoke_function("encode", _to_java_column(col), charset)
 
@@ -3262,18 +4388,39 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
 
-def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Column:
-    r"""Replace all substrings of the specified string value that match regexp with rep.
+def regexp_replace(
+    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+) -> Column:
+    r"""Replace all substrings of the specified string value that match regexp with replacement.
 
     .. versionadded:: 1.5.0
 
+    Parameters
+    ----------
+    string : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string value
+    pattern : :class:`~pyspark.sql.Column` or str
+        column object or str containing the regexp pattern
+    replacement : :class:`~pyspark.sql.Column` or str
+        column object or str containing the replacement
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('100-200',)], ['str'])
+    >>> df = spark.createDataFrame([("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"])
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
     [Row(d='-----')]
+    >>> df.select(regexp_replace("str", col("pattern"), col("replacement")).alias('d')).collect()
+    [Row(d='-----')]
     """
-    return _invoke_function("regexp_replace", _to_java_column(str), pattern, replacement)
+    if isinstance(pattern, str):
+        pattern_col = _create_column_from_literal(pattern)
+    else:
+        pattern_col = _to_java_column(pattern)
+    if isinstance(replacement, str):
+        replacement_col = _create_column_from_literal(replacement)
+    else:
+        replacement_col = _to_java_column(replacement)
+    return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
 
 
 def initcap(col: "ColumnOrName") -> Column:
@@ -3685,6 +4832,10 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     -----
     The position is not zero based, but 1 based index.
 
+    See Also
+    --------
+    :meth:`get`
+
     Examples
     --------
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
@@ -3696,6 +4847,72 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     [Row(element_at(data, a)=1.0)]
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
+
+
+def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
+    """
+    Collection function: Returns element of array at given (0-based) index.
+    If the index points outside of the array boundaries, then this function
+    returns NULL.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    index : :class:`~pyspark.sql.Column` or str or int
+        index to check for in array
+
+    Notes
+    -----
+    The position is not 1 based, but 0 based index.
+
+    See Also
+    --------
+    :meth:`element_at`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"], 1)], ['data', 'index'])
+    >>> df.select(get(df.data, 1)).show()
+    +------------+
+    |get(data, 1)|
+    +------------+
+    |           b|
+    +------------+
+
+    >>> df.select(get(df.data, -1)).show()
+    +-------------+
+    |get(data, -1)|
+    +-------------+
+    |         null|
+    +-------------+
+
+    >>> df.select(get(df.data, 3)).show()
+    +------------+
+    |get(data, 3)|
+    +------------+
+    |        null|
+    +------------+
+
+    >>> df.select(get(df.data, "index")).show()
+    +----------------+
+    |get(data, index)|
+    +----------------+
+    |               b|
+    +----------------+
+
+    >>> df.select(get(df.data, col("index") - 1)).show()
+    +----------------------+
+    |get(data, (index - 1))|
+    +----------------------+
+    |                     a|
+    +----------------------+
+    """
+    index = lit(index) if isinstance(index, int) else index
+
+    return _invoke_function_over_columns("get", col, index)
 
 
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
@@ -4283,25 +5500,44 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     return _invoke_function("sort_array", _to_java_column(col), asc)
 
 
-def array_sort(col: "ColumnOrName") -> Column:
+def array_sort(
+    col: "ColumnOrName", comparator: Optional[Callable[[Column, Column], Column]] = None
+) -> Column:
     """
     Collection function: sorts the input array in ascending order. The elements of the input array
     must be orderable. Null elements will be placed at the end of the returned array.
 
     .. versionadded:: 2.4.0
+    .. versionchanged:: 3.4.0
+        Can take a `comparator` function.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         name of column or expression
+    comparator : callable, optional
+        A binary ``(Column, Column) -> Column: ...``.
+        The comparator will take two
+        arguments representing two elements of the array. It returns a negative integer, 0, or a
+        positive integer as the first element is less than, equal to, or greater than the second
+        element. If the comparator function returns null, the function will fail and raise an error.
 
     Examples
     --------
     >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
     >>> df.select(array_sort(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+    >>> df = spark.createDataFrame([(["foo", "foobar", None, "bar"],),(["foo"],),([],)], ['data'])
+    >>> df.select(array_sort(
+    ...     "data",
+    ...     lambda x, y: when(x.isNull() | y.isNull(), lit(0)).otherwise(length(y) - length(x))
+    ... ).alias("r")).collect()
+    [Row(r=['foobar', 'foo', None, 'bar']), Row(r=['foo']), Row(r=[])]
     """
-    return _invoke_function_over_columns("array_sort", col)
+    if comparator is None:
+        return _invoke_function_over_columns("array_sort", col)
+    else:
+        return _invoke_higher_order_function("ArraySort", [col], [comparator])
 
 
 def shuffle(col: "ColumnOrName") -> Column:
@@ -4371,6 +5607,39 @@ def flatten(col: "ColumnOrName") -> Column:
     [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
     """
     return _invoke_function_over_columns("flatten", col)
+
+
+def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Returns true if the map contains the key.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    value :
+        a literal value
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import map_contains_key
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_contains_key("data", 1)).show()
+    +---------------------------------+
+    |array_contains(map_keys(data), 1)|
+    +---------------------------------+
+    |                             true|
+    +---------------------------------+
+    >>> df.select(map_contains_key("data", -1)).show()
+    +----------------------------------+
+    |array_contains(map_keys(data), -1)|
+    +----------------------------------+
+    |                             false|
+    +----------------------------------+
+    """
+    return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
 def map_keys(col: "ColumnOrName") -> Column:
@@ -5336,11 +6605,53 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
 
 
+def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
+    """
+    Call an user-defined function.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    udfName : str
+        name of the user defined function (UDF)
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in the UDF
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import call_udf, col
+    >>> from pyspark.sql.types import IntegerType, StringType
+    >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "c")],["id", "name"])
+    >>> _ = spark.udf.register("intX2", lambda i: i * 2, IntegerType())
+    >>> df.select(call_udf("intX2", "id")).show()
+    +---------+
+    |intX2(id)|
+    +---------+
+    |        2|
+    |        4|
+    |        6|
+    +---------+
+    >>> _ = spark.udf.register("strX2", lambda s: s * 2, StringType())
+    >>> df.select(call_udf("strX2", col("name"))).show()
+    +-----------+
+    |strX2(name)|
+    +-----------+
+    |         aa|
+    |         bb|
+    |         cc|
+    +-----------+
+    """
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
+    return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
+
+
 def unwrap_udt(col: "ColumnOrName") -> Column:
     """
     Unwrap UDT data type column into its underlying type.
 
-        .. versionadded:: 3.4.0
+    .. versionadded:: 3.4.0
 
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))

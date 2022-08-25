@@ -17,30 +17,31 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
+import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecution, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class SparkPlanSuite extends QueryTest with SharedSparkSession {
+class SparkPlanSuite extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
 
-    intercept[IllegalStateException] { plan.execute() }
-    intercept[IllegalStateException] { plan.executeCollect() }
-    intercept[IllegalStateException] { plan.executeCollectPublic() }
-    intercept[IllegalStateException] { plan.executeToIterator() }
-    intercept[IllegalStateException] { plan.executeBroadcast() }
-    intercept[IllegalStateException] { plan.executeTake(1) }
-    intercept[IllegalStateException] { plan.executeTail(1) }
+    intercept[SparkException] { plan.execute() }
+    intercept[SparkException] { plan.executeCollect() }
+    intercept[SparkException] { plan.executeCollectPublic() }
+    intercept[SparkException] { plan.executeToIterator() }
+    intercept[SparkException] { plan.executeBroadcast() }
+    intercept[SparkException] { plan.executeTake(1) }
+    intercept[SparkException] { plan.executeTail(1) }
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
@@ -125,7 +126,8 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     assert(nonEmpty === relation.executeCollect())
   }
 
-  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
+  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized",
+    DisableAdaptiveExecution("AQE removes ColumnarToRowExec")) {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         spark.range(1).write.parquet(path.getAbsolutePath)
@@ -154,3 +156,5 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
 }
+
+class SparkPlanWithAQESuite extends SparkPlanSuite with EnableAdaptiveExecutionSuite

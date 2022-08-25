@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -189,12 +189,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // +- ScanBuilderHolder[group_col_0#10, agg_func_0#21, agg_func_1#22]
       // Later, we build the `Scan` instance and convert ScanBuilderHolder to DataSourceV2ScanRelation.
       // scalastyle:on
-      val groupOutput = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
-        AttributeReference(s"group_col_$i", e.dataType)()
+      val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
+        AttributeReference(s"group_col_$i", e.dataType)() -> e
       }
-      val aggOutput = finalAggExprs.zipWithIndex.map { case (e, i) =>
-        AttributeReference(s"agg_func_$i", e.dataType)()
+      val groupOutput = groupOutputMap.unzip._1
+      val aggOutputMap = finalAggExprs.zipWithIndex.map { case (e, i) =>
+        AttributeReference(s"agg_func_$i", e.dataType)() -> e
       }
+      val aggOutput = aggOutputMap.unzip._1
       val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
@@ -204,6 +206,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       holder.pushedAggregate = Some(translatedAgg)
+      holder.pushedAggOutputMap = AttributeMap(groupOutputMap ++ aggOutputMap)
       holder.output = newOutput
       logInfo(
         s"""
@@ -408,14 +411,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       (operation, isPushed && !isPartiallyPushed)
     case s @ Sort(order, _, operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder))
-        // Without building the Scan, we do not know the resulting column names after aggregate
-        // push-down, and thus can't push down Top-N which needs to know the ordering column names.
-        // TODO: we can support simple cases like GROUP BY columns directly and ORDER BY the same
-        //       columns, which we know the resulting column names: the original table columns.
-        if sHolder.pushedAggregate.isEmpty &&
-          CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
+      if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
-      val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))
+      val newOrder = if (sHolder.pushedAggregate.isDefined) {
+        // `ScanBuilderHolder` has different output columns after aggregate push-down. Here we
+        // replace the attributes in ordering expressions with the original table output columns.
+        aliasReplacedOrder.map {
+          _.transform {
+            case a: Attribute => sHolder.pushedAggOutputMap.getOrElse(a, a)
+          }.asInstanceOf[SortOrder]
+        }
+      } else {
+        aliasReplacedOrder.asInstanceOf[Seq[SortOrder]]
+      }
       val normalizedOrders = DataSourceStrategy.normalizeExprs(
         newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
@@ -545,6 +554,8 @@ case class ScanBuilderHolder(
   var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
 
   var pushedAggregate: Option[Aggregation] = None
+
+  var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

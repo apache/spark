@@ -1923,7 +1923,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         x
       })
       verifyCallCount(
-        df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
+        df.agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
 
       verifyCallCount(
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
@@ -4306,25 +4306,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "select cast(s as date) from t",
           "select cast(s as timestamp) from t",
           "select cast(s as boolean) from t").foreach { query =>
-          val msg = intercept[SparkException] {
-            sql(query).collect()
-          }.getMessage
-          assert(msg.contains(query))
-        }
-      }
-    }
-  }
-
-  test("SPARK-39177: Query context of getting map value should be serialized to executors" +
-    " when WSCG is off") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-      SQLConf.ANSI_ENABLED.key -> "true") {
-      withTable("t") {
-        sql("create table t(m map<string, string>) using parquet")
-        sql("insert into t values map('a', 'b')")
-        Seq(
-          "select m['foo'] from t",
-          "select element_at(m, 'foo') from t").foreach { query =>
           val msg = intercept[SparkException] {
             sql(query).collect()
           }.getMessage

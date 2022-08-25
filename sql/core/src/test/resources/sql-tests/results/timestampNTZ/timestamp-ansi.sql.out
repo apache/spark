@@ -95,7 +95,13 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_FRACTION_OF_SECOND] The fraction of sec must be zero. Valid range is [0, 60]. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -329,7 +335,21 @@ select to_timestamp(1)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value '1' of the type "STRING" cannot be cast to "TIMESTAMP_NTZ" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_NTZ\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "fragment" : ""
+  } ]
+}
 
 
 -- !query
@@ -338,7 +358,14 @@ select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.' could not be parsed at index 20. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -403,7 +430,14 @@ select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSS
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -420,7 +454,14 @@ select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -485,7 +526,14 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 7. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -494,7 +542,14 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '12.1232019-10-06S10:11' could not be parsed at index 9. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -567,7 +622,14 @@ select to_timestamp("02-29", "MM-dd")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Invalid date 'February 29' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -758,8 +820,14 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'dd MM yyyy EEEEE'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query

@@ -751,9 +751,9 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
-    val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr1 = df.repartition(2).agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr1 - 1.0) < 1e-12)
-    val corr2 = df.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    val corr2 = df.agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr2 + 1.0) < 1e-12)
     // non-trivial example. To reproduce in python, use:
     // >>> from scipy.stats import pearsonr
@@ -768,17 +768,17 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // > cor(a, b)
     // [1] 0.957233913947585835
     val df2 = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
-    val corr3 = df2.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr3 = df2.agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
 
     val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
-    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0)
+    val corr4 = df3.agg(corr("a", "b")).collect()(0)
     assert(corr4 == Row(null))
 
     val df4 = Seq.tabulate(10)(i => (1 * i, 2 * i, i * -1)).toDF("a", "b", "c")
-    val corr5 = df4.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr5 = df4.repartition(2).agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr5 - 1.0) < 1e-12)
-    val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    val corr6 = df4.agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
@@ -855,23 +855,23 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // >>> np.cov(a, b, bias = 1)[0][1]
     // 565.25
     val df = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
-    val cov_samp = df.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    val cov_samp = df.agg(covar_samp("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_samp - 595.0) < 1e-12)
 
-    val cov_pop = df.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    val cov_pop = df.agg(covar_pop("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_pop - 565.25) < 1e-12)
 
     val df2 = Seq.tabulate(20)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    val cov_samp2 = df2.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    val cov_samp2 = df2.agg(covar_samp("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_samp2 - 11564.0) < 1e-12)
 
-    val cov_pop2 = df2.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    val cov_pop2 = df2.agg(covar_pop("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_pop2 - 10985.799999999999) < 1e-12)
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(null))
-    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
+    checkAnswer(df3.agg(covar_samp("a", "b")), Row(null))
+    checkAnswer(df3.agg(covar_pop("a", "b")), Row(0.0))
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -938,7 +938,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           .find(r => r.getInt(0) == 50)
           .getOrElse(fail("A row with id 50 should be the expected answer."))
       checkAnswer(
-        df.groupBy().agg(udaf(allColumns: _*)),
+        df.agg(udaf(allColumns: _*)),
         // udaf returns a Row as the output value.
         Row(expectedAnswer)
       )

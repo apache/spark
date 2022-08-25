@@ -213,8 +213,4 @@ trait FileScan extends Scan
       name.toLowerCase(Locale.ROOT)
     }
   }
-
-  override def name(): String = Utils.getSimpleName(this.getClass)
-    .toLowerCase(Locale.ROOT)
-    .replaceAll("scan$", "")
 }
