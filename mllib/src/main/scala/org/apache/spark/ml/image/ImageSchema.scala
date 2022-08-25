@@ -20,6 +20,7 @@ package org.apache.spark.ml.image
 import java.awt.Color
 import java.awt.color.ColorSpace
 import java.io.ByteArrayInputStream
+import javax.imageio.IIOException
 import javax.imageio.ImageIO
 
 import scala.collection.JavaConverters._
@@ -33,7 +34,7 @@ import org.apache.spark.sql.types._
  * Defines the image schema and methods to read and manipulate images.
  */
 @Since("2.3.0")
-object ImageSchema extends Logging {
+object ImageSchema {
 
   val undefinedImageType = "Undefined"
 
@@ -134,13 +135,15 @@ object ImageSchema extends Logging {
     val img = try {
       ImageIO.read(new ByteArrayInputStream(bytes))
     } catch {
+      case e: IIOException =>
+        throw new IIOException(
+          s"origin = $origin, bytes = ${bytes.mkString("Array(", ", ", ")")}", e)
       // Note that:
       // - At this point, the files are already read from the files as bytes. Therefore,
       //   no real I/O exceptions are expected.
       // - `ImageIO.read` can throw `javax.imageio.IIOException` that is technically
       //   a runtime exception but it inherits IOException.
       case _: Throwable =>
-        logWarning(s"origin = $origin, bytes = ${bytes.mkString("Array(", ", ", ")")}")
         null
     }
 
