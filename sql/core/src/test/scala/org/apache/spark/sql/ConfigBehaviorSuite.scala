@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,6 +66,40 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
         // chi-sq value would be very high.
         assert(computeChiSquareTest() > 300)
       }
+    }
+  }
+
+  test("SPARK-40211: customize initialNumPartitions for take") {
+    val totalElements = 100
+    val numToTake = 50
+    var jobCount = 0
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobCount += 1
+      }
+    })
+    val df = spark.range(0, totalElements, 1, totalElements)
+
+    // with default INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
+    df.take(numToTake)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(jobCount > 1)
+    jobCount = 0
+    df.tail(numToTake)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(jobCount > 1)
+
+    // setting INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
+
+    withSQLConf(SQLConf.INITIAL_NUM_PARTITIONS.key -> "1000") {
+      jobCount = 0
+      df.take(numToTake)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobCount == 1)
+      jobCount = 0
+      df.tail(numToTake)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobCount == 1)
     }
   }
 

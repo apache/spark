@@ -29,11 +29,12 @@ import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 import org.scalatest.concurrent.Eventually
-
 import org.apache.spark._
+
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{RDD_INITIAL_NUM_PARTITIONS, RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.rdd.RDDSuiteUtils._
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
@@ -1253,6 +1254,37 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
     assert(numPartsPerLocation(locations(0)) > 0.4 * numCoalescedPartitions)
     assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
+  }
+
+  test("SPARK-40211: customize initialNumPartitions for take") {
+    val totalElements = 100
+    val numToTake = 50
+    val rdd = sc.parallelize(0 to totalElements, totalElements)
+    var jobCount = 0
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobCount += 1
+      }
+    })
+    // with default RDD_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
+    rdd.take(numToTake)
+    sc.listenerBus.waitUntilEmpty()
+    assert(jobCount > 1)
+    jobCount = 0
+    rdd.takeAsync(numToTake).get()
+    sc.listenerBus.waitUntilEmpty()
+    assert(jobCount > 1)
+
+    // setting RDD_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
+    sc.conf.set(RDD_INITIAL_NUM_PARTITIONS, 1000)
+    jobCount = 0
+    rdd.take(numToTake)
+    sc.listenerBus.waitUntilEmpty()
+    assert(jobCount == 1)
+    jobCount = 0
+    rdd.takeAsync(numToTake).get()
+    sc.listenerBus.waitUntilEmpty()
+    assert(jobCount == 1)
   }
 
   // NOTE

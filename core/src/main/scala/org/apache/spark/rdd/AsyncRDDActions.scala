@@ -24,7 +24,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{RDD_INITIAL_NUM_PARTITIONS, RDD_LIMIT_SCALE_UP_FACTOR}
 import org.apache.spark.util.ThreadUtils
