@@ -2311,6 +2311,15 @@ package object config {
       .intConf
       .createWithDefault(3)
 
+  private[spark] val PUSH_BASED_SHUFFLE_SEND_FINALIZE_RPC_THREADS =
+    ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
+      .doc("Number of threads used by driver to send finalize shuffle RPCs to the merger" +
+        " locations and then get MergeStatuses. The thread won't stop" +
+        " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(6)
+
   private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
     ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
       .doc("Driver will wait for merge finalization to complete only if total shuffle size is" +
