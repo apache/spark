@@ -4874,7 +4874,6 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import col, get
     >>> df = spark.createDataFrame([(["a", "b", "c"], 1)], ['data', 'index'])
     >>> df.select(get(df.data, 1)).show()
     +------------+
