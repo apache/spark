@@ -37,7 +37,7 @@ class SQLOverwriteHadoopMapReduceCommitProtocolSuite extends QueryTest with Shar
     assert(commitProtocol.stagingDir.getName == s".${path.getName}-spark-staging-000001")
   }
 
-  test("SPARK-36571: None-partitioned table insert overwrite") {
+  test("SPARK-36571: Non-partitioned table insert overwrite") {
     withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
       classOf[SQLOverwriteHadoopMapReduceCommitProtocol].getName) {
       withTable("t") {
