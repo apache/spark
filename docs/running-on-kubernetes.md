@@ -1825,10 +1825,10 @@ Install Apache YuniKorn:
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
 kubectl create namespace yunikorn
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.0.0
 ```
 
-The above steps will install the latest version of YuniKorn on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.0.0 on an existing Kubernetes cluster.
 
 ##### Get started
 
@@ -1843,21 +1843,9 @@ Submit Spark jobs with the following extra options:
 Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
 With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
 
-##### Work with YuniKorn queues
-
-Apache YuniKorn supports 2 types of resource queues:
-
-- Static
-- Dynamic
-
-The static queues are predefined in YuniKorn configmap, and the dynamic queues are automatically created by the scheduler
-based on [placement rules](https://yunikorn.apache.org/docs/user_guide/placement_rules). Spark supports to run with
-both queue setup. Refer to this [resource quota management](https://yunikorn.apache.org/docs/user_guide/resource_quota_management) for more
-information about how to run Spark with different queue setup.
-
 ##### Limitations
 
-- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 with Apache YuniKorn is not supported at present.
+- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 (or other platform) with Apache YuniKorn is not supported at present.
 
 ### Stage Level Scheduling Overview
 
