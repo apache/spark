@@ -3523,7 +3523,7 @@ object SQLConf {
   val CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.csv.enableDateTimeParsingFallback")
       .internal()
-      .doc("When set to true, enables legacy date/time parsing fallback in CSV")
+      .doc("When true, enable legacy date/time parsing fallback in CSV")
       .version("3.4.0")
       .booleanConf
       .createOptional
@@ -3531,7 +3531,7 @@ object SQLConf {
   val JSON_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.json.enableDateTimeParsingFallback")
       .internal()
-      .doc("When set to true, enables legacy date/time parsing fallback in JSON")
+      .doc("When true, enable legacy date/time parsing fallback in JSON")
       .version("3.4.0")
       .booleanConf
       .createOptional
