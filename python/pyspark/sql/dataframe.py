@@ -361,6 +361,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+	Returns
+        -------
+        :class:`StructType`
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -373,8 +377,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
+
+	Retrieve the schema of the current DataFrame.
+
         >>> df.schema
-        StructType([StructField('age', LongType(), True), StructField('name', StringType(), True)])
+        StructType([StructField('age', IntegerType(), True), 
+		    StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
@@ -581,7 +589,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ... (16, "Bob")], ["age", "name"])
+        ... 	(16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -590,6 +598,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
+
+	Show only top 2 rows.
+
         >>> df.show(2)
         +---+-----+
         |age| name|
@@ -598,6 +609,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         +---+-----+
         only showing top 2 rows
+
+	Show DataFrame where the maximum number of characters is 3.
+
         >>> df.show(truncate=3)
         +---+----+
         |age|name|
@@ -606,6 +620,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23| Ali|
         | 16| Bob|
         +---+----+
+
+	Show DataFrame vertically.
+
         >>> df.show(vertical=True)
         -RECORD 0-----
         age  | 14
@@ -830,6 +847,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
+
+	Return the number of rows in the :class:`DataFrame`.
+
         >>> df.count()
         3
         """
@@ -904,6 +924,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 16|  Bob|
         +---+-----+
+
+	Return the first 2 rows of the :class:`DataFrame`.
+
         >>> df.take(2)
         [Row(age=14, name='Tom'), Row(age=23, name='Alice')]
         """
@@ -1241,6 +1264,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         | 23|Alice|
         +---+-----+
+
+	Return the number of distinct rows in the :class:`DataFrame`
+
         >>> df.distinct().count()
         2
         """
@@ -2817,9 +2843,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Fill all null values with 50 when the data type of the column is an integer
 
 	>>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
-        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        ... 	(None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
-        +----+------+-----+
+        +----+------+-----+ 
         | age|height| name|
         +----+------+-----+
         |  10|    80|Alice|
@@ -3001,17 +3027,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Replace all instances of Alice to null
 
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"), 
-        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
-        >>> df.show()
-        +----+------+-----+
-        | age|height| name|
-        +----+------+-----+
-        |  10|    80|Alice|
-        |   5|  null|  Bob|
-        |null|  null|  Tom|
-        |null|  null| null|
-        +----+------+-----+
         >>> df.na.replace('Alice', None).show()
         +----+------+----+
         | age|height|name|
@@ -3024,17 +3039,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Replace all instances of Alice to 'A' and Bob to 'B' under the name column
         
-        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
-        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
-        >>> df.show()
-        +----+------+-----+
-        | age|height| name|
-        +----+------+-----+
-        |  10|    80|Alice|
-        |   5|  null|  Bob|
-        |null|  null|  Tom|
-        |null|  null| null|
-        +----+------+-----+
         >>> df.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
