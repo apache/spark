@@ -2268,12 +2268,41 @@ class NumpyScalarConverter:
         return obj.item()
 
 
+class NumpyArrayConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return has_numpy and isinstance(obj, np.ndarray)
+
+    def convert(self, obj: "np.ndarray", gateway_client: GatewayClient) -> JavaObject:
+        from pyspark import SparkContext
+
+        gateway = SparkContext._gateway
+        assert gateway is not None
+
+        plist = obj.tolist()
+        # np.array([]).dtype is dtype('float64') so set float for empty plist
+        ptpe = type(plist[0]) if len(plist) > 0 else float
+        tpe_dict = {
+            int: gateway.jvm.int,
+            float: gateway.jvm.double,
+            bool: gateway.jvm.boolean,
+            str: gateway.jvm.String,
+            bytes: gateway.jvm.byte,
+        }
+        jarr = gateway.new_array(tpe_dict[ptpe], len(plist))
+        for i in range(len(plist)):
+            jarr[i] = plist[i]
+        return jarr
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 register_input_converter(DayTimeIntervalTypeConverter())
 register_input_converter(NumpyScalarConverter())
+# NumPy array satisfies py4j.java_collections.ListConverter,
+# so prepend NumpyArrayConverter
+register_input_converter(NumpyArrayConverter(), prepend=True)
 
 
 def _test() -> None:

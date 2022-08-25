@@ -1033,6 +1033,30 @@ class FunctionsTests(ReusedSQLTestCase):
             res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
             self.assertEqual([Row(c=1), Row(c=0)], res)
 
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_ndarray_input(self):
+        import numpy as np
+
+        int_arrs = [np.array([1, 2]).astype(t) for t in ["int8", "int16", "int32", "int64"]]
+        for arr in int_arrs:
+            self.assertEqual(
+                [Row(b=[1, 2])], self.spark.range(1).select(lit(arr).alias("b")).collect()
+            )
+
+        float_arrs = [np.array([0.1, 0.2]).astype(t) for t in ["float32", "float64"]]
+
+        self.assertEqual(
+            [("b", "array<double>")],
+            self.spark.range(1).select(lit(float_arrs[0]).alias("b")).dtypes,
+        )
+        self.assertEqual(
+            [0.10000000149011612, 0.20000000298023224],
+            self.spark.range(1).select(lit(float_arrs[0]).alias("b")).collect()[0][0],
+        )
+        self.assertEqual(
+            [Row(b=[0.1, 0.2])], self.spark.range(1).select(lit(float_arrs[1]).alias("b")).collect()
+        )
+
     def test_binary_math_function(self):
         funcs, expected = zip(*[(atan2, 0.13664), (hypot, 8.07527), (pow, 2.14359), (pmod, 1.1)])
         df = self.spark.range(1).select(*(func(1.1, 8) for func in funcs))
