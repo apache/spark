@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -1260,31 +1261,35 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val totalElements = 100
     val numToTake = 50
     val rdd = sc.parallelize(0 to totalElements, totalElements)
-    var jobCount = 0
-    sc.addSparkListener(new SparkListener {
+    import scala.language.reflectiveCalls
+    val jobCountListener = new SparkListener {
+      private var count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      def reset(): Unit = count.set(0)
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobCount += 1
+        count.incrementAndGet()
       }
-    })
+    }
+    sc.addSparkListener(jobCountListener)
     // with default RDD_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
     rdd.take(numToTake)
     sc.listenerBus.waitUntilEmpty()
-    assert(jobCount > 1)
-    jobCount = 0
+    assert(jobCountListener.getCount > 1)
+    jobCountListener.reset()
     rdd.takeAsync(numToTake).get()
     sc.listenerBus.waitUntilEmpty()
-    assert(jobCount > 1)
+    assert(jobCountListener.getCount > 1)
 
     // setting RDD_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
     sc.conf.set(RDD_LIMIT_INITIAL_NUM_PARTITIONS, 1000)
-    jobCount = 0
+    jobCountListener.reset()
     rdd.take(numToTake)
     sc.listenerBus.waitUntilEmpty()
-    assert(jobCount == 1)
-    jobCount = 0
+    assert(jobCountListener.getCount == 1)
+    jobCountListener.reset()
     rdd.takeAsync(numToTake).get()
     sc.listenerBus.waitUntilEmpty()
-    assert(jobCount == 1)
+    assert(jobCountListener.getCount == 1)
   }
 
   // NOTE

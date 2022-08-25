@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -72,34 +74,38 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
   test("SPARK-40211: customize initialNumPartitions for take") {
     val totalElements = 100
     val numToTake = 50
-    var jobCount = 0
-    spark.sparkContext.addSparkListener(new SparkListener {
+    import scala.language.reflectiveCalls
+    val jobCountListener = new SparkListener {
+      private var count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      def reset(): Unit = count.set(0)
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobCount += 1
+        count.incrementAndGet()
       }
-    })
+    }
+    spark.sparkContext.addSparkListener(jobCountListener)
     val df = spark.range(0, totalElements, 1, totalElements)
 
     // with default INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
     df.take(numToTake)
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(jobCount > 1)
-    jobCount = 0
+    assert(jobCountListener.getCount > 1)
+    jobCountListener.reset()
     df.tail(numToTake)
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(jobCount > 1)
+    assert(jobCountListener.getCount > 1)
 
     // setting INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
 
     withSQLConf(SQLConf.LIMIT_INITIAL_NUM_PARTITIONS.key -> "1000") {
-      jobCount = 0
+      jobCountListener.reset()
       df.take(numToTake)
       spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(jobCount == 1)
-      jobCount = 0
+      assert(jobCountListener.getCount == 1)
+      jobCountListener.reset()
       df.tail(numToTake)
       spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(jobCount == 1)
+      assert(jobCountListener.getCount == 1)
     }
   }
 
