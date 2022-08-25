@@ -3430,16 +3430,19 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-40199 Projecting NULLs from non-nullable input should throw NPE with helpful msg") {
+  test("SPARK-40199 Projecting NULLs from non-nullable input should throw error with helpful msg") {
     // See more in-depth testing in GeneratedProjectionSuite; this test exists mainly to validate
     // that the column/field identifiers are populated as expected in a "real" plan
-    val valueType = new StructType().add("f", StringType, nullable = false)
-    for (topLevelNullable <- Seq(false, true)) {
-      val df = spark.createDataFrame(List(Row(Row(null))).asJava,
-        new StructType().add("nest", valueType, nullable = topLevelNullable))
-      val e = intercept[RuntimeException](df.collect())
-      assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
-    }
+    val df = spark.createDataFrame(List(Row(Row(null))).asJava,
+      new StructType().add("nest", new StructType().add("f", StringType, nullable = false)))
+    val e = intercept[RuntimeException](df.collect())
+    assert(e.getMessage.contains("<POS_0>.`f` cannot be null"))
+  }
+
+  test("SPARK-40199 Projecting NULLs from non-nullable UDF should throw error with helpful msg") {
+    val badUdf = spark.udf.register[String, Int]("bad_udf", _ => null).asNonNullable()
+    val e = intercept[SparkException](Seq(1).toDF("c1").select(badUdf($"c1")).collect())
+    assert(e.getMessage.contains("<POS_0> cannot be null"))
   }
 }
 
