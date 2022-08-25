@@ -86,7 +86,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     spark.sparkContext.addSparkListener(jobCountListener)
     val df = spark.range(0, totalElements, 1, totalElements)
 
-    // with default INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
+    // with default LIMIT_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
     df.take(numToTake)
     spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(jobCountListener.getCount > 1)
@@ -95,7 +95,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(jobCountListener.getCount > 1)
 
-    // setting INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
+    // setting LIMIT_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
 
     withSQLConf(SQLConf.LIMIT_INITIAL_NUM_PARTITIONS.key -> "1000") {
       jobCountListener.reset()

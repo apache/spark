@@ -1271,7 +1271,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       }
     }
     sc.addSparkListener(jobCountListener)
-    // with default RDD_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
+    // with default RDD_LIMIT_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
     rdd.take(numToTake)
     sc.listenerBus.waitUntilEmpty()
     assert(jobCountListener.getCount > 1)
@@ -1280,7 +1280,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     sc.listenerBus.waitUntilEmpty()
     assert(jobCountListener.getCount > 1)
 
-    // setting RDD_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
+    // setting RDD_LIMIT_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
     sc.conf.set(RDD_LIMIT_INITIAL_NUM_PARTITIONS, 1000)
     jobCountListener.reset()
     rdd.take(numToTake)
