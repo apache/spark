@@ -20,10 +20,24 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * The data type is a new implement following decimal behavior.
+ * A Decimal128 that must have fixed precision (the maximum number of digits) and scale (the number
+ * of digits on right side of dot).
+ *
+ * The precision can be up to 38, scale can also be up to 38 (less or equal to precision).
+ *
+ * The default precision and scale is (10, 0).
+ *
+ * Please use `DataTypes.createDecimal128Type()` to create a specific instance.
+ *
+ * @since 3.4.0
+ */
+@Unstable
 case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
 
   Decimal128Type.checkNegativeScale(scale)
@@ -45,16 +59,17 @@ case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
   private[sql] val asIntegral = Decimal128.Decimal128AsIfIntegral
 
   /**
-   * The default size of a value of the Decimal128Type, used internally for size estimation.
+   * The default size of a value of the Decimal128Type is 8 bytes when precision is at most 18,
+   * and 16 bytes otherwise.
    */
-  override def defaultSize: Int = 16
+  override def defaultSize: Int = if (precision <= Decimal128.MAX_LONG_DIGITS) 8 else 16
 
   override def simpleString: String = s"decimal128($scale)"
 
   override private[spark] def asNullable: Decimal128Type = this
 }
 
-@Stable
+@Unstable
 object Decimal128Type extends AbstractDataType {
 
   val MAX_PRECISION = 38
