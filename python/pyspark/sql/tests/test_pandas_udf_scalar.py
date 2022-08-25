@@ -996,9 +996,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         "spark.sql.execution.pandas.udf.buffer.size": 4,
                     }
                 ):
-                    self.spark.range(10).repartition(1).select(test_close(col("id"))).limit(
-                        2
-                    ).collect()
+                    data = self.spark.sparkContext.parallelize([((i,), i) for i in range(10)], 1)
+                    self.spark.createDataFrame(data, "s struct<id: long>, tag: long").select(
+                        test_close(col("s.id"))
+                    ).limit(2).collect()
                     # wait here because python udf worker will take some time to detect
                     # jvm side socket closed and then will trigger `GenerateExit` raised.
                     # wait timeout is 10s.
