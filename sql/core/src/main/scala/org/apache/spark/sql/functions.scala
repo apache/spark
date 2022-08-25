@@ -3970,15 +3970,6 @@ object functions {
   }
 
   /**
-   * Returns element of array at given (0-based) index. If the index points
-   * outside of the array boundaries, then this function returns NULL.
-   *
-   * @group collection_funcs
-   * @since 3.4.0
-   */
-  def get(column: Column, index: Int): Column = get(column, lit(index))
-
-  /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
    * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
