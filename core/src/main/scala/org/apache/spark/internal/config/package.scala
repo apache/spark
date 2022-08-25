@@ -2313,8 +2313,8 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_SEND_FINALIZE_RPC_THREADS =
     ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
-      .doc("Number of threads used by driver to send finalize shuffle RPCs to the merger" +
-        " locations and then get MergeStatuses. The thread won't stop" +
+      .doc("Number of threads used by driver to send finalize shuffle RPC to the merger" +
+        " location and then get MergeStatus. The thread won't stop" +
         " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.")
       .version("3.3.0")
       .intConf
