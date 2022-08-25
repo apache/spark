@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.execution.datasources.{FileFormat, BasicWriteJobStatsTracker, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -113,7 +113,13 @@ case class InsertIntoHiveTable(
     CommandUtils.uncacheTableOrView(sparkSession, table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
-    CommandUtils.updateTableStats(sparkSession, table)
+    val writeStats = if (partition.isEmpty) {
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+      BasicWriteJobStatsTracker.getWriteStats(mode, metrics)
+    } else {
+      None
+    }
+    CommandUtils.updateTableStats(sparkSession, table, writeStats)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

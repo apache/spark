@@ -91,6 +91,7 @@ Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
+Statistics          	458 bytes, 0 rows   	                    
 Location [not included in comparison]/{warehouse_dir}/char_tbl2
 
 

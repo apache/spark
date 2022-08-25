@@ -203,7 +203,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
     }
 
-    CommandUtils.updateTableStats(sparkSession, table)
+    val writeStats = BasicWriteJobStatsTracker.getWriteStats(mode, metrics)
+    CommandUtils.updateTableStats(sparkSession, table, writeStats)
 
     Seq.empty[Row]
   }

@@ -1944,7 +1944,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
 
     test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive",
+        SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
         withLocale("tr") {
           val dbName = "DaTaBaSe_I"
           withDatabase(dbName) {

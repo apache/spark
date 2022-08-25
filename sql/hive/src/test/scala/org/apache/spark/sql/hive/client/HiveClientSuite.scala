@@ -737,7 +737,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       val totalSize = tableMeta.stats.map(_.sizeInBytes)
       // Except 0.12, all the following versions will fill the Hive-generated statistics
       if (version == "0.12") {
-        assert(totalSize.isEmpty)
+        assert(totalSize.nonEmpty)
       } else {
         assert(totalSize.nonEmpty && totalSize.get > 0)
       }

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
@@ -45,6 +46,10 @@ case class BasicWriteTaskStats(
     numRows: Long)
   extends WriteTaskStats
 
+/**
+ * The write mode and statistics, used to update table statistics.
+ */
+case class WriteStats(mode: SaveMode, numBytes: BigInt, numRows: Option[BigInt])
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
@@ -248,5 +253,15 @@ object BasicWriteJobStatsTracker {
       TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
       JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
     )
+  }
+
+  def getWriteStats(mode: SaveMode, metrics: Map[String, SQLMetric]): Option[WriteStats] = {
+    if (metrics.contains(NUM_OUTPUT_BYTES_KEY) && metrics.contains(NUM_OUTPUT_ROWS_KEY)) {
+      val numBytes = metrics.get(NUM_OUTPUT_BYTES_KEY).map(_.value).map(BigInt(_))
+      val numRows = metrics.get(NUM_OUTPUT_ROWS_KEY).map(_.value).map(BigInt(_))
+      numBytes.map(WriteStats(mode, _, numRows))
+    } else {
+      None
+    }
   }
 }

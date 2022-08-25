@@ -273,10 +273,12 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       hasSizeInBytes: Boolean,
       expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
     val stats = getCatalogTable(tableName).stats
-    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
+    if (hasSizeInBytes) {
       assert(stats.isDefined)
       assert(stats.get.sizeInBytes >= 0)
-      assert(stats.get.rowCount === expectedRowCounts)
+      if(expectedRowCounts.nonEmpty) {
+        assert(stats.get.rowCount === expectedRowCounts)
+      }
     } else {
       assert(stats.isEmpty)
     }

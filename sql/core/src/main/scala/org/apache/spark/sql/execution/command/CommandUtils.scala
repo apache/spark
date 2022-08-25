@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex, WriteStats}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -52,10 +52,28 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 
 object CommandUtils extends Logging {
 
-  /** Change statistics after changing data by commands. */
-  def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
-    val catalog = sparkSession.sessionState.catalog
-    if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+  /**
+   * Change statistics after changing data by commands.
+   * If SparkSession.sessionState.catalog is HiveExternalCatalog, after we set table stats
+   * to None, hive metastore will auto update NUM_FILES and TOTAL_SIZE stats for un-partitioned
+   * table in MetastoreUtils.populateQuickStats()
+   * If SparkSession.sessionState.catalog is InMemoryCatalog, after we set table stats to None,
+   * the table stats will be None.
+   * */
+  def updateTableStats(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      wroteStats: Option[WriteStats] = None): Unit = {
+    val sessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
+    if (sessionState.conf.autoUpdateStatsBasedOnMetricsEnabled &&
+      table.partitionColumnNames.isEmpty && wroteStats.nonEmpty &&
+      (wroteStats.get.mode == SaveMode.Overwrite ||
+        wroteStats.get.mode == SaveMode.ErrorIfExists)) {
+      val stat = wroteStats.get
+      catalog.alterTableStats(table.identifier,
+        Some(CatalogStatistics(stat.numBytes, stat.numRows)))
+    } else if (sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val (newSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, newTable)
       val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)

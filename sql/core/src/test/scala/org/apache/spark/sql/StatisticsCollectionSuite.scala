@@ -99,25 +99,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyze empty table") {
-    val table = "emptyTable"
-    withTable(table) {
-      val df = Seq.empty[Int].toDF("key")
-      df.write.format("json").saveAsTable(table)
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
-      assert(fetchedStats1.get.sizeInBytes == 0)
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-      val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetchedStats2.get.sizeInBytes == 0)
+    withSQLConf(SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
+      val table = "emptyTable"
+      withTable(table) {
+        val df = Seq.empty[Int].toDF("key")
+        df.write.format("json").saveAsTable(table)
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
+        val stats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+        assert(stats1.get.sizeInBytes == 0)
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+        val stats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+        assert(stats2.get.sizeInBytes == 0)
 
-      val expectedColStat =
-        "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
-          Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
+        val expectedColStat =
+          "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
+            Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
 
-      // There won't be histogram for empty column.
-      Seq("true", "false").foreach { histogramEnabled =>
-        withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
-          checkColStats(df, mutable.LinkedHashMap(expectedColStat))
+        // There won't be histogram for empty column.
+        Seq("true", "false").foreach { histogramEnabled =>
+          withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+            checkColStats(df, mutable.LinkedHashMap(expectedColStat))
+          }
         }
       }
     }
@@ -156,18 +158,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("test table-level statistics for data source table") {
-    val tableName = "tbl"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
-      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
+    withSQLConf(SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
+      val tableName = "tbl"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
+        Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
 
-      // noscan won't count the number of rows
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
+        // noscan won't count the number of rows
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
+        checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
 
-      // without noscan, we count the number of rows
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = Some(2))
+        // without noscan, we count the number of rows
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+        checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      }
     }
   }
 
@@ -319,7 +323,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString,
+        SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
@@ -352,7 +357,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("auto gather stats after insert command") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString,
+        SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // insert into command
@@ -686,7 +692,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
     val tableName = "spark_27694"
     Seq(false, true).foreach { updateEnabled =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString,
+        SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
         withTable(tableName) {
           // Create a data source table using the result of a query.
           sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
@@ -788,41 +795,75 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("SPARK-33687: analyze all tables in a specific database") {
-    withTempDatabase { database =>
-      spark.catalog.setCurrentDatabase(database)
-      withTempDir { dir =>
-        withTable("t1", "t2") {
-          spark.range(10).write.saveAsTable("t1")
-          sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
-            "AS SELECT * FROM range(20)")
-          withView("v1", "v2") {
-            sql("CREATE VIEW v1 AS SELECT 1 c1")
-            sql("CREATE VIEW v2 AS SELECT 2 c2")
-            sql("CACHE TABLE v1")
-            sql("CACHE LAZY TABLE v2")
+    withSQLConf(SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> "false") {
+      withTempDatabase { database =>
+        spark.catalog.setCurrentDatabase(database)
+        withTempDir { dir =>
+          withTable("t1", "t2") {
+            spark.range(10).write.saveAsTable("t1")
+            sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+              "AS SELECT * FROM range(20)")
+            withView("v1", "v2") {
+              sql("CREATE VIEW v1 AS SELECT 1 c1")
+              sql("CREATE VIEW v2 AS SELECT 2 c2")
+              sql("CACHE TABLE v1")
+              sql("CACHE LAZY TABLE v2")
 
-            sql(s"ANALYZE TABLES IN $database COMPUTE STATISTICS NOSCAN")
-            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
-            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
-            assert(getCatalogTable("v1").stats.isEmpty)
-            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
-            checkOptimizedPlanStats(spark.table("v2"), 1, None, Seq.empty)
+              sql(s"ANALYZE TABLES IN $database COMPUTE STATISTICS NOSCAN")
+              checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
+              checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+              assert(getCatalogTable("v1").stats.isEmpty)
+              checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+              checkOptimizedPlanStats(spark.table("v2"), 1, None, Seq.empty)
 
-            sql("ANALYZE TABLES COMPUTE STATISTICS")
-            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
-            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
-            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
-            checkOptimizedPlanStats(spark.table("v2"), 4, Some(1), Seq.empty)
+              sql("ANALYZE TABLES COMPUTE STATISTICS")
+              checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
+              checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+              checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+              checkOptimizedPlanStats(spark.table("v2"), 4, Some(1), Seq.empty)
+            }
           }
         }
       }
-    }
 
-    val e = intercept[AnalysisException] {
-      sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
+      val e = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
+      }
+      checkError(e,
+        errorClass = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`db_not_exists`"))
     }
-    checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`db_not_exists`"))
+  }
+
+  test("update datasource table stats based on metrics after insert command") {
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(
+        SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false",
+        SQLConf.AUTO_UPDATE_STATS_BASED_ON_METRICS_ENABLED.key -> autoUpdate.toString) {
+        val table1 = "datasource_table1"
+        val table2 = "datasource_table2"
+        withTable(table1, table2) {
+          // CreateDataSourceTableAsSelectCommand
+          sql(s"CREATE TABLE $table1 USING PARQUET SELECT 1 as i, 'abc' as j")
+          if (autoUpdate) {
+            checkTableStats(table1, true, Some(1))
+          } else {
+            checkTableStats(table1, false, None)
+          }
+
+          // InsertIntoHadoopFsRelationCommand
+          sql(s"INSERT INTO TABLE $table1 SELECT 1, 'abc'")
+          checkTableStats(table1, false, None)
+
+          // CreateDataSourceTableCommand
+          sql(s"CREATE TABLE $table2 (id int, name string) USING PARQUET")
+          checkTableStats(table2, false, None)
+
+          // InsertIntoHadoopFsRelationCommand
+          sql(s"INSERT INTO TABLE $table2 SELECT 1, 'abc'")
+          checkTableStats(table2, false, None)
+        }
+      }
+    }
   }
 }
