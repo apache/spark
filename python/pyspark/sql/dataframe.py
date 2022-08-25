@@ -363,8 +363,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ... (16, "Bob")], ["age", "name"])
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"),(16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -895,7 +895,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ... (16, "Bob")], ["age", "name"])
+        ...     (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -921,7 +921,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ... (16, "Bob")], ["age", "name"])
+        ...     (16, "Bob")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1232,7 +1232,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ... (23, "Alice")], ["age", "name"]) 
+        ...     (23, "Alice")], ["age", "name"]) 
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1438,7 +1438,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"),
-        ... (23, "Alice")], ["age", "name"])
+        ...     (23, "Alice")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -2837,10 +2837,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|    50| null|
         +---+------+-----+
 
-	Fill all null values with False when the data type of the column is a boolean
+	Fill all null values with ``False`` when the data type of the column is a boolean
 
         >>> df = spark.createDataFrame([(10, "Alice", None), (5, "Bob", None),
-        ... (None, "Mallory", True)], ["age", "name", "spy"])
+        ...     (None, "Mallory", True)], ["age", "name", "spy"])
         >>> df.show()
         +----+-------+----+
         | age|   name| spy|
@@ -2861,7 +2861,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 	Fill all null values in the 'age' column to 50 and "unknown" in the 'name' column
 	
         >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
-        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        ...     (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -2979,7 +2979,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
-        ... (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
+        ...     (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
         +----+------+-----+
         | age|height| name|
@@ -3549,7 +3549,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         cols : str
-            new column names. The length of the list needs to be the same as the number of columns in the initial DataFrame
+            new column names. The length of the list needs to be the same as the number of columns in the initial :class:`DataFrame`
 
         Examples
         --------
