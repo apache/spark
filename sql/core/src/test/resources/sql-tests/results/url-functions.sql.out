@@ -98,10 +98,17 @@ https://spark.apache.org
 -- !query
 select url_decode('http%3A%2F%2spark.apache.org')
 -- !query schema
-struct<url_decode(http%3A%2F%2spark.apache.org):string>
+struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException: [CANNOT_DECODE_URL] Cannot decode url : http%3A%2F%2spark.apache.org.
-URLDecoder: Illegal hex characters in escape (%) pattern - For input string: "2s"
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "CANNOT_DECODE_URL",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "url" : "http%3A%2F%2spark.apache.org",
+    "details" : "URLDecoder: Illegal hex characters in escape (%) pattern - For input string: \"2s\""
+  }
+}
 
 
 -- !query
