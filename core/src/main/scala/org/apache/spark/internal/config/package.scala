@@ -1956,7 +1956,7 @@ package object config {
       .intConf
       .createWithDefault(10)
 
-  private[spark] val RDD_INITIAL_NUM_PARTITIONS =
+  private[spark] val RDD_LIMIT_INITIAL_NUM_PARTITIONS =
     ConfigBuilder("spark.rdd.limit.initialNumPartitions")
       .version("3.4.0")
       .intConf

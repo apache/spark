@@ -479,11 +479,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = Math.max(conf.initialNumPartitions, 1)
+      var numPartsToTry = Math.max(conf.limitInitialNumPartitions, 1)
       if (partsScanned > 0) {
-        // If we didn't find any rows after the previous iteration, quadruple and retry.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate
-        // it by 50%. We also cap the estimation in the end.
+        // If we didn't find any rows after the previous iteration, multiply by
+        // limitScaleUpFactor and retry. Otherwise, interpolate the number of partitions we need
+        // to try, but overestimate it by 50%. We also cap the estimation in the end.
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {

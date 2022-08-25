@@ -91,7 +91,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
 
     // setting INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
 
-    withSQLConf(SQLConf.INITIAL_NUM_PARTITIONS.key -> "1000") {
+    withSQLConf(SQLConf.LIMIT_INITIAL_NUM_PARTITIONS.key -> "1000") {
       jobCount = 0
       df.take(numToTake)
       spark.sparkContext.listenerBus.waitUntilEmpty()
