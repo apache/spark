@@ -2258,55 +2258,55 @@ private[spark] class DAGScheduler(
         stage.shuffleDep.getMergerLocs.foreach {
           case shuffleServiceLoc =>
             Future {
-            // Sends async request to shuffle service to finalize shuffle merge on that host.
-            // Since merge statuses will not be registered in this case,
-            // we pass a no-op listener.
-            shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-              shuffleServiceLoc.port, shuffleId, shuffleMergeId,
-              new MergeFinalizerListener {
-                override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {}
+              // Sends async request to shuffle service to finalize shuffle merge on that host.
+              // Since merge statuses will not be registered in this case,
+              // we pass a no-op listener.
+              shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
+                shuffleServiceLoc.port, shuffleId, shuffleMergeId,
+                new MergeFinalizerListener {
+                  override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {}
 
-                override def onShuffleMergeFailure(e: Throwable): Unit = {
-                  if (e.isInstanceOf[IOException]) {
-                    logInfo(s"Failed to connect external shuffle service " +
-                      s"${shuffleServiceLoc.hostPort}")
-                    blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
+                  override def onShuffleMergeFailure(e: Throwable): Unit = {
+                    if (e.isInstanceOf[IOException]) {
+                      logInfo(s"Failed to connect external shuffle service " +
+                        s"${shuffleServiceLoc.hostPort}")
+                      blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
+                    }
                   }
-                }
-              })
+                })
             }(shuffleSendFinalizeRPCContext)
         }
       } else {
         stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
           case (shuffleServiceLoc, index) =>
             Future {
-            // Sends async request to shuffle service to finalize shuffle merge on that host
-            // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
-            // TODO: during shuffleMergeFinalizeWaitSec
-            shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-              shuffleServiceLoc.port, shuffleId, shuffleMergeId,
-              new MergeFinalizerListener {
-                override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
-                  assert(shuffleId == statuses.shuffleId)
-                  eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
-                    convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
-                  results(index).set(true)
-                }
-
-                override def onShuffleMergeFailure(e: Throwable): Unit = {
-                  logWarning(s"Exception encountered when trying to finalize shuffle " +
-                    s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
-                  // Do not fail the future as this would cause dag scheduler to prematurely
-                  // give up on waiting for merge results from the remaining shuffle services
-                  // if one fails
-                  if (e.isInstanceOf[IOException]) {
-                    logInfo(s"Failed to connect external shuffle service " +
-                      s"${shuffleServiceLoc.hostPort}")
-                    blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
+              // Sends async request to shuffle service to finalize shuffle merge on that host
+              // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
+              // TODO: during shuffleMergeFinalizeWaitSec
+              shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
+                shuffleServiceLoc.port, shuffleId, shuffleMergeId,
+                new MergeFinalizerListener {
+                  override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
+                    assert(shuffleId == statuses.shuffleId)
+                    eventProcessLoop.post(RegisterMergeStatuses(stage, MergeStatus.
+                      convertMergeStatusesToMergeStatusArr(statuses, shuffleServiceLoc)))
+                    results(index).set(true)
                   }
-                  results(index).set(false)
-                }
-              })
+
+                  override def onShuffleMergeFailure(e: Throwable): Unit = {
+                    logWarning(s"Exception encountered when trying to finalize shuffle " +
+                      s"merge on ${shuffleServiceLoc.host} for shuffle $shuffleId", e)
+                    // Do not fail the future as this would cause dag scheduler to prematurely
+                    // give up on waiting for merge results from the remaining shuffle services
+                    // if one fails
+                    if (e.isInstanceOf[IOException]) {
+                      logInfo(s"Failed to connect external shuffle service " +
+                        s"${shuffleServiceLoc.hostPort}")
+                      blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
+                    }
+                    results(index).set(false)
+                  }
+                })
             }(shuffleSendFinalizeRPCContext)
         }
       }
