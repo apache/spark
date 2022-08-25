@@ -1169,3 +1169,19 @@ drop table char_tbl4
 struct<>
 -- !query output
 
+
+
+-- !query
+select ascii('§'), ascii('÷'), ascii('×10')
+-- !query schema
+struct<ascii(§):int,ascii(÷):int,ascii(×10):int>
+-- !query output
+167	247	215
+
+
+-- !query
+select chr(167), chr(247), chr(215)
+-- !query schema
+struct<chr(167):string,chr(247):string,chr(215):string>
+-- !query output
+§	÷	×
