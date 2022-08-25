@@ -2198,7 +2198,7 @@ case class Ascii(child: Expression)
         } else {
           ${ev.value} = 0;
         }
-      """})
+       """})
   }
 
   override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
