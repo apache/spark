@@ -197,11 +197,16 @@ class SparkSession(SparkConversionMixin):
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
             ...
 
+        @overload
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
+            ...
+
         def config(
             self,
             key: Optional[str] = None,
             value: Optional[Any] = None,
             conf: Optional[SparkConf] = None,
+            *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
             """Sets a config option. Options set using this method are automatically propagated to
