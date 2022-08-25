@@ -394,10 +394,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (precision == this.precision && scale == this.scale) {
       return true
     }
-    var lv = longVal
     DecimalType.checkNegativeScale(scale)
+    var lv = longVal
+    var dv = decimalVal
     // First, update our lv if we can, or transfer over to using a BigDecimal
-    if (decimalVal.eq(null)) {
+    if (dv.eq(null)) {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
@@ -436,20 +437,19 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           lv *= POW_10(diff)
         } else {
           // Give up on using Longs; switch to BigDecimal, which we'll modify below
-          decimalVal = BigDecimal(lv, _scale)
+          dv = BigDecimal(lv, _scale)
         }
       }
       // In both cases, we will check whether our precision is okay below
     }
 
-    if (decimalVal.ne(null)) {
+    if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
-      // have overflowed our Long; in either case we must rescale decimalVal to the new scale.
-      val newVal = decimalVal.setScale(scale, roundMode)
-      if (newVal.precision > precision) {
+      // have overflowed our Long; in either case we must rescale dv to the new scale.
+      dv = dv.setScale(scale, roundMode)
+      if (dv.precision > precision) {
         return false
       }
-      decimalVal = newVal
     } else {
       // We're still using Longs, but we should check whether we match the new precision
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
@@ -458,7 +458,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         return false
       }
     }
-
+    decimalVal = dv
     longVal = lv
     _precision = precision
     _scale = scale
