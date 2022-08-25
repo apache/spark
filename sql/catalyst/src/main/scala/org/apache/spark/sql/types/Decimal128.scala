@@ -27,6 +27,17 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.Int128Math
 
+/**
+ * A mutable implementation of Decimal that can hold a Long if values are small enough.
+ * Otherwise, hold an Int128.
+ *
+ * The semantics of the fields are as follows:
+ * - _precision and _scale represent the SQL precision and scale we are looking for
+ * - If int128 is set, the decimal value is int128.toBigInteger / (10 ** _scale)
+ * - Otherwise, the decimal value is longVal / (10 ** _scale)
+ *
+ * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
+ */
 @Unstable
 final class Decimal128 extends Ordered[Decimal128] with Serializable {
   import org.apache.spark.sql.types.Decimal128._
@@ -69,23 +80,19 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     this
   }
 
+  /**
+   * Set this Decimal128 to the given Int128, with a given precision and scale.
+   */
   def set(high: Long, low: Long, precision: Int, scale: Int): Decimal128 = {
-    assert(scale >= 0)
-    this.int128 = Int128(high, low)
-    this.longVal = 0
-    this._precision = precision
-    this._scale = scale
-    this
+    checkOverflow(high, low, s"Construct Int128($high, $low) instance.")
+    set(Int128(high, low), precision, scale)
   }
 
-//  def set(int128: Int128): Decimal128 = {
-//    this.int128 = int128
-//    this.longVal = 0
-//    this._scale = 0
-//    this
-//  }
-
+  /**
+   * Set this Decimal128 to the given Int128, with a given precision and scale.
+   */
   def set(int128: Int128, precision: Int, scale: Int): Decimal128 = {
+    Decimal128Type.checkNegativeScale(scale)
     this.int128 = int128
     this.longVal = 0
     this._precision = precision
@@ -94,7 +101,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   /**
-   * Set this Decimal128 to the given unscaled Long, with a given scale.
+   * Set this Decimal128 to the given unscaled Long, with a given precision and scale.
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal128 = {
     if (setOrNull(unscaled, precision, scale) == null) {
@@ -108,7 +115,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
    * and return it, or return null if it cannot be set due to overflow.
    */
   def setOrNull(unscaled: Long, precision: Int, scale: Int): Decimal128 = {
-    assert(scale >= 0)
+    Decimal128Type.checkNegativeScale(scale)
     if (unscaled <= -POW_10(MAX_LONG_DIGITS) || unscaled >= POW_10(MAX_LONG_DIGITS)) {
       // We can't represent this compactly as a long without risking overflow
       if (precision < 19) {
@@ -133,7 +140,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
    * Set this Decimal128 to the given BigDecimal value, with a given scale.
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal128 = {
-    assert(scale >= 0)
+    Decimal128Type.checkNegativeScale(scale)
     val scaledDecimal = decimal.setScale(scale, RoundingMode.HALF_UP)
     if (scaledDecimal.precision > precision) {
       throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
@@ -191,7 +198,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   /**
-   * Set this Decimal to the given Decimal value.
+   * Set this Decimal128 to the given Decimal128 value.
    */
   def set(decimal: Decimal128): Decimal128 = {
     this.int128 = decimal.int128
@@ -217,7 +224,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
 
   def toDouble: Double = toBigDecimal.doubleValue()
 
-  def toFloat: Float = int128.toFloat
+  def toFloat: Float = toBigDecimal.floatValue()
 
   def toLong: Long = if (int128.eq(null)) {
     longVal / POW_10(_scale)
@@ -225,7 +232,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     toBigDecimal.longValue()
   }
 
-  def toInt: Int = int128.toInt
+  def toInt: Int = toLong.toInt
 
   def + (that: Decimal128): Decimal128 = {
     if (this.int128.eq(null) && that.int128.eq(null) && this._scale == that.scale) {
@@ -245,9 +252,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
           this.high, this.low, that.high, that.low, rescale, rescaleLeft) (Int128Math.add)
       }
 
-      if (Int128.overflows(newHigh, newLow)) {
-        throw new ArithmeticException("Overflow in decimal addition")
-      }
+      checkOverflow(newHigh, newLow, "Decimal128 addition.")
 
       val resultPrecision = resultScale +
         Math.max(this._precision - this._scale, that.precision - that.scale) + 1
@@ -274,9 +279,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
           this.high, this.low, that.high, that.low, rescale, rescaleLeft) (Int128Math.subtract)
       }
 
-      if (Int128.overflows(newHigh, newLow)) {
-        throw new ArithmeticException("Overflow in decimal addition")
-      }
+      checkOverflow(newHigh, newLow, "Decimal128 subtract.")
 
       val resultPrecision = resultScale +
         Math.max(this._precision - this._scale, that.precision - that.scale) + 1
@@ -288,9 +291,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   def * (that: Decimal128): Decimal128 = {
     val (newHigh, newLow) = Int128Math.multiply(this.high, this.low, that.high, that.low)
 
-    if (Int128.overflows(newHigh, newLow)) {
-      throw new ArithmeticException("Overflow in decimal multiply")
-    }
+    checkOverflow(newHigh, newLow, "Decimal128 multiply.")
 
     Decimal128(Int128(newHigh, newLow),
       this._precision + that.precision + 1, this._scale + that.scale)
@@ -302,11 +303,14 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     val resultScale =
       Math.min(Math.max(6, this._scale + that.precision + 1), Decimal128Type.MAX_PRECISION)
     val rescaleFactor = resultScale - this._scale + that.scale
-    val (newHigh, newLow) = Int128Math.divideRoundUp(
-      this.high, this.low, that.high, that.low, rescaleFactor, 0)
-    if (Int128.overflows(newHigh, newLow)) {
-      throw new ArithmeticException("Overflow in decimal divide")
+    val (newHigh, newLow) = try {
+      Int128Math.divideRoundUp(this.high, this.low, that.high, that.low, rescaleFactor, 0)
+    } catch {
+      case _: ArithmeticException =>
+        throw overflowError("Decimal128 division.")
     }
+
+    checkOverflow(newHigh, newLow, "Decimal128 division.")
 
     val resultPrecision = this._precision - this._scale + that.scale + resultScale
 
@@ -321,9 +325,8 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     val rightRescaleFactor = Int128Math.rescaleFactor(that.scale, this._scale)
     val (newHigh, newLow) = Int128Math.remainder(
       this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor)
-    if (Int128.overflows(newHigh, newLow)) {
-      throw new ArithmeticException("Overflow in decimal divide")
-    }
+
+    checkOverflow(newHigh, newLow, "Decimal128 remainder.")
 
     val resultPrecision =
       Math.min(this._precision - this._scale, that.precision - that.scale) + resultScale
@@ -334,6 +337,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   def quot (that: Decimal128): Decimal128 = {
     val divided = this / that
     val (high, low) = Int128Math.rescaleTruncate(divided.high, divided.low, -divided.scale)
+    checkOverflow(high, low, "Decimal128 quot.")
     Decimal128(Int128(high, low), divided.precision, 0)
   }
 
@@ -434,6 +438,16 @@ object Decimal128 {
     }
   }
 
+  def checkOverflow(high: Long, low: Long, msg: String): Unit = {
+    if (Int128.overflows(high, low)) {
+      throw overflowError(msg)
+    }
+  }
+
+  def overflowError(msg: String): ArithmeticException = {
+    new ArithmeticException(s"Decimal overflow: $msg")
+  }
+
   /** Common methods for Decimal128 evidence parameters */
   private[sql] trait Decimal128IsConflicted extends Numeric[Decimal128] {
     override def plus(x: Decimal128, y: Decimal128): Decimal128 = x + y
@@ -457,7 +471,7 @@ object Decimal128 {
     override def div(x: Decimal128, y: Decimal128): Decimal128 = x / y
   }
 
-  /** A [[scala.math.Integral]] evidence parameter for Decimals. */
+  /** A [[scala.math.Integral]] evidence parameter for Decimal128s. */
   private[sql] object Decimal128AsIfIntegral
     extends Decimal128IsConflicted with Integral[Decimal128] {
     override def quot(x: Decimal128, y: Decimal128): Decimal128 = x quot y

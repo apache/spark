@@ -21,10 +21,21 @@ package org.apache.spark.sql.types
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
-case class Decimal128Type(scale: Int) extends FractionalType {
+case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
 
-  DecimalType.checkNegativeScale(scale)
+  Decimal128Type.checkNegativeScale(scale)
+
+  if (scale > precision) {
+    throw QueryCompilationErrors.decimalCannotGreaterThanPrecisionError(scale, precision)
+  }
+
+  if (precision > Decimal128Type.MAX_PRECISION) {
+    throw QueryCompilationErrors.decimalOnlySupportPrecisionUptoError(
+      Decimal128Type.simpleString, Decimal128Type.MAX_PRECISION)
+  }
 
   private[sql] type InternalType = Decimal128
   @transient private[sql] lazy val tag = typeTag[InternalType]
@@ -48,8 +59,14 @@ object Decimal128Type extends AbstractDataType {
 
   val MAX_PRECISION = 38
   val DEFAULT_SCALE = 18
-  val SYSTEM_DEFAULT: Decimal128Type = Decimal128Type(DEFAULT_SCALE)
-  val USER_DEFAULT: Decimal128Type = Decimal128Type(0)
+  val SYSTEM_DEFAULT: Decimal128Type = Decimal128Type(MAX_PRECISION, DEFAULT_SCALE)
+  val USER_DEFAULT: Decimal128Type = Decimal128Type(10, 0)
+
+  private[sql] def checkNegativeScale(scale: Int): Unit = {
+    if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+      throw QueryCompilationErrors.negativeScaleNotAllowedError(scale)
+    }
+  }
 
   override private[sql] def defaultConcreteType = SYSTEM_DEFAULT
 

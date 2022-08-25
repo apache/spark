@@ -54,11 +54,24 @@ class Decimal128Suite extends SparkFunSuite {
     checkDecimal128(Decimal128(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal128(Decimal128(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal128(Decimal128(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[ArithmeticException](Decimal128(170L, 2, 1))
-    intercept[ArithmeticException](Decimal128(170L, 2, 0))
-    intercept[ArithmeticException](Decimal128(BigDecimal("10.030"), 2, 1))
-    intercept[ArithmeticException](Decimal128(BigDecimal("-9.95"), 2, 1))
-    intercept[ArithmeticException](Decimal128(1e17.toLong, 17, 0))
+    checkDecimal128(Decimal128(Int128.MAX_VALUE, 38, 0),
+      "170141183460469231731687303715884105727", 38, 0)
+    checkDecimal128(Decimal128(Int128.MIN_VALUE, 38, 0),
+      "-170141183460469231731687303715884105728", 38, 0)
+    val e1 = intercept[ArithmeticException](Decimal128(170L, 2, 1))
+    assert(e1.getMessage.contains("Unscaled value too large for precision."))
+    val e2 = intercept[ArithmeticException](Decimal128(170L, 2, 0))
+    assert(e2.getMessage.contains("Unscaled value too large for precision."))
+    val e3 = intercept[ArithmeticException](Decimal128(BigDecimal("10.030"), 2, 1))
+    assert(e3.getMessage.contains("Decimal precision 3 exceeds max precision 2"))
+    val e4 = intercept[ArithmeticException](Decimal128(BigDecimal("-9.95"), 2, 1))
+    assert(e4.getMessage.contains("Decimal precision 3 exceeds max precision 2"))
+    val e5 = intercept[ArithmeticException](Decimal128(1e17.toLong, 17, 0))
+    assert(e5.getMessage.contains("Unscaled value too large for precision."))
+    val e6 =
+      intercept[ArithmeticException](Decimal128(0x8000000000000000L, 0x0000000000000000L, 38, 0))
+    assert(e6.getMessage.contains(
+      "Decimal overflow: Construct Int128(-9223372036854775808, 0) instance."))
   }
 
   test("double and long values") {
@@ -128,6 +141,10 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128("10.0") + Decimal128("-1.00") === Decimal128(BigDecimal("9.00")))
     assert(Decimal128("15432.21543600787131") + Decimal128("57832.21543600787313") ===
       Decimal128(BigDecimal("73264.43087201574444")))
+    val e1 = intercept[ArithmeticException](
+      Decimal128("170141183460469231731687303715884105727") + Decimal128(1))
+    assert(e1.getMessage.contains(
+      "Int128 Overflow. Int128(9223372036854775807, -1) add Int128(0, 1)."))
 
     // test -
     assert(Decimal128(100) - Decimal128(-100) === Decimal128(200))
@@ -138,6 +155,10 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128("10.0") - Decimal128("-1.00") === Decimal128(BigDecimal("11.00")))
     assert(Decimal128("15432.21543600787131") - Decimal128("57832.21543600787313") ===
       Decimal128(BigDecimal("-42400.00000000000182")))
+    val e2 = intercept[ArithmeticException](
+      Decimal128("-170141183460469231731687303715884105728") - Decimal128(1))
+    assert(e2.getMessage.contains(
+      "Int128 Overflow. Int128(-9223372036854775808, 0) subtract Int128(0, 1)."))
 
     // test *
     assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
@@ -149,6 +170,9 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128("15432.21543600787131") * Decimal128("57832.21543600787313") ===
       Decimal128(BigDecimal("892479207.7500933852299992378118469003")))
     assert(Decimal128(1e13) * Decimal128(1e13) === Decimal128(1e26))
+    val e3 = intercept[ArithmeticException](
+      Decimal128("12345678901234567890123456789012345678") * Decimal128(9))
+    assert(e3.getMessage.contains("Decimal overflow: Decimal128 multiply."))
 
     // test /
     assert(Decimal128(100) / Decimal128(-100) === Decimal128(-1))
@@ -160,6 +184,9 @@ class Decimal128Suite extends SparkFunSuite {
     assert(Decimal128("15432.21543600") / Decimal128("57832.21543") ===
       Decimal128(BigDecimal("0.2668446180257286402")))
     assert(Decimal128(100) / Decimal128(0) === null)
+    val e4 = intercept[ArithmeticException](
+      Decimal128("12345678901234567890123456789012345678") / Decimal128(1, 1, 1))
+    assert(e4.getMessage.contains("Decimal overflow: Decimal128 division."))
 
     // test %
     assert(Decimal128(100) % Decimal128(-100) === Decimal128(0))

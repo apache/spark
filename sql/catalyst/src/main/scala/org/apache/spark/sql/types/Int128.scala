@@ -20,7 +20,9 @@ package org.apache.spark.sql.types
 import java.lang.{Long => JLong}
 import java.math.BigInteger
 import java.nio.{ByteBuffer, ByteOrder}
+
 import scala.util.Try
+
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.util.Int128Math
 
