@@ -2286,7 +2286,6 @@ class NumpyArrayConverter:
             float: gateway.jvm.double,
             bool: gateway.jvm.boolean,
             str: gateway.jvm.String,
-            bytes: gateway.jvm.byte,
         }
         jarr = gateway.new_array(tpe_dict[ptpe], len(plist))
         for i in range(len(plist)):
