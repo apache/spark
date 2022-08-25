@@ -111,7 +111,7 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
 case class TryDivide(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Divide(left, right, EvalMode.TRY)))
+    this(left, right, Divide(left, right, EvalMode.TRY))
 
   override def prettyName: String = "try_divide"
 
@@ -145,7 +145,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Subtract(left, right, EvalMode.TRY)))
+    this(left, right, Subtract(left, right, EvalMode.TRY))
 
   override def prettyName: String = "try_subtract"
 
@@ -172,7 +172,7 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
 case class TryMultiply(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Multiply(left, right, EvalMode.TRY)))
+    this(left, right, Multiply(left, right, EvalMode.TRY))
 
   override def prettyName: String = "try_multiply"
 
