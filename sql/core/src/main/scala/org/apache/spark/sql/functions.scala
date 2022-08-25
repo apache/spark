@@ -671,6 +671,14 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the most frequent value in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def mode(e: Column): Column = withAggregateFunction { Mode(e.expr) }
+
+  /**
    * Aggregate function: returns the maximum value of the expression in a group.
    *
    * @group agg_funcs
@@ -711,6 +719,14 @@ object functions {
    * @since 1.4.0
    */
   def mean(columnName: String): Column = avg(columnName)
+
+  /**
+   * Aggregate function: returns the median of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
 
   /**
    * Aggregate function: returns the minimum value of the expression in a group.
@@ -3951,6 +3967,19 @@ object functions {
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
+
+  /**
+   * Sorts the input array based on the given comparator function. The comparator will take two
+   * arguments representing two elements of the array. It returns a negative integer, 0, or a
+   * positive integer as the first element is less than, equal to, or greater than the second
+   * element. If the comparator function returns null, the function will fail and raise an error.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column, comparator: (Column, Column) => Column): Column = withExpr {
+    new ArraySort(e.expr, createLambda(comparator))
+  }
 
   /**
    * Remove all elements that equal to element from the given array.

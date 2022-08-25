@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -26,8 +24,4 @@ import org.apache.spark.sql.execution.command.v1
  */
 class ShowFunctionsSuite extends v1.ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
-  override def qualifiedFunName(ns: String, name: String): String = {
-    // Hive Metastore lower-cases all identifiers.
-    super.qualifiedFunName(ns, name).toLowerCase(Locale.ROOT)
-  }
 }

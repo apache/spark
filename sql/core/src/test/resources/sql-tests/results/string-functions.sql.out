@@ -167,7 +167,10 @@ SELECT split_part('11.12.13', '.', 0)
 struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
-[ELEMENT_AT_BY_INDEX_ZERO] The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
+{
+  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -200,6 +203,14 @@ SELECT split_part(null, '.', 1)
 struct<split_part(NULL, ., 1):string>
 -- !query output
 NULL
+
+
+-- !query
+SELECT split_part(str, delimiter, partNum) FROM VALUES ('11.12.13', '.', 3) AS v1(str, delimiter, partNum)
+-- !query schema
+struct<split_part(str, delimiter, partNum):string>
+-- !query output
+13
 
 
 -- !query

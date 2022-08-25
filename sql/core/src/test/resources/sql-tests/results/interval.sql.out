@@ -201,10 +201,18 @@ select interval '2 seconds' / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2 seconds' / 0
-       ^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "interval '2 seconds' / 0"
+  } ]
+}
 
 
 -- !query
@@ -237,10 +245,18 @@ select interval '2' year / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_DIVIDED_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
-== SQL(line 1, position 8) ==
-select interval '2' year / 0
-       ^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval '2' year / 0"
+  } ]
+}
 
 
 -- !query
@@ -1338,12 +1354,14 @@ select interval 30 day day day
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
-
-== SQL ==
-select interval 30 day day day
----------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'day'",
+    "hint" : ": extra input 'day'"
+  }
+}
 
 
 -- !query
@@ -1370,12 +1388,14 @@ select interval 30 days days days
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
-
-== SQL ==
-select interval 30 days days days
------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'days'",
+    "hint" : ": extra input 'days'"
+  }
+}
 
 
 -- !query
@@ -1742,7 +1762,14 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : ""
+  }
+}
 
 
 -- !query
@@ -1751,7 +1778,14 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_subtract' to tolerate overflow and return NULL instead.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead."
+  }
+}
 
 
 -- !query
@@ -1760,7 +1794,14 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow. Use 'try_add' to tolerate overflow and return NULL instead.
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead."
+  }
+}
 
 
 -- !query
@@ -1989,10 +2030,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1"
+  } ]
+}
 
 
 -- !query
@@ -2001,10 +2053,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1L"
+  } ]
+}
 
 
 -- !query
@@ -2047,10 +2110,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1"
+  } ]
+}
 
 
 -- !query
@@ -2059,10 +2133,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[INTERVAL_ARITHMETIC_OVERFLOW] Interval value overflows after being divided by -1. Use 'try_divide' to tolerate overflow and return NULL instead.
-== SQL(line 1, position 8) ==
-SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "Interval value overflows after being divided by -1",
+    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead."
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L"
+  } ]
+}
 
 
 -- !query

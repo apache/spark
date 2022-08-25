@@ -1549,6 +1549,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "periods should be an int; however"):
             psser.shift(periods=1.5)
 
+        self.assert_eq(psser.shift(periods=0), pser.shift(periods=0))
+
     def test_diff(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
         psser = ps.Series(pser)

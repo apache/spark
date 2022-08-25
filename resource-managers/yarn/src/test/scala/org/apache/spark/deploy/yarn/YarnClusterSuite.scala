@@ -55,11 +55,12 @@ import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
-  private val pythonExecutablePath = {
+  private val (isPythonAvailable, pythonExecutablePath) = {
     // To make sure to use the same Python executable.
-    val maybePath = TestUtils.getAbsolutePathFromExecutable("python3")
-    assert(maybePath.isDefined)
-    maybePath.get
+    TestUtils.getAbsolutePathFromExecutable("python3") match {
+      case Some(path) => (true, path)
+      case _ => (false, "")
+    }
   }
 
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
@@ -372,6 +373,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       clientMode: Boolean,
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map()): Unit = {
+    assume(isPythonAvailable)
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 

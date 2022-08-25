@@ -23,6 +23,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.ExtendedYarnTest
 
@@ -30,8 +31,7 @@ import org.apache.spark.tags.ExtendedYarnTest
  * SPARK-34828: Integration test for the external shuffle service with an alternate name and
  * configs (by using a configuration overlay)
  */
-@ExtendedYarnTest
-class YarnShuffleAlternateNameConfigSuite extends YarnShuffleIntegrationSuite {
+abstract class YarnShuffleAlternateNameConfigSuite extends YarnShuffleIntegrationSuite {
 
   private[this] val shuffleServiceName = "custom_shuffle_service_name"
 
@@ -76,4 +76,9 @@ class YarnShuffleAlternateNameConfigSuite extends YarnShuffleIntegrationSuite {
       Thread.currentThread().setContextClassLoader(oldClassLoader)
     }
   }
+}
+@ExtendedYarnTest
+class YarnShuffleAlternateNameConfigWithLevelDBBackendSuite
+  extends YarnShuffleAlternateNameConfigSuite {
+  override protected def dbBackend: DBBackend = DBBackend.LEVELDB
 }

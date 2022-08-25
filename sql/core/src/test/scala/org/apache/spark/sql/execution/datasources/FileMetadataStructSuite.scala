@@ -59,6 +59,30 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   private val METADATA_FILE_MODIFICATION_TIME = "_metadata.file_modification_time"
 
+  private val METADATA_ROW_INDEX = "_metadata.row_index"
+
+  private val FILE_FORMAT = "fileFormat"
+
+  private def getMetadataRow(f: Map[String, Any]): Row = f(FILE_FORMAT) match {
+    case "parquet" =>
+      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME), f(METADATA_FILE_SIZE),
+        f(METADATA_FILE_MODIFICATION_TIME), f(METADATA_ROW_INDEX))
+    case _ =>
+      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME), f(METADATA_FILE_SIZE),
+        f(METADATA_FILE_MODIFICATION_TIME))
+  }
+
+  private def getMetadataForFile(f: File): Map[String, Any] = {
+    Map(
+      METADATA_FILE_PATH -> f.toURI.toString,
+      METADATA_FILE_NAME -> f.getName,
+      METADATA_FILE_SIZE -> f.length(),
+      METADATA_FILE_MODIFICATION_TIME -> new Timestamp(f.lastModified()),
+      METADATA_ROW_INDEX -> 0,
+      FILE_FORMAT -> f.getName.split("\\.").last
+    )
+  }
+
   /**
    * This test wrapper will test for both row-based and column-based file formats:
    * (json and parquet) with nested schema:
@@ -101,21 +125,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           val realF1 = new File(dir, "data/f1").listFiles()
             .filter(_.getName.endsWith(s".$testFileFormat")).head
 
-          // 3. create f0 and f1 metadata data
-          val f0Metadata = Map(
-            METADATA_FILE_PATH -> realF0.toURI.toString,
-            METADATA_FILE_NAME -> realF0.getName,
-            METADATA_FILE_SIZE -> realF0.length(),
-            METADATA_FILE_MODIFICATION_TIME -> new Timestamp(realF0.lastModified())
-          )
-          val f1Metadata = Map(
-            METADATA_FILE_PATH -> realF1.toURI.toString,
-            METADATA_FILE_NAME -> realF1.getName,
-            METADATA_FILE_SIZE -> realF1.length(),
-            METADATA_FILE_MODIFICATION_TIME -> new Timestamp(realF1.lastModified())
-          )
-
-          f(df, f0Metadata, f1Metadata)
+          f(df, getMetadataForFile(realF0), getMetadataForFile(realF1))
         }
       }
     }
@@ -232,10 +242,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select("_metadata"),
       Seq(
-        Row(Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
-          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
-        Row(Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
-          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+        Row(getMetadataRow(f0)),
+        Row(getMetadataRow(f1))
       )
     )
   }
@@ -348,11 +356,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             df.select("name", "age", "_METADATA", "_metadata"),
             Seq(
               Row("jack", 24, Row(12345L, "uom"),
-                Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
-                  f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
+                getMetadataRow(f0)),
               Row("lily", 31, Row(54321L, "ucb"),
-                Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
-                  f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+                getMetadataRow(f1))
             )
           )
         } else {
@@ -492,12 +498,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         newDF.select("*"),
         Seq(
-          Row("jack", 24, Row(12345L, "uom"),
-            Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
-              f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
-          Row("lily", 31, Row(54321L, "ucb"),
-            Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
-              f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+          Row("jack", 24, Row(12345L, "uom"), getMetadataRow(f0)),
+          Row("lily", 31, Row(54321L, "ucb"), getMetadataRow(f1))
         )
       )
 
@@ -505,10 +507,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         newDF.select("_metadata"),
         Seq(
-          Row(Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
-            f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
-          Row(Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
-            f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+          Row(getMetadataRow(f0)),
+          Row(getMetadataRow(f1))
         )
       )
     }

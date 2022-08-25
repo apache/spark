@@ -164,7 +164,14 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `non_existing` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 21
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`non_existing`",
+    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+  }
+}
 
 
 -- !query
@@ -208,7 +215,14 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `k` cannot be resolved. Did you mean one of the following? [`testdata`.`a`, `testdata`.`b`]; line 1 pos 47
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+  }
+}
 
 
 -- !query

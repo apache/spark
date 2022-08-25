@@ -2857,7 +2857,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset with a column dropped.
+   * Returns a new Dataset with column dropped.
+   *
+   * This method can only be used to drop top level column.
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
@@ -2866,15 +2868,31 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    drop(col, Seq.empty : _*)
+  }
+
+  /**
+   * Returns a new Dataset with columns dropped.
+   *
+   * This method can only be used to drop top level columns.
+   * This is a no-op if the Dataset doesn't have a columns
+   * with an equivalent expression.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def drop(col: Column, cols: Column*): DataFrame = {
+    val allColumns = col +: cols
+    val expressions = (for (col <- allColumns) yield col match {
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
-    }
+    })
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      !attr.semanticEquals(expression)
+      expressions.forall(expression => !attr.semanticEquals(expression))
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }

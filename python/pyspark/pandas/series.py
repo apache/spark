@@ -2114,7 +2114,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._psdf._update_internal_frame(psser._psdf._internal, requires_same_anchor=False)
+            self._psdf._update_internal_frame(psser._psdf._internal, check_same_anchor=False)
             return None
         else:
             return psser.copy()
@@ -2418,7 +2418,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
                     data_fields=[self._internal.data_fields[0]],
                 )
-                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                self._psdf._update_internal_frame(internal, check_same_anchor=False)
                 return None
             else:
                 return self._with_new_scol(
@@ -2775,11 +2775,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> psser = ps.Series([2, 1, 3, 3], name='A')
-        >>> psser.unique().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1
-        ...  2
-        ...  3
+        >>> psser.unique().sort_values()
+        1    1
+        0    2
+        2    3
         Name: A, dtype: int64
 
         >>> ps.Series([pd.Timestamp('2016-01-01') for _ in range(3)]).unique()
@@ -2787,11 +2786,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: datetime64[ns]
 
         >>> psser.name = ('x', 'a')
-        >>> psser.unique().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1
-        ...  2
-        ...  3
+        >>> psser.unique().sort_values()
+        1    1
+        0    2
+        2    3
         Name: (x, a), dtype: int64
         """
         sdf = self._internal.spark_frame.select(self.spark.column).distinct()
@@ -4718,29 +4716,27 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         13    NaN
         dtype: float64
 
-        >>> s.mode().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1.0
-        ...  2.0
-        ...  3.0
+        >>> s.mode().sort_values()
+        0    1.0
+        1    2.0
+        2    3.0
         dtype: float64
 
         With 'dropna' set to 'False', we can also see NaN in the result
 
-        >>> s.mode(False).sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-        <BLANKLINE>
-        ...  1.0
-        ...  2.0
-        ...  3.0
-        ...  NaN
+        >>> s.mode(False).sort_values()
+        0    1.0
+        1    2.0
+        2    3.0
+        3    NaN
         dtype: float64
         """
-        ser_count = self.value_counts(dropna=dropna, sort=False)
-        sdf_count = ser_count._internal.spark_frame
-        most_value = ser_count.max()
-        sdf_most_value = sdf_count.filter("count == {}".format(str(most_value)))
-        sdf = sdf_most_value.select(
-            F.col(SPARK_DEFAULT_INDEX_NAME).alias(SPARK_DEFAULT_SERIES_NAME)
+        scol = self.spark.column
+        name = self._internal.data_spark_column_names[0]
+        sdf = (
+            self._internal.spark_frame.select(SF.mode(scol, dropna).alias(name))
+            .select(F.array_sort(F.col(name)).alias(name))
+            .select(F.explode(F.col(name)).alias(name))
         )
         internal = InternalFrame(spark_frame=sdf, index_spark_columns=None, column_labels=[None])
         ser_mode = first_series(DataFrame(internal))
@@ -5133,7 +5129,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._column_label, scol  # TODO: dtype?
             )
 
-            self._psdf._update_internal_frame(internal.resolved_copy, requires_same_anchor=False)
+            self._psdf._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
 
     def where(self, cond: "Series", other: Any = np.nan) -> "Series":
         """

@@ -134,6 +134,10 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasKurtosis(e: Column): Column = {
     Column(PandasKurtosis(e.expr).toAggregateExpression(false))
   }
+
+  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
+    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
+  }
 }
 
 /**
