@@ -632,16 +632,6 @@ class QueryExecutionErrorsSuite
       matchPVals = true)
   }
 
-  test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
-    checkError(
-      exception = intercept[SparkRuntimeException](
-        sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
-      ),
-      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      parameters = Map.empty
-    )
-  }
-
   test("ARITHMETIC_OVERFLOW: overflow on adding months") {
     checkError(
       exception = intercept[SparkArithmeticException](

@@ -114,6 +114,20 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         stop = 41))
   }
 
+  test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
+    checkError(
+      exception = intercept[SparkRuntimeException](
+        sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
+      ),
+      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "element_at(array(1, 2, 3, 4, 5), 0)",
+        start = 7,
+        stop = 41)
+    )
+  }
+
   test("CAST_INVALID_INPUT: cast string to double") {
     checkError(
       exception = intercept[SparkNumberFormatException] {
