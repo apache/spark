@@ -375,7 +375,7 @@ class DataFrame(Frame, Generic[T]):
 
     Notes
     -----
-    Since 3.4.0, it support more cases that combine `data` and `index`:
+    Since 3.4.0, it deals with `index` in this way:
     1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
     pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
     the `index` if necessary, and then try to combine the `data` and `index`;
@@ -431,8 +431,9 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import numpy as np
     >>> import pandas as pd
+
     >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-    ...     index=pd.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
+    ...     index=pd.Index([1, 4]), columns=['a', 'b', 'c', 'd', 'e'])
        a  b  c  d  e
     1  1  2  3  4  5
     4  6  7  8  9  0
@@ -442,7 +443,7 @@ class DataFrame(Frame, Generic[T]):
     >>> import numpy as np
     >>> import pandas as pd
     >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
-    ...     index=ps.Index([1,4]), columns=['a', 'b', 'c', 'd', 'e'])
+    ...     index=ps.Index([1, 4]), columns=['a', 'b', 'c', 'd', 'e'])
        a  b  c  d  e
     1  1  2  3  4  5
     4  6  7  8  9  0
@@ -453,7 +454,7 @@ class DataFrame(Frame, Generic[T]):
     >>> import pandas as pd
     >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
     ...     columns=['a', 'b', 'c', 'd', 'e'])
-    >>> ps.DataFrame(data=pdf, index=pd.Index([1,4]))
+    >>> ps.DataFrame(data=pdf, index=pd.Index([1, 4]))
          a    b    c    d    e
     1  6.0  7.0  8.0  9.0  0.0
     4  NaN  NaN  NaN  NaN  NaN
@@ -464,12 +465,12 @@ class DataFrame(Frame, Generic[T]):
     >>> import pandas as pd
     >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
     ...     columns=['a', 'b', 'c', 'd', 'e'])
-    >>> ps.DataFrame(data=pdf, index=ps.Index([1,4]))
+    >>> ps.DataFrame(data=pdf, index=ps.Index([1, 4]))
          a    b    c    d    e
     1  6.0  7.0  8.0  9.0  0.0
     4  NaN  NaN  NaN  NaN  NaN
 
-    Constructing DataFrame from SparkDataFrame with Pandas index:
+    Constructing DataFrame from Spark DataFrame with Pandas index:
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
@@ -487,7 +488,7 @@ class DataFrame(Frame, Generic[T]):
     1  Bricks  2.0
     2    None  NaN
 
-    Constructing DataFrame from SparkDataFrame with pandas-on-Spark index:
+    Constructing DataFrame from Spark DataFrame with pandas-on-Spark index:
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
