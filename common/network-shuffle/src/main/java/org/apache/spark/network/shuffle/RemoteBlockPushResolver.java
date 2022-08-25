@@ -122,7 +122,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
   private final ExecutorService mergedShuffleCleaner;
+
   private final TransportConf conf;
+
+  private final long cleanerShutdownTimeout;
+
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
 
@@ -142,6 +146,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
+    this.cleanerShutdownTimeout = conf.mergedShuffleCleanerShutdownTimeout();
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
@@ -809,16 +814,20 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       try {
         mergedShuffleCleaner.shutdown();
         // Wait a while for existing tasks to terminate
-        if (!mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS)) {
-          mergedShuffleCleaner.shutdownNow();
+        if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+          List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
+          logger.warn("There are still {} tasks not completed in mergedShuffleCleaner after {}s.",
+            unfinishedTasks.size(), cleanerShutdownTimeout);
           // Wait a while for tasks to respond to being cancelled
-          if (!mergedShuffleCleaner.awaitTermination(10L, TimeUnit.SECONDS)) {
+          if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
             logger.warn("mergedShuffleCleaner did not terminate");
           }
         }
       } catch (InterruptedException ignored) {
         // (Re-)Cancel if current thread also interrupted
-        mergedShuffleCleaner.shutdownNow();
+        List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
+        logger.warn("There are still {} tasks not completed in mergedShuffleCleaner.",
+          unfinishedTasks.size());
         // Preserve interrupt status
         Thread.currentThread().interrupt();
       }
