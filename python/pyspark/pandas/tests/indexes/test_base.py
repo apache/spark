@@ -64,6 +64,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
         with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
             bool(ps.Index([1]))
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
@@ -1949,6 +1953,13 @@ class IndexesTest(ComparisonTestBase, TestUtils):
                 self.assert_eq(
                     (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
                 )
+
+        # other = tuple
+        other = [(1, 2), (3, 4)]
+        self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
+        self.assert_eq(
+            (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
+        )
 
         # MultiIndex / other = Index
         self.assert_eq(
