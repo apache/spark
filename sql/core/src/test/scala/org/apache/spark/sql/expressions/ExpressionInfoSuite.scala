@@ -228,11 +228,6 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
     // Do not check these expressions, because these expressions override the eval method
     val ignoreSet = Set(
-      // Extend NullIntolerant and avoid evaluating input1 if input2 is 0
-      classOf[IntegralDivide],
-      classOf[Divide],
-      classOf[Remainder],
-      classOf[Pmod],
       // Throws an exception, even if input is null
       classOf[RaiseError]
     )
@@ -242,6 +237,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       .filterNot(c => ignoreSet.exists(_.getName.equals(c)))
       .map(name => Utils.classForName(name))
       .filterNot(classOf[NonSQLExpression].isAssignableFrom)
+      // BinaryArithmetic overrides the eval method
+      .filterNot(classOf[BinaryArithmetic].isAssignableFrom)
 
     exprTypesToCheck.foreach { superClass =>
       candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
