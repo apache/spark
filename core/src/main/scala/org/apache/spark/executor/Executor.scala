@@ -986,7 +986,7 @@ private[spark] class Executor(
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     updateDependenciesLock.lockInterruptibly()
     try {
-      // For testing, so we can simulate a slow library install:
+      // For testing, so we can simulate a slow file download:
       testStartLatch.foreach(_.countDown())
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
@@ -1030,7 +1030,7 @@ private[spark] class Executor(
           }
         }
       }
-      // For testing, so we can simulate a slow library download:
+      // For testing, so we can simulate a slow file download:
       testEndLatch.foreach(_.await())
     } finally {
       updateDependenciesLock.unlock()
