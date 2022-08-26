@@ -213,7 +213,14 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
-  "messageParameters" : { }
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "element_at(array(1, 2, 3), 0)"
+  } ]
 }
 
 
