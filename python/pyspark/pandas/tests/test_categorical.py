@@ -61,6 +61,9 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psser.cat.codes, pser.cat.codes)
         self.assert_eq(psser.cat.ordered, pser.cat.ordered)
 
+        with self.assertRaisesRegex(ValueError, "Cannot call CategoricalAccessor on type int64"):
+            ps.Series([1, 2, 3]).cat
+
     def test_categories_setter(self):
         pdf, psdf = self.df_pair
 

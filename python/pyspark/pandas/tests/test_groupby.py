@@ -158,11 +158,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by="a"))
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by=["a", "b"]))
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by=("a", "b")))
+        self.assertRaises(KeyError, lambda: psdf.a.groupby(by=[("a", "b")]))
 
         # we can't use DataFrame as a parameter `by` for `DataFrameGroupBy`/`SeriesGroupBy`.
         self.assertRaises(ValueError, lambda: psdf.groupby(psdf))
         self.assertRaises(ValueError, lambda: psdf.a.groupby(psdf))
         self.assertRaises(ValueError, lambda: psdf.a.groupby((psdf,)))
+
+        with self.assertRaisesRegex(ValueError, "Grouper for 'list' not 1-dimensional"):
+            psdf.groupby(by=[["a", "b"]])
 
         # non-string names
         pdf = pd.DataFrame(
