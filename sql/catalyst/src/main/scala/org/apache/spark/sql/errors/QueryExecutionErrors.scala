@@ -1246,9 +1246,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       "length must be greater than or equal to 0.")
   }
 
-  def elementAtByIndexZeroError(): SparkRuntimeException = {
-    new SparkRuntimeException(errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      messageParameters = Array.empty)
+  def elementAtByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      cause = null,
+      messageParameters = Array.empty,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
