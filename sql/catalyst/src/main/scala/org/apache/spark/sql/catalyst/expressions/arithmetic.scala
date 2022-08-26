@@ -251,7 +251,7 @@ abstract class BinaryArithmetic extends BinaryOperator
     if (left.dataType.isInstanceOf[DecimalType]) {
       // For decimal arithmetic, we may return null even if both inputs are not null, if overflow
       // happens and this `failOnError` flag is false.
-      !failOnError
+      evalMode != EvalMode.ANSI
     } else {
       // For non-decimal arithmetic, the calculation always return non-null result when inputs are
       // not null. If overflow happens, we return either the overflowed value or fail.
@@ -758,7 +758,7 @@ case class Divide(
 
   // `try_divide` has exactly the same behavior as the legacy divide, so here it only executes
   // the error code path when `evalMode` is `ANSI`.
-  protected override val failOnError: Boolean = evalMode == EvalMode.ANSI
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
