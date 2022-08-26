@@ -2732,12 +2732,20 @@ class RDD(Generic[T_co]):
         [1, 2, 3, 4, 5, 6]
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
         [10, 9, 7, 6, 5, 4]
+        >>> sc.emptyRDD().takeOrdered(3)
+        []
         """
+        if num < 0:
+            raise ValueError("top N cannot be negative.")
 
-        def merge(a: List[T], b: List[T]) -> List[T]:
-            return heapq.nsmallest(num, a + b, key)
+        if num == 0 or self.getNumPartitions() == 0:
+            return []
+        else:
 
-        return self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).reduce(merge)
+            def merge(a: List[T], b: List[T]) -> List[T]:
+                return heapq.nsmallest(num, a + b, key)
+
+            return self.mapPartitions(lambda it: [heapq.nsmallest(num, it, key)]).reduce(merge)
 
     def take(self: "RDD[T]", num: int) -> List[T]:
         """
