@@ -316,7 +316,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     //     note that 3.14 will be rounded to 3.14000010... after casting to float
 
     val (nullList, canCastList) = (ArrayBuffer[Literal](), ArrayBuffer[Literal]())
-    var cannotCastCounter = 0
+    var containsCannotCastLiteral = false
     val fromType = fromExp.dataType
     val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
     val minMaxInToType = getRange(fromType).map {
@@ -334,13 +334,13 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         minMaxCmp match {
           // the literal value is out of fromType range
           case Some((minCmp, maxCmp)) if maxCmp > 0 || minCmp < 0 =>
-            cannotCastCounter += 1
+            containsCannotCastLiteral = true
           case _ =>
             val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
             if (newValue == null) {
               // the literal cannot cast to fromExp.dataType, and there is no min/max for the
               // fromType
-              cannotCastCounter += 1
+              containsCannotCastLiteral = true
             } else {
               val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
               val cmp = ordering.compare(value, valueRoundTrip)
@@ -348,22 +348,21 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
                 canCastList += Literal(newValue, fromType)
               } else {
                 // the literal value is rounded up/down after casting to `fromType`
-                cannotCastCounter += 1
+                containsCannotCastLiteral = true
               }
             }
         }
     }
 
     // return None when list contains only null values.
-    if (canCastList.isEmpty && cannotCastCounter == 0) {
+    if (canCastList.isEmpty && !containsCannotCastLiteral) {
       None
     } else {
       val unwrapExpr = buildExpr(nullList, canCastList)
-      if (cannotCastCounter == 0) {
+      if (!containsCannotCastLiteral) {
         Option(unwrapExpr)
       } else {
-        // since can not cast literals are all transformed to the same `falseIfNotNull(fromExp)`,
-        // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
+        // the list contains a literal that cannot be cast to `fromExp.dataType`
         Option(Or(falseIfNotNull(fromExp), unwrapExpr))
       }
     }
