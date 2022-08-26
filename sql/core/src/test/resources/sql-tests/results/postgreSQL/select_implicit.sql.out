@@ -121,10 +121,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "suggestion" : " Did you mean one of the following? [`count(1)`]"
+    "proposal" : "`count(1)`"
   }
 }
 
@@ -333,10 +334,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "suggestion" : " Did you mean one of the following? [`count(a)`]"
+    "proposal" : "`count(a)`"
   }
 }
 

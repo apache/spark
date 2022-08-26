@@ -3275,10 +3275,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`y`.`f1`",
-    "suggestion" : " Did you mean one of the following? [`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`]"
+    "proposal" : "`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"
   }
 }
 
@@ -3301,10 +3302,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
-    "suggestion" : " Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`]"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`"
   }
 }
 
@@ -3318,10 +3320,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
-    "suggestion" : " Did you mean one of the following? [`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`]"
+    "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`"
   }
 }
 
@@ -3335,10 +3338,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`uunique1`",
-    "suggestion" : " Did you mean one of the following? [`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`]"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`"
   }
 }
 
@@ -3542,10 +3546,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "GENERIC",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`f1`",
-    "suggestion" : ""
+    "objectName" : "`f1`"
   }
 }
 
@@ -3558,10 +3562,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "GENERIC",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`a`.`f1`",
-    "suggestion" : ""
+    "objectName" : "`a`.`f1`"
   }
 }
 
@@ -3574,10 +3578,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "GENERIC",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`f1`",
-    "suggestion" : ""
+    "objectName" : "`f1`"
   }
 }
 
@@ -3590,10 +3594,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "GENERIC",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`a`.`f1`",
-    "suggestion" : ""
+    "objectName" : "`a`.`f1`"
   }
 }
 

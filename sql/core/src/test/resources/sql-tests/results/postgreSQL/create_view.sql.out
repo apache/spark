@@ -65,10 +65,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "GENERIC",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`FROM`",
-    "suggestion" : ""
+    "objectName" : "`FROM`"
   }
 }
 

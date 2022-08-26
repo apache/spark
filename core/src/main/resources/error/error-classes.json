@@ -408,20 +408,56 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved.<suggestion>"
+      "A column or function parameter with name <objectName> cannot be resolved."
     ],
+    "subClass" : {
+      "GENERIC" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_FIELD" : {
     "message" : [
-      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>.<suggestion>"
+      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
     ],
+    "subClass" : {
+      "GENERIC" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it.<suggestion>"
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
+    "subClass" : {
+      "GENERIC" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Otherwise did you mean one of the following column(s)? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNSUPPORTED_DATATYPE" : {

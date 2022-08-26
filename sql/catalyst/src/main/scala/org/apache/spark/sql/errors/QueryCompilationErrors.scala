@@ -164,19 +164,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         s"side of the join. The $side-side columns: [${plan.output.map(_.name).mkString(", ")}]")
   }
 
-  private def unresolvedAttributeSuggestion(errorClass: String, candidates: Seq[String]): String = {
-    if (candidates.isEmpty) {
-      ""
-    } else {
-      val candidateIds = candidates.map(toSQLId).mkString(", ")
-      if (errorClass == "UNRESOLVED_MAP_KEY") {
-        s" Otherwise did you mean one of the following column(s)? [$candidateIds]"
-      } else {
-        s" Did you mean one of the following? [$candidateIds]"
-      }
-    }
-  }
-
   def unresolvedAttributeError(
       errorClass: String,
       colName: String,
@@ -184,8 +171,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = errorClass,
-      messageParameters =
-        Array(toSQLId(colName), unresolvedAttributeSuggestion(errorClass, candidates)),
+      errorSubClass = if (candidates.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(colName)), if (candidates.isEmpty) {
+        Array.empty
+      } else {
+        Array(candidates.map(toSQLId).mkString(", "))
+      }),
       origin = origin
     )
   }
@@ -193,9 +184,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      messageParameters =
-        Array(toSQLId(columnName), unresolvedAttributeSuggestion("UNRESOLVED_COLUMN", proposal))
-    )
+      errorSubClass = if (proposal.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(columnName)), if (proposal.isEmpty) {
+        Array.empty
+      } else {
+        Array(proposal.map(toSQLId).mkString(", "))
+      }))
   }
 
   def unresolvedFieldError(
@@ -204,11 +198,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      messageParameters = Array(
-        toSQLId(fieldName),
-        toSQLId(columnPath),
-        unresolvedAttributeSuggestion("UNRESOLVED_FIELD", proposal)
-      )
+      errorSubClass = if (proposal.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      messageParameters =
+        Array.concat(Array(toSQLId(fieldName), toSQLId(columnPath)), if (proposal.isEmpty) {
+          Array.empty
+        } else {
+          Array(proposal.map(toSQLId).mkString(", "))
+        })
     )
   }
 

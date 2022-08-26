@@ -691,8 +691,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan,
       "UNRESOLVED_COLUMN",
-      Array("`a`", " Did you mean one of the following? [`x`, `y`]")
-    )
+      "WITH_SUGGESTION",
+      Array("`a`", "`x`, `y`"),
+      caseSensitive = true)
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
@@ -704,8 +705,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisErrorClass(
       parsedPlan2,
       "UNRESOLVED_COLUMN",
-      Array("`a`", " Did you mean one of the following? [`x`, `y`]")
-    )
+      "WITH_SUGGESTION",
+      Array("`a`", "`x`, `y`"),
+      caseSensitive = true)
   }
 
   test("SPARK-36498: reorder inner fields with byName mode") {

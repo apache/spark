@@ -134,7 +134,9 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN",
-      Array("`a`", ""))
+      "GENERIC",
+      Array("`a`"),
+      caseSensitive = true)
   }
 
   test("lateral subquery with unresolvable attributes") {
@@ -142,26 +144,30 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN",
-      Array("`c`", "")
-    )
+      "GENERIC",
+      Array("`c`"),
+      caseSensitive = true)
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
       lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "UNRESOLVED_COLUMN",
-      Array("`d`", " Did you mean one of the following? [`b`, `c`]")
-    )
+      "WITH_SUGGESTION",
+      Array("`d`", "`b`, `c`"),
+      caseSensitive = true)
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN",
-      Array("`t1`.`a`", "")
-    )
+      "GENERIC",
+      Array("`t1`.`a`"),
+      caseSensitive = true)
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN",
-      Array("`a`", "")
-    )
+      "GENERIC",
+      Array("`a`"),
+      caseSensitive = true)
   }
 
   test("lateral subquery with struct type") {

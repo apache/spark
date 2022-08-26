@@ -117,8 +117,18 @@ class AnalysisErrorSuite extends AnalysisTest {
       plan: LogicalPlan,
       errorClass: String,
       messageParameters: Array[String]): Unit = {
+    errorClassTest(name, plan, errorClass, null, messageParameters)
+  }
+
+  def errorClassTest(
+    name: String,
+    plan: LogicalPlan,
+    errorClass: String,
+    errorSubClass: String,
+    messageParameters: Array[String]): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, messageParameters)
+      assertAnalysisErrorClass(plan, errorClass, errorSubClass, messageParameters,
+        caseSensitive = true)
     }
   }
 
@@ -292,7 +302,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved attributes",
     testRelation.select($"abcd"),
     "UNRESOLVED_COLUMN",
-    Array("`abcd`", " Did you mean one of the following? [`a`]"))
+    "WITH_SUGGESTION",
+    Array("`abcd`", "`a`"))
 
   errorClassTest(
     "unresolved attributes with a generated name",
@@ -300,7 +311,8 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "UNRESOLVED_COLUMN",
-    Array("`havingCondition`", " Did you mean one of the following? [`max(b)`]"))
+    "WITH_SUGGESTION",
+    Array("`havingCondition`", "`max(b)`"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -316,7 +328,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "UNRESOLVED_COLUMN",
-    Array("`b`", " Did you mean one of the following? [`a`, `c`, `a3`]"))
+    "WITH_SUGGESTION",
+    Array("`b`", "`a`, `c`, `a3`"))
 
   errorTest(
     "non-boolean filters",
@@ -410,7 +423,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN",
-    Array("`bad_column`", " Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"))
+    "WITH_SUGGESTION",
+    Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
     "slide duration greater than window in time window",
@@ -830,8 +844,9 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN] A column or function parameter with name `bad_column` cannot be " +
-      "resolved. Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"
+    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
+      "`bad_column` cannot be resolved. Did you mean one of the following? " +
+      "[`a`, `b`, `c`, `d`, `e`]"
       :: Nil)
 
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
