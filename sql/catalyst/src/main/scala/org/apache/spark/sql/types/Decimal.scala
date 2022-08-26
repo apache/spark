@@ -395,69 +395,71 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       return true
     }
     DecimalType.checkNegativeScale(scale)
-    // First, update our longVal if we can, or transfer over to using a BigDecimal
-    if (decimalVal.eq(null)) {
+    var lv = longVal
+    var dv = decimalVal
+    // First, update our lv if we can, or transfer over to using a BigDecimal
+    if (dv.eq(null)) {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
         val pow10diff = POW_10(diff)
         // % and / always round to 0
-        val droppedDigits = longVal % pow10diff
-        longVal /= pow10diff
+        val droppedDigits = lv % pow10diff
+        lv /= pow10diff
         roundMode match {
           case ROUND_FLOOR =>
             if (droppedDigits < 0) {
-              longVal += -1L
+              lv += -1L
             }
           case ROUND_CEILING =>
             if (droppedDigits > 0) {
-              longVal += 1L
+              lv += 1L
             }
           case ROUND_HALF_UP =>
             if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+              lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case ROUND_HALF_EVEN =>
             val doubled = math.abs(droppedDigits) * 2
-            if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+            if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
+              lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>
             throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
         }
       } else if (scale > _scale) {
-        // We might be able to multiply longVal by a power of 10 and not overflow, but if not,
+        // We might be able to multiply lv by a power of 10 and not overflow, but if not,
         // switch to using a BigDecimal
         val diff = scale - _scale
         val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
-        if (diff <= MAX_LONG_DIGITS && longVal > -p && longVal < p) {
-          // Multiplying longVal by POW_10(diff) will still keep it below MAX_LONG_DIGITS
-          longVal *= POW_10(diff)
+        if (diff <= MAX_LONG_DIGITS && lv > -p && lv < p) {
+          // Multiplying lv by POW_10(diff) will still keep it below MAX_LONG_DIGITS
+          lv *= POW_10(diff)
         } else {
           // Give up on using Longs; switch to BigDecimal, which we'll modify below
-          decimalVal = BigDecimal(longVal, _scale)
+          dv = BigDecimal(lv, _scale)
         }
       }
       // In both cases, we will check whether our precision is okay below
     }
 
-    if (decimalVal.ne(null)) {
+    if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
-      // have overflowed our Long; in either case we must rescale decimalVal to the new scale.
-      val newVal = decimalVal.setScale(scale, roundMode)
-      if (newVal.precision > precision) {
+      // have overflowed our Long; in either case we must rescale dv to the new scale.
+      dv = dv.setScale(scale, roundMode)
+      if (dv.precision > precision) {
         return false
       }
-      decimalVal = newVal
     } else {
       // We're still using Longs, but we should check whether we match the new precision
       val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
-      if (longVal <= -p || longVal >= p) {
+      if (lv <= -p || lv >= p) {
         // Note that we shouldn't have been able to fix this by switching to BigDecimal
         return false
       }
     }
-
+    decimalVal = dv
+    longVal = lv
     _precision = precision
     _scale = scale
     true

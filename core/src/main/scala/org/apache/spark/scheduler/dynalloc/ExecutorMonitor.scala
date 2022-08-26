@@ -463,7 +463,7 @@ private[spark] class ExecutorMonitor(
   override def checkpointCleaned(rddId: Long): Unit = { }
 
   // Visible for testing.
-  private[dynalloc] def isExecutorIdle(id: String): Boolean = {
+  private[scheduler] def isExecutorIdle(id: String): Boolean = {
     Option(executors.get(id)).map(_.isIdle).getOrElse(throw SparkCoreErrors.noExecutorIdleError(id))
   }
 
@@ -489,7 +489,9 @@ private[spark] class ExecutorMonitor(
    * which the `SparkListenerTaskStart` event is posted before the `SparkListenerBlockManagerAdded`
    * event, which is possible because these events are posted in different threads. (see SPARK-4951)
    */
-  private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
+  // Visible for testing.
+  private[scheduler] def ensureExecutorIsTracked(
+      id: String, resourceProfileId: Int) : Tracker = {
     val numExecsWithRpId = execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => 0)
     val execTracker = executors.computeIfAbsent(id, _ => {
         val newcount = numExecsWithRpId + 1
@@ -528,7 +530,7 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  private class Tracker(var resourceProfileId: Int) {
+  private[scheduler] class Tracker(var resourceProfileId: Int) {
     @volatile var timeoutAt: Long = Long.MaxValue
 
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list

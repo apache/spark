@@ -23,14 +23,13 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
-import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecution, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class SparkPlanSuite extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
+class SparkPlanSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
@@ -126,8 +125,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession with DisableAdapt
     assert(nonEmpty === relation.executeCollect())
   }
 
-  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized",
-    DisableAdaptiveExecution("AQE removes ColumnarToRowExec")) {
+  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         spark.range(1).write.parquet(path.getAbsolutePath)
@@ -156,5 +154,3 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
 }
-
-class SparkPlanWithAQESuite extends SparkPlanSuite with EnableAdaptiveExecutionSuite

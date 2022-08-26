@@ -300,13 +300,10 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
 }
 
 
-/** An implementation of [[CheckpointFileManager]] using Hadoop's [[FileContext]] API. */
-class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
-  extends CheckpointFileManager with RenameHelperMethods with Logging {
+abstract class AbstractFileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
+  extends CheckpointFileManager with Logging {
 
-  import CheckpointFileManager._
-
-  private val fc = if (path.toUri.getScheme == null) {
+  protected val fc = if (path.toUri.getScheme == null) {
     FileContext.getFileContext(hadoopConf)
   } else {
     FileContext.getFileContext(path.toUri, hadoopConf)
@@ -320,19 +317,6 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     fc.mkdir(path, FsPermission.getDirDefault, true)
   }
 
-  override def createTempFile(path: Path): FSDataOutputStream = {
-    import CreateFlag._
-    import Options._
-    fc.create(
-      path, EnumSet.of(CREATE, OVERWRITE), CreateOpts.checksumParam(ChecksumOpt.createDisabled()))
-  }
-
-  override def createAtomic(
-      path: Path,
-      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
-    new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
-  }
-
   override def open(path: Path): FSDataInputStream = {
     fc.open(path)
   }
@@ -340,14 +324,6 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   override def exists(path: Path): Boolean = {
     fc.util.exists(path)
   }
-
-  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
-    import Options.Rename._
-    fc.rename(srcPath, dstPath, if (overwriteIfPossible) OVERWRITE else NONE)
-    // TODO: this is a workaround of HADOOP-16255 - remove this when HADOOP-16255 is resolved
-    mayRemoveCrcFile(srcPath)
-  }
-
 
   override def delete(path: Path): Unit = {
     try {
@@ -367,6 +343,33 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     val qualifiedPath = fc.makeQualified(path)
     fc.mkdir(qualifiedPath, FsPermission.getDirDefault, true)
     qualifiedPath
+  }
+}
+
+class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
+  extends AbstractFileContextBasedCheckpointFileManager(path, hadoopConf)
+  with RenameHelperMethods {
+
+  import CheckpointFileManager._
+
+  override def createTempFile(path: Path): FSDataOutputStream = {
+    import CreateFlag._
+    import Options._
+    fc.create(
+      path, EnumSet.of(CREATE, OVERWRITE), CreateOpts.checksumParam(ChecksumOpt.createDisabled()))
+  }
+
+  override def createAtomic(
+      path: Path,
+      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+    new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
+  }
+
+  override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
+    import Options.Rename._
+    fc.rename(srcPath, dstPath, if (overwriteIfPossible) OVERWRITE else NONE)
+    // TODO: this is a workaround of HADOOP-16255 - remove this when HADOOP-16255 is resolved
+    mayRemoveCrcFile(srcPath)
   }
 
   private def mayRemoveCrcFile(path: Path): Unit = {

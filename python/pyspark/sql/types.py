@@ -49,6 +49,10 @@ from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.utils import has_numpy
+
+if has_numpy:
+    import numpy as np
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -2256,11 +2260,20 @@ class DayTimeIntervalTypeConverter:
         )
 
 
+class NumpyScalarConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return has_numpy and isinstance(obj, np.generic)
+
+    def convert(self, obj: "np.generic", gateway_client: GatewayClient) -> Any:
+        return obj.item()
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 register_input_converter(DayTimeIntervalTypeConverter())
+register_input_converter(NumpyScalarConverter())
 
 
 def _test() -> None:
