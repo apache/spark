@@ -373,9 +373,8 @@ class DataFrame(Frame, Generic[T]):
     copy : boolean, default False
         Copy data from inputs. Only affects DataFrame / 2d ndarray input
 
-    Notes
-    -----
-    Since 3.4.0, it deals with `index` in this way:
+    .. versionchanged:: 3.4.0
+    Since 3.4.0, it deals with `data` and `index` in this approach:
     1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
     pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
     the `index` if necessary, and then try to combine the `data` and `index`;

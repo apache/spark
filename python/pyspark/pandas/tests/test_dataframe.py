@@ -220,6 +220,114 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
             )
 
+        # test String Index
+        pdf = pd.DataFrame(
+            data={
+                "s": ["Hello", "World", "Databricks"],
+                "x": [2002, 2003, 2004],
+            }
+        )
+        pdf = pdf.set_index("s")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+        )
+
+        # test with pd.DataFrame and ps.Index
+        self.assert_eq(
+            ps.DataFrame(data=pdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
+            pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            )
+
+            # test with ps.DataFrame and ps.Index
+            self.assert_eq(
+                ps.DataFrame(data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
+                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+            )
+
+        # test DatetimeIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    datetime(2022, 9, 1, 0, 0, 0, 0),
+                    datetime(2022, 9, 2, 0, 0, 0, 0),
+                    datetime(2022, 9, 3, 0, 0, 0, 0),
+                ],
+                "x": [2002, 2003, 2004],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        # test with pd.DataFrame and pd.DatetimeIndex
+        self.assert_eq(
+            ps.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+            pd.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+        )
+
+        # test with pd.DataFrame and ps.DatetimeIndex
+        self.assert_eq(
+            ps.DataFrame(
+                data=pdf,
+                index=ps.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+            pd.DataFrame(
+                data=pdf,
+                index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
+            ),
+        )
+
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            # test with ps.DataFrame and pd.DatetimeIndex
+            self.assert_eq(
+                ps.DataFrame(
+                    data=psdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+                pd.DataFrame(
+                    data=pdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+            )
+
+            # test with ps.DataFrame and ps.DatetimeIndex
+            self.assert_eq(
+                ps.DataFrame(
+                    data=psdf,
+                    index=ps.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+                pd.DataFrame(
+                    data=pdf,
+                    index=pd.DatetimeIndex(
+                        ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
+                    ),
+                ),
+            )
+
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
             self.assert_eq(psdf, pdf, check_exact=False)
