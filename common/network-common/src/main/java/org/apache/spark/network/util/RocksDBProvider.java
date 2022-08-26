@@ -117,7 +117,7 @@ public class RocksDBProvider {
         .setFormatVersion(5);
 
       Options dbOptions = new Options();
-      dbOptions.setCreateIfMissing(false);
+      dbOptions.setCreateIfMissing(true);
       dbOptions.setBottommostCompressionType(CompressionType.ZSTD_COMPRESSION);
       dbOptions.setCompressionType(CompressionType.LZ4_COMPRESSION);
       dbOptions.setTableFormatConfig(tableFormatConfig);
