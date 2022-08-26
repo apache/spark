@@ -78,24 +78,29 @@ object FilePartition extends Logging {
 
     val sqlConf = sparkSession.sessionState.conf
     var openCostInBytes = sqlConf.filesOpenCostInBytes
-    val expectedFilePartitionNum =
-      sqlConf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
-    var maxPartitionBytes = sqlConf.filesMaxPartitionBytes
-    if (partitionedFiles.size < expectedFilePartitionNum) {
-      openCostInBytes = maxPartitionBytes
-    } else {
-      val totalSize = partitionedFiles.foldLeft(0L) {
-        (totalSize, file) => totalSize + file.length + openCostInBytes
-      }
-      val expectFilePartitionSize = totalSize / expectedFilePartitionNum
-      if (expectFilePartitionSize < maxPartitionBytes) {
-        maxPartitionBytes = expectFilePartitionSize
+    var maxPartitionBytes = maxSplitBytes
+    val maxFilesInPartition = sqlConf.filesMaxNumInPartition
+    if (sqlConf.filesDynamicMergeEnabled) {
+      maxPartitionBytes = maxPartitionBytes
+      val expectedFilePartitionNum =
+        sqlConf.filesExpectedPartitionNum.getOrElse(taskParallelismNum)
+      if (partitionedFiles.size < expectedFilePartitionNum) {
+        openCostInBytes = maxPartitionBytes
+      } else {
+        val totalSize = partitionedFiles.foldLeft(0L) {
+          (totalSize, file) => totalSize + file.length + openCostInBytes
+        }
+        val expectFilePartitionSize = totalSize / expectedFilePartitionNum
+        if (expectFilePartitionSize < maxPartitionBytes) {
+          maxPartitionBytes = expectFilePartitionSize
+        }
       }
     }
     logInfo(s"Using $openCostInBytes as openCost.")
     // Assign files to partitions using "Next Fit Decreasing"
     partitionedFiles.foreach { file =>
-      if (currentSize + file.length > maxPartitionBytes) {
+      if (currentSize + file.length > maxPartitionBytes ||
+        maxFilesInPartition.exists(fileNum => currentFiles.size >= fileNum)) {
         closePartition()
       }
       // Add the given file to the current partition.

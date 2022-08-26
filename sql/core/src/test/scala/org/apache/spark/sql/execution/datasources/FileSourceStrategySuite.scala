@@ -46,33 +46,31 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
-    withSQLConf(SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
-      val table =
-        createTable(
-          files = Seq(
-            "file1" -> 1,
-            "file2" -> 1,
-            "file3" -> 1,
-            "file4" -> 1,
-            "file5" -> 1,
-            "file6" -> 1,
-            "file7" -> 1,
-            "file8" -> 1,
-            "file9" -> 1,
-            "file10" -> 1))
+    val table =
+      createTable(
+        files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1,
+          "file4" -> 1,
+          "file5" -> 1,
+          "file6" -> 1,
+          "file7" -> 1,
+          "file8" -> 1,
+          "file9" -> 1,
+          "file10" -> 1))
 
-      checkScan(table.select($"c1")) { partitions =>
-        // 10 one byte files should fit in a single partition with 10 files.
-        assert(partitions.size == 1, "when checking partitions")
-        assert(partitions.head.files.size == 10, "when checking partition 1")
-        // 1 byte files are too small to split so we should read the whole thing.
-        assert(partitions.head.files.head.start == 0)
-        assert(partitions.head.files.head.length == 1)
-      }
-
-      checkPartitionSchema(StructType(Nil))
-      checkDataSchema(StructType(Nil).add("c1", IntegerType))
+    checkScan(table.select($"c1")) { partitions =>
+      // 10 one byte files should fit in a single partition with 10 files.
+      assert(partitions.size == 1, "when checking partitions")
+      assert(partitions.head.files.size == 10, "when checking partition 1")
+      // 1 byte files are too small to split so we should read the whole thing.
+      assert(partitions.head.files.head.start == 0)
+      assert(partitions.head.files.head.length == 1)
     }
+
+    checkPartitionSchema(StructType(Nil))
+    checkDataSchema(StructType(Nil).add("c1", IntegerType))
   }
 
   test("unpartitioned table, multiple partitions") {
@@ -86,11 +84,10 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "11",
       SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select($"c1")) { partitions =>
-        // 5 byte files should be laid out [(5), (5), (5)]
-        assert(partitions.size == 3, "when checking partitions")
-        assert(partitions(0).files.size == 1, "when checking partition 1")
+        // 5 byte files should be laid out [(5, 5), (5)]
+        assert(partitions.size == 2, "when checking partitions")
+        assert(partitions(0).files.size == 2, "when checking partition 1")
         assert(partitions(1).files.size == 1, "when checking partition 2")
-        assert(partitions(2).files.size == 1, "when checking partition 3")
 
         // 5 byte files are too small to split so we should read the whole thing.
         assert(partitions.head.files.head.start == 0)
@@ -535,8 +532,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
-    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
-      SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
       val table =
         createTable(files = Seq(
           "file1" -> 1,
@@ -546,8 +542,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       assert(table.rdd.partitions.length == 1)
     }
 
-    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10",
-      SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "3") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
       val table =
         createTable(files = Seq(
           "file1" -> 1,
@@ -577,35 +572,33 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
-    withSQLConf(SQLConf.FILES_EXPECTED_PARTITION_NUM.key -> "1") {
-      val table =
-        createTable(
-          files = Seq(
-            "p1=1/file1" -> 10,
-            "p1=2/file2" -> 10,
-            "p1=3/file3" -> 10,
-            "p1=4/file4" -> 10))
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10,
+          "p1=3/file3" -> 10,
+          "p1=4/file4" -> 10))
 
-      checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
-        assert(partitions.size == 1, "when checking partitions")
-      }
-      checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
-
-      checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
-        assert(partitions.size == 1, "when checking partitions")
-      }
-      checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
-
-      checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
-        assert(partitions.size == 1, "when checking partitions")
-      }
-      checkDataFilters(Set.empty)
-
-      checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
-        assert(partitions.size == 1, "when checking partitions")
-      }
-      checkDataFilters(Set.empty)
+    checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
     }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+
+    checkScan(table.where("(p1 = '1' AND c1 = 2) OR (c1 = 1 OR p1 = '2')")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
+
+    checkScan(table.where("p1 = '1' OR (p1 = '2' AND c1 = 1)")) { partitions =>
+      assert(partitions.size == 1, "when checking partitions")
+    }
+    checkDataFilters(Set.empty)
   }
 
   // Helpers for checking the arguments passed to the FileFormat.

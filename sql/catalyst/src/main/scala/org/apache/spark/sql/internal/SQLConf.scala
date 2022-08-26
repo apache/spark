@@ -1644,6 +1644,15 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
+  val FILES_DYNAMIC_MERGE_ENABLED = buildConf("spark.sql.files.dynamicMergeEnabled")
+    .doc("Whether to merge file partition dynamically. If true, It will use the total size, " +
+      "file count and expectPartitionNum to dynamic merge filePartition. This is better to set " +
+      "true if there are many small files in the read path. This configuration is effective " +
+      "only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILES_EXPECTED_PARTITION_NUM = buildConf("spark.sql.files.expectedPartitionNum")
     .doc("The expected number of File partitions. It will automatically merge file splits to " +
       "provide the best concurrency when the file partitions after split exceed the " +
@@ -1654,6 +1663,16 @@ object SQLConf {
     .version("3.4.0")
     .intConf
     .checkValue(v => v > 0, "The expected partition number must be a positive integer.")
+    .createOptional
+
+  val FILES_MAX_NUM_IN_PARTITION = buildConf("spark.sql.files.maxNumInPartition")
+    .doc("The max number of files in one filePartition. If set, it will limit the max file num " +
+      "in FilePartition while merging files. This can avoid too many little io in one task. " +
+      "This configuration is effective only when using file-based sources such as Parquet, " +
+      "JSON and ORC.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(v => v > 0, "The max file number in partition must be a positive integer.")
     .createOptional
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
@@ -4117,7 +4136,11 @@ class SQLConf extends Serializable with Logging {
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
+  def filesDynamicMergeEnabled: Boolean = getConf(FILES_DYNAMIC_MERGE_ENABLED)
+
   def filesExpectedPartitionNum: Option[Int] = getConf(FILES_EXPECTED_PARTITION_NUM)
+
+  def filesMaxNumInPartition: Option[Int] = getConf(FILES_MAX_NUM_IN_PARTITION)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
