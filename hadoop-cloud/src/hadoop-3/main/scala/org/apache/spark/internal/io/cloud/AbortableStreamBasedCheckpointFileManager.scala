@@ -65,7 +65,8 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         if (!overwriteIfPossible && fc.util().exists(path)) {
           fsDataOutputStream.abort()
           throw new FileAlreadyExistsException(
-            s"Failed to close atomic stream $path (stream: $fsDataOutputStream) as destination already exists")
+            s"Failed to close atomic stream $path (stream: " +
+            s"$fsDataOutputStream) as destination already exists")
         }
         fsDataOutputStream.close()
       } catch {
