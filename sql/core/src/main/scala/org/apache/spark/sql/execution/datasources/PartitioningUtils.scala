@@ -534,7 +534,8 @@ object PartitioningUtils extends SQLConfHelper {
     case ShortType => Integer.parseInt(value).toShort
     case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case FloatType | DoubleType => JDouble.parseDouble(value)
+    case FloatType => JDouble.parseDouble(value).toFloat
+    case DoubleType => JDouble.parseDouble(value)
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
