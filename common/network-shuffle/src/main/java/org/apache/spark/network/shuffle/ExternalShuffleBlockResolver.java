@@ -125,18 +125,13 @@ public class ExternalShuffleBlockResolver {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
-    DBBackend dbBackend;
-    if (registeredExecutorFile != null) {
-      String dbBackendName =
-        conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
-      dbBackend = DBBackend.byName(dbBackendName);
+    String dbBackendName =
+      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+    DBBackend dbBackend = DBBackend.byName(dbBackendName);
+    db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
+    if (db != null) {
       logger.info("Use {} as the implementation of {}",
         dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
-      db = DBProvider.initDB(dbBackend, this.registeredExecutorFile, CURRENT_VERSION, mapper);
-    } else {
-      db = null;
-    }
-    if (db != null) {
       executors = reloadRegisteredExecutors(db);
     } else {
       executors = Maps.newConcurrentMap();

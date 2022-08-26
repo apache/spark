@@ -156,16 +156,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.recoveryFile = recoveryFile;
-    DBBackend dbBackend = null;
-    if (recoveryFile != null) {
-      String dbBackendName =
-        conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
-      dbBackend = DBBackend.byName(dbBackendName);
-      logger.info("Use {} as the implementation of {}",
-        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
-    }
+    String dbBackendName =
+      conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name());
+    DBBackend dbBackend = DBBackend.byName(dbBackendName);
     db = DBProvider.initDB(dbBackend, this.recoveryFile, CURRENT_VERSION, mapper);
     if (db != null) {
+      logger.info("Use {} as the implementation of {}",
+        dbBackend, Constants.SHUFFLE_SERVICE_DB_BACKEND);
       reloadAndCleanUpAppShuffleInfo(db);
     }
   }
