@@ -98,7 +98,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "1.0 / 0.0"
+  } ]
 }
 
 
@@ -306,7 +313,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 30,
+    "fragment" : "1.0 / 0.0"
+  } ]
 }
 
 
@@ -457,7 +471,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 32,
+    "fragment" : "1.0 / 0.0"
+  } ]
 }
 
 
@@ -592,7 +613,14 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22012",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 32,
+    "fragment" : "1.0 / 0.0"
+  } ]
 }
 
 
