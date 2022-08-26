@@ -27,16 +27,35 @@ import org.apache.hadoop.fs._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
+abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
-  def createManager(path: Path): CheckpointFileManager
+  protected def withTempHadoopPath(p: Path => Unit): Unit
+
+  protected def checkLeakingCrcFiles(path: Path): Unit
+
+  protected def createManager(path: Path): CheckpointFileManager
+
+  private implicit class RichCancellableStream(stream: CancellableFSDataOutputStream) {
+    def writeContent(i: Int): CancellableFSDataOutputStream = {
+      stream.writeInt(i)
+      stream
+    }
+  }
+
+  private implicit class RichFSDataInputStream(stream: FSDataInputStream) {
+    def readContent(): Int = {
+      val res = stream.readInt()
+      stream.close()
+      res
+    }
+  }
 
   test("mkdirs, list, createAtomic, open, delete, exists") {
-    withTempPath { p =>
-      val basePath = new Path(p.getAbsolutePath)
+    withTempHadoopPath { case basePath =>
       val fm = createManager(basePath)
       // Mkdirs
       val dir = new Path(s"$basePath/dir/subdir/subsubdir")
@@ -58,42 +77,32 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
       // Create atomic without overwrite
       var path = new Path(s"$dir/file")
       assert(!fm.exists(path))
-      fm.createAtomic(path, overwriteIfPossible = false).cancel()
+      fm.createAtomic(path, overwriteIfPossible = false).writeContent(1).cancel()
       assert(!fm.exists(path))
-      fm.createAtomic(path, overwriteIfPossible = false).close()
+      fm.createAtomic(path, overwriteIfPossible = false).writeContent(2).close()
       assert(fm.exists(path))
+      assert(fm.open(path).readContent() == 2)
       quietly {
         intercept[IOException] {
           // should throw exception since file exists and overwrite is false
-          fm.createAtomic(path, overwriteIfPossible = false).close()
+          fm.createAtomic(path, overwriteIfPossible = false).writeContent(3).close()
         }
       }
+      assert(fm.open(path).readContent() == 2)
 
       // Create atomic with overwrite if possible
       path = new Path(s"$dir/file2")
       assert(!fm.exists(path))
-      fm.createAtomic(path, overwriteIfPossible = true).cancel()
+      fm.createAtomic(path, overwriteIfPossible = true).writeContent(4).cancel()
       assert(!fm.exists(path))
-      fm.createAtomic(path, overwriteIfPossible = true).close()
+      fm.createAtomic(path, overwriteIfPossible = true).writeContent(5).close()
       assert(fm.exists(path))
-      fm.createAtomic(path, overwriteIfPossible = true).close()  // should not throw exception
+      assert(fm.open(path).readContent() == 5)
+      // should not throw exception
+      fm.createAtomic(path, overwriteIfPossible = true).writeContent(6).close()
+      assert(fm.open(path).readContent() == 6)
 
-      // crc file should not be leaked when origin file doesn't exist.
-      // The implementation of Hadoop filesystem may filter out checksum file, so
-      // listing files from local filesystem.
-      val fileNames = new File(path.getParent.toString).listFiles().toSeq
-        .filter(p => p.isFile).map(p => p.getName)
-      val crcFiles = fileNames.filter(n => n.startsWith(".") && n.endsWith(".crc"))
-      val originFileNamesForExistingCrcFiles = crcFiles.map { name =>
-        // remove first "." and last ".crc"
-        name.substring(1, name.length - 4)
-      }
-
-      // Check all origin files exist for all crc files.
-      assert(originFileNamesForExistingCrcFiles.toSet.subsetOf(fileNames.toSet),
-        s"Some of origin files for crc files don't exist - crc files: $crcFiles / " +
-          s"expected origin files: $originFileNamesForExistingCrcFiles / actual files: $fileNames")
-
+      checkLeakingCrcFiles(dir)
       // Open and delete
       fm.open(path).close()
       fm.delete(path)
@@ -138,13 +147,42 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
   }
 }
 
-class FileContextBasedCheckpointFileManagerSuite extends CheckpointFileManagerTests {
+abstract class CheckpointFileManagerTestsOnLocalFs
+  extends CheckpointFileManagerTests with SQLHelper {
+
+  protected def withTempHadoopPath(p: Path => Unit): Unit = {
+    withTempDir { f: File =>
+      val basePath = new Path(f.getAbsolutePath)
+      p(basePath)
+    }
+  }
+
+  protected def checkLeakingCrcFiles(path: Path): Unit = {
+    // crc file should not be leaked when origin file doesn't exist.
+    // The implementation of Hadoop filesystem may filter out checksum file, so
+    // listing files from local filesystem.
+    val fileNames = new File(path.toString).listFiles().toSeq
+      .filter(p => p.isFile).map(p => p.getName)
+    val crcFiles = fileNames.filter(n => n.startsWith(".") && n.endsWith(".crc"))
+    val originFileNamesForExistingCrcFiles = crcFiles.map { name =>
+      // remove first "." and last ".crc"
+      name.substring(1, name.length - 4)
+    }
+
+    // Check all origin files exist for all crc files.
+    assert(originFileNamesForExistingCrcFiles.toSet.subsetOf(fileNames.toSet),
+      s"Some of origin files for crc files don't exist - crc files: $crcFiles / " +
+        s"expected origin files: $originFileNamesForExistingCrcFiles / actual files: $fileNames")
+  }
+}
+
+class FileContextBasedCheckpointFileManagerSuite extends CheckpointFileManagerTestsOnLocalFs {
   override def createManager(path: Path): CheckpointFileManager = {
     new FileContextBasedCheckpointFileManager(path, new Configuration())
   }
 }
 
-class FileSystemBasedCheckpointFileManagerSuite extends CheckpointFileManagerTests {
+class FileSystemBasedCheckpointFileManagerSuite extends CheckpointFileManagerTestsOnLocalFs {
   override def createManager(path: Path): CheckpointFileManager = {
     new FileSystemBasedCheckpointFileManager(path, new Configuration())
   }

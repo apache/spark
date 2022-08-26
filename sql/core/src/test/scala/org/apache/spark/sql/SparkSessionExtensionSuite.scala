@@ -735,7 +735,7 @@ class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
     failOnError: Boolean = false)
-  extends Add(left, right, failOnError) with ColumnarExpression {
+  extends Add(left, right, EvalMode.fromBoolean(failOnError)) with ColumnarExpression {
 
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 
