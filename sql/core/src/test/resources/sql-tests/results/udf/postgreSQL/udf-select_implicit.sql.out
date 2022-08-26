@@ -122,7 +122,14 @@ SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `b` cannot be resolved. Did you mean one of the following? [`udf(count(1))`]; line 1 pos 75
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`b`",
+    "objectList" : "`udf(count(1))`"
+  }
+}
 
 
 -- !query
@@ -327,7 +334,14 @@ SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `b` cannot be resolved. Did you mean one of the following? [`udf(count(udf(a)))`]; line 1 pos 80
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`b`",
+    "objectList" : "`udf(count(udf(a)))`"
+  }
+}
 
 
 -- !query

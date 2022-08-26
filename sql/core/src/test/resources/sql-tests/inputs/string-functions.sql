@@ -38,6 +38,7 @@ SELECT split_part('11.12.13', '.', 4);
 SELECT split_part('11.12.13', '.', 5);
 SELECT split_part('11.12.13', '.', -5);
 SELECT split_part(null, '.', 1);
+SELECT split_part(str, delimiter, partNum) FROM VALUES ('11.12.13', '.', 3) AS v1(str, delimiter, partNum);
 
 -- substring function
 SELECT substr('Spark SQL', 5);

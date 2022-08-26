@@ -143,4 +143,21 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, analyzed)
   }
 
+  test("SPARK-38034: transpose two adjacent windows with compatible partitions " +
+    "which is not a prefix") {
+    val query = testRelation
+      .window(Seq(sum(c).as('sum_a_2)), partitionSpec4, orderSpec2)
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec3, orderSpec1)
+
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+
+    val correctAnswer = testRelation
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec3, orderSpec1)
+      .window(Seq(sum(c).as('sum_a_2)), partitionSpec4, orderSpec2)
+      .select('a, 'b, 'c, 'd, 'sum_a_2, 'sum_a_1)
+
+    comparePlans(optimized, correctAnswer.analyze)
+  }
+
 }

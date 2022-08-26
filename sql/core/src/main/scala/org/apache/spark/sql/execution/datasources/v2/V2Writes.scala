@@ -24,12 +24,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Ove
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -49,21 +48,21 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
     case o @ OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, options, _, None) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
-      val filters = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
-        val filter = DataSourceStrategy.translateFilter(pred, supportNestedPredicatePushdown = true)
-        if (filter.isEmpty) {
+      val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
+        val predicate = DataSourceV2Strategy.translateFilterV2(pred)
+        if (predicate.isEmpty) {
           throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(pred)
         }
-        filter
+        predicate
       }.toArray
 
       val table = r.table
       val writeBuilder = newWriteBuilder(table, options, query.schema)
       val write = writeBuilder match {
-        case builder: SupportsTruncate if isTruncate(filters) =>
+        case builder: SupportsTruncate if isTruncate(predicates) =>
           builder.truncate().build()
-        case builder: SupportsOverwrite =>
-          builder.overwrite(filters).build()
+        case builder: SupportsOverwriteV2 if builder.canOverwrite(predicates) =>
+          builder.overwrite(predicates).build()
         case _ =>
           throw QueryExecutionErrors.overwriteTableByUnsupportedExpressionError(table)
       }
@@ -123,8 +122,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def isTruncate(filters: Array[Filter]): Boolean = {
-    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
+  private def isTruncate(predicates: Array[Predicate]): Boolean = {
+    predicates.length == 1 && predicates(0).name().equals("ALWAYS_TRUE")
   }
 
   private def newWriteBuilder(

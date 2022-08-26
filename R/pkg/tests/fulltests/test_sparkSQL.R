@@ -1291,6 +1291,15 @@ test_that("drop column", {
   df1 <- drop(df, df$age)
   expect_equal(columns(df1), c("name", "age2"))
 
+  df1 <- drop(df, df$age, df$name)
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age, column("random"))
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df1 <- drop(df, df$age, "random")
+  expect_equal(columns(df1), c("name", "age2"))
+
   df$age2 <- NULL
   expect_equal(columns(df), c("name", "age"))
   df$age3 <- NULL
@@ -1595,6 +1604,16 @@ test_that("column functions", {
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- collect(select(
+    df,
+    array_sort(
+      df[[1]],
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
+    )
+  ))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
@@ -4098,14 +4117,13 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
-               paste("Error in listColumns : analysis error - Table",
-                     "'zxwtyswklpf' does not exist in database 'default'"))
+               paste("Table or view not found: spark_catalog.default.zxwtyswklpf"))
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
                c("name", "catalog", "namespace", "description", "className", "isTemporary"))
-  expect_equal(take(orderBy(f, "className"), 1)$className,
+  expect_equal(take(orderBy(filter(f, "className IS NOT NULL"), "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
                paste("Error in listFunctions : no such database - Database",

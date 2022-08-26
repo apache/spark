@@ -39,7 +39,7 @@ import org.apache.thrift.transport.TSocket
 import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -394,19 +394,17 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            rc.getException match {
-              case e: AnalysisException => e.cause match {
-                case Some(_) if !sessionState.getIsSilent =>
-                  err.println(
-                    s"""Error in query: ${e.getMessage}
-                       |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
-                     """.stripMargin)
-                // For analysis exceptions in silent mode or simple ones that only related to the
-                // query itself, such as `NoSuchDatabaseException`, only the error is printed out
-                // to the console.
-                case _ => err.println(s"""Error in query: ${e.getMessage}""")
-              }
-              case _ => err.println(rc.getErrorMessage())
+            val format = SparkSQLEnv.sqlContext.conf.errorMessageFormat
+            val e = rc.getException
+            val msg = e match {
+              case st: SparkThrowable with Throwable => SparkThrowableHelper.getMessage(st, format)
+              case _ => e.getMessage
+            }
+            err.println(msg)
+            if (format == ErrorMessageFormat.PRETTY &&
+                !sessionState.getIsSilent &&
+                (!e.isInstanceOf[AnalysisException] || e.getCause != null)) {
+              e.printStackTrace(err)
             }
             driver.close()
             return ret

@@ -709,7 +709,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.0")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.1")
 }
 
 /**
@@ -1136,7 +1136,8 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those

@@ -496,7 +496,10 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING(cours
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -505,7 +508,10 @@ SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING_ID(co
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -560,7 +566,10 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING(cou
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "messageParameters" : { }
+}
 
 
 -- !query
@@ -569,7 +578,10 @@ SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING_ID(
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "messageParameters" : { }
+}
 
 
 -- !query

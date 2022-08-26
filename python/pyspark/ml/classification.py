@@ -3230,6 +3230,7 @@ class MultilayerPerceptronClassifier(
         solver: str = "l-bfgs",
         initialWeights: Optional[Vector] = None,
         probabilityCol: str = "probability",
+        rawPredictionCol: str = "rawPrediction",
     ) -> "MultilayerPerceptronClassifier":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \

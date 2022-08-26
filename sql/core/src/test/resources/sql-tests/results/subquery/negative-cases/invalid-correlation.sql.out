@@ -134,4 +134,11 @@ ON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `t1a` cannot be resolved. Did you mean one of the following? [`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`]; line 4 pos 44
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`t1a`",
+    "objectList" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
+  }
+}

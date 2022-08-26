@@ -909,7 +909,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
       assert(e.getMessage.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendOrcToParquet is `Parquet"))
+        s"$SESSION_CATALOG_NAME.default.appendorctoparquet is `Parquet"))
     }
 
     withTable("appendParquetToJson") {
@@ -920,7 +920,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }.getMessage
 
       assert(msg.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendParquetToJson is `Json"))
+        s"$SESSION_CATALOG_NAME.default.appendparquettojson is `Json"))
     }
 
     withTable("appendTextToJson") {
@@ -931,7 +931,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }.getMessage
       // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
       assert(msg.contains("The format of the existing table " +
-        s"$SESSION_CATALOG_NAME.default.appendTextToJson is `Json"))
+        s"$SESSION_CATALOG_NAME.default.appendtexttojson is `Json"))
     }
   }
 
@@ -1251,7 +1251,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains(s"Table `$tableName` already exists"))
+      assert(e.contains(s"Table `$SESSION_CATALOG_NAME`.`default`.`$tableName` already exists"))
     }
   }
 
@@ -1346,8 +1346,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
-        assert(tableMeta.identifier ==
-          TableIdentifier("t", Some("default"), Some(SESSION_CATALOG_NAME)))
+        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
         assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
       }
     } finally {

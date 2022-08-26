@@ -20,12 +20,16 @@
 name: Build / Cache base image
 
 on:
+  # Run jobs when a commit is merged
   push:
     branches:
     - 'master'
+    - 'branch-*'
     paths:
     - 'dev/infra/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
+  # Create infra image when cutting down branches/tags
+  create:
 jobs:
   main:
     if: github.repository == 'apache/spark'
@@ -49,7 +53,7 @@ jobs:
         with:
           context: ./dev/infra/
           push: true
-          tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }}
           cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ github.ref_name }},mode=max
       - name: Image digest
