@@ -87,7 +87,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       } else {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = Math.max(self.conf.get(RDD_LIMIT_INITIAL_NUM_PARTITIONS), 1)
+        var numPartsToTry = self.conf.get(RDD_LIMIT_INITIAL_NUM_PARTITIONS)
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, multiply by
           // limitScaleUpFactor and retry. Otherwise, interpolate the number of partitions we need

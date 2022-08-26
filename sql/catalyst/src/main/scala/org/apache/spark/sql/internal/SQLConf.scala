@@ -533,6 +533,7 @@ object SQLConf {
       "jobs will be run")
     .version("3.4.0")
     .intConf
+    .checkValue(_ > 0, "value should be positive")
     .createWithDefault(1)
 
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")

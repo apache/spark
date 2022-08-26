@@ -1960,6 +1960,7 @@ package object config {
     ConfigBuilder("spark.rdd.limit.initialNumPartitions")
       .version("3.4.0")
       .intConf
+      .checkValue(_ > 0, "value should be positive")
       .createWithDefault(1)
 
   private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
