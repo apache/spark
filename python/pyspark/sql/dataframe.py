@@ -488,11 +488,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-	Retrieve the schema of the current DataFrame.
+        Retrieve the schema of the current DataFrame.
 
         >>> df.schema
-        StructType([StructField('age', IntegerType(), True), 
-		    StructField('name', StringType(), True)])
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
@@ -755,7 +755,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-	Show only top 2 rows.
+        Show only top 2 rows.
 
         >>> df.show(2)
         +---+-----+
@@ -766,7 +766,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         only showing top 2 rows
 
-	Show DataFrame where the maximum number of characters is 3.
+        Show DataFrame where the maximum number of characters is 3.
 
         >>> df.show(truncate=3)
         +---+----+
@@ -777,7 +777,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16| Bob|
         +---+----+
 
-	Show DataFrame vertically.
+        Show DataFrame vertically.
 
         >>> df.show(vertical=True)
         -RECORD 0-----
@@ -1038,7 +1038,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-	Return the number of rows in the :class:`DataFrame`.
+        Return the number of rows in the :class:`DataFrame`.
 
         >>> df.count()
         3
@@ -1147,7 +1147,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 16|  Bob|
         +---+-----+
 
-	Return the first 2 rows of the :class:`DataFrame`.
+        Return the first 2 rows of the :class:`DataFrame`.
 
         >>> df.take(2)
         [Row(age=14, name='Tom'), Row(age=23, name='Alice')]
@@ -1583,7 +1583,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df = spark.createDataFrame([(14, "Tom"), (23, "Alice"),
-        ...     (23, "Alice")], ["age", "name"]) 
+        ...     (23, "Alice")], ["age", "name"])
         >>> df.show()
         +---+-----+
         |age| name|
@@ -1593,7 +1593,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 23|Alice|
         +---+-----+
 
-	Return the number of distinct rows in the :class:`DataFrame`
+        Return the number of distinct rows in the :class:`DataFrame`
 
         >>> df.distinct().count()
         2
@@ -3453,10 +3453,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         Fill all null values with 50 when the data type of the column is an integer
 
-	>>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
+        >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
         ... 	(None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
-        +----+------+-----+ 
+        +----+------+-----+
         | age|height| name|
         +----+------+-----+
         |  10|    80|Alice|
@@ -3474,7 +3474,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|    50| null|
         +---+------+-----+
 
-	Fill all null values with ``False`` when the data type of the column is a boolean
+        Fill all null values with ``False`` when the data type of the column is a boolean
 
         >>> df = spark.createDataFrame([(10, "Alice", None), (5, "Bob", None),
         ...     (None, "Mallory", True)], ["age", "name", "spy"])
@@ -3495,8 +3495,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |null|Mallory| true|
         +----+-------+-----+
 
-	Fill all null values in the 'age' column to 50 and "unknown" in the 'name' column
-	
+        Fill all null values in the 'age' column to 50 and "unknown" in the 'name' column
+
         >>> df = spark.createDataFrame([(10, 80, "Alice"), (5, None, "Bob"),
         ...     (None, None, "Tom"), (None, None, None)], ["age", "height", "name"])
         >>> df.show()
@@ -3654,7 +3654,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+------+----+
 
         Replace all instances of Alice to 'A' and Bob to 'B' under the name column
-        
+
         >>> df.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
