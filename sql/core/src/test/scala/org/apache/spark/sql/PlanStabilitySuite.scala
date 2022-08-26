@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
@@ -344,6 +345,36 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with T
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q, ".sf100")
+    }
+  }
+}
+
+@ExtendedSQLTest
+class TPCDSV1_4_SF1000_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
+  override def injectStats: Boolean = true
+  override def statistics: Map[String, CatalogStatistics] = TPCDSTableStatsSF1000.tableStats
+
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
+
+  tpcdsQueries.foreach { q =>
+    test(s"check simplified sf1000 (tpcds-v1.4/$q)") {
+      testQuery( "tpcds", q, ".sf1000")
+    }
+  }
+}
+
+@ExtendedSQLTest
+class TPCDSV2_7_SF1000_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
+  override def injectStats: Boolean = true
+  override def statistics: Map[String, CatalogStatistics] = TPCDSTableStatsSF1000.tableStats
+
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
+
+  tpcdsQueriesV2_7_0.foreach { q =>
+    test(s"check simplified sf1000 (tpcds-v2.7.0/$q)") {
+      testQuery("tpcds-v2.7.0", q, ".sf1000")
     }
   }
 }

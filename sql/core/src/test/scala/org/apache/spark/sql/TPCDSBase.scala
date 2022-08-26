@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 
 trait TPCDSBase extends TPCBase with TPCDSSchema {
 
@@ -87,7 +88,7 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
       if (injectStats) {
         // To simulate plan generation on actual TPC-DS data, injects data stats here
         spark.sessionState.catalog.alterTableStats(
-          TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
+          TableIdentifier(tableName), Some(statistics(tableName)))
       }
     }
   }
@@ -97,4 +98,5 @@ trait TPCDSBase extends TPCBase with TPCDSSchema {
       spark.sessionState.catalog.dropTable(TableIdentifier(tableName), true, true)
     }
   }
+  protected def statistics: Map[String, CatalogStatistics] = TPCDSTableStats.sf100TableStats
 }
