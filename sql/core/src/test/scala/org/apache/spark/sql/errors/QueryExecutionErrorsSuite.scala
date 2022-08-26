@@ -608,8 +608,7 @@ class QueryExecutionErrorsSuite
 
   test(
     "MULTI_VALUE_SUBQUERY_ERROR: " +
-    "More than one row returned by a subquery used as an expression"
-  ) {
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
