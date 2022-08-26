@@ -382,9 +382,11 @@ pyspark_core = Module(
         "pyspark.conf",
         "pyspark.broadcast",
         "pyspark.accumulators",
+        "pyspark.files",
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
+        "pyspark.taskcontext",
         "pyspark.util",
         # unittests
         "pyspark.tests.test_appsubmit",
@@ -476,6 +478,8 @@ pyspark_resource = Module(
     dependencies=[pyspark_core],
     source_file_regexes=["python/pyspark/resource"],
     python_test_goals=[
+        # doctests
+        "pyspark.resource.profile",
         # unittests
         "pyspark.resource.tests.test_resources",
     ],

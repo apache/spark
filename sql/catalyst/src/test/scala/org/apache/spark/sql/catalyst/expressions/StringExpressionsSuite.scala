@@ -307,6 +307,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
   }
 
+  test("SPARK-40213: ascii for Latin-1 Supplement characters") {
+    // scalastyle:off
+    checkEvaluation(Ascii(Literal("¥")), 165, create_row("¥"))
+    checkEvaluation(Ascii(Literal("®")), 174, create_row("®"))
+    checkEvaluation(Ascii(Literal("©")), 169, create_row("©"))
+    // scalastyle:on
+    (128 until 256).foreach { c =>
+      checkEvaluation(Ascii(Chr(Literal(c.toLong))), c, create_row(c.toLong))
+    }
+  }
+
   test("ascii for string") {
     val a = $"a".string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))

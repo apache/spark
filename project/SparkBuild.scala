@@ -1136,7 +1136,8 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those

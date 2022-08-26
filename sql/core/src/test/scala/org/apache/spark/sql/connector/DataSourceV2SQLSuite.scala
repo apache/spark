@@ -258,6 +258,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> "false") {
       // unset this config to use the default v2 session catalog.
       spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      spark.sessionState.catalogManager.reset()
       val testCatalog = catalog("testcat").asTableCatalog
 
       sql("CREATE TABLE testcat.t1 (id int)")
@@ -727,6 +728,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    spark.sessionState.catalogManager.reset()
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -1010,6 +1012,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         spark.conf.set(
           V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
       }
+      spark.sessionState.catalogManager.reset()
 
       withTable("t") {
         sql(s"CREATE TABLE t USING $format AS SELECT 1 AS i")
@@ -1807,8 +1810,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
-    assert(e.message.contains(
-      "global_temp.ns1.ns2.tbl is not a valid TableIdentifier as it has more than 2 name parts."))
+    assert(e.message.contains("requires a single-part namespace"))
   }
 
   test("table name same as catalog can be used") {
@@ -1823,6 +1825,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   test("SPARK-30001: session catalog name can be specified in SQL statements") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    spark.sessionState.catalogManager.reset()
 
     withTable("t") {
       sql("CREATE TABLE t USING json AS SELECT 1 AS i")
@@ -1887,6 +1890,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   test("SPARK-30094: current namespace is used during table resolution") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    spark.sessionState.catalogManager.reset()
 
     withTable("spark_catalog.default.t", "testcat.ns.t") {
       sql("CREATE TABLE t USING parquet AS SELECT 1")

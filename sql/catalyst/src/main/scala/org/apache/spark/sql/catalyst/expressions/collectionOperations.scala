@@ -2228,7 +2228,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError()
+            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2259,9 +2259,8 @@ case class ElementAt(
           } else {
             ""
           }
-
+          val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2270,7 +2269,7 @@ case class ElementAt(
               case Some(value) =>
                 val defaultValueEval = value.genCode(ctx)
                 s"""
-                  ${defaultValueEval.code};
+                  ${defaultValueEval.code}
                   ${ev.isNull} = ${defaultValueEval.isNull};
                   ${ev.value} = ${defaultValueEval.value};
                 """.stripMargin
@@ -2284,7 +2283,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -3119,7 +3118,7 @@ object Sequence {
           // "spring forward" without a corresponding "fall back", make a copy
           // that's larger by 1
           if (i == arr.length) {
-            arr = arr.padTo(estimatedArrayLength + 1, fromLong(0L))
+            arr = arr.padTo(i + 1, fromLong(0L))
           }
           arr(i) = fromLong(result)
           i += 1

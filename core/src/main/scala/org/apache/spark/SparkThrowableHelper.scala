@@ -172,11 +172,14 @@ private[spark] object SparkThrowableHelper {
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)
-          g.writeObjectFieldStart("messageParameters")
-          (e.getParameterNames zip e.getMessageParameters).foreach { case (name, value) =>
-            g.writeStringField(name, value)
+          val parameterNames = e.getParameterNames
+          if (!parameterNames.isEmpty) {
+            g.writeObjectFieldStart("messageParameters")
+            (parameterNames zip e.getMessageParameters).foreach { case (name, value) =>
+              g.writeStringField(name, value)
+            }
+            g.writeEndObject()
           }
-          g.writeEndObject()
           val queryContext = e.getQueryContext
           if (!queryContext.isEmpty) {
             g.writeArrayFieldStart("queryContext")
