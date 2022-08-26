@@ -816,8 +816,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // Wait a while for existing tasks to terminate
         if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
           List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
-          logger.warn("There are still {} tasks not completed in mergedShuffleCleaner after {}s.",
-            unfinishedTasks.size(), cleanerShutdownTimeout);
+          logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
+            "after {} seconds.", unfinishedTasks.size(), cleanerShutdownTimeout);
           // Wait a while for tasks to respond to being cancelled
           if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
             logger.warn("mergedShuffleCleaner did not terminate");
@@ -1065,7 +1065,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Check `mergedShuffleCleaner` is null or already shutdown.
+   * Check `mergedShuffleCleaner` is already shutdown.
    */
   @VisibleForTesting
   boolean isCleanerShutdown() {

@@ -388,7 +388,8 @@ public class TransportConf {
   }
 
   /**
-   * The RemoteBlockPushResolver#mergedShuffleCleanermergedShuffleCleaner shutdown timeout, in seconds.
+   * The RemoteBlockPushResolver#mergedShuffleCleanermergedShuffleCleaner
+   * shutdown timeout, in seconds.
    */
   public long mergedShuffleCleanerShutdownTimeout() {
     return JavaUtils.timeStringAsSec(
