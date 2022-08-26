@@ -17,6 +17,13 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_DECODE_URL" : {
+    "message" : [
+      "Cannot decode url : <url>.",
+      "<details>"
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_INFER_DATE" : {
     "message" : [
       "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
@@ -294,7 +301,7 @@
   },
   "MULTI_VALUE_SUBQUERY_ERROR" : {
     "message" : [
-      "more than one row returned by a subquery used as an expression: <plan>"
+      "More than one row returned by a subquery used as an expression."
     ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {

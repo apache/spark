@@ -152,8 +152,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "LATERAL_NATURAL_JOIN",
-  "sqlState" : "0A000",
-  "messageParameters" : { }
+  "sqlState" : "0A000"
 }
 
 
@@ -166,8 +165,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "LATERAL_JOIN_USING",
-  "sqlState" : "0A000",
-  "messageParameters" : { }
+  "sqlState" : "0A000"
 }
 
 

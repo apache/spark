@@ -22,12 +22,13 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -35,6 +36,8 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
@@ -606,30 +609,22 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("MULTI_VALUE_SUBQUERY_ERROR: " +
-    "more than one row returned by a subquery used as an expression") {
+  test(
+    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      parameters = Map("plan" ->
-          """Subquery subquery#\w+, \[id=#\w+\]
-            |\+\- AdaptiveSparkPlan isFinalPlan=true
-            |   \+\- == Final Plan ==
-            |      Union
-            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
-            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
-            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
-            |         \+\- \*\(2\) Scan OneRowRelation\[\]
-            |   \+\- == Initial Plan ==
-            |      Union
-            |      :\- Project \[\w+ AS a#\w+\]
-            |      :  \+\- Scan OneRowRelation\[\]
-            |      \+\- Project \[\w+ AS a#\w+\]
-            |         \+\- Scan OneRowRelation\[\]
-            |""".stripMargin),
-      matchPVals = true)
+      queryContext = Array(
+        ExpectedContext(
+          fragment = "(select a from (select 1 as a union all select 2 as a) t)",
+          start = 7,
+          stop = 63
+        )
+      )
+    )
   }
 
   test("ARITHMETIC_OVERFLOW: overflow on adding months") {
@@ -675,6 +670,31 @@ class QueryExecutionErrorsSuite
         "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
       ),
       sqlState = "0A000")
+  }
+
+  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
+    var srcPath: Path = null
+    val e = intercept[SparkFileNotFoundException](
+      withTempPath { p =>
+        val conf = new Configuration()
+        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
+        assert(!fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        fm.renameTempFile(srcPath, dstPath, true)
+      }
+    )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
+      ))
   }
 }
 
