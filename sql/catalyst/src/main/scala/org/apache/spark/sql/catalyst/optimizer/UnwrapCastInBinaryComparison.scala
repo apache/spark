@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -151,25 +150,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       // 2. The literals that can cast to fromExp.dataType
       // 3. The literals that cannot cast to fromExp.dataType
       // null literals is special as we can cast null literals to any data type.
-      val (nullList, canCastList, cannotCastList) =
-        (ArrayBuffer[Literal](), ArrayBuffer[Literal](), ArrayBuffer[Expression]())
-      list.foreach {
-        case lit @ Literal(null, _) => nullList += lit
-        case lit @ NonNullLiteral(_, _) =>
-          unwrapCast(EqualTo(in.value, lit)) match {
-            // the function `unwrapCast` returns None means the literal can not cast to fromType,
-            // for instance: (the boundreference is of type DECIMAL(5,2))
-            //     CAST(boundreference() AS DECIMAL(10,4)) = 123456.1234BD
-            // Due to `cast(lit, fromExp.dataType) == null` we simply return
-            // `falseIfNotNull(fromExp)`.
-            case None | Some(And(IsNull(_), Literal(null, BooleanType))) =>
-              cannotCastList += falseIfNotNull(fromExp)
-            case Some(EqualTo(_, unwrapLit: Literal)) =>
-              canCastList += unwrapLit
-            case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-          }
-        case _ => throw new IllegalStateException("Illegal value found in in.list.")
-      }
+      val (nullList, canCastList, cannotCastList) = simplifyIn(fromExp, toType, list)
 
       // return None when in.list contains only null values.
       if (canCastList.isEmpty && cannotCastList.isEmpty) {
@@ -200,40 +181,70 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       // 1. null literals
       // 2. The literals that can cast to fromExp.dataType
       // 3. The literals that cannot cast to fromExp.dataType
-      var (nullSet, canCastSet, cannotCastSet) =
-        (HashSet[Any](), HashSet[Any](), HashSet[Expression]())
-      hset.map(value => Literal.create(value, toType))
-        .foreach {
-          case lit @ Literal(null, _) => nullSet += lit.value
-          case lit @ NonNullLiteral(_, _) =>
-            unwrapCast(EqualTo(inSet.child, lit)) match {
-              // The same with `In`, when the lit cast to from.dataType failed, we simply return
-              // `falseIfNotNull(fromExp)`.
-              case None | Some(And(IsNull(_), Literal(null, BooleanType))) =>
-                cannotCastSet += falseIfNotNull(fromExp)
-              case Some(EqualTo(_, unwrapLit: Literal)) =>
-                canCastSet += unwrapLit.value
-              case _ => throw new IllegalStateException("Illegal unwrap cast result found.")
-            }
-          case _ => throw new IllegalStateException("Illegal value found in hset.")
-        }
+      val (nullList, canCastList, cannotCastList) =
+        simplifyIn(fromExp, toType, hset.map(v => Literal.create(v, toType)).toSeq)
 
-      if (canCastSet.isEmpty && cannotCastSet.isEmpty) {
+//      var (nullSet, canCastSet, cannotCastSet) =
+//        (HashSet[Any](), HashSet[Any](), HashSet[Expression]())
+//      (ArrayBuffer[Literal](), ArrayBuffer[Literal](), ArrayBuffer[Expression]())
+      if (canCastList.isEmpty && cannotCastList.isEmpty) {
         None
       } else {
-        val unwrapInSet = InSet(fromExp, nullSet ++ canCastSet)
-        cannotCastSet.headOption match {
+        val unwrapInSet = InSet(fromExp, (nullList ++ canCastList).map(_.value).toSet)
+        cannotCastList.headOption match {
           case None => Option(unwrapInSet)
           // since `cannotCastList` are all the same,
           // convert to a single value `And(IsNull(_), Literal(null, BooleanType))`.
           case Some(falseIfNotNull @ And(IsNull(_), Literal(null, BooleanType)))
-            if cannotCastSet.map(_.canonicalized).size == 1 =>
+            if cannotCastList.map(_.canonicalized).distinct.size == 1 =>
             Option(Or(falseIfNotNull, unwrapInSet))
           case _ => None
         }
       }
 
     case _ => None
+  }
+
+  private def simplifyIn(
+      fromExp: Expression,
+      toType: NumericType,
+      list: Seq[Expression]
+                        ): (ArrayBuffer[Literal], ArrayBuffer[Literal], ArrayBuffer[Expression]) = {
+    val (nullList, canCastList, cannotCastList) =
+      (ArrayBuffer[Literal](), ArrayBuffer[Literal](), ArrayBuffer[Expression]())
+    val fromType = fromExp.dataType
+    val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
+    val minMaxInToType = getRange(fromType).map {
+      case (min, max) =>
+        (Cast(Literal(min), toType).eval(), Cast(Literal(max), toType).eval())
+    }
+
+    list.foreach {
+      case lit @ Literal(null, _) => nullList += lit
+      case NonNullLiteral(value, _) =>
+        val minMaxCmp = minMaxInToType.map {
+          case (minInToType, maxInToType) =>
+            (ordering.compare(value, minInToType), ordering.compare(value, maxInToType))
+        }
+        minMaxCmp match {
+          case Some((minCmp, maxCmp)) if maxCmp > 0 || minCmp < 0 =>
+            cannotCastList += falseIfNotNull(fromExp)
+          case _ =>
+            val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
+            if (newValue == null) {
+              cannotCastList += falseIfNotNull(fromExp)
+            } else {
+              val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
+              val cmp = ordering.compare(value, valueRoundTrip)
+              if (cmp == 0) {
+                canCastList += Literal(newValue, fromType)
+              } else {
+                cannotCastList += falseIfNotNull(fromExp)
+              }
+            }
+        }
+    }
+    (nullList, canCastList, cannotCastList)
   }
 
   /**
@@ -410,5 +421,23 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    */
   private[optimizer] def trueIfNotNull(e: Expression): Expression = {
     Or(IsNotNull(e), Literal(null, BooleanType))
+  }
+}
+
+object CannotCastLiteral {
+  def unapply(input: (Literal, Option[(Int, Int)])): Option[Boolean] = {
+    input match {
+      case (NonNullLiteral(_, _), Some((minCmp, maxCmp))) if maxCmp > 0 || minCmp < 0 =>
+        true
+      case (NonNullLiteral(_, _), None) =>
+
+//        lazy val minCmp = ordering.compare(value, minInToType)
+//        lazy val maxCmp = ordering.compare(value, maxInToType)
+//        if (range.isDefined && (maxCmp > 0 || minCmp < 0)) {
+//          cannotCastList += falseIfNotNull(fromExp)
+//        } else {
+    }
+
+    None
   }
 }
