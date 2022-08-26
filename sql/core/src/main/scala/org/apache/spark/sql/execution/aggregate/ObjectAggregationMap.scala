@@ -54,6 +54,7 @@ class ObjectAggregationMap() {
       }
       override def next(): AggregationBufferEntry = {
         val entry = iter.next()
+        iter.remove()
         new AggregationBufferEntry(entry.getKey, entry.getValue)
       }
     }
