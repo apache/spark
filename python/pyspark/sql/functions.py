@@ -2546,12 +2546,6 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.agg(count_distinct(df.age, df.name).alias('c')).collect()
-    [Row(c=2)]
-
-    >>> df.agg(count_distinct("age", "name").alias('c')).collect()
-    [Row(c=2)]
-
     >>> from pyspark.sql import types
     >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
     >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
@@ -2617,7 +2611,9 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     |  Bob|         5|
     +-----+----------+
 
-    >>> df.groupby("name").agg(first("age", True)).orderBy("name").show()
+    Now, to ignore any nulls we needs to set ``ignorenulls`` to `True`
+
+    >>> df.groupby("name").agg(first("age", ignorenulls=True)).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -2684,15 +2680,6 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
-    +-----+-------------+--------+
-    | name|grouping_id()|sum(age)|
-    +-----+-------------+--------+
-    | null|            1|       7|
-    |Alice|            0|       2|
-    |  Bob|            0|       5|
-    +-----+-------------+--------+
-
     >>> df = spark.createDataFrame([(1, "a", "a"),
     ...                             (3, "a", "a"),
     ...                             (4, "b", "c")], ["c1", "c2", "c3"])
@@ -2829,7 +2816,9 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     |  Bob|        5|
     +-----+---------+
 
-    >>> df.groupby("name").agg(last("age", True)).orderBy("name").show()
+    Now, to ignore any nulls we needs to set ``ignorenulls`` to `True`
+
+    >>> df.groupby("name").agg(last("age", ignorenulls=True)).orderBy("name").show()
     +-----+---------+
     | name|last(age)|
     +-----+---------+
