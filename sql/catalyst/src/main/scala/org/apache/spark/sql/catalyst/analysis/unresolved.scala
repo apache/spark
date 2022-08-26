@@ -106,7 +106,7 @@ case class UnresolvedInlineTable(
  *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
-    name: FunctionIdentifier,
+    name: Seq[String],
     functionArgs: Seq[Expression],
     outputNames: Seq[String])
   extends LeafNode {
@@ -114,14 +114,25 @@ case class UnresolvedTableValuedFunction(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TABLE_VALUED_FUNCTION)
 }
 
 object UnresolvedTableValuedFunction {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   def apply(
       name: String,
       functionArgs: Seq[Expression],
       outputNames: Seq[String]): UnresolvedTableValuedFunction = {
-    UnresolvedTableValuedFunction(FunctionIdentifier(name), functionArgs, outputNames)
+    UnresolvedTableValuedFunction(Seq(name), functionArgs, outputNames)
+  }
+
+  def apply(
+      name: FunctionIdentifier,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(name.asMultipart, functionArgs, outputNames)
   }
 }
 
