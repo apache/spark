@@ -127,7 +127,7 @@ class SessionCatalog(
   // check whether the temporary view or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb: String = formatDatabaseName(defaultDatabase)
+  protected var currentDb: String = format(defaultDatabase)
 
   private val validNameFormat = "([\\w_]+)".r
 
@@ -282,7 +282,7 @@ class SessionCatalog(
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
-    val dbName = formatDatabaseName(db)
+    val dbName = format(db)
     if (dbName == defaultDatabase) {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
