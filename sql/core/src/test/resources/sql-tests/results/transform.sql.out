@@ -718,8 +718,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
-  "sqlState" : "0A000",
-  "messageParameters" : { }
+  "sqlState" : "0A000"
 }
 
 
@@ -735,8 +734,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
-  "sqlState" : "0A000",
-  "messageParameters" : { }
+  "sqlState" : "0A000"
 }
 
 

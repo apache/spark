@@ -213,7 +213,6 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
-  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

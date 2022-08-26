@@ -332,6 +332,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
+  def illegalUrlError(url: UTF8String, e: IllegalArgumentException):
+  Throwable with SparkThrowable = {
+    new SparkIllegalArgumentException(errorClass = "CANNOT_DECODE_URL",
+      messageParameters = Array(url.toString, e.getMessage)
+    )
+  }
+
   def dataTypeOperationUnsupportedError(): Throwable = {
     new UnsupportedOperationException("dataType")
   }
@@ -2075,9 +2082,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def multipleRowSubqueryError(plan: String): Throwable = {
+  def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR", messageParameters = Array(plan), cause = null)
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      messageParameters = Array.empty,
+      cause = null,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def nullComparisonResultError(): Throwable = {
