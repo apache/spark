@@ -383,6 +383,10 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java }}
+    - name: Install Python packages (Python 3.9, PyPy3)
+      run: |
+        # To test excel I/O for pandas API on Spark.
+        python3.9 -m pip install openpyxl
     - name: List Python packages (Python 3.9, PyPy3)
       run: |
         python3.9 -m pip list
