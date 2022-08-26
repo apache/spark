@@ -45,7 +45,7 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
 import org.apache.spark.network.server.BlockPushNonFatalFailure
-import org.apache.spark.network.shuffle.{MergedShuffleFileManager, NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
+import org.apache.spark.network.shuffle.{Constants, MergedShuffleFileManager, NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.shuffledb.DBBackend
@@ -53,7 +53,6 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.network.yarn.util.HadoopConfigProvider
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
-
 abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private[yarn] var yarnConfig: YarnConfiguration = null
@@ -1068,6 +1067,8 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   test("create remote block push resolver instance") {
     val mockConf = mock(classOf[TransportConf])
+    when(mockConf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND, DBBackend.LEVELDB.name()))
+      .thenReturn(shuffleDBBackend().name())
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
