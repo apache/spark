@@ -334,7 +334,6 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based 
     store used in shuffle state store. This supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value. 
-    This only affects standalone mode (yarn always has this behavior enabled). 
     The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>

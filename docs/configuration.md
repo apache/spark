@@ -1106,8 +1106,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.service.db.enabled</code></td>
   <td>true</td>
   <td>
-    To determine whether external shuffle uses db to store shuffle state.
-    In standalone and Yarn modes, for more detail, see
+    To determine whether external shuffle service uses db to store shuffle state.
+    In standalone mode, for more detail, see
     <a href="spark-standalone.html#Cluster Launch Scripts">this description</a>.
   </td>
   <td>3.0.0</td>

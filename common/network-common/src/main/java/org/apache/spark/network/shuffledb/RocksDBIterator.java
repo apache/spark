@@ -39,7 +39,7 @@ public class RocksDBIterator implements DBIterator {
     private Map.Entry<byte[], byte[]> next;
 
     public RocksDBIterator(RocksIterator it) {
-        this.it = it;
+      this.it = it;
     }
 
     @Override
@@ -49,11 +49,11 @@ public class RocksDBIterator implements DBIterator {
         checkedNext = true;
       }
       if (!closed && next == null) {
-       try {
-         close();
-       } catch (IOException ioe) {
-           throw Throwables.propagate(ioe);
-       }
+        try {
+          close();
+        } catch (IOException ioe) {
+          throw Throwables.propagate(ioe);
+        }
       }
       return next != null;
     }
@@ -72,20 +72,15 @@ public class RocksDBIterator implements DBIterator {
     @Override
     public void close() throws IOException {
       if (!closed) {
-       it.close();
-       closed = true;
-       next = null;
+        it.close();
+        closed = true;
+        next = null;
       }
     }
 
     @Override
     public void seek(byte[] key) {
       it.seek(key);
-    }
-
-    @Override
-    public void remove() {
-      throw new UnsupportedOperationException();
     }
 
     private Map.Entry<byte[], byte[]> loadNext() {
