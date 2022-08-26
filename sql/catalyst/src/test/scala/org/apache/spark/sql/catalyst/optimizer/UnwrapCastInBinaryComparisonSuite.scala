@@ -287,6 +287,28 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       Or(falseIfNotNull(f3), f3.in(decimal(decimalValue2))))
   }
 
+  test("SPARK-39896: unwrap cast when the literal of In/Inset has round up or down") {
+
+    val doubleValue = 1.0
+    val doubleValue1 = 100.6
+    checkInAndInSet(
+      In(castDouble(f), Seq(doubleValue1, doubleValue)),
+      Or(falseIfNotNull(f), f.in(doubleValue.toShort)))
+
+    // Cases for rounding up: 3.14 will be rounded to 3.14000010... after casting to float
+    val doubleValue2 = 3.14
+    checkInAndInSet(
+      In(castDouble(f2), Seq(doubleValue2, doubleValue)),
+      Or(falseIfNotNull(f2), f2.in(doubleValue.toFloat)))
+
+    // Another case: 400.5678 is rounded up to 400.57
+    val decimalValue1 = decimal2(400.5678)
+    val decimalValue2 = decimal2(1.0)
+    checkInAndInSet(
+      In(castDecimal2(f3), Seq(decimalValue1, decimalValue2)),
+      Or(falseIfNotNull(f3), f3.in(decimal(decimalValue2))))
+  }
+
   test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
     "is not literal") {
     val add = Cast(f2, DoubleType) + 1.0d
