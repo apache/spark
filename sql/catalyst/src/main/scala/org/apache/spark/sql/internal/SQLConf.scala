@@ -3520,6 +3520,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in CSV")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
+  val LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK =
+    buildConf("spark.sql.legacy.json.enableDateTimeParsingFallback")
+      .internal()
+      .doc("When true, enable legacy date/time parsing fallback in JSON")
+      .version("3.4.0")
+      .booleanConf
+      .createOptional
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -4620,6 +4636,12 @@ class SQLConf extends Serializable with Logging {
   def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
+
+  def jsonEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK)
+
+  def csvEnableDateTimeParsingFallback: Option[Boolean] =
+    getConf(LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 

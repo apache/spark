@@ -3322,6 +3322,38 @@ abstract class JsonSuite
       )
     }
   }
+
+  test("SPARK-40215: enable parsing fallback for JSON in CORRECTED mode with a SQL config") {
+    withTempPath { path =>
+      Seq("""{"date": "2020-01-01", "ts": "2020-01-01"}""").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (fallbackEnabled <- Seq(true, false)) {
+        withSQLConf(
+            SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+            SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+          val df = spark.read
+            .schema("date date, ts timestamp")
+            .option("dateFormat", "invalid")
+            .option("timestampFormat", "invalid")
+            .json(path.getAbsolutePath)
+
+          if (fallbackEnabled) {
+            checkAnswer(
+              df,
+              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null))
+            )
+          }
+        }
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
