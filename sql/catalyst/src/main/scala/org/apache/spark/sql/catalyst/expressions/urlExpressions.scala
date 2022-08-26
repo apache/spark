@@ -110,7 +110,12 @@ object UrlCodec {
   }
 
   def decode(src: UTF8String, enc: UTF8String): UTF8String = {
-    UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
+    try {
+      UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
+    } catch {
+      case e: IllegalArgumentException =>
+        throw QueryExecutionErrors.illegalUrlError(src, e)
+    }
   }
 }
 

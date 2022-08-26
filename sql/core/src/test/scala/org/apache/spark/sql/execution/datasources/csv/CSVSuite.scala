@@ -2949,6 +2949,38 @@ abstract class CSVSuite
       )
     }
   }
+
+  test("SPARK-40215: enable parsing fallback for CSV in CORRECTED mode with a SQL config") {
+    withTempPath { path =>
+      Seq("2020-01-01,2020-01-01").toDF()
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+
+      for (fallbackEnabled <- Seq(true, false)) {
+        withSQLConf(
+            SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+            SQLConf.LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+          val df = spark.read
+            .schema("date date, ts timestamp")
+            .option("dateFormat", "invalid")
+            .option("timestampFormat", "invalid")
+            .csv(path.getAbsolutePath)
+
+          if (fallbackEnabled) {
+            checkAnswer(
+              df,
+              Seq(Row(Date.valueOf("2020-01-01"), Timestamp.valueOf("2020-01-01 00:00:00")))
+            )
+          } else {
+            checkAnswer(
+              df,
+              Seq(Row(null, null))
+            )
+          }
+        }
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

@@ -277,7 +277,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
-      ResolveTableValuedFunctions(v1SessionCatalog) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
@@ -2088,12 +2087,15 @@ class Analyzer(override val catalogManager: CatalogManager)
   /**
    * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
+   * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
+   * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
+      _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
+        UNRESOLVED_TABLE_VALUED_FUNCTION), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2110,6 +2112,43 @@ class Analyzer(override val catalogManager: CatalogManager)
           CatalogV2Util.loadFunction(catalog, ident).map { func =>
             ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
           }.getOrElse(u.copy(possibleQualifiedName = Some(fullName)))
+        }
+
+      // Resolve table-valued function references.
+      case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
+        withPosition(u) {
+          val resolvedFunc = try {
+            resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+              val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
+              if (CatalogV2Util.isSessionCatalog(catalog)) {
+                v1SessionCatalog.resolvePersistentTableFunction(
+                  ident.asFunctionIdentifier, u.functionArgs)
+              } else {
+                throw QueryCompilationErrors.missingCatalogAbilityError(
+                  catalog, "table-valued functions")
+              }
+            }
+          } catch {
+            case _: NoSuchFunctionException =>
+              u.failAnalysis(s"could not resolve `${u.name.quoted}` to a table-valued function")
+          }
+          // If alias names assigned, add `Project` with the aliases
+          if (u.outputNames.nonEmpty) {
+            val outputAttrs = resolvedFunc.output
+            // Checks if the number of the aliases is equal to expected one
+            if (u.outputNames.size != outputAttrs.size) {
+              u.failAnalysis(
+                s"Number of given aliases does not match number of output columns. " +
+                  s"Function name: ${u.name.quoted}; number of aliases: " +
+                  s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
+            }
+            val aliases = outputAttrs.zip(u.outputNames).map {
+              case (attr, name) => Alias(attr, name)()
+            }
+            Project(aliases, resolvedFunc)
+          } else {
+            resolvedFunc
+          }
         }
 
       case q: LogicalPlan =>
@@ -2184,6 +2223,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
           if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
         }
+      } else {
+        None
+      }
+    }
+
+    private def resolveBuiltinOrTempTableFunction(
+        name: Seq[String],
+        arguments: Seq[Expression]): Option[LogicalPlan] = {
+      if (name.length == 1) {
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
       } else {
         None
       }

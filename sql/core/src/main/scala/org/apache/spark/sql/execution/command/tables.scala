@@ -207,9 +207,8 @@ case class AlterTableRenameCommand(
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      val newQualifiedIdent = catalog.qualifyIdentifier(oldName.copy(table = newName.table))
       optStorageLevel.foreach { storageLevel =>
-        sparkSession.catalog.cacheTable(newQualifiedIdent.unquotedString, storageLevel)
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]

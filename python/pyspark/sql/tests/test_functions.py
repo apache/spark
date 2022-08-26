@@ -20,6 +20,7 @@ from inspect import getmembers, isfunction
 from itertools import chain
 import re
 import math
+import unittest
 
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window, types
@@ -55,6 +56,7 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import have_numpy
 
 
 class FunctionsTests(ReusedSQLTestCase):
@@ -973,6 +975,33 @@ class FunctionsTests(ReusedSQLTestCase):
                 ).first()
             )
         )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_np_scalar_input(self):
+        import numpy as np
+        from pyspark.sql.functions import array_contains, array_position
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],)], ["data"])
+        for dtype in [np.int8, np.int16, np.int32, np.int64]:
+            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1", "int")])
+            res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
+            self.assertEqual([Row(b=True), Row(b=False)], res)
+            res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
+            self.assertEqual([Row(c=1), Row(c=0)], res)
+
+        # java.lang.Integer max: 2147483647
+        max_int = 2147483647
+        # Convert int to bigint automatically
+        self.assertEqual(df.select(lit(np.int32(max_int))).dtypes, [("2147483647", "int")])
+        self.assertEqual(df.select(lit(np.int64(max_int + 1))).dtypes, [("2147483648", "bigint")])
+
+        df = self.spark.createDataFrame([([1.0, 2.0, 3.0],), ([],)], ["data"])
+        for dtype in [np.float32, np.float64]:
+            self.assertEqual(df.select(lit(dtype(1))).dtypes, [("1.0", "double")])
+            res = df.select(array_contains(df.data, dtype(1)).alias("b")).collect()
+            self.assertEqual([Row(b=True), Row(b=False)], res)
+            res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
+            self.assertEqual([Row(c=1), Row(c=0)], res)
 
 
 if __name__ == "__main__":

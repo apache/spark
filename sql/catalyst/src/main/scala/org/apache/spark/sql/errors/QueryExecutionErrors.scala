@@ -114,9 +114,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Array(
-        value.toDebugString,
+        value.toPlainString,
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -330,6 +330,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidUrlError(url: UTF8String, e: URISyntaxException): Throwable = {
     new IllegalArgumentException(s"Find an invalid url string ${url.toString}. " +
       s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
+  }
+
+  def illegalUrlError(url: UTF8String, e: IllegalArgumentException):
+  Throwable with SparkThrowable = {
+    new SparkIllegalArgumentException(errorClass = "CANNOT_DECODE_URL",
+      messageParameters = Array(url.toString, e.getMessage)
+    )
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
@@ -1246,9 +1253,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       "length must be greater than or equal to 0.")
   }
 
-  def elementAtByIndexZeroError(): SparkRuntimeException = {
-    new SparkRuntimeException(errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      messageParameters = Array.empty)
+  def elementAtByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      cause = null,
+      messageParameters = Array.empty,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
@@ -2071,9 +2082,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def multipleRowSubqueryError(plan: String): Throwable = {
+  def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR", messageParameters = Array(plan), cause = null)
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      messageParameters = Array.empty,
+      cause = null,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def nullComparisonResultError(): Throwable = {
