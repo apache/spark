@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
+import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
 /**
  * Utility functions for collections.
@@ -35,6 +35,23 @@ private[spark] object Utils {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
     ordering.leastOf(input.asJava, num).iterator.asScala
+  }
+
+  /**
+   * Returns an iterator over the merged contents of all given iterators,
+   * traversing every element of the input iterators.
+   * Equivalent entries will not be de-duplicated.
+   *
+   * Callers must ensure that the source iterators are already sorted by
+   * the same ordering `ord`, otherwise the result is likely to be incorrectly.
+   */
+  def mergeOrdered[T](iterators: Iterable[TraversableOnce[T]])(
+    implicit ord: Ordering[T]): Iterator[T] = {
+    val ordering = new GuavaOrdering[T] {
+      override def compare(l: T, r: T): Int = ord.compare(l, r)
+    }
+    GuavaIterators.mergeSorted(
+      iterators.map(_.toIterator.asJava).asJava, ordering).asScala
   }
 
   /**
