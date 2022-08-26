@@ -604,9 +604,7 @@ trait SupportQueryContext extends Expression with Serializable {
 
   def initQueryContext(): Option[SQLQueryContext]
 
-  def getContextOrNull(): SQLQueryContext = {
-    queryContext.getOrElse(null)
-  }
+  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
 
   def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
     if (withErrorContext && queryContext.isDefined) {
