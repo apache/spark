@@ -150,13 +150,13 @@ private[sql] class SharedState(
 
     // Create default database if it doesn't exist
     // If database name not equals 'default', throw exception
-    if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
-      if ("default" != SessionCatalog.DEFAULT_DATABASE) {
-        throw new SparkException(s"Default catalog database '${SessionCatalog.DEFAULT_DATABASE}' " +
+    if (!externalCatalog.databaseExists(SQLConf.get.defaultDatabase)) {
+      if ("default" != SQLConf.get.defaultDatabase) {
+        throw new SparkException(s"Default catalog database '${SQLConf.get.defaultDatabase}' " +
           s"not exist, please change default database to 'default' and create it first.")
       }
       val defaultDbDefinition = CatalogDatabase(
-        SessionCatalog.DEFAULT_DATABASE,
+        SQLConf.get.defaultDatabase,
         "default database",
         CatalogUtils.stringToURI(conf.get(WAREHOUSE_PATH)),
         Map())

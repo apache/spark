@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
@@ -130,7 +130,7 @@ class CatalogManager(
       _currentNamespace = None
       // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
       // when we switch back to session catalog, the current namespace definitely is ["default"].
-      v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+      v1SessionCatalog.setCurrentDatabase(conf.getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE))
     }
   }
 
@@ -144,7 +144,7 @@ class CatalogManager(
     catalogs.clear()
     _currentNamespace = None
     _currentCatalogName = None
-    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+    v1SessionCatalog.setCurrentDatabase(conf.getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE))
   }
 }
 

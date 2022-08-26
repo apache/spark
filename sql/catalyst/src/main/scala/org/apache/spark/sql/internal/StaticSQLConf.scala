@@ -41,7 +41,7 @@ object StaticSQLConf {
   val CATALOG_DEFAULT_DATABASE =
     buildStaticConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME.defaultDatabase")
     .doc("The default database for session catalog.")
-    .version("3.2.0")
+    .version("3.4.0")
     .stringConf
     .createWithDefault("default")
 

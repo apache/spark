@@ -47,9 +47,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
-object SessionCatalog {
-  val DEFAULT_DATABASE = SQLConf.get.defaultDatabase
-}
 
 /**
  * An internal catalog that is used by a Spark Session. This internal catalog serves as a
