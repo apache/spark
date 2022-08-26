@@ -425,7 +425,6 @@ struct<>
 org.apache.spark.SparkException
 {
   "errorClass" : "MULTI_VALUE_SUBQUERY_ERROR",
-  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
