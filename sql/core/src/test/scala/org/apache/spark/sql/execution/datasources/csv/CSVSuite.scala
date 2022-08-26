@@ -2959,7 +2959,7 @@ abstract class CSVSuite
       for (fallbackEnabled <- Seq(true, false)) {
         withSQLConf(
             SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
-            SQLConf.CSV_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
+            SQLConf.LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> s"$fallbackEnabled") {
           val df = spark.read
             .schema("date date, ts timestamp")
             .option("dateFormat", "invalid")
