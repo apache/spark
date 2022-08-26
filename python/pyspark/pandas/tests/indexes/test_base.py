@@ -1954,13 +1954,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
                     (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
                 )
 
-        # other = tuple
-        other = [(1, 2), (3, 4)]
-        self.assert_eq(pidx.intersection(other), psidx.intersection(other).sort_values())
-        self.assert_eq(
-            (pidx + 1).intersection(other), (psidx + 1).intersection(other).sort_values()
-        )
-
         # MultiIndex / other = Index
         self.assert_eq(
             pmidx.intersection(pidx), psmidx.intersection(psidx).sort_values(), almost=True
