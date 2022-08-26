@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
@@ -133,10 +133,11 @@ class FileIndexSuite extends SharedSparkSession {
       val schema = StructType(Seq(StructField("a", IntegerType, false)))
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        val msg = intercept[RuntimeException] {
+        val msg = intercept[SparkRuntimeException] {
           fileIndex.partitionSpec()
         }.getMessage
-        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+        assert(msg == "[FAILED_CAST_PARTITION] Failed to cast value `foo` to `IntegerType` " +
+          "for partition column `a`")
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {

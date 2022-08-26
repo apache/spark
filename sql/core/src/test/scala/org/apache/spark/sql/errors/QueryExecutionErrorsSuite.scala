@@ -29,9 +29,10 @@ import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.catalyst.util.{stringToFile, BadRecordException}
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.InMemoryFileIndex
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
@@ -39,7 +40,7 @@ import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -686,6 +687,31 @@ class QueryExecutionErrorsSuite
       ),
       sqlState = "0A000")
   }
+
+  test("FAILED_CAST_PARTITION: cannot cast partition value  to data type") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("a", IntegerType, false)))
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        checkError(
+          exception = intercept[SparkRuntimeException] (
+            fileIndex.partitionSpec()
+          ),
+          errorClass = "FAILED_CAST_PARTITION",
+          parameters = Map("value" -> "`foo`",
+            "dataType" -> "`IntegerType`",
+            "columnName" -> "`a`",
+          ))
+      }
+    }
+  }
+
+
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
