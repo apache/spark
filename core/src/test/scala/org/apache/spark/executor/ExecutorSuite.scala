@@ -523,7 +523,7 @@ class ExecutorSuite extends SparkFunSuite
       val endLatch = new CountDownLatch(1)
 
       // Start a thread to simulate a task that begins executing updateDependencies()
-      // and takes a long time to finish because library download or installation is slow:
+      // and takes a long time to finish because file download is slow:
       val slowLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
           Map.empty,
@@ -538,7 +538,7 @@ class ExecutorSuite extends SparkFunSuite
       startLatch.await()
 
       // Start a second thread to simulate a task that blocks on the other task's
-      // library download:
+      // dependency update:
       val blockedLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
           Map.empty,
