@@ -2077,8 +2077,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array.empty,
       cause = null,
       context = getQueryContext(context),
-      summary = getSummary(context)
-    )
+      summary = getSummary(context))
   }
 
   def nullComparisonResultError(): Throwable = {
