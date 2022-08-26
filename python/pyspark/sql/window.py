@@ -134,7 +134,6 @@ class Window:
         cols : str, :class:`Column` or list
             names of columns or expressions
 
-
         Returns
         -------
         :class: `WindowSpec`
