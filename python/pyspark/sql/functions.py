@@ -2693,7 +2693,9 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     |  Bob|            0|       5|
     +-----+-------------+--------+
 
-    >>> df = spark.createDataFrame([(1, "a", "a"), (3, "a", "a"), (4, "b", "c")], ["c1", "c2", "c3"])
+    >>> df = spark.createDataFrame([(1, "a", "a"),
+    ...                             (3, "a", "a"),
+    ...                             (4, "b", "c")], ["c1", "c2", "c3"])
     >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
     +----+----+-------------+-------+
     |  c2|  c3|grouping_id()|sum(c1)|
