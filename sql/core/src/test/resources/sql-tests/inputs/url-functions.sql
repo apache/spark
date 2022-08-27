@@ -15,6 +15,5 @@ select url_encode(null);
 
 -- url_decode function
 select url_decode('https%3A%2F%2Fspark.apache.org');
-select url_decode('http%3A%2F%2spark.apache.org');
 select url_decode('inva lid://user:pass@host/file\\;param?query\\;p2');
 select url_decode(null);
