@@ -469,7 +469,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     if (n == 0) {
       return new Array[InternalRow](0)
     }
-
+    val limitScaleUpFactor = Math.max(conf.limitScaleUpFactor, 2)
+    // TODO: refactor and reuse the code from RDD's take()
     val childRDD = getByteArrayRdd(n, takeFromEnd)
 
     val buf = if (takeFromEnd) new ListBuffer[InternalRow] else new ArrayBuffer[InternalRow]
@@ -478,12 +479,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
-      var numPartsToTry = 1L
+      var numPartsToTry = conf.limitInitialNumPartitions
       if (partsScanned > 0) {
-        // If we didn't find any rows after the previous iteration, quadruple and retry.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate
-        // it by 50%. We also cap the estimation in the end.
-        val limitScaleUpFactor = Math.max(conf.limitScaleUpFactor, 2)
+        // If we didn't find any rows after the previous iteration, multiply by
+        // limitScaleUpFactor and retry. Otherwise, interpolate the number of partitions we need
+        // to try, but overestimate it by 50%. We also cap the estimation in the end.
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
