@@ -183,6 +183,9 @@ class ArrowPythonRunnerWithState(
               numRowsForCurGroup)
             arrowWriterForState.write(stateInfoRow)
 
+            // start offset for next group would be same as the total number of rows for batch
+            startOffsetForCurGroup = totalNumRowsForBatch
+
             // FIXME: threshold as number of rows
             //   if we want to go with size,
             //   arrowWriterForState.sizeInBytes() + arrowWriterForState.sizeInBytes()

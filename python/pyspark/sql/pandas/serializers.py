@@ -416,9 +416,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
             state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
 
-            # FIXME: data_batch: should be "zero-copy" split
             for state_idx in range(0, len(state_pandas)):
                 state_info_col = state_pandas.iloc[state_idx]
+
+                if not state_info_col:
+                    # no more data with grouping key + state
+                    break
 
                 state_info_col_properties = state_info_col['properties']
                 state_info_col_key_row = state_info_col['keyRowAsUnsafe']
@@ -438,6 +441,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                                        valueSchema=self.state_object_schema, **state_properties)
 
                 data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
+
                 data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
 
                 data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
