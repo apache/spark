@@ -413,30 +413,37 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
             state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
 
-            data_arrow = pa.Table.from_batches([data_batch]).itercolumns()
             state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
-
-            data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
             state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
 
-            state_info_col = state_pandas.iloc[0]
+            # FIXME: data_batch: should be "zero-copy" split
+            for state_idx in range(0, len(state_pandas)):
+                state_info_col = state_pandas.iloc[0]
 
-            state_info_col_properties = state_info_col['properties']
-            state_info_col_key_row = state_info_col['keyRowAsUnsafe']
-            state_info_col_object = state_info_col['object']
+                state_info_col_properties = state_info_col['properties']
+                state_info_col_key_row = state_info_col['keyRowAsUnsafe']
+                state_info_col_object = state_info_col['object']
 
-            state_properties = json.loads(state_info_col_properties)
-            if state_info_col_object:
-                state_object = self.pickleSer.loads(state_info_col_object)
-            else:
-                state_object = None
-            state_properties["optionalValue"] = state_object
+                data_start_offset = state_info_col['startOffset']
+                num_data_rows = state_info_col['numRows']
 
-            state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
-                                   valueSchema=self.state_object_schema, **state_properties)
+                state_properties = json.loads(state_info_col_properties)
+                if state_info_col_object:
+                    state_object = self.pickleSer.loads(state_info_col_object)
+                else:
+                    state_object = None
+                state_properties["optionalValue"] = state_object
 
-            # state info
-            yield (data_pandas, state, )
+                state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
+                                       valueSchema=self.state_object_schema, **state_properties)
+
+                data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
+                data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
+
+                data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
+
+                # state info
+                yield (data_pandas, state, )
 
     def dump_stream(self, iterator, stream):
         """
@@ -516,6 +523,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 max_data_cnt = max(pdf_data_cnt, state_data_cnt)
                 # FIXME: what would be the best criteria for threshold?
+                #   currently we arbitrarily set this via number of rows
                 if max_data_cnt > 10000:
                     batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
                                                    state_pdfs, state_data_cnt)

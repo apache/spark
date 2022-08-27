@@ -77,7 +77,9 @@ class ArrowPythonRunnerWithState(
       Array(
         StructField("properties", StringType),
         StructField("keyRowAsUnsafe", BinaryType),
-        StructField("object", BinaryType)
+        StructField("object", BinaryType),
+        StructField("startOffset", IntegerType),
+        StructField("numRows", IntegerType)
       )
     )
   )
@@ -110,12 +112,22 @@ class ArrowPythonRunnerWithState(
 
       private def buildStateInfoRow(
           keyRow: UnsafeRow,
-          groupState: GroupStateImpl[Row]): InternalRow = {
+          groupState: GroupStateImpl[Row],
+          startOffset: Int,
+          numRows: Int): InternalRow = {
+        // FIXME: document the schema
+        //   - properties
+        //   - keyRowAsUnsafe
+        //   - state object as Row
+        //   - startOffset
+        //   - numRows
         val stateUnderlyingRow = new GenericInternalRow(
           Array[Any](
             UTF8String.fromString(groupState.json()),
             keyRow.getBytes,
-            groupState.getOption.map(PythonSQLUtils.toPyRow).orNull
+            groupState.getOption.map(PythonSQLUtils.toPyRow).orNull,
+            startOffset,
+            numRows
           )
         )
         new GenericInternalRow(Array[Any](stateUnderlyingRow))
@@ -147,20 +159,49 @@ class ArrowPythonRunnerWithState(
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
+          var numRowsForCurGroup = 0
+          var startOffsetForCurGroup = 0
+          var totalNumRowsForBatch = 0
+
           while (inputIterator.hasNext) {
             val (keyRow, groupState, dataIter) = inputIterator.next()
 
             assert(dataIter.hasNext, "should have at least one data row!")
 
-            // Provide state info row in the first row
-            val stateInfoRow = buildStateInfoRow(keyRow, groupState)
-            arrowWriterForState.write(stateInfoRow)
+            numRowsForCurGroup = 0
 
-            // Continue providing remaining data rows
+            // Provide data rows
             while (dataIter.hasNext) {
               val dataRow = dataIter.next()
               arrowWriterForData.write(dataRow)
+              numRowsForCurGroup += 1
+              totalNumRowsForBatch += 1
             }
+
+            // Provide state info row in the first row
+            val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
+              numRowsForCurGroup)
+            arrowWriterForState.write(stateInfoRow)
+
+            // FIXME: threshold as number of rows
+            //   if we want to go with size,
+            //   arrowWriterForState.sizeInBytes() + arrowWriterForState.sizeInBytes()
+            if (totalNumRowsForBatch > 10000) {
+              // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
+              // side, as we know there is at least one data row.
+              arrowWriterForState.finish()
+              arrowWriterForData.finish()
+              writer.writeBatch()
+              arrowWriterForState.reset()
+              arrowWriterForData.reset()
+
+              startOffsetForCurGroup = 0
+              totalNumRowsForBatch = 0
+            }
+          }
+
+          if (numRowsForCurGroup > 0) {
+            // need to flush remaining batch
 
             // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
             // side, as we know there is at least one data row.
@@ -170,6 +211,7 @@ class ArrowPythonRunnerWithState(
             arrowWriterForState.reset()
             arrowWriterForData.reset()
           }
+
           // end writes footer to the output stream and doesn't clean any resources.
           // It could throw exception if the output stream is closed, so it should be
           // in the try block.
