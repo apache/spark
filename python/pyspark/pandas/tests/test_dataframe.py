@@ -146,12 +146,6 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
         )
 
-        # test local data with ps.MultiIndex
-        self.assert_eq(
-            ps.DataFrame(data=[1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
-            pd.DataFrame(data=[1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
-        )
-
         err_msg = "Cannot combine the series or dataframe"
         with self.assertRaisesRegex(ValueError, err_msg):
             # test ps.DataFrame with ps.Index
@@ -159,20 +153,6 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, err_msg):
             # test ps.DataFrame with pd.Index
             ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
-
-        # test distributed data with ps.MultiIndex
-        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
-        with ps.option_context("compute.ops_on_diff_frames", True):
-            with self.assertRaisesRegex(ValueError, err_msg):
-                # test ps.DataFrame with ps.Index
-                ps.DataFrame(
-                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
-                )
-            with self.assertRaisesRegex(ValueError, err_msg):
-                # test ps.DataFrame with pd.Index
-                ps.DataFrame(
-                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
-                )
 
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test pd.DataFrame with pd.Index
@@ -341,6 +321,27 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                     ),
                 ),
             )
+
+        # test MultiIndex
+        # test local data with ps.MultiIndex
+        self.assert_eq(
+            ps.DataFrame(data=[1, 2], index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+            pd.DataFrame(data=[1, 2], index=pd.MultiIndex.from_tuples([(1, 3), (2, 4)])),
+        )
+
+        # test distributed data with ps.MultiIndex
+        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with ps.Index
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with pd.Index
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
 
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
