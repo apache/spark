@@ -390,7 +390,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             StructField('properties', StringType()),
             StructField('keyRowAsUnsafe', BinaryType()),
             StructField('object', BinaryType()),
-            StructField('isEmptyData', BooleanType()),
         ])
 
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
@@ -446,35 +445,59 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         be sent back to the JVM before the Arrow stream starts.
         """
 
+        def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
+            import pandas as pd
+            import pyarrow as pa
+
+            max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+
+            empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
+            empty_row_cnt_in_state = max_data_cnt - state_data_cnt
+
+            empty_rows_pdf = pd.DataFrame(
+                    dict.fromkeys(pa.schema(pdf_schema).names),
+                    index=[x for x in range(0, empty_row_cnt_in_data)])
+            empty_rows_state = pd.DataFrame(
+                    columns=['properties', 'keyRowAsUnsafe', 'object'],
+                    index=[x for x in range(0, empty_row_cnt_in_state)])
+
+            pdfs.append(empty_rows_pdf)
+            state_pdfs.append(empty_rows_state)
+
+            merged_pdf = pd.concat(pdfs, ignore_index=True)
+            merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+
+            return self._create_batch([
+                    (merged_pdf, pdf_schema),
+                    (merged_state_pdf, self.result_state_pdf_arrow_type)])
+
         def init_stream_yield_batches():
             import pandas as pd
             import pyarrow as pa
 
             should_write_start_length = True
 
-            # FIXME: we are now very specific to the test code which always produces 1 output
-            #  to experiment bin-packing. We are also assuming that all states & outputs do not
-            #  grow that much if we pack to one. In reality we may need to try bin-packing to
-            #  specific number of rows or size of data.
-
             pdfs = []
             state_pdfs = []
+            return_schema = None
+
+            pdf_data_cnt = 0
+            state_data_cnt = 0
 
             for data in iterator:
                 packaged_result = data[0]
 
                 pdf = packaged_result[0][0]
                 state = packaged_result[0][-1]
+                # this won't change across batches
                 return_schema = packaged_result[1]
 
                 # FIXME: arrow type to pandas type
                 # FIXME: probably also need to check columns to validate?
 
-                empty_data = len(pdf) == 0
-                if empty_data:
-                    # if returned DataFrame is empty with no column information, just create a new
-                    # DataFrame with empty row with column information
-                    pdf = pd.DataFrame(dict.fromkeys(pa.schema(return_schema).names), index=[0])
+                if len(pdf) > 0:
+                    pdf_data_cnt += len(pdf)
+                    pdfs.append(pdf)
 
                 state_properties = state.json().encode("utf-8")
                 state_key_row_as_binary = state._keyAsUnsafe
@@ -484,27 +507,39 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     'properties': [state_properties, ],
                     'keyRowAsUnsafe': [state_key_row_as_binary, ],
                     'object': [state_object, ],
-                    'isEmptyData': [empty_data, ],
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
 
-                pdfs.append(pdf)
                 state_pdfs.append(state_pdf)
+                state_data_cnt = 1
 
-            assert len(pdfs) == len(state_pdfs)
+                max_data_cnt = max(pdf_data_cnt, state_data_cnt)
+                # FIXME: what would be the best criteria for threshold?
+                if max_data_cnt > 10000:
+                    batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                                   state_pdfs, state_data_cnt)
 
-            if len(pdfs) > 0:
-                merged_pdf = pd.concat(pdfs, ignore_index=True)
-                merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+                    pdfs = []
+                    state_pdfs = []
+                    pdf_data_cnt = 0
+                    state_data_cnt = 0
 
-                batch = self._create_batch([
-                    (merged_pdf, return_schema),
-                    (merged_state_pdf, self.result_state_pdf_arrow_type)])
+                    if should_write_start_length:
+                        write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                        should_write_start_length = False
 
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
+                    yield batch
+
+            # end of loop, we may have remaining data
+            if pdf_data_cnt > 0 or state_data_cnt > 0:
+                batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                               state_pdfs, state_data_cnt)
+
+                pdfs = []
+                state_pdfs = []
+                pdf_data_cnt = 0
+                state_data_cnt = 0
 
                 yield batch
 

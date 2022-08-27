@@ -170,10 +170,6 @@ case class FlatMapGroupsInPandasWithStateExec(
           watermarkPresent).asInstanceOf[GroupStateImpl[Row]]
         (keyRow, groupedState, valueIter)
       }
-      // FIXME: we are now very specific to the test code which always produces 1 output
-      //  to experiment bin-packing. We are also assuming that all states & outputs do not
-      //  grow that much if we pack to one. In reality we may need to try bin-packing to
-      //  specific number of rows or size of data.
       runner.compute(processIter, context.partitionId(), context).flatMap {
         case (stateIter, outputIter) =>
           // When the iterator is consumed, then write changes to state
