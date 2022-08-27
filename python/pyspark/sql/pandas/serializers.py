@@ -418,7 +418,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
             # FIXME: data_batch: should be "zero-copy" split
             for state_idx in range(0, len(state_pandas)):
-                state_info_col = state_pandas.iloc[0]
+                state_info_col = state_pandas.iloc[state_idx]
 
                 state_info_col_properties = state_info_col['properties']
                 state_info_col_key_row = state_info_col['keyRowAsUnsafe']
