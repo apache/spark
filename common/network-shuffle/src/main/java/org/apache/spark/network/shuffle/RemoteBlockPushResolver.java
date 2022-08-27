@@ -824,10 +824,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         }
       } catch (InterruptedException ignored) {
-        // (Re-)Cancel if current thread also interrupted
-        List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
-        logger.warn("There are still {} tasks not completed in mergedShuffleCleaner.",
-          unfinishedTasks.size());
         // Preserve interrupt status
         Thread.currentThread().interrupt();
       }
