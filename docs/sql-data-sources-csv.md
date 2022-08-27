@@ -55,7 +55,7 @@ Data source options of CSV can be set via:
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
-    <td><code>sep</code></td>
+    <td><code>delimiter</code></td>
     <td>,</td>
     <td>Sets a separator for each field and value. This separator can be one or more characters.</td>
     <td>read/write</td>
