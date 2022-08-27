@@ -65,7 +65,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
 
   private def add(left: Expression, right: Expression): Expression = left.dataType match {
     case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
-    case _ => Add(left, right, useAnsiAdd)
+    case _ => Add(left, right, EvalMode.fromBoolean(useAnsiAdd))
   }
 
   override lazy val aggBufferAttributes = if (shouldTrackIsEmpty) {
