@@ -213,8 +213,10 @@
         <activeByDefault>true</activeByDefault>
       </activation>
       <properties>
-        <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
-        <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
+        <extra.java.source.dir>src/hadoop-3/main/java</extra.java.source.dir>
+        <extra.java.testsource.dir>src/hadoop-3/test/java</extra.java.testsource.dir>
+        <extra.scala.source.dir>src/hadoop-3/main/scala</extra.scala.source.dir>
+        <extra.scala.testsource.dir>src/hadoop-3/test/scala</extra.scala.testsource.dir>
       </properties>
 
       <build>
@@ -240,26 +242,28 @@
             <artifactId>build-helper-maven-plugin</artifactId>
             <executions>
               <execution>
-                <id>add-scala-sources</id>
+                <id>add-extra-sources</id>
                 <phase>generate-sources</phase>
                 <goals>
                   <goal>add-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.source.dir}</source>
+                    <source>${extra.java.source.dir}</source>
+                    <source>${extra.scala.source.dir}</source>
                   </sources>
                 </configuration>
               </execution>
               <execution>
-                <id>add-scala-test-sources</id>
+                <id>add-extra-test-sources</id>
                 <phase>generate-test-sources</phase>
                 <goals>
                   <goal>add-test-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.testsource.dir}</source>
+                    <source>${extra.java.testsource.dir}</source>
+                    <source>${extra.scala.testsource.dir}</source>
                   </sources>
                 </configuration>
               </execution>
