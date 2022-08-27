@@ -772,6 +772,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
+        cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
           // This means the task was successfully deserialized, its stageId and stageAttemptId
@@ -788,11 +789,18 @@ private[spark] class Executor(
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
     try {
-      // make sure we run the task with the user-specified mdc properties only
-      MDC.clear()
       mdc.foreach { case (key, value) => MDC.put(key, value) }
       // avoid overriding the takName by the user
       MDC.put("mdc.taskName", taskName)
+    } catch {
+      case _: NoSuchFieldError => logInfo("MDC is not supported.")
+    }
+  }
+
+  private def cleanMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
+    try {
+      mdc.foreach { case (key, _) => MDC.remove(key) }
+      MDC.remove("mdc.taskName")
     } catch {
       case _: NoSuchFieldError => logInfo("MDC is not supported.")
     }
@@ -897,6 +905,7 @@ private[spark] class Executor(
           }
         }
       } finally {
+        cleanMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
         // Clean up entries in the taskReaperForTask map.
         taskReaperForTask.synchronized {
           taskReaperForTask.get(taskId).foreach { taskReaperInMap =>
