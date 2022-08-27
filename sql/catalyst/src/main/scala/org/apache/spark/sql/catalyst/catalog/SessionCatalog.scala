@@ -1471,7 +1471,7 @@ class SessionCatalog(
    * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name) || {
+    isRegisteredFunction(name) || {
       val qualifiedIdent = qualifyIdentifier(name)
       val db = qualifiedIdent.database.get
       requireDbExists(db)

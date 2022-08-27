@@ -45,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
  */
-class InMemoryBaseTable(
+abstract class InMemoryBaseTable(
     val name: String,
     val schema: StructType,
     override val partitioning: Array[Transform],
@@ -337,59 +337,39 @@ class InMemoryBaseTable(
     }
   }
 
-  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
-    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
+  abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
+    with SupportsStreamingUpdateAsAppend {
 
-    new WriteBuilder with SupportsTruncate with SupportsOverwrite
-      with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
+    protected var writer: BatchWrite = Append
+    protected var streamingWriter: StreamingWrite = StreamingAppend
 
-      private var writer: BatchWrite = Append
-      private var streamingWriter: StreamingWrite = StreamingAppend
+    override def overwriteDynamicPartitions(): WriteBuilder = {
+      assert(writer == Append)
+      writer = DynamicOverwrite
+      streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
+      this
+    }
 
-      override def truncate(): WriteBuilder = {
-        assert(writer == Append)
-        writer = TruncateAndAppend
-        streamingWriter = StreamingTruncateAndAppend
-        this
+    override def build(): Write = new Write with RequiresDistributionAndOrdering {
+      override def requiredDistribution: Distribution = distribution
+
+      override def distributionStrictlyRequired: Boolean = isDistributionStrictlyRequired
+
+      override def requiredOrdering: Array[SortOrder] = ordering
+
+      override def requiredNumPartitions(): Int = {
+        numPartitions.getOrElse(0)
       }
 
-      override def overwrite(filters: Array[Filter]): WriteBuilder = {
-        assert(writer == Append)
-        writer = new Overwrite(filters)
-        streamingWriter = new StreamingNotSupportedOperation(
-          s"overwrite (${filters.mkString("filters(", ", ", ")")})")
-        this
+      override def toBatch: BatchWrite = writer
+
+      override def toStreaming: StreamingWrite = streamingWriter match {
+        case exc: StreamingNotSupportedOperation => exc.throwsException()
+        case s => s
       }
 
-      override def overwriteDynamicPartitions(): WriteBuilder = {
-        assert(writer == Append)
-        writer = DynamicOverwrite
-        streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
-        this
-      }
-
-      override def build(): Write = new Write with RequiresDistributionAndOrdering {
-        override def requiredDistribution: Distribution = distribution
-
-        override def distributionStrictlyRequired: Boolean = isDistributionStrictlyRequired
-
-        override def requiredOrdering: Array[SortOrder] = ordering
-
-        override def requiredNumPartitions(): Int = {
-          numPartitions.getOrElse(0)
-        }
-
-        override def toBatch: BatchWrite = writer
-
-        override def toStreaming: StreamingWrite = streamingWriter match {
-          case exc: StreamingNotSupportedOperation => exc.throwsException()
-          case s => s
-        }
-
-        override def supportedCustomMetrics(): Array[CustomMetric] = {
-          Array(new InMemorySimpleCustomMetric)
-        }
+      override def supportedCustomMetrics(): Array[CustomMetric] = {
+        Array(new InMemorySimpleCustomMetric)
       }
     }
   }
@@ -402,7 +382,7 @@ class InMemoryBaseTable(
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
   }
 
-  private object Append extends TestBatchWrite {
+  protected object Append extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
@@ -416,24 +396,14 @@ class InMemoryBaseTable(
     }
   }
 
-  private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = InMemoryBaseTable.filtersToKeys(
-        dataMap.keys, partCols.map(_.toSeq.quoted), filters)
-      dataMap --= deleteKeys
-      withData(messages.map(_.asInstanceOf[BufferedRows]))
-    }
-  }
-
-  private object TruncateAndAppend extends TestBatchWrite {
+  protected object TruncateAndAppend extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
 
-  private abstract class TestStreamingWrite extends StreamingWrite {
+  protected abstract class TestStreamingWrite extends StreamingWrite {
     def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
       BufferedRowsWriterFactory
     }
@@ -441,7 +411,7 @@ class InMemoryBaseTable(
     def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   }
 
-  private class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
+  protected class StreamingNotSupportedOperation(operation: String) extends TestStreamingWrite {
     override def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
       throwsException()
 
@@ -463,7 +433,7 @@ class InMemoryBaseTable(
     }
   }
 
-  private object StreamingTruncateAndAppend extends TestStreamingWrite {
+  protected object StreamingTruncateAndAppend extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         dataMap.clear
@@ -476,46 +446,7 @@ class InMemoryBaseTable(
 object InMemoryBaseTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
-  def filtersToKeys(
-      keys: Iterable[Seq[Any]],
-      partitionNames: Seq[String],
-      filters: Array[Filter]): Iterable[Seq[Any]] = {
-    keys.filter { partValues =>
-      filters.flatMap(splitAnd).forall {
-        case EqualTo(attr, value) =>
-          value == extractValue(attr, partitionNames, partValues)
-        case EqualNullSafe(attr, value) =>
-          val attrVal = extractValue(attr, partitionNames, partValues)
-          if (attrVal == null && value === null) {
-            true
-          } else if (attrVal == null || value === null) {
-            false
-          } else {
-            value == attrVal
-          }
-        case IsNull(attr) =>
-          null == extractValue(attr, partitionNames, partValues)
-        case IsNotNull(attr) =>
-          null != extractValue(attr, partitionNames, partValues)
-        case AlwaysTrue() => true
-        case f =>
-          throw new IllegalArgumentException(s"Unsupported filter type: $f")
-      }
-    }
-  }
-
-  def supportsFilters(filters: Array[Filter]): Boolean = {
-    filters.flatMap(splitAnd).forall {
-      case _: EqualTo => true
-      case _: EqualNullSafe => true
-      case _: IsNull => true
-      case _: IsNotNull => true
-      case _: AlwaysTrue => true
-      case _ => false
-    }
-  }
-
-  private def extractValue(
+  def extractValue(
       attr: String,
       partFieldNames: Seq[String],
       partValues: Seq[Any]): Any = {
@@ -524,13 +455,6 @@ object InMemoryBaseTable {
         partValues(partIndex)
       case _ =>
         throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
-    }
-  }
-
-  private def splitAnd(filter: Filter): Seq[Filter] = {
-    filter match {
-      case And(left, right) => splitAnd(left) ++ splitAnd(right)
-      case _ => filter :: Nil
     }
   }
 

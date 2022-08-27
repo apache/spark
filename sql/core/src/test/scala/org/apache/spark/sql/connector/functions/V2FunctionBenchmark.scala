@@ -24,7 +24,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, EvalMode, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
@@ -104,7 +104,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       left: Expression,
       right: Expression,
       override val nullable: Boolean) extends BinaryArithmetic {
-    override protected val failOnError: Boolean = false
+    protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
 

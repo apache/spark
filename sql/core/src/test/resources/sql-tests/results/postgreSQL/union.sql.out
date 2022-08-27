@@ -76,12 +76,14 @@ SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 39)
-
-== SQL ==
-SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
----------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -90,12 +92,14 @@ SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 37)
-
-== SQL ==
-SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
--------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -167,12 +171,14 @@ SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 41)
-
-== SQL ==
-SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
------------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -181,12 +187,14 @@ SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 47)
-
-== SQL ==
-SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
------------------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -377,12 +385,14 @@ struct<q1:bigint>
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 20)
-
-== SQL ==
-(SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6
---------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -391,12 +401,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 20)
-
-== SQL ==
-(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6
---------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -405,12 +417,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 20)
-
-== SQL ==
-(SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6
---------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -419,12 +433,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 20)
-
-== SQL ==
-(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6
---------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -565,7 +581,14 @@ SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNRESOLVED_COLUMN] A column or function parameter with name `q2` cannot be resolved. Did you mean one of the following? [`int8_tbl`.`q1`]; line 1 pos 64
+{
+  "errorClass" : "UNRESOLVED_COLUMN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "objectName" : "`q2`",
+    "objectList" : "`int8_tbl`.`q1`"
+  }
+}
 
 
 -- !query
@@ -724,12 +747,14 @@ SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELECT'(line 1, pos 44)
-
-== SQL ==
-SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
---------------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  }
+}
 
 
 -- !query

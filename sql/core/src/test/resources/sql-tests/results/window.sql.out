@@ -910,23 +910,13 @@ ORDER BY salary DESC
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[INVALID_SQL_SYNTAX] Invalid SQL syntax: The definition of window `w` is repetitive.(line 9, pos 0)
-
-== SQL ==
-SELECT
-    employee_name,
-    salary,
-    first_value(employee_name) OVER w highest_salary,
-    any_value(employee_name) OVER w highest_salary,
-    nth_value(employee_name, 2) OVER w second_highest_salary
-FROM
-    basic_pays
-WINDOW
-^^^
-    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
-    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)
-ORDER BY salary DESC
+{
+  "errorClass" : "INVALID_SQL_SYNTAX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "inputString" : "The definition of window `w` is repetitive."
+  }
+}
 
 
 -- !query

@@ -114,9 +114,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       decimalScale: Int,
       context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
       messageParameters = Array(
-        value.toDebugString,
+        value.toPlainString,
         decimalPrecision.toString,
         decimalScale.toString,
         toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -237,19 +237,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
           toSQLValue(index, IntegerType),
           toSQLValue(numElements, IntegerType),
           toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
-  def mapKeyNotExistError(
-      key: Any,
-      dataType: DataType,
-      context: SQLQueryContext): NoSuchElementException = {
-    new SparkNoSuchElementException(
-      errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(
-        toSQLValue(key, dataType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -1259,9 +1246,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       "length must be greater than or equal to 0.")
   }
 
-  def elementAtByIndexZeroError(): SparkRuntimeException = {
-    new SparkRuntimeException(errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      messageParameters = Array.empty)
+  def elementAtByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      cause = null,
+      messageParameters = Array.empty,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
@@ -2084,9 +2075,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def multipleRowSubqueryError(plan: String): Throwable = {
+  def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
-      errorClass = "MULTI_VALUE_SUBQUERY_ERROR", messageParameters = Array(plan), cause = null)
+      errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
+      messageParameters = Array.empty,
+      cause = null,
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def nullComparisonResultError(): Throwable = {

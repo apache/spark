@@ -39,3 +39,4 @@ This page gives an overview of all public Spark SQL API.
     catalog
     avro
     observation
+    udf

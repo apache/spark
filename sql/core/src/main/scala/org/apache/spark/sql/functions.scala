@@ -3959,6 +3959,17 @@ object functions {
   }
 
   /**
+   * Returns element of array at given (0-based) index. If the index points
+   * outside of the array boundaries, then this function returns NULL.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def get(column: Column, index: Column): Column = withExpr {
+    new Get(column.expr, index.expr)
+  }
+
+  /**
    * Sorts the input array in ascending order. The elements of the input array must be orderable.
    * NaN is greater than any non-NaN elements for double/float type.
    * Null elements will be placed at the end of the returned array.
@@ -3967,6 +3978,19 @@ object functions {
    * @since 2.4.0
    */
   def array_sort(e: Column): Column = withExpr { new ArraySort(e.expr) }
+
+  /**
+   * Sorts the input array based on the given comparator function. The comparator will take two
+   * arguments representing two elements of the array. It returns a negative integer, 0, or a
+   * positive integer as the first element is less than, equal to, or greater than the second
+   * element. If the comparator function returns null, the function will fail and raise an error.
+   *
+   * @group collection_funcs
+   * @since 3.4.0
+   */
+  def array_sort(e: Column, comparator: (Column, Column) => Column): Column = withExpr {
+    new ArraySort(e.expr, createLambda(comparator))
+  }
 
   /**
    * Remove all elements that equal to element from the given array.

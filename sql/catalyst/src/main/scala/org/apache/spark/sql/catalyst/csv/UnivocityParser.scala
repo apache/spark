@@ -124,15 +124,19 @@ class UnivocityParser(
   // dates and timestamps.
   // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
   private val enableParsingFallbackForTimestampType =
-    options.enableDateTimeParsingFallback.getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-        options.timestampFormatInRead.isEmpty
-    }
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.timestampFormatInRead.isEmpty
+      }
   private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback.getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-        options.dateFormatInRead.isEmpty
-    }
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatInRead.isEmpty
+      }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

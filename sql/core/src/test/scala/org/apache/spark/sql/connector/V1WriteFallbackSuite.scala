@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveM
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
@@ -359,7 +359,7 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def overwrite(filters: Array[Filter]): WriteBuilder = {
-      val keys = InMemoryBaseTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+      val keys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
       dataMap --= keys
       mode = "overwrite"
       this

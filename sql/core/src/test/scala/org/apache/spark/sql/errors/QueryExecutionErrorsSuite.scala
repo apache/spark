@@ -22,24 +22,27 @@ import java.net.{URI, URL}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.RenameReturnsFalseFileSystem
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.types.{DataType, DecimalType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -606,39 +609,21 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("MULTI_VALUE_SUBQUERY_ERROR: " +
-    "more than one row returned by a subquery used as an expression") {
+  test(
+    "MULTI_VALUE_SUBQUERY_ERROR: " +
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
       },
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      parameters = Map("plan" ->
-          """Subquery subquery#\w+, \[id=#\w+\]
-            |\+\- AdaptiveSparkPlan isFinalPlan=true
-            |   \+\- == Final Plan ==
-            |      Union
-            |      :\- \*\(1\) Project \[\w+ AS a#\w+\]
-            |      :  \+\- \*\(1\) Scan OneRowRelation\[\]
-            |      \+\- \*\(2\) Project \[\w+ AS a#\w+\]
-            |         \+\- \*\(2\) Scan OneRowRelation\[\]
-            |   \+\- == Initial Plan ==
-            |      Union
-            |      :\- Project \[\w+ AS a#\w+\]
-            |      :  \+\- Scan OneRowRelation\[\]
-            |      \+\- Project \[\w+ AS a#\w+\]
-            |         \+\- Scan OneRowRelation\[\]
-            |""".stripMargin),
-      matchPVals = true)
-  }
-
-  test("ELEMENT_AT_BY_INDEX_ZERO: element_at from array by index zero") {
-    checkError(
-      exception = intercept[SparkRuntimeException](
-        sql("select element_at(array(1, 2, 3, 4, 5), 0)").collect()
-      ),
-      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      parameters = Map.empty
+      queryContext = Array(
+        ExpectedContext(
+          fragment = "(select a from (select 1 as a union all select 2 as a) t)",
+          start = 7,
+          stop = 63
+        )
+      )
     )
   }
 
@@ -655,19 +640,61 @@ class QueryExecutionErrorsSuite
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {
-    Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
-      checkError(
-        exception = intercept[SparkArithmeticException] {
-          sql(s"select CAST(9223372036854775807L AS $it)").collect()
-        },
-        errorClass = "CAST_OVERFLOW",
-        parameters = Map(
-          "value" -> "9223372036854775807L",
-          "sourceType" -> "\"BIGINT\"",
-          "targetType" -> s""""$it"""",
-          "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
-        sqlState = "22005")
+    Seq(
+      LongType -> "9223372036854775807L",
+      DecimalType(19, 0) -> "9223372036854775807BD").foreach { case (sourceType, sourceValue) =>
+      Seq("INTERVAL YEAR TO MONTH", "INTERVAL HOUR TO MINUTE").foreach { it =>
+        checkError(
+          exception = intercept[SparkArithmeticException] {
+            sql(s"select CAST($sourceValue AS $it)").collect()
+          },
+          errorClass = "CAST_OVERFLOW",
+          parameters = Map(
+            "value" -> sourceValue,
+            "sourceType" -> s""""${sourceType.sql}"""",
+            "targetType" -> s""""$it"""",
+            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+          sqlState = "22005")
+      }
     }
+  }
+
+  test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        val row = spark.sparkContext.parallelize(Seq(1, 2)).map(Row(_))
+        spark.sqlContext.createDataFrame(row, StructType.fromString("StructType()"))
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
+      ),
+      sqlState = "0A000")
+  }
+
+  test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
+    var srcPath: Path = null
+    val e = intercept[SparkFileNotFoundException](
+      withTempPath { p =>
+        val conf = new Configuration()
+        conf.set("fs.test.impl", classOf[RenameReturnsFalseFileSystem].getName)
+        conf.set("fs.defaultFS", "test:///")
+        val basePath = new Path(p.getAbsolutePath)
+        val fm = new FileSystemBasedCheckpointFileManager(basePath, conf)
+        srcPath = new Path(s"$basePath/file")
+        assert(!fm.exists(srcPath))
+        fm.createAtomic(srcPath, overwriteIfPossible = true).cancel()
+        assert(!fm.exists(srcPath))
+        val dstPath = new Path(s"$basePath/new_file")
+        fm.renameTempFile(srcPath, dstPath, true)
+      }
+    )
+    checkError(
+      exception = e,
+      errorClass = "RENAME_SRC_PATH_NOT_FOUND",
+      parameters = Map(
+        "sourcePath" -> s"$srcPath"
+      ))
   }
 }
 

@@ -32,14 +32,14 @@ import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -388,8 +388,7 @@ class CliSuite extends SparkFunSuite {
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
-      "select * from nonexistent_table;"
-        -> "Error in query: Table or view not found: nonexistent_table;"
+      "select * from nonexistent_table;" -> "Table or view not found: nonexistent_table;"
     )
   }
 
@@ -698,4 +697,79 @@ class CliSuite extends SparkFunSuite {
     t.start()
     cd.await()
   }
+
+  // scalastyle:off line.size.limit
+  test("formats of error messages") {
+    def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
+      val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
+      runCliWithin(
+        1.minute,
+        extraArgs = Seq(
+          "--conf", s"spark.hive.session.silent=$silent",
+          "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
+          "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
+          "-e", "select 1 / 0"),
+        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected: _*)
+    }
+    check(
+      format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = true)
+    check(
+      format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL(line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |
+          |org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |""".stripMargin,
+      silent = false)
+    Seq(true, false).foreach { silent =>
+      check(
+        format = ErrorMessageFormat.MINIMAL,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+      check(
+        format = ErrorMessageFormat.STANDARD,
+        errorMessage =
+          """{
+            |  "errorClass" : "DIVIDE_BY_ZERO",
+            |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
+            |  "sqlState" : "22012",
+            |  "messageParameters" : {
+            |    "config" : "\"spark.sql.ansi.enabled\""
+            |  },
+            |  "queryContext" : [ {
+            |    "objectType" : "",
+            |    "objectName" : "",
+            |    "startIndex" : 8,
+            |    "stopIndex" : 12,
+            |    "fragment" : "1 / 0"
+            |  } ]
+            |}""".stripMargin,
+        silent)
+    }
+  }
+  // scalastyle:on line.size.limit
 }

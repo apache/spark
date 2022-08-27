@@ -125,10 +125,23 @@ SELECT double('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'N A N' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT double('N A N')
-       ^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'N A N'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "double('N A N')"
+  } ]
+}
 
 
 -- !query
@@ -137,10 +150,23 @@ SELECT double('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'NaN x' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT double('NaN x')
-       ^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'NaN x'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "double('NaN x')"
+  } ]
+}
 
 
 -- !query
@@ -149,10 +175,23 @@ SELECT double(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value ' INFINITY    x' of the type "STRING" cannot be cast to "DOUBLE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-SELECT double(' INFINITY    x')
-       ^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "' INFINITY    x'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "double(' INFINITY    x')"
+  } ]
+}
 
 
 -- !query
@@ -185,10 +224,23 @@ SELECT double(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-[CAST_INVALID_INPUT] The value 'nan' of the type "STRING" cannot be cast to "DECIMAL(10,0)" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 15) ==
-SELECT double(decimal('nan'))
-              ^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'nan'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DECIMAL(10,0)\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "decimal('nan')"
+  } ]
+}
 
 
 -- !query
@@ -842,7 +894,16 @@ SELECT bigint(double('-9223372036854780000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CAST_OVERFLOW] The value -9.22337203685478E18D of the type "DOUBLE" cannot be cast to "BIGINT" due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22005",
+  "messageParameters" : {
+    "value" : "-9.22337203685478E18D",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"BIGINT\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query

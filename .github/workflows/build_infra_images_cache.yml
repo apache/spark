@@ -20,12 +20,16 @@
 name: Build / Cache base image
 
 on:
+  # Run jobs when a commit is merged
   push:
     branches:
     - 'master'
+    - 'branch-*'
     paths:
     - 'dev/infra/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
+  # Create infra image when cutting down branches/tags
+  create:
 jobs:
   main:
     if: github.repository == 'apache/spark'

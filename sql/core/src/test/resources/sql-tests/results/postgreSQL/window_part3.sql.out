@@ -329,12 +329,14 @@ SELECT * FROM rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY'(line 1, pos 33)
-
-== SQL ==
-SELECT * FROM rank() OVER (ORDER BY random())
----------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'BY'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -361,12 +363,14 @@ select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY': extra input 'BY'(line 1, pos 45)
-
-== SQL ==
-select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
----------------------------------------------^^^
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "'BY'",
+    "hint" : ": extra input 'BY'"
+  }
+}
 
 
 -- !query

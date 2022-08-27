@@ -98,12 +98,14 @@ def generate_supported_api(output_rst_file_path: str) -> None:
 
     Write supported APIs documentation.
     """
-    if LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
-        warnings.warn(
-            "Warning: Latest version of pandas(>=1.4.0) is required to generate the documentation; "
-            + "however, your version was %s" % pd.__version__,
-            UserWarning,
+    pandas_latest_version = "1.4.3"
+    if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
+        msg = (
+            "Warning: Latest version of pandas (%s) is required to generate the documentation; "
+            "however, your version was %s" % (pandas_latest_version, pd.__version__)
         )
+        warnings.warn(msg, UserWarning)
+        raise ImportError(msg)
 
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:

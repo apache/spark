@@ -141,7 +141,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ => false
       }
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.keyGroupedPartitioning, relation.ordering)
+        relation.keyGroupedPartitioning, relation.ordering, relation.relation.table)
       withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
