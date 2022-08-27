@@ -512,7 +512,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_pdf = pd.DataFrame.from_dict(state_dict)
 
                 state_pdfs.append(state_pdf)
-                state_data_cnt = 1
+                state_data_cnt += 1
 
                 max_data_cnt = max(pdf_data_cnt, state_data_cnt)
                 # FIXME: what would be the best criteria for threshold?
