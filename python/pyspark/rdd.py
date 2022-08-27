@@ -1133,7 +1133,7 @@ class RDD(Generic[T_co]):
         >>> sc.range(0, 10).takeSample(False, sys.maxsize)
         Traceback (most recent call last):
             ...
-        ValueError: Sample size cannot be greater than 9223372006484770808.
+        ValueError: Sample size cannot be greater than ...
         """
         numStDev = 10.0
         maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
