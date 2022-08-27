@@ -541,6 +541,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 pdf_data_cnt = 0
                 state_data_cnt = 0
 
+                if should_write_start_length:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    should_write_start_length = False
+
                 yield batch
 
         return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
