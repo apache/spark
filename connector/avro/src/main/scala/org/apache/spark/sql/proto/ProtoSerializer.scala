@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.sql.proto
 
 import java.nio.ByteBuffer
@@ -19,10 +35,10 @@ import org.apache.spark.sql.proto.SchemaConverters.{IncompatibleSchemaException,
  * A serializer to serialize data in catalyst format to data in proto format.
  */
 private[sql] class ProtoSerializer(
-                                   rootCatalystType: DataType,
-                                   rootProtoType: Descriptor,
-                                   nullable: Boolean,
-                                   positionalFieldMatch: Boolean) extends Logging {
+                                    rootCatalystType: DataType,
+                                    rootProtoType: Descriptor,
+                                    nullable: Boolean,
+                                    positionalFieldMatch: Boolean) extends Logging {
 
   def this(rootCatalystType: DataType, rootProtoType: Descriptor, nullable: Boolean) = {
     this(rootCatalystType, rootProtoType, nullable, false)
@@ -81,7 +97,9 @@ private[sql] class ProtoSerializer(
       case (ShortType, INT) =>
         (getter, ordinal) => getter.getShort(ordinal).toInt
       case (IntegerType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
+        (getter, ordinal) => {
+          getter.getInt(ordinal)
+        }
       case (LongType, LONG) =>
         (getter, ordinal) => getter.getLong(ordinal)
       case (FloatType, FLOAT) =>
@@ -89,7 +107,7 @@ private[sql] class ProtoSerializer(
       case (DoubleType, DOUBLE) =>
         (getter, ordinal) => getter.getDouble(ordinal)
       case (StringType, ENUM) =>
-        val enumSymbols: Set[String] = protoType.getEnumType.getValues.asScala.map(e=>e.toString).toSet
+        val enumSymbols: Set[String] = protoType.getEnumType.getValues.asScala.map(e => e.toString).toSet
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
@@ -97,9 +115,11 @@ private[sql] class ProtoSerializer(
               s""""$data" cannot be written since it's not defined in enum """ +
               enumSymbols.mkString("\"", "\", \"", "\""))
           }
-          protoType.getEnumType.toProto.toBuilder.setField(protoType, data)
+          protoType.getEnumType.findValueByName(data)
       case (StringType, STRING) =>
-        (getter, ordinal) => getter.getUTF8String(ordinal).getBytes
+        (getter, ordinal) => {
+          String.valueOf(getter.getUTF8String(ordinal))
+        }
 
       case (BinaryType, BYTE_STRING) =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
@@ -128,7 +148,7 @@ private[sql] class ProtoSerializer(
 
       case (ArrayType(et, containsNull), _) =>
         val elementConverter = newConverter(
-          et, resolveNullableType(protoType.getContainingType, containsNull).left.get,
+          et, protoType,
           catalystPath :+ "element", protoPath :+ "element")
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
@@ -202,7 +222,7 @@ private[sql] class ProtoSerializer(
     val (protoIndices, fieldConverters) = protoSchemaHelper.matchedFields.map {
       case ProtoMatchedField(catalystField, _, protoField) =>
         val converter = newConverter(catalystField.dataType,
-          resolveNullableType(protoField.getMessageType, catalystField.nullable).left.get,
+          protoField,
           catalystPath :+ catalystField.name, protoPath :+ protoField.getName)
         (protoField, converter)
     }.toArray.unzip
@@ -246,7 +266,7 @@ private[sql] class ProtoSerializer(
    * return value is the possibly resolved type.
    */
   private def resolveProtoType(protoType: Descriptor): (Boolean, Either[FieldDescriptor, Descriptor]) = {
-    if (protoType.getContainingType.getContainingType.getName.equals(Type.GROUP.name())) {
+    if (protoType.getName.equals(Type.GROUP.name())) {
       val fields = protoType.getFields.asScala
       val actualType = fields.filter(_.getType != null)
       if (fields.length != 2 || actualType.length != 1) {
@@ -273,4 +293,3 @@ private[sql] class ProtoSerializer(
     }
   }
 }
-

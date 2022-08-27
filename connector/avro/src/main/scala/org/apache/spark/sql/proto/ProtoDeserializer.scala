@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.Descriptor
@@ -59,15 +75,6 @@ private[sql] class ProtoDeserializer(
           val skipRow = writer(fieldUpdater, record)
           if (skipRow) None else Some(resultRow)
         }
-
-//      case _ =>
-//        val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
-//        val fieldUpdater = new RowUpdater(tmpRow)
-//        val writer = newWriter(rootProtoType, rootCatalystType, Nil, Nil)
-//        (data: Any) => {
-//          writer(fieldUpdater, 0, data)
-//          Some(tmpRow.get(0, rootCatalystType))
-//        }
     }
   } catch {
     case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
