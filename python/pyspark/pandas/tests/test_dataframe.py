@@ -165,10 +165,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with ps.option_context("compute.ops_on_diff_frames", True):
             with self.assertRaisesRegex(ValueError, err_msg):
                 # test ps.DataFrame with ps.Index
-                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
             with self.assertRaisesRegex(ValueError, err_msg):
                 # test ps.DataFrame with pd.Index
-                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+                ps.DataFrame(
+                    data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
+                )
 
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test pd.DataFrame with pd.Index
