@@ -159,6 +159,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateType)
 
       val context = TaskContext.get()
+
       val processIter = iter.map { case (keyRow, stateData, valueIter) =>
         val groupedState = GroupStateImpl.createForStreaming(
           Option(stateData.stateObj).map { r => assert(r.isInstanceOf[Row]); r },
@@ -169,24 +170,31 @@ case class FlatMapGroupsInPandasWithStateExec(
           watermarkPresent).asInstanceOf[GroupStateImpl[Row]]
         (keyRow, groupedState, valueIter)
       }
+      // FIXME: we are now very specific to the test code which always produces 1 output
+      //  to experiment bin-packing. We are also assuming that all states & outputs do not
+      //  grow that much if we pack to one. In reality we may need to try bin-packing to
+      //  specific number of rows or size of data.
       runner.compute(processIter, context.partitionId(), context).flatMap {
-        case (keyRow, newGroupState, outputIter) =>
+        case (stateIter, outputIter) =>
           // When the iterator is consumed, then write changes to state
+          // state does not affect each others, hence when to update does not affect to the result
           def onIteratorCompletion: Unit = {
-            if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
-              stateManager.removeState(store, keyRow)
-              numRemovedStateRows += 1
-            } else {
-              val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs
-                .orElse(NO_TIMESTAMP)
-              val shouldWriteState = newGroupState.isUpdated || newGroupState.isRemoved ||
-                newGroupState.isTimeoutUpdated
+            stateIter.foreach { case (keyRow, newGroupState) =>
+              if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
+                stateManager.removeState(store, keyRow)
+                numRemovedStateRows += 1
+              } else {
+                val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs
+                  .orElse(NO_TIMESTAMP)
+                val shouldWriteState = newGroupState.isUpdated || newGroupState.isRemoved ||
+                  newGroupState.isTimeoutUpdated
 
-              if (shouldWriteState) {
-                val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
-                stateManager.putState(store, keyRow, updatedStateObj,
-                  currentTimeoutTimestamp)
-                numUpdatedStateRows += 1
+                if (shouldWriteState) {
+                  val updatedStateObj = if (newGroupState.exists) newGroupState.get else null
+                  stateManager.putState(store, keyRow, updatedStateObj,
+                    currentTimeoutTimestamp)
+                  numUpdatedStateRows += 1
+                }
               }
             }
           }

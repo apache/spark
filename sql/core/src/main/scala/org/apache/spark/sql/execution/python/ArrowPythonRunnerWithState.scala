@@ -61,7 +61,7 @@ class ArrowPythonRunnerWithState(
     stateSchema: StructType)
   extends BasePythonRunner[
     (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]),
-    (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow])](
+    (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -200,7 +200,8 @@ class ArrowPythonRunnerWithState(
       worker: Socket,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[(UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow])] = {
+      context: TaskContext)
+    : Iterator[(Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])] = {
 
     new ReaderIterator(
       stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
@@ -223,7 +224,8 @@ class ArrowPythonRunnerWithState(
 
       private var batchLoaded = true
 
-      protected override def read(): (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
+      protected override def read()
+        : (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow]) = {
         if (writerThread.exception.isDefined) {
           throw writerThread.exception.get
         }
@@ -269,8 +271,12 @@ class ArrowPythonRunnerWithState(
         } catch handleException
       }
 
-      private def deserializeColumnarBatch(
-          batch: ColumnarBatch): (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]) = {
+      // FIXME: we are now very specific to the test code which always produces 1 output
+      //  to experiment bin-packing. We are also assuming that all states & outputs do not
+      //  grow that much if we pack to one. In reality we may need to try bin-packing to
+      //  specific number of rows or size of data.
+      private def deserializeColumnarBatch(batch: ColumnarBatch)
+        : (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow]) = {
         // this should at least have one row for state
         assert(batch.numRows() > 0)
         assert(schema.length == 2)
@@ -279,40 +285,42 @@ class ArrowPythonRunnerWithState(
         val outputVectorsForState = schema(1).dataType.asInstanceOf[StructType]
           .indices.map(structVectorForState.getChild)
         val flattenedBatchForState = new ColumnarBatch(outputVectorsForState.toArray)
-        flattenedBatchForState.setNumRows(1)
+        flattenedBatchForState.setNumRows(batch.numRows())
+
+        val rowIteratorForState = flattenedBatchForState.rowIterator().asScala.map { row =>
+          implicit val formats = org.json4s.DefaultFormats
+
+          // FIXME: we rely on known schema for state info, but would we want to access this by
+          //  column name?
+          // Received state information does not need schemas - this class already knows them.
+          /*
+          Array(
+            StructField("properties", StringType),
+            StructField("keyRowAsUnsafe", BinaryType),
+            StructField("object", BinaryType),
+            StructField('isEmptyData', BooleanType)
+          )
+          */
+          val propertiesAsJson = parse(row.getUTF8String(0).toString)
+          val keyRowAsUnsafeAsBinary = row.getBinary(1)
+          val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
+          keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
+          val maybeObjectRow = if (row.isNullAt(2)) {
+            None
+          } else {
+            val pickledRow = row.getBinary(2)
+            Some(PythonSQLUtils.toJVMRow(pickledRow, stateSchema, stateRowDeserializer))
+          }
+
+          // FIXME: does not hold true for experiment
+          // val isEmptyData = rowForStateInfo.getBoolean(3)
+
+          (keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson))
+        }
 
         val rowForStateInfo = flattenedBatchForState.getRow(0)
 
-        // FIXME: we rely on known schema for state info, but would we want to access this by
-        //  column name?
-        // Received state information does not need schemas - this class already knows them.
-        /*
-        Array(
-          StructField("properties", StringType),
-          StructField("keyRowAsUnsafe", BinaryType),
-          StructField("object", BinaryType),
-          StructField('isEmptyData', BooleanType)
-        )
-        */
-        implicit val formats = org.json4s.DefaultFormats
-
-        val propertiesAsJson = parse(rowForStateInfo.getUTF8String(0).toString)
-        val keyRowAsUnsafeAsBinary = rowForStateInfo.getBinary(1)
-        val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
-        keyRowAsUnsafe.pointTo(keyRowAsUnsafeAsBinary, keyRowAsUnsafeAsBinary.length)
-        val maybeObjectRow = if (rowForStateInfo.isNullAt(2)) {
-          None
-        } else {
-          val pickledRow = rowForStateInfo.getBinary(2)
-          Some(PythonSQLUtils.toJVMRow(pickledRow, stateSchema, stateRowDeserializer))
-        }
-        val isEmptyData = rowForStateInfo.getBoolean(3)
-
-        val newGroupState = GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson)
-
-        val rowIterator = if (isEmptyData) {
-          Iterator.empty
-        } else {
+        val rowIteratorForOutput = {
           //  UDF returns a StructType column in ColumnarBatch, select the children here
           val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
           val outputVectors = schema(0).dataType.asInstanceOf[StructType]
@@ -324,7 +332,7 @@ class ArrowPythonRunnerWithState(
           rowIterator.map(unsafeProjForData)
         }
 
-        (keyRowAsUnsafe, newGroupState, rowIterator)
+        (rowIteratorForState, rowIteratorForOutput)
       }
     }
   }

@@ -451,6 +451,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             import pyarrow as pa
 
             should_write_start_length = True
+
+            # FIXME: we are now very specific to the test code which always produces 1 output
+            #  to experiment bin-packing. We are also assuming that all states & outputs do not
+            #  grow that much if we pack to one. In reality we may need to try bin-packing to
+            #  specific number of rows or size of data.
+
+            pdfs = []
+            state_pdfs = []
+
             for data in iterator:
                 packaged_result = data[0]
 
@@ -480,13 +489,23 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)
 
+                pdfs.append(pdf)
+                state_pdfs.append(state_pdf)
+
+            assert len(pdfs) == len(state_pdfs)
+
+            if len(pdfs) > 0:
+                merged_pdf = pd.concat(pdfs, ignore_index=True)
+                merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+
                 batch = self._create_batch([
-                    (pdf, return_schema),
-                    (state_pdf, self.result_state_pdf_arrow_type)])
+                    (merged_pdf, return_schema),
+                    (merged_state_pdf, self.result_state_pdf_arrow_type)])
 
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
+
                 yield batch
 
         return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
