@@ -1483,7 +1483,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(ElementAt(a0, Literal(0)), null)
     }.getMessage.contains("SQL array indices start at 1")
     intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(a0, Literal(4)), null)
       checkEvaluation(ElementAt(a0, Literal(-4)), null)
     }
@@ -1512,7 +1512,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ElementAt(m0, Literal(1.0)).checkInputDataTypes().isFailure)
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(m0, Literal("d")), null)
       checkEvaluation(ElementAt(m1, Literal("a")), null)
     }
@@ -1529,7 +1529,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(BinaryType, StringType))
     val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkEvaluation(ElementAt(mb0, Literal(Array[Byte](1, 2, 3))), null)
       checkEvaluation(ElementAt(mb1, Literal(Array[Byte](1, 2))), null)
     }
@@ -1537,22 +1537,24 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
 
     // test defaultValueOutOfBound
-    val delimiter = Literal.create(".", StringType)
-    val str = StringSplitSQL(Literal.create("11.12.13", StringType), delimiter)
-    val outOfBoundValue = Some(Literal.create("", StringType))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val delimiter = Literal.create(".", StringType)
+      val str = StringSplitSQL(Literal.create("11.12.13", StringType), delimiter)
+      val outOfBoundValue = Some(Literal.create("", StringType))
 
-    checkEvaluation(ElementAt(str, Literal(3), outOfBoundValue), UTF8String.fromString("13"))
-    checkEvaluation(ElementAt(str, Literal(1), outOfBoundValue), UTF8String.fromString("11"))
-    checkEvaluation(ElementAt(str, Literal(10), outOfBoundValue), UTF8String.fromString(""))
-    checkEvaluation(ElementAt(str, Literal(-10), outOfBoundValue), UTF8String.fromString(""))
+      checkEvaluation(ElementAt(str, Literal(3), outOfBoundValue), UTF8String.fromString("13"))
+      checkEvaluation(ElementAt(str, Literal(1), outOfBoundValue), UTF8String.fromString("11"))
+      checkEvaluation(ElementAt(str, Literal(10), outOfBoundValue), UTF8String.fromString(""))
+      checkEvaluation(ElementAt(str, Literal(-10), outOfBoundValue), UTF8String.fromString(""))
 
-    checkEvaluation(ElementAt(StringSplitSQL(Literal.create(null, StringType), delimiter),
-      Literal(1), outOfBoundValue), null)
-    checkEvaluation(ElementAt(StringSplitSQL(Literal.create("11.12.13", StringType),
-      Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
+      checkEvaluation(ElementAt(StringSplitSQL(Literal.create(null, StringType), delimiter),
+        Literal(1), outOfBoundValue), null)
+      checkEvaluation(ElementAt(StringSplitSQL(Literal.create("11.12.13", StringType),
+        Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
 
-    checkExceptionInExpression[Exception](
-      ElementAt(str, Literal(0), outOfBoundValue), "The index 0 is invalid")
+      checkExceptionInExpression[Exception](
+        ElementAt(str, Literal(0), outOfBoundValue), "The index 0 is invalid")
+    }
   }
 
   test("correctly handles ElementAt nullability for arrays") {
