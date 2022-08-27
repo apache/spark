@@ -160,6 +160,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             # test ps.DataFrame with pd.Index
             ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
 
+        # test distributed data with ps.MultiIndex
+        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
+        with ps.option_context("compute.ops_on_diff_frames", True):
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with ps.Index
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with pd.Index
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)]))
+
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test pd.DataFrame with pd.Index
             self.assert_eq(

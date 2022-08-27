@@ -374,14 +374,14 @@ class DataFrame(Frame, Generic[T]):
         Copy data from inputs. Only affects DataFrame / 2d ndarray input
 
     .. versionchanged:: 3.4.0
-    Since 3.4.0, it deals with `data` and `index` in this approach:
-    1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
-    pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
-    the `index` if necessary, and then try to combine the `data` and `index`;
-    Note that in this case `compute.ops_on_diff_frames` should be turned on;
-    2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
-    it will first collect the `index` to driver if necessary, and then apply
-    the `Pandas.DataFrame(...)` creation internally;
+        Since 3.4.0, it deals with `data` and `index` in this approach:
+        1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
+        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
+        the `index` if necessary, and then try to combine the `data` and `index`;
+        Note that in this case `compute.ops_on_diff_frames` should be turned on;
+        2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
+        it will first collect the `index` to driver if necessary, and then apply
+        the `Pandas.DataFrame(...)` creation internally;
 
     Examples
     --------
@@ -478,7 +478,7 @@ class DataFrame(Frame, Generic[T]):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
 
-    Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
+    Enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
 
     >>> with ps.option_context("compute.ops_on_diff_frames", True):
     ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
@@ -496,7 +496,7 @@ class DataFrame(Frame, Generic[T]):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
 
-    Need to enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
+    Enable 'compute.ops_on_diff_frames' to combine Spark DataFrame and pandas-on-Spark index
 
     >>> with ps.option_context("compute.ops_on_diff_frames", True):
     ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
@@ -543,13 +543,17 @@ class DataFrame(Frame, Generic[T]):
                 # ps.DataFrame([1, 2], index=ps.Index([1, 2]))
                 # and
                 # pd.DataFrame([1, 2], index=pd.Index([1, 2]))
-                index = index.to_pandas()
+                index = index._to_pandas()
 
             pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
             internal = InternalFrame.from_pandas(pdf)
             index_assigned = True
 
         if index is not None and not index_assigned:
+            # TODO(SPARK-40226): Support MultiIndex
+            if isinstance(index, (ps.MultiIndex, pd.MultiIndex)):
+                raise ValueError("Cannot combine a Distributed Dataset with a MultiIndex")
+
             data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)
             index_ps = ps.Index(index)
             index_df = index_ps.to_frame()
