@@ -715,31 +715,6 @@ class QueryExecutionErrorsSuite
         "sourcePath" -> s"$srcPath"
       ))
   }
-
-  test("FAILED_CAST_PARTITION: cannot cast partition value  to data type") {
-    withTempDir { dir =>
-      val partitionDirectory = new File(dir, "a=foo")
-      partitionDirectory.mkdir()
-      val file = new File(partitionDirectory, "text.txt")
-      stringToFile(file, "text")
-      val path = new Path(dir.getCanonicalPath)
-      val schema = StructType(Seq(StructField("a", IntegerType, false)))
-      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
-        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-        checkError(
-          exception = intercept[SparkRuntimeException] (
-            fileIndex.partitionSpec()
-          ),
-          errorClass = "FAILED_CAST_PARTITION",
-          parameters = Map("value" -> "`foo`",
-            "dataType" -> "`IntegerType`",
-            "columnName" -> "`a`",
-          ))
-      }
-    }
-  }
-
-
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
