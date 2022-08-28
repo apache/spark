@@ -4003,6 +4003,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-40247: Fix BitSet equals") {
+    withTable("td") {
+      testData
+        .withColumn("bucket", $"key" % 3)
+        .write
+        .mode(SaveMode.Overwrite)
+        .bucketBy(2, "bucket")
+        .format("parquet")
+        .saveAsTable("td")
+      val df = sql(
+        """
+          |SELECT t1.key, t2.key, t3.key
+          |FROM td AS t1
+          |JOIN td AS t2 ON t2.key = t1.key
+          |JOIN td AS t3 ON t3.key = t2.key
+          |WHERE t1.bucket = 1 AND t2.bucket = 1 AND t3.bucket = 1
+          |""".stripMargin)
+      df.collect()
+      val reusedExchanges = collect(df.queryExecution.executedPlan) {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reusedExchanges.size == 1)
+    }
+  }
+
   test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
     Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
       Seq("a", "substr(a, 0, 3)").foreach { expr =>
