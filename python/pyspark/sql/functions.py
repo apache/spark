@@ -3278,7 +3278,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
         name of column or expression
     offset : int
         number of row to use as the value
-    ignoreNulls : bool, optional default False
+    ignoreNulls : bool, optional
         indicates the Nth value should skip null in the
         determination of which row to use
 
