@@ -977,7 +977,7 @@ private[spark] class Executor(
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    * Visible for testing.
    */
-  private[spark] def updateDependencies(
+  private[executor] def updateDependencies(
       newFiles: Map[String, Long],
       newJars: Map[String, Long],
       newArchives: Map[String, Long],
