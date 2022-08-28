@@ -19,8 +19,7 @@
   },
   "CANNOT_DECODE_URL" : {
     "message" : [
-      "Cannot decode url : <url>.",
-      "<details>"
+      "Cannot decode url : <url>."
     ],
     "sqlState" : "42000"
   },
