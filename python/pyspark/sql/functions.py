@@ -3285,7 +3285,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        row value of nth row.
+        value of nth row.
 
     Examples
     --------
