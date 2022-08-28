@@ -3205,7 +3205,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        row value after current row based on `offset`.
+        value after current row based on `offset`.
 
     Examples
     --------
