@@ -3349,7 +3349,7 @@ def ntile(n: int) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        aportioned group id.
+        portioned group id.
 
     Examples
     --------
