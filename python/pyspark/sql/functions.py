@@ -3122,7 +3122,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
         name of column or expression
     offset : int, optional default 1
         number of row to extend
-    default : optional default None
+    default : optional
         default value
 
     Returns
