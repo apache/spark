@@ -1,0 +1,26 @@
+
+¬
+@connector/proto/src/test/resources/protobuf/simple_message.protoorg.apache.spark.sql.proto"¬
+SimpleMessage
+id (Rid!
+string_value (	RstringValue
+int32_value (R
+int32Value!
+uint32_value (Ruint32Value!
+sint32_value (Rsint32Value#
+fixed32_value (Rfixed32Value%
+sfixed32_value (Rsfixed32Value
+int64_value (R
+int64Value!
+uint64_value	 (Ruint64Value!
+sint64_value
+ (Rsint64Value#
+fixed64_value (Rfixed64Value%
+sfixed64_value (Rsfixed64Value!
+double_value (RdoubleValue
+float_value (R
+floatValue
+
+bool_value (R	boolValue
+bytes_value (R
+bytesValueBBSimpleMessageProtosbproto3

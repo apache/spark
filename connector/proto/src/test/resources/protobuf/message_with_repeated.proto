@@ -1,0 +1,26 @@
+// To compile and create test class:
+// protoc --java_out=connector/proto/src/test/resources/protobuf/ connector/proto/src/test/resources/protobuf/message_with_repeated.proto
+// protoc --descriptor_set_out=connector/proto/src/test/resources/protobuf/message_with_repeated.desc --java_out=connector/proto/src/test/resources/protobuf/org/apache/spark/sql/proto/ connector/proto/src/test/resources/protobuf/message_with_repeated.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.proto;
+option java_outer_classname = "SimpleMessageRepeatedProtos";
+
+message SimpleMessageRepeated {
+  string key = 1;
+  string value = 2;
+  enum NestedEnum {
+    ESTED_NOTHING = 0;
+    NESTED_FIRST = 1;
+    NESTED_SECOND = 2;
+  }
+  repeated string rstring_value = 3;
+  repeated int32 rint32_value = 4;
+  repeated bool rbool_value = 5;
+  repeated int64 rint64_value = 6;
+  repeated float rfloat_value = 7;
+  repeated double rdouble_value = 8;
+  repeated bytes rbytes_value = 9;
+  repeated NestedEnum rnested_enum = 10;
+}

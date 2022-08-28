@@ -1,0 +1,22 @@
+// Multiple top-level messages, some included
+
+// To compile and create test class:
+// protoc --java_out=connector/proto/src/test/resources/protobuf/ connector/proto/src/test/resources/protobuf/message_multiple_message.proto
+// protoc --descriptor_set_out=connector/proto/src/test/resources/protobuf/message_multiple_message.desc --java_out=connector/proto/src/test/resources/protobuf/org/apache/spark/sql/proto/ connector/proto/src/test/resources/protobuf/message_multiple_message.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.proto;
+
+message OtherExample {
+    string other = 1;
+}
+
+message IncludedExample {
+    string included = 1;
+    OtherExample other = 2;
+}
+
+message MultipleExample {
+    IncludedExample included_example = 1;
+}

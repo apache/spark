@@ -1,0 +1,28 @@
+// To compile and create test class:
+// protoc --java_out=connector/proto/src/test/resources/protobuf/ connector/proto/src/test/resources/protobuf/message_with_map.proto
+// protoc --descriptor_set_out=connector/proto/src/test/resources/protobuf/message_with_map.desc --java_out=connector/proto/src/test/resources/protobuf/org/apache/spark/sql/proto/ connector/proto/src/test/resources/protobuf/message_with_map.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.proto;
+option java_outer_classname = "SimpleMessageMapProtos";
+
+message SimpleMessageMap {
+  string key = 1;
+  string value = 2;
+  map<string, string> string_mapdata = 3;
+  map<int32, int32> int32_mapdata = 4;
+  map<uint32, uint32> uint32_mapdata = 5;
+  map<sint32, sint32> sint32_mapdata = 6;
+  map<fixed32, fixed32> float32_mapdata = 7;
+  map<sfixed32, sfixed32> sfixed32_mapdata = 8;
+  map<int64, int64> int64_mapdata = 9;
+  map<uint64, uint64> uint64_mapdata = 10;
+  map<sint64, sint64> sint64_mapdata = 11;
+  map<fixed64, fixed64> fixed64_mapdata = 12;
+  map<sfixed64, sfixed64> sfixed64_mapdata = 13;
+  map<string, double> double_mapdata = 14;
+  map<string, float> float_mapdata = 15;
+  map<bool, bool> bool_mapdata = 16;
+  map<string, bytes> bytes_mapdata = 17;
+}

@@ -1,0 +1,10 @@
+
+ð
+Jconnector/proto/src/test/resources/protobuf/message_multiple_message.protoorg.apache.spark.sql.proto"$
+OtherExample
+other (	Rother"m
+IncludedExample
+included (	Rincluded>
+other (2(.org.apache.spark.sql.proto.OtherExampleRother"i
+MultipleExampleV
+included_example (2+.org.apache.spark.sql.proto.IncludedExampleRincludedExamplebproto3
