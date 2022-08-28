@@ -55,6 +55,13 @@ case class BloomFilterAggregate(
       Multiply(estimatedNumItemsExpression, Literal(8L)))
   }
 
+  def this(child: Expression, estimatedNumItems: Long) = {
+    this(child, Literal(estimatedNumItems),
+      Literal(math.min(
+        BloomFilter.optimalNumOfBits(estimatedNumItems, estimatedNumItems / 3000000000L.toDouble),
+        SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))))
+  }
+
   def this(child: Expression) = {
     this(child, Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)),
       Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
