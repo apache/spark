@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ShowTableExtended, ShowTables}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -64,20 +64,20 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
       ShowTableExtended(
         UnresolvedNamespace(Seq.empty[String]),
         "*test*",
-        Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09", "hr" -> "11")))))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*' " +
         "PARTITION(ds='2008-04-09')"),
       ShowTableExtended(
         UnresolvedNamespace(Seq(catalog, "ns1", "ns2")),
         "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
+        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09")))))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' " +
         "PARTITION(ds='2008-04-09')"),
       ShowTableExtended(
         UnresolvedNamespace(Seq(catalog, "ns1", "ns2")),
         "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
+        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09")))))
   }
 }

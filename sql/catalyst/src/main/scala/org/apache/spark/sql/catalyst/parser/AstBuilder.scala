@@ -3715,7 +3715,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitShowTableExtended(
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
     ShowTableExtended(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       string(ctx.pattern),

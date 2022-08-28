@@ -91,6 +91,15 @@ case class UnresolvedPartitionSpec(
   override lazy val resolved = false
 }
 
+case class ExtractPartitionSpec(
+    spec: Map[String, String],
+    location: Option[String] = None) extends PartitionSpec {
+
+  def this(u: UnresolvedPartitionSpec) = this(u.spec, u.location)
+
+  override lazy val resolved = true
+}
+
 sealed trait FieldName extends LeafExpression with Unevaluable {
   def name: Seq[String]
   override def dataType: DataType = throw new IllegalStateException(

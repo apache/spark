@@ -706,7 +706,7 @@ object ShowTables {
 case class ShowTableExtended(
     namespace: LogicalPlan,
     pattern: String,
-    partitionSpec: Option[TablePartitionSpec],
+    partitionSpec: Option[PartitionSpec],
     override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTableExtended =

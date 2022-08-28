@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ShowTableExtended, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -49,6 +49,10 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
           }
         case _ => command
       }
+    case s @ ShowTableExtended(_, _, partitionSpec @ Some(UnresolvedPartitionSpec(_, _)), _) =>
+      val extractPartitionSpec = new ExtractPartitionSpec(
+        partitionSpec.get.asInstanceOf[UnresolvedPartitionSpec])
+      s.copy(partitionSpec = Some(extractPartitionSpec))
   }
 
   private def resolvePartitionSpec(

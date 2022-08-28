@@ -22,7 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ExtractPartitionSpec, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -371,15 +371,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTableExtended(
         ResolvedNamespace(catalog, ns),
         pattern,
-        partitionSpec,
+        partitionSpec @ (None | Some(ExtractPartitionSpec(_, _))),
         output) =>
+      val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[ExtractPartitionSpec].spec)
       ShowTablesExec(
         output,
         catalog.asTableCatalog,
         ns,
         Some(pattern),
         true,
-        partitionSpec) :: Nil
+        tablePartitionSpec) :: Nil
 
     case SetCatalogAndNamespace(ResolvedNamespace(catalog, ns)) =>
       val catalogManager = session.sessionState.catalogManager
