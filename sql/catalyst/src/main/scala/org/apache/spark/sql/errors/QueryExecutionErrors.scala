@@ -265,12 +265,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new DateTimeException(newMessage, e.getCause)
   }
 
-  def ansiParseError(e: JavaParseException): JavaParseException = {
-    val newMessage = s"${e.getMessage}. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-    new JavaParseException(newMessage, e.getErrorOffset)
-  }
-
   def ansiIllegalArgumentError(message: String): IllegalArgumentException = {
     val newMessage = s"$message. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error."
@@ -360,10 +354,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       codeType: String, dataType: DataType): Throwable = {
     new IllegalArgumentException(
       s"Cannot generate $codeType code for incomparable type: ${dataType.catalogString}")
-  }
-
-  def cannotGenerateCodeForUnsupportedTypeError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
   }
 
   def cannotInterpolateClassIntoCodeBlockError(arg: Any): Throwable = {
@@ -1014,18 +1004,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedMergingFieldsError(leftName: String, rightName: String, e: Throwable): Throwable = {
     new SparkException(s"Failed to merge fields '$leftName' and '$rightName'. ${e.getMessage}")
-  }
-
-  def cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-      leftPrecision: Int, rightPrecision: Int, leftScale: Int, rightScale: Int): Throwable = {
-    new SparkException("Failed to merge decimal types with incompatible " +
-      s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
-  }
-
-  def cannotMergeDecimalTypesWithIncompatiblePrecisionError(
-      leftPrecision: Int, rightPrecision: Int): Throwable = {
-    new SparkException("Failed to merge decimal types with incompatible " +
-      s"precision $leftPrecision and $rightPrecision")
   }
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
