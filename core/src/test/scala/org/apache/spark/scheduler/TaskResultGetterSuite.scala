@@ -298,7 +298,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     assert(unknownFailure.findFirstMatchIn(message).isDefined)
   }
 
-  test("task result metadata should not be counted into result size") {
+  test("SPARK-40261 task result metadata should not be counted into result size") {
     val conf = new SparkConf().set(MAX_RESULT_SIZE.key, "1M")
     sc = new SparkContext("local", "test", conf)
     val rdd = sc.parallelize(1 to 10000, 10000)
