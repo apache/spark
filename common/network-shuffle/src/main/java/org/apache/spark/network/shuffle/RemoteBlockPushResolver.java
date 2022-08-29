@@ -137,7 +137,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final File recoveryFile;
 
   @VisibleForTesting
-  DB db;
+  final DB db;
 
   @SuppressWarnings("UnstableApiUsage")
   public RemoteBlockPushResolver(TransportConf conf, File recoveryFile) throws IOException {
@@ -831,7 +831,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (db != null) {
       try {
         db.close();
-        db = null;
       } catch (IOException e) {
         logger.error("Exception closing leveldb with registered app paths info and "
             + "shuffle partition info", e);

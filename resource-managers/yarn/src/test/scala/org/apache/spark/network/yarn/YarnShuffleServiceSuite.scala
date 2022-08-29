@@ -775,7 +775,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val maxId = 100
     s1 = createYarnShuffleService()
     val resolver = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
-    (0 to maxId).foreach { id =>
+    (0 until maxId).foreach { id =>
       val appId = ApplicationId.newInstance(0, id)
       val appInfo = makeAppInfo("user", appId)
       s1.initializeApplication(appInfo)
@@ -795,14 +795,6 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stop()
 
     assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(resolver))
-    assert(ShuffleTestAccessor.mergeManagerLevelDB(resolver) == null)
-
-    val message = intercept[RejectedExecutionException] {
-      val appId = ApplicationId.newInstance(0, maxId)
-      resolver.applicationRemoved(appId.toString, true)
-    }.getMessage
-    assert(message.contains("Terminated, pool size = 0, " +
-      s"active threads = 0, queued tasks = 0, completed tasks = $maxId"))
   }
 
   test("Dangling finalized merged partition info in DB will be removed during restart") {
