@@ -461,7 +461,7 @@ package object config {
         "a migratable shuffle resolver (like sort based shuffle)")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
@@ -476,7 +476,7 @@ package object config {
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
@@ -1956,6 +1956,13 @@ package object config {
       .intConf
       .createWithDefault(10)
 
+  private[spark] val RDD_LIMIT_INITIAL_NUM_PARTITIONS =
+    ConfigBuilder("spark.rdd.limit.initialNumPartitions")
+      .version("3.4.0")
+      .intConf
+      .checkValue(_ > 0, "value should be positive")
+      .createWithDefault(1)
+
   private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
     ConfigBuilder("spark.rdd.limit.scaleUpFactor")
       .version("2.1.0")
@@ -2413,4 +2420,13 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark] val EXECUTOR_REMOVE_DELAY =
+    ConfigBuilder("spark.standalone.executorRemoveDelayOnDisconnection")
+      .internal()
+      .doc("The timeout duration for a disconnected executor to wait for the specific disconnect" +
+        "reason before it gets removed. This is only used for Standalone yet.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
 }

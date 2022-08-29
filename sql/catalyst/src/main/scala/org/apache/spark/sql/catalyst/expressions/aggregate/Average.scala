@@ -69,7 +69,7 @@ abstract class AverageBase
 
   protected def add(left: Expression, right: Expression): Expression = left.dataType match {
     case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
-    case _ => Add(left, right, useAnsiAdd)
+    case _ => Add(left, right, EvalMode.fromBoolean(useAnsiAdd))
   }
 
   override lazy val aggBufferAttributes = sum :: count :: Nil
@@ -103,7 +103,7 @@ abstract class AverageBase
       If(EqualTo(count, Literal(0L)),
         Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
-      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
+      Divide(sum.cast(resultType), count.cast(resultType), EvalMode.LEGACY)
   }
 
   protected def getUpdateExpressions: Seq[Expression] = Seq(

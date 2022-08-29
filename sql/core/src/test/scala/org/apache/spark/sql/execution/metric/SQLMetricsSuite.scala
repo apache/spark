@@ -206,7 +206,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
-    val df = testData2.groupBy().agg(collect_set($"a")) // 2 partitions
+    val df = testData2.agg(collect_set($"a")) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
       1L -> (("Exchange", Map(

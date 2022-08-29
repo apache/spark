@@ -415,3 +415,21 @@ struct<c1:int,scalarsubquery(c1):bigint>
 -- !query output
 0	3
 1	1
+
+
+-- !query
+SELECT (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "MULTI_VALUE_SUBQUERY_ERROR",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "(SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t)"
+  } ]
+}
