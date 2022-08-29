@@ -325,6 +325,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
+  def illegalUrlError(url: UTF8String):
+  Throwable with SparkThrowable = {
+    new SparkIllegalArgumentException(errorClass = "CANNOT_DECODE_URL",
+      messageParameters = Array(url.toString)
+    )
+  }
+
   def dataTypeOperationUnsupportedError(): Throwable = {
     new UnsupportedOperationException("dataType")
   }
