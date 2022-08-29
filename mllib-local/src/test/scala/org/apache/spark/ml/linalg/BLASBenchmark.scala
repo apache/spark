@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
-import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, F2jBLAS}
+import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, F2jBLASUtil}
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
@@ -39,7 +39,7 @@ object BLASBenchmark extends BenchmarkBase {
     val iters = 1e2.toInt
     val rnd = new scala.util.Random(0)
 
-    val f2jBLAS = F2jBLAS.getInstance
+    val f2jBLAS = F2jBLASUtil.getInstance
     val javaBLAS = BLAS.javaBLAS
     val nativeBLAS = BLAS.nativeBLAS
 
