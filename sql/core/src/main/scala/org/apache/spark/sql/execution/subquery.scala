@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -62,12 +62,13 @@ object ExecSubqueryExpression {
 case class ScalarSubquery(
     plan: BaseSubqueryExec,
     exprId: ExprId)
-  extends ExecSubqueryExpression with LeafLike[Expression] {
+  extends ExecSubqueryExpression with LeafLike[Expression] with SupportQueryContext {
 
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
+  def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
 
   override lazy val preCanonicalized: Expression = {
     ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
@@ -80,7 +81,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      throw QueryExecutionErrors.multipleRowSubqueryError(plan.toString)
+      throw QueryExecutionErrors.multipleRowSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,

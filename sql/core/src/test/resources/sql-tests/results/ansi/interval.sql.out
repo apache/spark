@@ -306,7 +306,6 @@ org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
-  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -350,7 +349,6 @@ org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
-  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

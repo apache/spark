@@ -2228,7 +2228,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError()
+            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2259,9 +2259,8 @@ case class ElementAt(
           } else {
             ""
           }
-
+          val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = if (failOnError) {
-            val errorContext = getContextOrNullCode(ctx)
             // scalastyle:off line.size.limit
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
             // scalastyle:on line.size.limit
@@ -2284,7 +2283,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError();
+             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {

@@ -1628,6 +1628,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e3.message.contains(errorMsg3))
   }
 
+  test("SPARK-40214: get function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3"), 2),
+      (Seq[String](null, ""), 1),
+      (Seq[String](), 2),
+      (null, 3)
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(get(df("a"), lit(-1))),
+      Seq(Row(null), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(0))),
+      Seq(Row("1"), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(1))),
+      Seq(Row("2"), Row(""), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(2))),
+      Seq(Row("3"), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(3))),
+      Seq(Row(null), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), df("b"))),
+      Seq(Row("3"), Row(""), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), df("b") - 1)),
+      Seq(Row("2"), Row(null), Row(null), Row(null))
+    )
+  }
+
   test("array_union functions") {
     val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
     val ans1 = Row(Seq(1, 2, 3, 4))

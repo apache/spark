@@ -294,7 +294,7 @@
   },
   "MULTI_VALUE_SUBQUERY_ERROR" : {
     "message" : [
-      "more than one row returned by a subquery used as an expression: <plan>"
+      "More than one row returned by a subquery used as an expression."
     ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {

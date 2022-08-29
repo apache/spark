@@ -82,15 +82,19 @@ class JacksonParser(
   // dates and timestamps.
   // For more information, see comments for "enableDateTimeParsingFallback" option in JSONOptions.
   private val enableParsingFallbackForTimestampType =
-    options.enableDateTimeParsingFallback.getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-        options.timestampFormatInRead.isEmpty
-    }
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.timestampFormatInRead.isEmpty
+      }
   private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback.getOrElse {
-      SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-        options.dateFormatInRead.isEmpty
-    }
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.jsonEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatInRead.isEmpty
+      }
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
