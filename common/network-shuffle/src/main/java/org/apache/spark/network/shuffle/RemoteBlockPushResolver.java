@@ -815,16 +815,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         mergedShuffleCleaner.shutdown();
         // Wait a while for existing tasks to terminate
         if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
-          List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
-          logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
-            "after {} seconds.", unfinishedTasks.size(), cleanerShutdownTimeout);
-          // Wait a while for tasks to respond to being cancelled
-          if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
-            logger.warn("mergedShuffleCleaner did not terminate");
-          }
+          shutdownMergedShuffleCleanerNow();
         }
       } catch (InterruptedException ignored) {
-        // Preserve interrupt status
+        shutdownMergedShuffleCleanerNow();
         Thread.currentThread().interrupt();
       }
     }
@@ -835,6 +829,24 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         logger.error("Exception closing leveldb with registered app paths info and "
             + "shuffle partition info", e);
       }
+    }
+  }
+
+  /**
+   * Call `shutdownNow` to stop all actively executing tasks and halts the
+   * processing of waiting tasks in `mergedShuffleCleaner`.
+   */
+  private void shutdownMergedShuffleCleanerNow() {
+    try {
+      List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
+      logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
+        "after {} seconds.", unfinishedTasks.size(), cleanerShutdownTimeout);
+      // Wait a while for tasks to respond to being cancelled
+      if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+        logger.warn("mergedShuffleCleaner did not terminate");
+      }
+    } catch (InterruptedException ignored) {
+      Thread.currentThread().interrupt();
     }
   }
 
