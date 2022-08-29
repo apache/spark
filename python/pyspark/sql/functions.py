@@ -5883,6 +5883,28 @@ def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
 
+def inline(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.functions import inline
+    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
+    >>> df.select(inline(df.structlist)).show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |  1|  2|
+    |  3|  4|
+    +---+---+
+    """
+    return _invoke_function_over_columns("inline", col)
+
+
 def explode_outer(col: "ColumnOrName") -> Column:
     """
     Returns a new row for each element in the given array or map.
@@ -5954,6 +5976,33 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+----+
     """
     return _invoke_function_over_columns("posexplode_outer", col)
+
+
+def inline_outer(col: "ColumnOrName") -> Column:
+    """
+    Explodes an array of structs into a table.
+    Unlike inline, if the array is null or empty then null is produced for each nested column.
+
+    .. versionadded:: 3.4.0
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.functions import inline_outer
+    >>> df = spark.createDataFrame([
+    ...     Row(id=1, structlist=[Row(a=1, b=2), Row(a=3, b=4)]),
+    ...     Row(id=2, structlist=[])
+    ... ])
+    >>> df.select('id', inline_outer(df.structlist)).show()
+    +---+----+----+
+    | id|   a|   b|
+    +---+----+----+
+    |  1|   1|   2|
+    |  1|   3|   4|
+    |  2|null|null|
+    +---+----+----+
+    """
+    return _invoke_function_over_columns("inline_outer", col)
 
 
 def get_json_object(col: "ColumnOrName", path: str) -> Column:
