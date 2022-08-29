@@ -442,7 +442,7 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 setGeneric("distinct", function(x) { standardGeneric("distinct") })
 
 #' @rdname drop
-setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+setGeneric("drop", function(x, col, ...) { standardGeneric("drop") })
 
 #' @rdname dropDuplicates
 setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
@@ -840,7 +840,7 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+setGeneric("array_sort", function(x, ...) { standardGeneric("array_sort") })
 
 #' @rdname column_ml_functions
 #' @name NULL

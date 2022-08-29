@@ -252,7 +252,9 @@ SELECT course, udf(year) FROM courseSales GROUP BY udf(course), year HAVING GROU
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -261,7 +263,9 @@ SELECT course, udf(udf(year)) FROM courseSales GROUP BY course, year HAVING GROU
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -316,7 +320,9 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query
@@ -325,7 +331,9 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNSUPPORTED_GROUPING_EXPRESSION] grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
+}
 
 
 -- !query

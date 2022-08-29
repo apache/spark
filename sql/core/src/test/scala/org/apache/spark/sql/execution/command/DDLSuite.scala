@@ -313,10 +313,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
-  test("alter table: set location (datasource table)") {
-    testSetLocation(isDatasourceTable = true)
-  }
-
   test("alter table: set properties (datasource table)") {
     testSetProperties(isDatasourceTable = true)
   }
@@ -1027,70 +1023,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(getProps == Map("x" -> "y"))
-  }
-
-  protected def testSetLocation(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val partSpec = Map("a" -> "1", "b" -> "2")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, partSpec, tableIdent)
-    assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
-    assert(normalizeSerdeProp(catalog.getTableMetadata(tableIdent).storage.properties).isEmpty)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
-    assert(
-      normalizeSerdeProp(catalog.getPartition(tableIdent, partSpec).storage.properties).isEmpty)
-
-    // Verify that the location is set to the expected string
-    def verifyLocation(expected: URI, spec: Option[TablePartitionSpec] = None): Unit = {
-      val storageFormat = spec
-        .map { s => catalog.getPartition(tableIdent, s).storage }
-        .getOrElse { catalog.getTableMetadata(tableIdent).storage }
-      // TODO(gatorsmile): fix the bug in alter table set location.
-      // if (isUsingHiveMetastore) {
-      //  assert(storageFormat.properties.get("path") === expected)
-      // }
-      assert(storageFormat.locationUri ===
-        Some(makeQualifiedPath(CatalogUtils.URIToString(expected))))
-    }
-    // set table location
-    sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
-    verifyLocation(new URI("/path/to/your/lovely/heart"))
-    // set table partition location
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
-    verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
-    // set location for partition spec in the upper case
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways2'")
-      verifyLocation(new URI("/path/to/part/ways2"), Some(partSpec))
-    }
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val errMsg = intercept[AnalysisException] {
-        sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
-      }.getMessage
-      assert(errMsg.contains("not a valid partition column"))
-    }
-    // set table location without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
-    verifyLocation(new URI("/swanky/steak/place"))
-    // set table partition location without explicitly specifying database
-    sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tab1"))
-    val viennaPartPath = new Path(new Path(table. location), "vienna")
-    verifyLocation(CatalogUtils.stringToURI(viennaPartPath.toString), Some(partSpec))
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
-    }
-    // partition to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.tab1 PARTITION (b='2') SET LOCATION '/mister/spark'")
-    }
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {

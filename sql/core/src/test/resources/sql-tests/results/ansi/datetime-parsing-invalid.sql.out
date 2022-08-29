@@ -14,8 +14,14 @@ select to_timestamp('1', 'yy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '1' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'1'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -24,7 +30,14 @@ select to_timestamp('-12', 'yy')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '-12' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '-12' could not be parsed at index 0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -33,8 +46,14 @@ select to_timestamp('123', 'yy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '123' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'123'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -43,8 +62,14 @@ select to_timestamp('1', 'yyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '1' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'1'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -53,8 +78,14 @@ select to_timestamp('1234567', 'yyyyyyy')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to recognize 'yyyyyyy' pattern in the DateTimeFormatter. 1) You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "messageParameters" : {
+    "pattern" : "'yyyyyyy'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -63,7 +94,14 @@ select to_timestamp('366', 'D')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Invalid date 'DayOfYear 366' as '1970' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Invalid date 'DayOfYear 366' as '1970' is not a leap year",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -72,8 +110,14 @@ select to_timestamp('9', 'DD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '9' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'9'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -82,8 +126,14 @@ select to_timestamp('9', 'DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '9' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'9'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -92,8 +142,14 @@ select to_timestamp('99', 'DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '99' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'99'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -102,7 +158,14 @@ select to_timestamp('30-365', 'dd-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -111,7 +174,14 @@ select to_timestamp('11-365', 'MM-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Conflict found: Field MonthOfYear 11 differs from MonthOfYear 12 derived from 1970-12-31",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -120,7 +190,14 @@ select to_timestamp('2019-366', 'yyyy-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2019-366' could not be parsed: Invalid date 'DayOfYear 366' as '2019' is not a leap year. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2019-366' could not be parsed: Invalid date 'DayOfYear 366' as '2019' is not a leap year",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -129,7 +206,14 @@ select to_timestamp('12-30-365', 'MM-dd-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Conflict found: Field DayOfMonth 30 differs from DayOfMonth 31 derived from 1970-12-31",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -138,7 +222,14 @@ select to_timestamp('2020-01-365', 'yyyy-dd-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-01-365' could not be parsed: Conflict found: Field DayOfMonth 30 differs from DayOfMonth 1 derived from 2020-12-30. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-01-365' could not be parsed: Conflict found: Field DayOfMonth 30 differs from DayOfMonth 1 derived from 2020-12-30",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -147,7 +238,14 @@ select to_timestamp('2020-10-350', 'yyyy-MM-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-10-350' could not be parsed: Conflict found: Field MonthOfYear 12 differs from MonthOfYear 10 derived from 2020-12-15. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-10-350' could not be parsed: Conflict found: Field MonthOfYear 12 differs from MonthOfYear 10 derived from 2020-12-15",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -156,7 +254,14 @@ select to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD')
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-11-31-366' could not be parsed: Invalid date 'NOVEMBER 31'. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-11-31-366' could not be parsed: Invalid date 'NOVEMBER 31'",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -165,8 +270,14 @@ select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-[INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER] You may get a different result due to the upgrading to Spark >= 3.0:
-Fail to parse '2018-366' in the new parser. You can set "spark.sql.legacy.timeParserPolicy" to "LEGACY" to restore the behavior before Spark 3.0, or set to "CORRECTED" and treat it as an invalid datetime string.
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "messageParameters" : {
+    "datetime" : "'2018-366'",
+    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+  }
+}
 
 
 -- !query
@@ -175,7 +286,14 @@ select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -184,7 +302,14 @@ select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text 'Unparseable' could not be parsed at index 0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -193,7 +318,14 @@ select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -202,7 +334,14 @@ select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text 'Unparseable' could not be parsed at index 0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -211,7 +350,14 @@ select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -220,7 +366,14 @@ select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text 'Unparseable' could not be parsed at index 0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -229,7 +382,14 @@ select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -238,7 +398,14 @@ select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CANNOT_PARSE_TIMESTAMP] Text 'Unparseable' could not be parsed at index 0. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "message" : "Text 'Unparseable' could not be parsed at index 0",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  }
+}
 
 
 -- !query
@@ -247,10 +414,23 @@ select cast("Unparseable" as timestamp)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value 'Unparseable' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select cast("Unparseable" as timestamp)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'Unparseable'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "cast(\"Unparseable\" as timestamp)"
+  } ]
+}
 
 
 -- !query
@@ -259,7 +439,20 @@ select cast("Unparseable" as date)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[CAST_INVALID_INPUT] The value 'Unparseable' of the type "STRING" cannot be cast to "DATE" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 1, position 8) ==
-select cast("Unparseable" as date)
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "'Unparseable'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\"",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(\"Unparseable\" as date)"
+  } ]
+}

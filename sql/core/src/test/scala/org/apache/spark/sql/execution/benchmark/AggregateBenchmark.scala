@@ -57,11 +57,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val N = 100L << 20
 
       codegenBenchmark("stddev", N) {
-        spark.range(N).groupBy().agg("id" -> "stddev").noop()
+        spark.range(N).agg("id" -> "stddev").noop()
       }
 
       codegenBenchmark("kurtosis", N) {
-        spark.range(N).groupBy().agg("id" -> "kurtosis").noop()
+        spark.range(N).agg("id" -> "kurtosis").noop()
       }
     }
 

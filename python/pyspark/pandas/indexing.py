@@ -619,7 +619,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psser._psdf[
                         self._psdf_or_psser._psdf._internal.column_labels
                     ]._internal.resolved_copy,
-                    requires_same_anchor=False,
+                    check_same_anchor=False,
                 )
                 return
 
@@ -653,7 +653,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_spark_column(
                 self._psdf_or_psser._column_label, scol  # TODO: dtype?
             )
-            self._psdf_or_psser._psdf._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._psdf._update_internal_frame(internal, check_same_anchor=False)
         else:
             assert self._is_df
 
@@ -705,7 +705,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
                 self._psdf_or_psser._update_internal_frame(
                     psdf[list(self._psdf_or_psser.columns)]._internal.resolved_copy,
-                    requires_same_anchor=False,
+                    check_same_anchor=False,
                 )
                 return
 
@@ -772,7 +772,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_columns(
                 new_data_spark_columns, column_labels=column_labels, data_fields=new_fields
             )
-            self._psdf_or_psser._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
 
 
 class LocIndexer(LocIndexerLike):
@@ -1817,7 +1817,7 @@ class iLocIndexer(LocIndexerLike):
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
         self._psdf._update_internal_frame(
-            self._psdf._internal.resolved_copy, requires_same_anchor=False
+            self._psdf._internal.resolved_copy, check_same_anchor=False
         )
 
         # Clean up implicitly cached properties to be able to reuse the indexer.

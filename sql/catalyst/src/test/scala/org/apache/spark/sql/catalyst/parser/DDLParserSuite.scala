@@ -900,23 +900,6 @@ class DDLParserSuite extends AnalysisTest {
       )))
   }
 
-  test("alter table: set location") {
-    val hint = Some("Please use ALTER VIEW instead.")
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
-      SetTableLocation(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
-        None,
-        "new location"))
-
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
-      SetTableLocation(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
-        Some(Map("ds" -> "2017-06-10")),
-        "new location"))
-  }
-
   test("alter table: rename column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),

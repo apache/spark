@@ -135,10 +135,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     )
   }
 
-  test("alter table: set location") {
-    testSetLocation(isDatasourceTable = false)
-  }
-
   test("alter table: set properties") {
     testSetProperties(isDatasourceTable = false)
   }

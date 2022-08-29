@@ -1291,6 +1291,15 @@ test_that("drop column", {
   df1 <- drop(df, df$age)
   expect_equal(columns(df1), c("name", "age2"))
 
+  df1 <- drop(df, df$age, df$name)
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age, column("random"))
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df1 <- drop(df, df$age, "random")
+  expect_equal(columns(df1), c("name", "age2"))
+
   df$age2 <- NULL
   expect_equal(columns(df), c("name", "age"))
   df$age3 <- NULL
@@ -1595,6 +1604,16 @@ test_that("column functions", {
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- collect(select(
+    df,
+    array_sort(
+      df[[1]],
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
+    )
+  ))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
