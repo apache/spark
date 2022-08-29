@@ -379,7 +379,8 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema):
+    def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema,
+                 softLimitBytesPerBatch, minDataCountForSample):
         super(ApplyInPandasWithStateSerializer, self).__init__(
             timezone, safecheck, assign_cols_by_name)
         self.pickleSer = CPickleSerializer()
@@ -393,6 +394,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         ])
 
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
+        self.softLimitBytesPerBatch = softLimitBytesPerBatch
+        self.minDataCountForSample = minDataCountForSample
 
     def load_stream(self, stream):
         import pyarrow as pa
@@ -495,6 +498,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             pdf_data_cnt = 0
             state_data_cnt = 0
 
+            sampled_data_size_per_row = 0
+            sampled_state_size = 0
+            # FIXME: sample with empty state size separately?
+            sampled_empty_state_size = 0
+
             for data in iterator:
                 packaged_result = data[0]
 
@@ -525,10 +533,20 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_pdfs.append(state_pdf)
                 state_data_cnt += 1
 
-                max_data_cnt = max(pdf_data_cnt, state_data_cnt)
-                # FIXME: what would be the best criteria for threshold?
-                #   currently we arbitrarily set this via number of rows
-                if max_data_cnt > 10000:
+                # FIXME: threshold of sample data
+                if sampled_data_size_per_row == 0 and pdf_data_cnt > self.minDataCountForSample:
+                    memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
+                    sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
+
+                # FIXME: threshold of sample data
+                if sampled_state_size == 0 and state_data_cnt > self.minDataCountForSample:
+                    memory_usages = [p.memory_usage(deep=True).sum() for p in state_pdfs]
+                    sampled_state_size = sum(memory_usages) / state_data_cnt
+
+                # This effectively works after the sampling has completed, size we multiply by 0
+                # if the sampling is still in progress.
+                if (sampled_data_size_per_row * pdf_data_cnt) + \
+                   (sampled_state_size * state_data_cnt) >= self.softLimitBytesPerBatch:
                     batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
                                                    state_pdfs, state_data_cnt)
 

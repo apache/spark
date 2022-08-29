@@ -58,7 +58,9 @@ class ArrowPythonRunnerWithState(
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     valueSchema: StructType,
-    stateSchema: StructType)
+    stateSchema: StructType,
+    softLimitBytesPerBatch: Long,
+    minDataCountForSample: Int)
   extends BasePythonRunner[
     (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]),
     (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])](
@@ -66,6 +68,7 @@ class ArrowPythonRunnerWithState(
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
+  // FIXME: should we use this instead?
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(
     bufferSize >= 4,
@@ -160,8 +163,11 @@ class ArrowPythonRunnerWithState(
           writer.start()
 
           var numRowsForCurGroup = 0
+          var numStatesForCurGroup = 0
           var startOffsetForCurGroup = 0
           var totalNumRowsForBatch = 0
+
+          var sampledDataSizePerRow = 0
 
           while (inputIterator.hasNext) {
             val (keyRow, groupState, dataIter) = inputIterator.next()
@@ -182,14 +188,22 @@ class ArrowPythonRunnerWithState(
             val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
               numRowsForCurGroup)
             arrowWriterForState.write(stateInfoRow)
+            numStatesForCurGroup += 1
 
             // start offset for next group would be same as the total number of rows for batch
             startOffsetForCurGroup = totalNumRowsForBatch
 
-            // FIXME: threshold as number of rows
-            //   if we want to go with size,
-            //   arrowWriterForState.sizeInBytes() + arrowWriterForState.sizeInBytes()
-            if (totalNumRowsForBatch > 10000) {
+            // FIXME: threshold of sample data
+            if (sampledDataSizePerRow == 0 && totalNumRowsForBatch > minDataCountForSample) {
+              sampledDataSizePerRow = arrowWriterForData.sizeInBytes() / totalNumRowsForBatch
+            }
+
+            // This effectively works after the sampling has completed, size we multiply by 0
+            // if the sampling is still in progress.
+            // FIXME: ignore state size for now, as we expect more number of data rather than
+            //  number of state.
+            // FIXME: sample with empty state size separately?
+            if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch) {
               // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
               // side, as we know there is at least one data row.
               arrowWriterForState.finish()

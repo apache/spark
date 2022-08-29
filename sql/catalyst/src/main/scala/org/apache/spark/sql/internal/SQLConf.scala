@@ -2705,6 +2705,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH =
+    buildConf("spark.sql.execution.applyInPandasWithState.softLimitSizePerBatch")
+      // FIXME: doc
+      .version("3.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("64MB")
+
+  val MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE =
+    buildConf("spark.sql.execution.applyInPandasWithState.minDataCountForSample")
+      // FIXME: doc
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(100)
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -4528,6 +4542,12 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def softLimitBytesPerBatchInApplyInPandasWithState: Long =
+      getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH)
+
+  def minDataCountForSampleInApplyInPandasWithState: Int =
+      getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

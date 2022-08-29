@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.TaskContext
+
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExecHelper.StateData
 import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
@@ -78,8 +80,16 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override def output: Seq[Attribute] = outAttributes
 
+  private val softLimitBytesPerBatch = conf.softLimitBytesPerBatchInApplyInPandasWithState
+  private val minDataCountForSample = conf.minDataCountForSampleInApplyInPandasWithState
+
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf) +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH.key ->
+      softLimitBytesPerBatch.toString) +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE.key ->
+      minDataCountForSample.toString)
+
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
@@ -156,7 +166,9 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         child.output.toStructType,
-        stateType)
+        stateType,
+        softLimitBytesPerBatch,
+        minDataCountForSample)
 
       val context = TaskContext.get()
 

@@ -383,6 +383,8 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf[k] = v
 
         state_object_schema = None
+        softLimitBytesPerBatchInApplyInPandasWithState = None
+        minDataCountForSampleInApplyInPandasWithState = None
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
@@ -400,12 +402,27 @@ def read_udfs(pickleSer, infile, eval_type):
             == "true"
         )
 
+        softLimitBytesPerBatchInApplyInPandasWithState = runner_conf.get(
+            "spark.sql.execution.applyInPandasWithState.softLimitSizePerBatch", (64 * 1024 * 1024)
+        )
+        softLimitBytesPerBatchInApplyInPandasWithState = \
+            int(softLimitBytesPerBatchInApplyInPandasWithState)
+
+        minDataCountForSampleInApplyInPandasWithState = runner_conf.get(
+            "spark.sql.execution.applyInPandasWithState.minDataCountForSample", 100
+        )
+        minDataCountForSampleInApplyInPandasWithState = \
+            int(minDataCountForSampleInApplyInPandasWithState)
+
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-            ser = ApplyInPandasWithStateSerializer(timezone, safecheck, assign_cols_by_name, state_object_schema)
+            ser = ApplyInPandasWithStateSerializer(timezone, safecheck, assign_cols_by_name,
+                                                   state_object_schema,
+                                                   softLimitBytesPerBatchInApplyInPandasWithState,
+                                                   minDataCountForSampleInApplyInPandasWithState)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
