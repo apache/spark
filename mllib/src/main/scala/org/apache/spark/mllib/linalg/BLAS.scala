@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.linalg
 
-import dev.ludovic.netlib.{BLAS => NetlibBLAS,
-                           JavaBLAS => NetlibJavaBLAS,
-                           NativeBLAS => NetlibNativeBLAS}
+import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS,
+                                JavaBLAS => NetlibJavaBLAS,
+                                NativeBLAS => NetlibNativeBLAS}
 
 import org.apache.spark.internal.Logging
 

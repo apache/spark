@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.linalg
 
-import dev.ludovic.netlib.{ARPACK => NetlibARPACK,
-                           JavaARPACK => NetlibJavaARPACK,
-                           NativeARPACK => NetlibNativeARPACK}
+import dev.ludovic.netlib.arpack.{ARPACK => NetlibARPACK,
+                                  JavaARPACK => NetlibJavaARPACK,
+                                  NativeARPACK => NetlibNativeARPACK}
 
 /**
  * ARPACK routines for MLlib's vectors and matrices.
