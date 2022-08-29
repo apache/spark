@@ -1938,6 +1938,13 @@ def degrees(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         angle in degrees, as if computed by `java.lang.Math.toDegrees()`
+
+    Examples
+    --------
+    >>> import math
+    >>> df = spark.range(1)
+    >>> df.select(degrees(lit(math.pi))).first()
+    Row(DEGREES(3.14159...)=180.0)
     """
     return _invoke_function_over_columns("degrees", col)
 
@@ -1958,6 +1965,12 @@ def radians(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         angle in radians, as if computed by `java.lang.Math.toRadians()`
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(radians(lit(180))).first()
+    Row(RADIANS(180)=3.14159...)
     """
     return _invoke_function_over_columns("radians", col)
 
@@ -1996,6 +2009,12 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
         in polar coordinates that corresponds to the point
         (`x`, `y`) in Cartesian coordinates,
         as if computed by `java.lang.Math.atan2()`
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(atan2(lit(1), lit(2))).first()
+    Row(ATAN2(1, 2)=0.46364...)
     """
     return _invoke_binary_math_function("atan2", col1, col2)
 
@@ -2020,6 +2039,24 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
 
     .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col1 : str, :class:`~pyspark.sql.Column` or float
+        a leg.
+    col2 : str, :class:`~pyspark.sql.Column` or float
+        b leg.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of the hypotenuse.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(hypot(lit(1), lit(2))).first()
+    Row(HYPOT(1, 2)=2.23606...)
     """
     return _invoke_binary_math_function("hypot", col1, col2)
 
@@ -2044,6 +2081,24 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     Returns the value of the first argument raised to the power of the second argument.
 
     .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col1 : str, :class:`~pyspark.sql.Column` or float
+        the base number.
+    col2 : str, :class:`~pyspark.sql.Column` or float
+        the exponent number.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the base rased to the power the argument.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(pow(lit(3), lit(2))).first()
+    Row(POWER(3, 2)=9.0)
     """
     return _invoke_binary_math_function("pow", col1, col2)
 
@@ -2060,6 +2115,11 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
         the column that contains dividend, or the specified dividend value
     divisor : str, :class:`~pyspark.sql.Column` or float
         the column that contains divisor, or the specified divisor value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        positive value of dividend mod divisor.
 
     Examples
     --------
@@ -2092,6 +2152,25 @@ def row_number() -> Column:
     Window function: returns a sequential number starting at 1 within a window partition.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating row numbers.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window
+    >>> df = spark.range(3)
+    >>> w = Window.orderBy(df.id.desc())
+    >>> df.withColumn("desc_order", row_number().over(w)).show()
+    +---+----------+
+    | id|desc_order|
+    +---+----------+
+    |  2|         1|
+    |  1|         2|
+    |  0|         3|
+    +---+----------+
     """
     return _invoke_function("row_number")
 
@@ -2109,6 +2188,28 @@ def dense_rank() -> Column:
     This is equivalent to the DENSE_RANK function in SQL.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating ranks.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("drank", dense_rank().over(w)).show()
+    +-----+-----+
+    |value|drank|
+    +-----+-----+
+    |    1|    1|
+    |    1|    1|
+    |    2|    2|
+    |    3|    3|
+    |    3|    3|
+    |    4|    4|
+    +-----+-----+
     """
     return _invoke_function("dense_rank")
 
@@ -2126,6 +2227,28 @@ def rank() -> Column:
     This is equivalent to the RANK function in SQL.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating ranks.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("drank", rank().over(w)).show()
+    +-----+-----+
+    |value|drank|
+    +-----+-----+
+    |    1|    1|
+    |    1|    1|
+    |    2|    3|
+    |    3|    4|
+    |    3|    4|
+    |    4|    6|
+    +-----+-----+
     """
     return _invoke_function("rank")
 
@@ -2136,6 +2259,27 @@ def cume_dist() -> Column:
     i.e. the fraction of rows that are below the current row.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating cumulative distribution.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("cd", cume_dist().over(w)).show()
+    +-----+---+
+    |value| cd|
+    +-----+---+
+    |    1|0.2|
+    |    2|0.4|
+    |    3|0.8|
+    |    3|0.8|
+    |    4|1.0|
+    +-----+---+
     """
     return _invoke_function("cume_dist")
 
@@ -2145,6 +2289,28 @@ def percent_rank() -> Column:
     Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column for calculating relative rank.
+
+    Examples
+    --------
+    >>> from pyspark.sql import Window, types
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> w = Window.orderBy("value")
+    >>> df.withColumn("pr", percent_rank().over(w)).show()
+    +-----+---+
+    |value| pr|
+    +-----+---+
+    |    1|0.0|
+    |    1|0.0|
+    |    2|0.4|
+    |    3|0.6|
+    |    3|0.6|
+    |    4|1.0|
+    +-----+---+
     """
     return _invoke_function("percent_rank")
 
@@ -2189,6 +2355,25 @@ def broadcast(df: DataFrame) -> DataFrame:
     Marks a DataFrame as small enough for use in broadcast joins.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.DataFrame`
+        DataFrame marked as ready for broadcast join.
+
+    Examples
+    --------
+    >>> from pyspark.sql import types
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> df_small = spark.range(3)
+    >>> df_b = broadcast(df_small)
+    >>> df.join(df_b, df.value == df_small.id).show()
+    +-----+---+
+    |value| id|
+    +-----+---+
+    |    1|  1|
+    |    2|  2|
+    +-----+---+
     """
 
     sc = SparkContext._active_spark_context
@@ -2200,6 +2385,16 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     """Returns the first column that is not null.
 
     .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        list of columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value of the first column that is not null.
 
     Examples
     --------
@@ -2240,6 +2435,18 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     .. versionadded:: 1.6.0
 
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        first column to calculate correlation.
+    col1 : :class:`~pyspark.sql.Column` or str
+        second column to calculate correlation.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Pearson Correlation Coefficient of these two column values.
+
     Examples
     --------
     >>> a = range(20)
@@ -2257,6 +2464,18 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     .. versionadded:: 2.0.0
 
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        first column to calculate covariance.
+    col1 : :class:`~pyspark.sql.Column` or str
+        second column to calculate covariance.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        covariance of these two column values.
+
     Examples
     --------
     >>> a = [1] * 10
@@ -2273,6 +2492,18 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ``col2``.
 
     .. versionadded:: 2.0.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+        first column to calculate covariance.
+    col1 : :class:`~pyspark.sql.Column` or str
+        second column to calculate covariance.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        sample covariance of these two column values.
 
     Examples
     --------
@@ -2301,13 +2532,40 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.2.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        first column to compute on.
+    cols : :class:`~pyspark.sql.Column` or str
+        other columns to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        distinct values of these two column values.
+
     Examples
     --------
-    >>> df.agg(count_distinct(df.age, df.name).alias('c')).collect()
-    [Row(c=2)]
-
-    >>> df.agg(count_distinct("age", "name").alias('c')).collect()
-    [Row(c=2)]
+    >>> from pyspark.sql import types
+    >>> df1 = spark.createDataFrame([1, 1, 3], types.IntegerType())
+    >>> df2 = spark.createDataFrame([1, 2], types.IntegerType())
+    >>> df1.join(df2).show()
+    +-----+-----+
+    |value|value|
+    +-----+-----+
+    |    1|    1|
+    |    1|    2|
+    |    1|    1|
+    |    1|    2|
+    |    3|    1|
+    |    3|    2|
+    +-----+-----+
+    >>> df1.join(df2).select(count_distinct(df1.value, df2.value)).show()
+    +----------------------------+
+    |count(DISTINCT value, value)|
+    +----------------------------+
+    |                           4|
+    +----------------------------+
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
@@ -2329,10 +2587,33 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to fetch first value for.
+    ignorenulls : :class:`~pyspark.sql.Column` or str
+        if first value is null then look for first non-null value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        first value of the group.
+
     Examples
     --------
-    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
+    >>> df = df.orderBy(df.age)
     >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    +-----+----------+
+    | name|first(age)|
+    +-----+----------+
+    |Alice|      null|
+    |  Bob|         5|
+    +-----+----------+
+
+    Now, to ignore any nulls we needs to set ``ignorenulls`` to `True`
+
+    >>> df.groupby("name").agg(first("age", ignorenulls=True)).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -2349,6 +2630,16 @@ def grouping(col: "ColumnOrName") -> Column:
     or not, returns 1 for aggregated or 0 for not aggregated in the result set.
 
     .. versionadded:: 2.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if it's aggregated.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        returns 1 for aggregated or 0 for not aggregated in the result set.
 
     Examples
     --------
@@ -2377,16 +2668,33 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     The list of columns should match with grouping columns exactly, or empty (means all
     the grouping columns).
 
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        columns to check for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        returns level of the grouping it relates to.
+
     Examples
     --------
-    >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
-    +-----+-------------+--------+
-    | name|grouping_id()|sum(age)|
-    +-----+-------------+--------+
-    | null|            1|       7|
-    |Alice|            0|       2|
-    |  Bob|            0|       5|
-    +-----+-------------+--------+
+    >>> df = spark.createDataFrame([(1, "a", "a"),
+    ...                             (3, "a", "a"),
+    ...                             (4, "b", "c")], ["c1", "c2", "c3"])
+    >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
+    +----+----+-------------+-------+
+    |  c2|  c3|grouping_id()|sum(c1)|
+    +----+----+-------------+-------+
+    |null|null|            3|      8|
+    |null|   a|            2|      4|
+    |null|   c|            2|      4|
+    |   a|null|            1|      4|
+    |   a|   a|            0|      4|
+    |   b|null|            1|      4|
+    |   b|   c|            0|      4|
+    +----+----+-------------+-------+
     """
     return _invoke_function_over_seq_of_columns("grouping_id", cols)
 
@@ -2396,34 +2704,77 @@ def input_file_name() -> Column:
     Creates a string column for the file name of the current Spark task.
 
     .. versionadded:: 1.6.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        file names.
+
+    Examples
+    --------
+    >>> import os
+    >>> path = os.path.abspath(__file__)
+    >>> df = spark.read.text(path)
+    >>> df.select(input_file_name()).first()
+    Row(input_file_name()='file:///...')
     """
     return _invoke_function("input_file_name")
 
 
 def isnan(col: "ColumnOrName") -> Column:
-    """An expression that returns true iff the column is NaN.
+    """An expression that returns true if the column is NaN.
 
     .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        True if value is NaN and False otherwise.
 
     Examples
     --------
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
-    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
+    >>> df.select("a", "b", isnan("a").alias("r1"), isnan(df.b).alias("r2")).show()
+    +---+---+-----+-----+
+    |  a|  b|   r1|   r2|
+    +---+---+-----+-----+
+    |1.0|NaN|false| true|
+    |NaN|2.0| true|false|
+    +---+---+-----+-----+
     """
     return _invoke_function_over_columns("isnan", col)
 
 
 def isnull(col: "ColumnOrName") -> Column:
-    """An expression that returns true iff the column is null.
+    """An expression that returns true if the column is null.
 
     .. versionadded:: 1.6.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        True if value is null and False otherwise.
 
     Examples
     --------
     >>> df = spark.createDataFrame([(1, None), (None, 2)], ("a", "b"))
-    >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
-    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
+    >>> df.select("a", "b", isnull("a").alias("r1"), isnull(df.b).alias("r2")).show()
+    +----+----+-----+-----+
+    |   a|   b|   r1|   r2|
+    +----+----+-----+-----+
+    |   1|null|false| true|
+    |null|   2| true|false|
+    +----+----+-----+-----+
     """
     return _invoke_function_over_columns("isnull", col)
 
@@ -2440,6 +2791,40 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     -----
     The function is non-deterministic because its results depends on the order of the
     rows which may be non-deterministic after a shuffle.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to fetch last value for.
+    ignorenulls : :class:`~pyspark.sql.Column` or str
+        if last value is null then look for non-null value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        last value of the group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
+    >>> df = df.orderBy(df.age.desc())
+    >>> df.groupby("name").agg(last("age")).orderBy("name").show()
+    +-----+---------+
+    | name|last(age)|
+    +-----+---------+
+    |Alice|     null|
+    |  Bob|        5|
+    +-----+---------+
+
+    Now, to ignore any nulls we needs to set ``ignorenulls`` to `True`
+
+    >>> df.groupby("name").agg(last("age", ignorenulls=True)).orderBy("name").show()
+    +-----+---------+
+    | name|last(age)|
+    +-----+---------+
+    |Alice|        2|
+    |  Bob|        5|
+    +-----+---------+
     """
     return _invoke_function("last", _to_java_column(col), ignorenulls)
 
