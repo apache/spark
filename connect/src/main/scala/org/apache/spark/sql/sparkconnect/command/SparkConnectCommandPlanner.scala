@@ -18,10 +18,10 @@
 package org.apache.spark.sql.sparkconnect.command
 
 import com.google.common.collect.{Lists, Maps}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.{proto => proto}
-import org.apache.spark.connect.proto.CreateScalarFunction
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
@@ -29,17 +29,18 @@ import org.apache.spark.sql.types.StringType
 case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   def process(): Unit = {
-    command.commandType match {
-      case proto.Command.CommandType.CreateFunction(cf) => handleCreateScalarFunction(cf)
-      case _ => throw new UnsupportedOperationException(s"${command.commandType} not supported.")
+    command.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
+        handleCreateScalarFunction(command.getCreateFunction)
+      case _ => throw new UnsupportedOperationException(s"${command} not supported.")
     }
   }
 
   // This is a helper function that registers a new Python function in the
   // [[SparkSession]].
-  def handleCreateScalarFunction(cf: CreateScalarFunction): Unit = {
+  def handleCreateScalarFunction(cf: proto.CreateScalarFunction): Unit = {
     val function = SimplePythonFunction(
-      cf.functionDefinition.serializedFunction.get.toByteArray,
+      cf.getSerializedFunction.toByteArray,
       Maps.newHashMap(),
       Lists.newArrayList(),
       "python3",
@@ -48,13 +49,13 @@ case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Comm
       null)
 
     val udf = UserDefinedPythonFunction(
-      cf.parts.head,
+      cf.getPartsList.asScala.head,
       function,
       StringType,
       PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = false)
 
-    session.udf.registerPython(cf.parts.head, udf)
+    session.udf.registerPython(cf.getPartsList.asScala.head, udf)
 
   }
 

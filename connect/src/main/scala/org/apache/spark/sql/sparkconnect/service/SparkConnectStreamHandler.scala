@@ -19,6 +19,7 @@ package org.apache.spark.sql.sparkconnect.service
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
@@ -39,11 +40,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def handle(v: Request): Unit = {
     // Preconditions.checkState(v.userContext.nonEmpty, "User Context must be present")
-    val session = SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.userId).session
-    v.getPlan.opType match {
-      case proto.Plan.OpType.Command(_) => handleCommand(session, v)
-      case proto.Plan.OpType.Root(_) => handlePlan(session, v)
-      case _ => throw new UnsupportedOperationException(s"${v.getPlan.opType} not supported.")
+    val session =
+      SparkConnectService.getOrCreateIsolatedSession(v.getUserContext.getUserId).session
+    v.getPlan.getOpTypeCase match {
+      case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
+      case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+      case _ =>
+        throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
     }
   }
 
@@ -51,7 +54,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     // Extract the plan from the request and convert it to a logical plan
     val rows =
       Dataset.ofRows(session, SparkConnectPlanner(request.getPlan.getRoot, session).transform())
-    processRows(request.clientId, rows)
+    processRows(request.getClientId, rows)
   }
 
   private def processRows(clientId: String, rows: DataFrame) = {
@@ -64,12 +67,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
     // TODO empty results (except limit 0) will not yield a schema.
 
     val data = rows.collect().map(x => x.toSeq.mkString("|")).mkString("\n")
-    val bbb = proto.Response.CSVBatch(rowCount = -1, data = textSchema ++ "\n" ++ data)
-    val response = proto.Response(
-      clientId = clientId,
-      resultType = proto.Response.ResultType.CsvBatch(bbb),
-      // metrics = Some(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
-    )
+    val bbb = proto.Response.CSVBatch.newBuilder
+      .setRowCount(-1)
+      .setData(textSchema ++ "\n" ++ data)
+      .build()
+    val response = proto.Response.newBuilder().setClientId(clientId).setCsvBatch(bbb).build()
 
     // Send all the data
     responseObserver.onNext(response)
@@ -97,9 +99,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def sendMetricsToResponse(clientId: String, rows: DataFrame): Response = {
     // Send a last batch with the metrics
-    Response(
-      clientId = clientId,
-      metrics = Some(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan)))
+    Response
+      .newBuilder()
+      .setClientId(clientId)
+      .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
+      .build()
   }
 
   def handleCommand(session: SparkSession, request: Request): Unit = {
@@ -113,7 +117,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
 object MetricGenerator extends AdaptiveSparkPlanHelper {
   def buildMetrics(p: SparkPlan): Response.Metrics = {
-    Response.Metrics(metrics = transformPlan(p, p.id))
+    val b = Response.Metrics.newBuilder
+    b.addAllMetrics(transformPlan(p, p.id).asJava)
+    b.build()
   }
 
   def transformChildren(p: SparkPlan): Seq[Response.Metrics.MetricObject] = {
@@ -127,15 +133,20 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
   }
 
   def transformPlan(p: SparkPlan, parentId: Int): Seq[Response.Metrics.MetricObject] = {
-    val mv = p.metrics.map(m =>
-      m._1 -> Response.Metrics.MetricValue(m._2.name.getOrElse(""), m._2.value, m._2.metricType))
-    Seq(
-      Response.Metrics.MetricObject(
-        name = p.nodeName,
-        planId = p.id,
-        executionMetrics = mv,
-        parent = parentId)) ++
-      transformChildren(p)
+    val mv = p.metrics.map(
+      m =>
+        m._1 -> Response.Metrics.MetricValue.newBuilder
+          .setName(m._2.name.getOrElse(""))
+          .setValue(m._2.value)
+          .setMetricType(m._2.metricType)
+          .build())
+    val mo = Response.Metrics.MetricObject
+      .newBuilder()
+      .setName(p.nodeName)
+      .setPlanId(p.id)
+      .putAllExecutionMetrics(mv.asJava)
+      .build()
+    Seq(mo) ++ transformChildren(p)
   }
 
 }

@@ -202,6 +202,34 @@
             </plugin>
             <!-- Add protobuf-maven-plugin and provide ScalaPB as a code generation plugin -->
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.6</source>
+                    <target>1.6</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>0.6.1</version>
+                <configuration>
+                    <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+                    <pluginId>grpc-java</pluginId>
+                    <pluginArtifact>io.grpc:protoc-gen-grpc-java:${io.grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
+                    <protoSourceRoot>src/main/protobuf</protoSourceRoot>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>compile</goal>
+                            <goal>compile-custom</goal>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
                 <version>3.11.4</version>
@@ -225,12 +253,12 @@
                     <outputTargets>
                         <outputTarget>
                             <type>scalapb</type>
-                            <outputOptions>grpc,flat_package</outputOptions> <!-- more scalapb options can be added here -->
+                            <outputOptions>grpc,flat_package</outputOptions>
                             <pluginArtifact>com.thesamet.scalapb:protoc-gen-scala:0.11.11:sh:unix</pluginArtifact>
                         </outputTarget>
                     </outputTargets>
                 </configuration>
-            </plugin>
+            </plugin -->
             <!-- Shade all GRPC / Guava / Protobuf depencies of this build -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -242,7 +270,6 @@
                             <include>com.google.guava:*</include>
                             <include>io.grpc:*</include>
                             <include>com.google.protobuf:*</include>
-                            <include>com.thesamet.scalapb:*</include>
                         </includes>
                     </artifactSet>
                     <relocations>

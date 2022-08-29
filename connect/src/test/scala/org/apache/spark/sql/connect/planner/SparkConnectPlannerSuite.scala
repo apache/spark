@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
@@ -29,9 +31,14 @@ trait SparkConnectPlanTest {
   }
 
   def readRel: proto.Relation =
-    proto
-      .Relation()
-      .withRead(proto.Read().withNamedTable(proto.Read.NamedTable().withParts(Seq("table"))))
+    proto.Relation
+      .newBuilder()
+      .setRead(
+        proto.Read
+          .newBuilder()
+          .setNamedTable(proto.Read.NamedTable.newBuilder().addParts("table"))
+          .build())
+      .build()
 }
 
 trait SparkConnectSessionTest {
@@ -57,7 +64,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("LIMIT simple") {
     assertThrows[IndexOutOfBoundsException] {
-      SparkConnectPlanner(proto.Relation().withFetch(proto.Fetch(limit = 10)), None.orNull)
+      SparkConnectPlanner(
+        proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
+        None.orNull)
         .transform()
     }
   }
@@ -65,56 +74,69 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      SparkConnectPlanner(proto.Relation(), None.orNull).transform())
+      SparkConnectPlanner(proto.Relation.newBuilder().build(), None.orNull).transform())
 
     intercept[InvalidPlanInput](
-      SparkConnectPlanner(proto.Relation().withUnknown(proto.Unknown()), None.orNull).transform())
+      SparkConnectPlanner(
+        proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build(),
+        None.orNull).transform())
 
   }
 
   test("READ simple") {
-    val read = proto.Read()
+    val read = proto.Read.newBuilder().build()
     // Invalid read without Table name.
-    intercept[InvalidPlanInput](transform(proto.Relation().withRead(read)))
-    val readWithTable = read.withNamedTable(proto.Read.NamedTable().withParts(Seq("name")))
-    assert(transform(proto.Relation().withRead(readWithTable)) !== null)
+    intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
+    val readWithTable = read.toBuilder
+      .setNamedTable(proto.Read.NamedTable.newBuilder.addParts("name").build())
+      .build()
+    assert(transform(proto.Relation.newBuilder.setRead(readWithTable).build()) !== null)
   }
 
   test("SORT") {
-    val sort = proto.Sort().withSortFields(Seq(proto.Sort.SortField()))
+    val sort = proto.Sort.newBuilder
+      .addAllSortFields(Seq(proto.Sort.SortField.newBuilder().build()).asJava)
+      .build()
     intercept[IndexOutOfBoundsException](
-      transform(proto.Relation().withSort(sort)),
+      transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
-    val f = proto.Sort
-      .SortField()
-      .withNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
-      .withDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
-      .withExpression(
-        proto
-          .Expression()
-          .withUnresolvedAttribute(proto.Expression.UnresolvedAttribute().withParts(Seq("col"))))
+    val f = proto.Sort.SortField
+      .newBuilder()
+      .setNulls(proto.Sort.SortNulls.SORT_NULLS_LAST)
+      .setDirection(proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING)
+      .setExpression(proto.Expression.newBuilder
+        .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute.newBuilder.addAllParts(Seq("col").asJava).build())
+        .build())
+      .build()
 
-    transform(proto.Relation().withSort(proto.Sort().withSortFields(Seq(f)).withInput(readRel)))
+    transform(
+      proto.Relation.newBuilder
+        .setSort(proto.Sort.newBuilder.addAllSortFields(Seq(f).asJava).setInput(readRel))
+        .build())
 
   }
 
   test("UNION") {
-    intercept[AssertionError](transform(proto.Relation().withUnion(proto.Union())))
-    val union = proto.Relation().withUnion(proto.Union().withInputs(Seq(readRel, readRel)))
+    intercept[AssertionError](
+      transform(proto.Relation.newBuilder.setUnion(proto.Union.newBuilder.build()).build))
+    val union = proto.Relation.newBuilder
+      .setUnion(proto.Union.newBuilder.addAllInputs(Seq(readRel, readRel).asJava).build())
+      .build()
     val msg = intercept[InvalidPlanInput] {
       transform(union)
     }
     assert(msg.getMessage.contains("Unsupported set operation"))
 
     transform(
-      proto
-        .Relation()
-        .withUnion(
-          proto
-            .Union()
-            .withInputs(Seq(readRel, readRel))
-            .withUnionType(proto.Union.UnionType.UNION_TYPE_ALL)))
+      proto.Relation.newBuilder
+        .setUnion(
+          proto.Union.newBuilder
+            .addAllInputs(Seq(readRel, readRel).asJava)
+            .setUnionType(proto.Union.UnionType.UNION_TYPE_ALL)
+            .build())
+        .build())
   }
 
 }

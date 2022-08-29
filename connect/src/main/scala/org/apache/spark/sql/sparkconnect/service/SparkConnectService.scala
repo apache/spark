@@ -22,11 +22,6 @@ import com.google.common.cache.CacheBuilder
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
-import java.{util => util}
-import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{
@@ -40,6 +35,10 @@ import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.{SparkContext, SparkEnv}
 
+import java.util
+import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
+
 /**
  * The SparkConnectService Implementation.
  *
@@ -47,29 +46,35 @@ import org.apache.spark.{SparkContext, SparkEnv}
  *
  * @param debug delegates debug behavior to the handlers.
  */
-class SparkConnectService(debug: Boolean) extends SparkConnectServiceGrpc.SparkConnectService {
+class SparkConnectService(debug: Boolean)
+    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
   override def executePlan(request: Request, responseObserver: StreamObserver[Response]): Unit =
     new SparkConnectStreamHandler(responseObserver).handle(request)
 
-  override def analyzePlan(request: Request): Future[AnalyzeResponse] = {
+  override def analyzePlan(
+      request: Request,
+      responseObserver: StreamObserver[AnalyzeResponse]): Unit = {
     val session =
-      SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.userId).session
+      SparkConnectService.getOrCreateIsolatedSession(request.getUserContext.getUserId).session
 
-    val logicalPlan = request.getPlan.opType match {
-      case proto.Plan.OpType.Root(plan) => SparkConnectPlanner(plan, session).transform()
+    val logicalPlan = request.getPlan.getOpTypeCase match {
+      case proto.Plan.OpTypeCase.ROOT =>
+        SparkConnectPlanner(request.getPlan.getRoot, session).transform()
       case _ =>
         throw new UnsupportedOperationException(
-          s"${request.getPlan.opType} not supported for analysis.")
+          s"${request.getPlan.getOpTypeCase} not supported for analysis.")
     }
     val ds = Dataset.ofRows(session, logicalPlan)
     val explainString = ds.queryExecution.explainString(ExtendedMode)
 
-    val resp = AnalyzeResponse()
-      .withExplainString(explainString)
-      .withClientId(request.clientId)
-      .withColumnTypes(ds.schema.fields.map(_.dataType.sql))
-      .withColumnNames(ds.schema.fields.map(_.name))
-    Future.successful(resp)
+    val resp = proto.AnalyzeResponse
+      .newBuilder()
+      .setExplainString(explainString)
+      .setClientId(request.getClientId)
+
+    resp.addAllColumnTypes(ds.schema.fields.map(_.dataType.sql).toSeq.asJava)
+    resp.addAllColumnNames(ds.schema.fields.map(_.name).toSeq.asJava)
+    responseObserver.onNext(resp.build())
   }
 }
 
@@ -131,9 +136,7 @@ object SparkConnectService {
     val port = 15002
     val server = NettyServerBuilder
       .forPort(port)
-      .addService(
-        SparkConnectServiceGrpc
-          .bindService(new SparkConnectService(debugMode), ExecutionContext.global))
+      .addService(new SparkConnectService(debugMode))
 
     // If debug mode is configured, load the ProtoReflection service so that tools like
     // grpcurl can introspect the API for debugging.
