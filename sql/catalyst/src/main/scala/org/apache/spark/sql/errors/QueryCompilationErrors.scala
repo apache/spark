@@ -366,9 +366,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def groupByPositionRefersToAggregateFunctionError(
       index: Int,
       expr: Expression): Throwable = {
-    new AnalysisException(s"GROUP BY $index refers to an expression that is or contains " +
-      "an aggregate function. Aggregate functions are not allowed in GROUP BY, " +
-      s"but got ${expr.sql}")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_REFERS_AGG_EXPR",
+      errorSubClass = "",
+      messageParameters = Array(index.toString, expr.sql),
+      origin = expr.origin)
   }
 
   def groupByPositionRangeError(index: Int, size: Int): Throwable = {
