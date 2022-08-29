@@ -76,10 +76,6 @@ object ShuffleTestAccessor {
     mergeManager.db
   }
 
-  def isMergedShuffleCleanerShutdown(mergeManager: RemoteBlockPushResolver): Boolean = {
-    mergeManager.isCleanerShutdown
-  }
-
   def createMergeManagerWithSynchronizedCleanup(
       transportConf: TransportConf,
       file: File): MergedShuffleFileManager = {
