@@ -77,10 +77,7 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-services</artifactId>
-    </dependency>
+
     <!--
       This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
       them will yield errors.
@@ -149,30 +146,6 @@
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty-shaded</artifactId>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-protobuf</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-stub</artifactId>
-    </dependency>
-    <dependency> <!-- necessary for Java 9+ -->
-      <groupId>org.apache.tomcat</groupId>
-      <artifactId>annotations-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <!-- TODO(grundprinzip) fix the scala pb version -->
-    <dependency>
-      <groupId>com.thesamet.scalapb</groupId>
-      <artifactId>scalapb-runtime-grpc_${scala.binary.version}</artifactId>
-      <version>0.11.11</version>
-    </dependency>
-    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -230,13 +203,6 @@
     </dependency>
   </dependencies>
   <build>
-    <extensions>
-      <extension>
-        <groupId>kr.motd.maven</groupId>
-        <artifactId>os-maven-plugin</artifactId>
-        <version>1.6.2</version>
-      </extension>
-    </extensions>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>

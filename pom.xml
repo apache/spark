@@ -82,7 +82,6 @@
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
     <module>common/tags</module>
-    <module>connect</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
@@ -185,7 +184,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.11.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>31.0.1-jre</guava.version>
+    <guava.version>14.0.1</guava.version>
     <janino.version>3.1.7</janino.version>
     <jersey.version>2.36</jersey.version>
     <joda.version>2.10.14</joda.version>
@@ -216,9 +215,6 @@
     <kubernetes-client.version>5.12.3</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
-
-    <io.grpc.version>1.47.0</io.grpc.version>
-    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
@@ -548,11 +544,7 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>failureaccess</artifactId>
-        <version>1.0.1</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.jpmml</groupId>
@@ -828,35 +820,6 @@
         <artifactId>RoaringBitmap</artifactId>
         <version>0.9.31</version>
       </dependency>
-
-      <!-- Spark Connect Begin -->
-      <dependency>
-        <groupId>io.grpc</groupId>
-        <artifactId>grpc-netty-shaded</artifactId>
-        <version>${io.grpc.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.grpc</groupId>
-        <artifactId>grpc-protobuf</artifactId>
-        <version>${io.grpc.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.grpc</groupId>
-        <artifactId>grpc-services</artifactId>
-        <version>${io.grpc.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.grpc</groupId>
-        <artifactId>grpc-stub</artifactId>
-        <version>${io.grpc.version}</version>
-      </dependency>
-      <dependency> <!-- necessary for Java 9+ -->
-        <groupId>org.apache.tomcat</groupId>
-        <artifactId>annotations-api</artifactId>
-        <version>${tomcat.annotations.api.version}</version>
-        <scope>provided</scope>
-      </dependency>
-      <!-- Spark Connect End -->
 
       <!-- Netty Begin -->
       <dependency>
@@ -3281,7 +3244,7 @@
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
-              <include>com.google.guava:*</include>
+              <include>com.google.guava:guava</include>
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
@@ -3845,6 +3808,12 @@
           </plugins>
         </pluginManagement>
       </build>
+    </profile>
+    <profile>
+      <id>spark-connect</id>
+      <modules>
+        <module>connect</module>
+      </modules>
     </profile>
   </profiles>
 </project>

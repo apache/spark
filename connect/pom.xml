@@ -31,7 +31,14 @@
     <name>Spark Project Connect</name>
     <url>https://spark.apache.org/</url>
     <properties>
+        <!-- Package to use when relocating shaded classes. -->
+        <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
+
         <sbt.project.name>connect</sbt.project.name>
+        <protobuf.version>3.21.1</protobuf.version>
+        <guava.version>31.0.1-jre</guava.version>
+        <io.grpc.version>1.47.0</io.grpc.version>
+        <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
     </properties>
 
     <dependencies>
@@ -71,26 +78,32 @@
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-servlet</artifactId>
+            <version>${jetty.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-protobuf</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-services</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>
+            <version>${io.grpc.version}</version>
         </dependency>
         <dependency> <!-- necessary for Java 9+ -->
             <groupId>org.apache.tomcat</groupId>
             <artifactId>annotations-api</artifactId>
+            <version>${tomcat.annotations.api.version}</version>
             <scope>provided</scope>
         </dependency>
         <!-- TODO(grundprinzip) fix the scala pb version -->
@@ -109,6 +122,11 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>failureaccess</artifactId>
+            <version>1.0.1</version>
+        </dependency>
     </dependencies>
     <build>
         <!-- Protobuf compilation for Spark Connect -->
@@ -122,6 +140,7 @@
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
         <plugins>
+
             <!--
                  This plugin forces the generation of jar containing sql test classes,
                  so that the tests classes of external modules can use them. The two execution profiles
@@ -210,6 +229,39 @@
                             <pluginArtifact>com.thesamet.scalapb:protoc-gen-scala:0.11.11:sh:unix</pluginArtifact>
                         </outputTarget>
                     </outputTargets>
+                </configuration>
+            </plugin>
+            <!-- Shade all GRPC / Guava / Protobuf depencies of this build -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <configuration>
+                    <shadedArtifactAttached>false</shadedArtifactAttached>
+                    <artifactSet>
+                        <includes>
+                            <include>com.google.guava:*</include>
+                            <include>io.grpc:*</include>
+                            <include>com.google.protobuf:*</include>
+                            <include>com.thesamet.scalapb:*</include>
+                        </includes>
+                    </artifactSet>
+                    <relocations>
+                        <relocation>
+                            <pattern>com.google.common</pattern>
+                            <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.eclipse.jetty</pattern>
+                            <shadedPattern>${spark.shade.packageName}.jetty</shadedPattern>
+                            <includes>
+                                <include>org.eclipse.jetty.**</include>
+                            </includes>
+                        </relocation>
+                        <relocation>
+                            <pattern>io.grpc</pattern>
+                            <shadedPattern>${spark.shade.packageName}.grpc</shadedPattern>
+                        </relocation>
+                    </relocations>
                 </configuration>
             </plugin>
         </plugins>
