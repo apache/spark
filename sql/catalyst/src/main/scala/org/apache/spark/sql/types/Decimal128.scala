@@ -247,14 +247,14 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     }
   }
 
-  def toDouble: Double = toBigDecimal.doubleValue()
+  def toDouble: Double = toBigDecimal.doubleValue
 
-  def toFloat: Float = toBigDecimal.floatValue()
+  def toFloat: Float = toBigDecimal.floatValue
 
   def toLong: Long = if (int128.eq(null)) {
     longVal / POW_10(_scale)
   } else {
-    toBigDecimal.longValue()
+    toBigDecimal.longValue
   }
 
   def toInt: Int = toLong.toInt
