@@ -18,6 +18,8 @@
 package org.apache.spark.sql.types;
 
 import java.time.LocalDateTime;
+import java.lang.String;
+import java.time.format.DateTimeFormatter;
 
 import com.google.common.base.StandardSystemProperty;
 import org.openjdk.jmh.profile.LinuxPerfAsmProfiler;
@@ -28,9 +30,6 @@ import org.openjdk.jmh.runner.options.ChainedOptionsBuilder;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 import org.openjdk.jmh.runner.options.VerboseMode;
 
-import static java.lang.String.format;
-import static java.time.format.DateTimeFormatter.ISO_DATE_TIME;
-
 public class BenchmarkRunner {
   private BenchmarkRunner() {}
 
@@ -39,8 +38,8 @@ public class BenchmarkRunner {
       .verbosity(VerboseMode.NORMAL)
       .include(".*\\." + clazz.getSimpleName() + "\\..*")
       .resultFormat(ResultFormatType.JSON)
-      .result(format("%s/%s-result-%s.json", System.getProperty("java.io.tmpdir"),
-        clazz.getSimpleName(), ISO_DATE_TIME.format(LocalDateTime.now())));
+      .result(String.format("%s/%s-result-%s.json", System.getProperty("java.io.tmpdir"),
+        clazz.getSimpleName(), DateTimeFormatter.ISO_DATE_TIME.format(LocalDateTime.now())));
 
     if (StandardSystemProperty.OS_NAME.value().equals("Linux")) {
       optionsBuilder.addProfiler(LinuxPerfAsmProfiler.class);
