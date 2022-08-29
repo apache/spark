@@ -2270,7 +2270,7 @@ class NumpyScalarConverter:
 
 class NumpyArrayConverter:
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.ndarray)
+        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
 
     def convert(self, obj: "np.ndarray", gateway_client: GatewayClient) -> JavaObject:
         from pyspark import SparkContext
