@@ -413,11 +413,15 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             data_columns = batch_columns[0:-1]
             state_column = batch_columns[-1]
 
+            print("== <load_stream> data_columns: %s state_column: %s" % (data_columns, state_column, ), file=sys.stderr)
+
             data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
             state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
 
             state_arrow = pa.Table.from_batches([state_batch]).itercolumns()
             state_pandas = [self.arrow_to_pandas(c) for c in state_arrow][0]
+
+            print("== <load_stream> data_batch: %s state_batch: %s" % (data_batch, state_batch, ), file=sys.stderr)
 
             for state_idx in range(0, len(state_pandas)):
                 state_info_col = state_pandas.iloc[state_idx]
@@ -450,6 +454,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
 
                 # state info
+
+                print("== <load_stream> data_pandas: %s state: %s" % (data_pandas, state, ), file=sys.stderr)
+
                 yield (data_pandas, state, )
 
     def dump_stream(self, iterator, stream):
