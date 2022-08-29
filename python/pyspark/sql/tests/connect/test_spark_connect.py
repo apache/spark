@@ -49,7 +49,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     def spark_connect_test_data(cls):
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
-        cls.connect = RemoteSparkSession()
+        cls.connect = RemoteSparkSession(port=15002)
         df = cls.spark.createDataFrame(
             [(x, f"{x}") for x in range(100)], ["id", "name"]
         )

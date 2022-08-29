@@ -32,8 +32,8 @@ from pyspark import cloudpickle
 from pyspark.sql.connect.data_frame import DataFrame
 from pyspark.sql.connect.plan import Read, Sql
 
-if typing.TYPE_CHECKING:
-    NumericType = typing.Union[int, float]
+
+NumericType = typing.Union[int, float]
 
 logging.basicConfig(level=logging.INFO)
 
