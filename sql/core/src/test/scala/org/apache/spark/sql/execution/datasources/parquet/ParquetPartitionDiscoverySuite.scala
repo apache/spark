@@ -1095,6 +1095,23 @@ abstract class ParquetPartitionDiscoverySuite
       checkAnswer(readback, Row(0, "AA") :: Row(1, "-0") :: Nil)
     }
   }
+
+  test("SPARK-40212: SparkSQL castPartValue does not properly handle byte, short, float") {
+    withTempDir { dir =>
+      val data = Seq[(Int, Byte, Short, Float)](
+        (1, 2, 3, 4.0f)
+      )
+      data.toDF("a", "b", "c", "d")
+        .write
+        .mode("overwrite")
+        .partitionBy("b", "c", "d")
+        .parquet(dir.getCanonicalPath)
+      val res = spark.read
+        .schema("a INT, b BYTE, c SHORT, d FLOAT")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(Row(1, 2, 3, 4.0f)))
+    }
+  }
 }
 
 class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {

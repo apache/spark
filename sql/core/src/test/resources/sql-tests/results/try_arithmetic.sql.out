@@ -40,6 +40,30 @@ NULL
 
 
 -- !query
+SELECT try_add(1, (2147483647 + 1))
+-- !query schema
+struct<try_add(1, (2147483647 + 1)):int>
+-- !query output
+-2147483647
+
+
+-- !query
+SELECT try_add(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<try_add(1, (9223372036854775807 + 1)):bigint>
+-- !query output
+-9223372036854775807
+
+
+-- !query
+SELECT try_add(1, 1.0 / 0.0)
+-- !query schema
+struct<try_add(1, (1.0 / 0.0)):decimal(9,6)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_add(date'2021-01-01', 1)
 -- !query schema
 struct<try_add(DATE '2021-01-01', 1):date>
@@ -185,6 +209,30 @@ NULL
 
 
 -- !query
+SELECT try_divide(1, (2147483647 + 1))
+-- !query schema
+struct<try_divide(1, (2147483647 + 1)):double>
+-- !query output
+-4.6566128730773926E-10
+
+
+-- !query
+SELECT try_divide(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<try_divide(1, (9223372036854775807 + 1)):double>
+-- !query output
+-1.0842021724855044E-19
+
+
+-- !query
+SELECT try_divide(1, 1.0 / 0.0)
+-- !query schema
+struct<try_divide(1, (1.0 / 0.0)):decimal(16,9)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
 struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
@@ -273,6 +321,30 @@ NULL
 
 
 -- !query
+SELECT try_subtract(1, (2147483647 + 1))
+-- !query schema
+struct<try_subtract(1, (2147483647 + 1)):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<try_subtract(1, (9223372036854775807 + 1)):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(1, 1.0 / 0.0)
+-- !query schema
+struct<try_subtract(1, (1.0 / 0.0)):decimal(9,6)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_subtract(interval 2 year, interval 3 year)
 -- !query schema
 struct<try_subtract(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
@@ -340,6 +412,30 @@ NULL
 SELECT try_multiply(-9223372036854775808L, -2)
 -- !query schema
 struct<try_multiply(-9223372036854775808, -2):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_multiply(1, (2147483647 + 1))
+-- !query schema
+struct<try_multiply(1, (2147483647 + 1)):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT try_multiply(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<try_multiply(1, (9223372036854775807 + 1)):bigint>
+-- !query output
+-9223372036854775808
+
+
+-- !query
+SELECT try_multiply(1, 1.0 / 0.0)
+-- !query schema
+struct<try_multiply(1, (1.0 / 0.0)):decimal(10,6)>
 -- !query output
 NULL
 

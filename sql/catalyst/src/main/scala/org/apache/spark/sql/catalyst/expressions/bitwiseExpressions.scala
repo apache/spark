@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
   group = "bitwise_funcs")
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  protected override val failOnError: Boolean = false
+  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -77,7 +77,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   group = "bitwise_funcs")
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  protected override val failOnError: Boolean = false
+  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -116,7 +116,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   group = "bitwise_funcs")
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
-  protected override val failOnError: Boolean = false
+  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
   override def inputType: AbstractDataType = IntegralType
 

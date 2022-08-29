@@ -526,6 +526,16 @@ object SQLConf {
     .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
     .createWithDefault(3)
 
+  val LIMIT_INITIAL_NUM_PARTITIONS = buildConf("spark.sql.limit.initialNumPartitions")
+    .internal()
+    .doc("Initial number of partitions to try when executing a take on a query. Higher values " +
+      "lead to more partitions read. Lower values might lead to longer execution times as more" +
+      "jobs will be run")
+    .version("3.4.0")
+    .intConf
+    .checkValue(_ > 0, "value should be positive")
+    .createWithDefault(1)
+
   val LIMIT_SCALE_UP_FACTOR = buildConf("spark.sql.limit.scaleUpFactor")
     .internal()
     .doc("Minimal increase rate in number of partitions between attempts when executing a take " +
@@ -4315,6 +4325,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 
   def limitScaleUpFactor: Int = getConf(LIMIT_SCALE_UP_FACTOR)
 
