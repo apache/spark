@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
-import java.util.concurrent.RejectedExecutionException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
