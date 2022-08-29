@@ -36,8 +36,9 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -120,8 +121,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
-  private final Executor mergedShuffleCleaner;
+  private final ExecutorService mergedShuffleCleaner;
+
   private final TransportConf conf;
+
+  private final long cleanerShutdownTimeout;
+
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
 
@@ -141,6 +146,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
+    this.cleanerShutdownTimeout = conf.mergedShuffleCleanerShutdownTimeout();
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
@@ -795,10 +801,33 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Close the DB during shutdown
+   * Shutdown mergedShuffleCleaner and close the DB during shutdown
    */
   @Override
   public void close() {
+    if (!mergedShuffleCleaner.isShutdown()) {
+      // SPARK-40186：Use two phases shutdown refer to
+      // https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html
+      // Use two phases shutdown can prevent new tasks and wait for executing tasks to
+      // complete gracefully, and once timeout is reached, we want to interrupt running tasks,
+      // so that they fail. This is to prevent updates to shuffle state db after it is closed.
+      try {
+        mergedShuffleCleaner.shutdown();
+        // Wait a while for existing tasks to terminate
+        if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+          List<Runnable> unfinishedTasks = mergedShuffleCleaner.shutdownNow();
+          logger.warn("There are still {} tasks not completed in mergedShuffleCleaner " +
+            "after {} seconds.", unfinishedTasks.size(), cleanerShutdownTimeout);
+          // Wait a while for tasks to respond to being cancelled
+          if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
+            logger.warn("mergedShuffleCleaner did not terminate");
+          }
+        }
+      } catch (InterruptedException ignored) {
+        // Preserve interrupt status
+        Thread.currentThread().interrupt();
+      }
+    }
     if (db != null) {
       try {
         db.close();
@@ -1028,6 +1057,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void submitCleanupTask(Runnable task) {
     mergedShuffleCleaner.execute(task);
+  }
+
+  /**
+   * Check `mergedShuffleCleaner` is already shutdown.
+   */
+  @VisibleForTesting
+  boolean isCleanerShutdown() {
+    return mergedShuffleCleaner.isShutdown();
   }
 
   /**
