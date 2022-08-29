@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.annotations.VisibleForTesting;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
@@ -83,14 +82,6 @@ public class LevelDBProvider {
       checkVersion(tmpDb, version, mapper);
     }
     return tmpDb;
-  }
-
-  @VisibleForTesting
-  static DB initLevelDB(File file) throws IOException {
-    Options options = new Options();
-    options.createIfMissing(true);
-    JniDBFactory factory = new JniDBFactory();
-    return factory.open(file, options);
   }
 
   private static class LevelDBLogger implements org.iq80.leveldb.Logger {
