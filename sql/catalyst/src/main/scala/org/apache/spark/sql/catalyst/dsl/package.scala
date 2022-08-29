@@ -314,6 +314,14 @@ package object dsl {
       def decimal(precision: Int, scale: Int): AttributeReference =
         AttributeReference(s, DecimalType(precision, scale), nullable = true)()
 
+      /** Creates a new AttributeReference of type decimal128 */
+      def decimal128: AttributeReference =
+        AttributeReference(s, Decimal128Type.SYSTEM_DEFAULT, nullable = true)()
+
+      /** Creates a new AttributeReference of type decimal128 */
+      def decimal128(precision: Int, scale: Int): AttributeReference =
+        AttributeReference(s, Decimal128Type(precision, scale), nullable = true)()
+
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
 

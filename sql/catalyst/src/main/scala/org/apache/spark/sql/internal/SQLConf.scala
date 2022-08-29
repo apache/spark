@@ -3207,6 +3207,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DECIMAL128_TYPE_CONVERTER_ENABLED =
+    buildConf("spark.sql.allowDecimal128TypeConverter")
+      .internal()
+      .doc("When set to true, using Decimal128Converter to convert BigDecimal.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
     buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
       .internal()
@@ -4619,6 +4627,9 @@ class SQLConf extends Serializable with Logging {
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
+
+  def allowDecimal128TypeConverterEnabled: Boolean =
+    getConf(SQLConf.DECIMAL128_TYPE_CONVERTER_ENABLED)
 
   def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
 

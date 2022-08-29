@@ -201,6 +201,19 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
   }
 
   @Override
+  public Decimal128 getDecimal128(int ordinal, int precision, int scale) {
+    if (isNullAt(ordinal)) return null;
+    if (precision <= Decimal128.MAX_LONG_DIGITS()) {
+      return Decimal128.apply(getLong(ordinal), precision, scale);
+    } else {
+      final byte[] bytes = getBinary(ordinal);
+      final BigInteger bigInteger = new BigInteger(bytes);
+      final BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal128.apply(new scala.math.BigDecimal(javaDecimal), precision, scale);
+    }
+  }
+
+  @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);

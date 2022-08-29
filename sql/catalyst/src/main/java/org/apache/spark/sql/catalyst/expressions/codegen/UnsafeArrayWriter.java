@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -180,6 +181,34 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
       }
     } else {
       setNull(ordinal);
+    }
+  }
+
+  @Override
+  public void write(int ordinal, Decimal128 input, int precision, int scale) {
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      // compact format
+      if (input == null) {
+        setNull(ordinal);
+      } else {
+        write(ordinal, input.toUnscaledLong());
+      }
+    } else {
+      // grow the global buffer before writing data.
+      holder.grow(16);
+
+      // always zero-out the 16-byte buffer
+      zeroOutPaddingBytes(16);
+
+      if (input == null) {
+        setNull(ordinal);
+      } else {
+        Platform.putLong(getBuffer(), cursor(), input.high());
+        Platform.putLong(getBuffer(), cursor() + 8, input.low());
+        setOffsetAndSize(ordinal, 16);
+      }
+      // move the cursor forward.
+      increaseCursor(16);
     }
   }
 }

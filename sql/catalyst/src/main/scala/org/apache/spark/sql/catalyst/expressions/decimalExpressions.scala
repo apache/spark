@@ -152,6 +152,48 @@ case class CheckOverflow(
   }
 }
 
+case class CheckDecimal128Overflow(
+    child: Expression,
+    dataType: Decimal128Type,
+    nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(input: Any): Any =
+    input.asInstanceOf[Decimal128].toPrecision(
+      dataType.precision,
+      dataType.scale,
+      Decimal128.ROUND_HALF_UP,
+      nullOnOverflow,
+      getContextOrNull())
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+    nullSafeCodeGen(ctx, ev, eval => {
+      // scalastyle:off line.size.limit
+      s"""
+         |${ev.value} = $eval.toPrecision(
+         |  ${dataType.precision}, ${dataType.scale}, Decimal128.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
+         |${ev.isNull} = ${ev.value} == null;
+       """.stripMargin
+      // scalastyle:on line.size.limit
+    })
+  }
+
+  override def toString: String = s"CheckDecimal128Overflow($child, $dataType)"
+
+  override def sql: String = child.sql
+
+  override protected def withNewChildInternal(newChild: Expression): CheckDecimal128Overflow =
+    copy(child = newChild)
+
+  override def initQueryContext(): Option[SQLQueryContext] = if (!nullOnOverflow) {
+    Some(origin.context)
+  } else {
+    None
+  }
+}
+
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
 case class CheckOverflowInSum(
     child: Expression,

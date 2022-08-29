@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, Decimal128}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
@@ -50,6 +50,34 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     // The two rows should be the equal
     assert(res1 == res2)
   }
+
+  def checkDecimal128SizeInBytes(decimal: Decimal128, numBytes: Int): Unit = {
+    assert(decimal.toJavaBigDecimal.unscaledValue().toByteArray.length == numBytes)
+  }
+
+//  test("zero-out all bits for decimal128s") {
+//    val decimal1 = Decimal128(0.431)
+//    decimal1.changePrecision(38, 18)
+//    checkDecimal128SizeInBytes(decimal1, 8)
+//
+//    val decimal2 = Decimal128(123456789.1232456789)
+//    decimal2.changePrecision(38, 18)
+//    checkDecimal128SizeInBytes(decimal2, 11)
+//    // On an UnsafeRowWriter we write decimal2 first and then decimal1
+//    val unsafeRowWriter1 = new UnsafeRowWriter(1)
+//    unsafeRowWriter1.resetRowWriter()
+//    unsafeRowWriter1.write(0, decimal2, decimal2.precision, decimal2.scale)
+//    unsafeRowWriter1.reset()
+//    unsafeRowWriter1.write(0, decimal1, decimal1.precision, decimal1.scale)
+//    val res1 = unsafeRowWriter1.getRow
+//    // On a second UnsafeRowWriter we write directly decimal1
+//    val unsafeRowWriter2 = new UnsafeRowWriter(1)
+//    unsafeRowWriter2.resetRowWriter()
+//    unsafeRowWriter2.write(0, decimal1, decimal1.precision, decimal1.scale)
+//    val res2 = unsafeRowWriter2.getRow
+//    // The two rows should be the equal
+//    assert(res1 == res2)
+//  }
 
   test("write and get calendar intervals through UnsafeRowWriter") {
     val rowWriter = new UnsafeRowWriter(2)

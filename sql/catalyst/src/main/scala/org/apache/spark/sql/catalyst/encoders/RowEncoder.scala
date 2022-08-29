@@ -47,6 +47,7 @@ import org.apache.spark.sql.types._
  *   DoubleType -> java.lang.Double
  *   StringType -> String
  *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
+ *   Decimal128Type -> java.math.BigDecimal or scala.math.BigDecimal or Decimal128
  *
  *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
  *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
@@ -132,6 +133,14 @@ object RowEncoder {
         Decimal.getClass,
         d,
         "fromDecimal",
+        inputObject :: Nil,
+        returnNullable = false), d, !SQLConf.get.ansiEnabled)
+
+    case d: Decimal128Type =>
+      CheckDecimal128Overflow(StaticInvoke(
+        Decimal128.getClass,
+        d,
+        "fromDecimal128",
         inputObject :: Nil,
         returnNullable = false), d, !SQLConf.get.ansiEnabled)
 
@@ -228,6 +237,7 @@ object RowEncoder {
     // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    case _: Decimal128Type => ObjectType(classOf[java.lang.Object])
     // In order to support both Array and Seq in external row, we make this as java.lang.Object.
     case _: ArrayType => ObjectType(classOf[java.lang.Object])
     case _: DateType | _: TimestampType if lenient => ObjectType(classOf[java.lang.Object])
@@ -254,6 +264,7 @@ object RowEncoder {
     case _: DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
     case _: YearMonthIntervalType => ObjectType(classOf[java.time.Period])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
+    case _: Decimal128Type => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
@@ -315,7 +326,8 @@ object RowEncoder {
 
     case _: YearMonthIntervalType => createDeserializerForPeriod(input)
 
-    case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
+    case _: DecimalType | _: Decimal128Type =>
+      createDeserializerForJavaBigDecimal(input, returnNullable = false)
 
     case StringType => createDeserializerForString(input, returnNullable = false)
 

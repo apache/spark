@@ -195,6 +195,7 @@ trait Row extends Serializable {
    *   DoubleType -> java.lang.Double
    *   StringType -> String
    *   DecimalType -> java.math.BigDecimal
+   *   Decimal128Type -> java.math.BigDecimal
    *
    *   DateType -> java.sql.Date if spark.sql.datetime.java8API.enabled is false
    *   DateType -> java.time.LocalDate if spark.sql.datetime.java8API.enabled is true
@@ -283,6 +284,13 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
+
+  /**
+   * Returns the value at position i of decimal type as java.math.BigDecimal.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getDecimal128(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
    * Returns the value at position i of date type as java.sql.Date.

@@ -43,7 +43,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     FloatType,
     DoubleType,
     DecimalType.SYSTEM_DEFAULT,
-    DecimalType.USER_DEFAULT)
+    DecimalType.USER_DEFAULT,
+    Decimal128Type.SYSTEM_DEFAULT,
+    Decimal128Type.USER_DEFAULT)
 
   test("null handling in rows") {
     val schema = StructType(simpleTypes.map(t => StructField(t.getClass.getName, t)))
@@ -137,6 +139,15 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     }
     assert(exception.getMessage.contains("The value (test) of the type "
       + "(java.lang.String) cannot be converted to decimal(10,0)"))
+  }
+
+  test("converting a wrong value to the decimal128 type") {
+    val decimal128Type = Decimal128Type(10, 0)
+    val exception = intercept[IllegalArgumentException] {
+      CatalystTypeConverters.createToCatalystConverter(decimal128Type)("test")
+    }
+    assert(exception.getMessage.contains("The value (test) of the type "
+      + "(java.lang.String) cannot be converted to decimal128(10,0)"))
   }
 
   test("converting a wrong value to the string type") {

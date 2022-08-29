@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 
@@ -214,6 +215,37 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         setOffsetAndSize(ordinal, bytes.length);
       }
 
+      // move the cursor forward.
+      increaseCursor(16);
+    }
+  }
+
+  @Override
+  public void write(int ordinal, Decimal128 input, int precision, int scale) {
+    if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      // make sure Decimal128 object has the same scale as Decimal128Type
+      if (input != null && input.changePrecision(precision, scale)) {
+        write(ordinal, input.toUnscaledLong());
+      } else {
+        setNullAt(ordinal);
+      }
+    } else {
+      // grow the global buffer before writing data.
+      holder.grow(16);
+
+      // always zero-out the 16-byte buffer
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
+
+      if (input == null || !input.changePrecision(precision, scale)) {
+        BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+        // keep the offset for future update
+        setOffsetAndSize(ordinal, 0);
+      } else {
+        Platform.putLong(getBuffer(), cursor(), input.high());
+        Platform.putLong(getBuffer(), cursor() + 8, input.low());
+        setOffsetAndSize(ordinal, 16);
+      }
       // move the cursor forward.
       increaseCursor(16);
     }

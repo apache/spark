@@ -123,6 +123,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def cannotChangeDecimal128PrecisionError(
+      value: Decimal128,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: SQLQueryContext = null): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      messageParameters = Array(
+        value.toDebugString,
+        decimalPrecision.toString,
+        decimalScale.toString,
+        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def invalidInputInCastToDatetimeError(
       value: Any,
       from: DataType,

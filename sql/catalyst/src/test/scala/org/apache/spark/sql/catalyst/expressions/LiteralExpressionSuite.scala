@@ -49,6 +49,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, StringType), null)
     checkEvaluation(Literal.create(null, BinaryType), null)
     checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
+    checkEvaluation(Literal.create(null, Decimal128Type.USER_DEFAULT), null)
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
@@ -72,6 +73,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(BinaryType), "".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Literal.default(DecimalType.USER_DEFAULT), Decimal(0))
     checkEvaluation(Literal.default(DecimalType.SYSTEM_DEFAULT), Decimal(0))
+    checkEvaluation(Literal.default(Decimal128Type.USER_DEFAULT), Decimal128(0))
+    checkEvaluation(Literal.default(Decimal128Type.SYSTEM_DEFAULT), Decimal128(0))
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "false") {
       checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
       checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
@@ -178,6 +181,29 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.create(BigDecimal(d.toString)), Decimal(d))
       checkEvaluation(Literal.create(new java.math.BigDecimal(d.toString)), Decimal(d))
 
+    }
+  }
+
+  test("decimal128") {
+    withSQLConf(SQLConf.DECIMAL128_TYPE_CONVERTER_ENABLED.key -> "true") {
+      List(-0.0001, 0.0, 0.001, 1.2, 1.1111, 5).foreach { d =>
+        checkEvaluation(Literal(Decimal128(d)), Decimal128(d))
+        checkEvaluation(Literal(Decimal128(d.toInt)), Decimal128(d.toInt))
+        checkEvaluation(Literal(Decimal128(d.toLong)), Decimal128(d.toLong))
+        checkEvaluation(Literal(Decimal128((d * 1000L).toLong, 10, 3)),
+          Decimal128((d * 1000L).toLong, 10, 3))
+        checkEvaluation(Literal(BigDecimal(d.toString)), Decimal128(d))
+        checkEvaluation(Literal(new java.math.BigDecimal(d.toString)), Decimal128(d))
+
+        checkEvaluation(Literal.create(Decimal128(d)), Decimal128(d))
+        checkEvaluation(Literal.create(Decimal128(d.toInt)), Decimal128(d.toInt))
+        checkEvaluation(Literal.create(Decimal128(d.toLong)), Decimal128(d.toLong))
+        checkEvaluation(Literal.create(Decimal128((d * 1000L).toLong, 10, 3)),
+          Decimal128((d * 1000L).toLong, 10, 3))
+        checkEvaluation(Literal.create(BigDecimal(d.toString)), Decimal128(d))
+        checkEvaluation(Literal.create(new java.math.BigDecimal(d.toString)), Decimal128(d))
+
+      }
     }
   }
 

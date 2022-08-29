@@ -1908,12 +1908,15 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-26233: serializer should enforce decimal precision and scale") {
-    val s = StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(38, 8))))
+    val s = StructType(Seq(StructField("a", StringType),
+      StructField("b", DecimalType(38, 8)), StructField("c", Decimal128Type(38, 8))))
     val encoder = RowEncoder(s)
     implicit val uEnc = encoder
-    val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
-    checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
-      Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
+    val df = spark.range(2).map(l =>
+      Row(l.toString, BigDecimal.valueOf(l + 0.1111), BigDecimal.valueOf(l + 0.1111)))
+    checkAnswer(df.groupBy(col("a")).agg(first(col("b")), first(col("c"))),
+      Seq(Row("0", BigDecimal.valueOf(0.1111), BigDecimal.valueOf(0.1111)),
+        Row("1", BigDecimal.valueOf(1.1111), BigDecimal.valueOf(1.1111))))
   }
 
   test("SPARK-26366: return nulls which are not filtered in except") {

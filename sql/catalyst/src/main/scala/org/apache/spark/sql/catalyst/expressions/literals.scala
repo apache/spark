@@ -72,6 +72,13 @@ object Literal {
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
+    case d: BigDecimal if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      val decimal = Decimal128(d)
+      Literal(decimal, Decimal128Type.fromDecimal128(decimal))
+    case d: JavaBigDecimal if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      val decimal = Decimal128(d)
+      Literal(decimal, Decimal128Type.fromDecimal128(decimal))
+    case d: Decimal128 => Literal(d, Decimal128Type(Math.max(d.precision, d.scale), d.scale))
     case d: BigDecimal =>
       val decimal = Decimal(d)
       Literal(decimal, DecimalType.fromDecimal(decimal))
@@ -124,6 +131,8 @@ object Literal {
     case _ if clz == classOf[LocalDateTime] => TimestampNTZType
     case _ if clz == classOf[Duration] => DayTimeIntervalType()
     case _ if clz == classOf[Period] => YearMonthIntervalType()
+    case _ if clz == classOf[JavaBigDecimal] && SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      Decimal128Type.SYSTEM_DEFAULT
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] => StringType
@@ -137,6 +146,10 @@ object Literal {
 
     // other scala classes
     case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[BigInt] && SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      Decimal128Type.SYSTEM_DEFAULT
+    case _ if clz == classOf[BigDecimal] && SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      Decimal128Type.SYSTEM_DEFAULT
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
@@ -185,6 +198,7 @@ object Literal {
     case FloatType => Literal(0.0f)
     case DoubleType => Literal(0.0)
     case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
+    case dt: Decimal128Type => Literal(Decimal128(0, dt.precision, dt.scale))
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
@@ -214,6 +228,7 @@ object Literal {
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
       case _: DecimalType => v.isInstanceOf[Decimal]
+      case _: Decimal128Type => v.isInstanceOf[Decimal128]
       case CalendarIntervalType => v.isInstanceOf[CalendarInterval]
       case BinaryType => v.isInstanceOf[Array[Byte]]
       case StringType => v.isInstanceOf[UTF8String]
@@ -310,6 +325,24 @@ object DecimalLiteral {
   def largerThanLargestLong(v: Decimal): Boolean = v > Decimal(Long.MaxValue)
 
   def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
+}
+
+/**
+ * Extractor for and other utility methods for decimal128 literals.
+ */
+object Decimal128Literal {
+  def apply(v: Long): Literal = Literal(Decimal128(v))
+
+  def apply(v: Double): Literal = Literal(Decimal128(v))
+
+  def unapply(e: Expression): Option[Decimal128] = e match {
+    case Literal(v, _: Decimal128Type) => Some(v.asInstanceOf[Decimal128])
+    case _ => None
+  }
+
+  def largerThanLargestLong(v: Decimal128): Boolean = v > Decimal128(Long.MaxValue)
+
+  def smallerThanSmallestLong(v: Decimal128): Boolean = v < Decimal128(Long.MinValue)
 }
 
 object LiteralTreeBits {
@@ -473,6 +506,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
+    case (v: Decimal128, t: Decimal128Type) => v + "BD128"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>

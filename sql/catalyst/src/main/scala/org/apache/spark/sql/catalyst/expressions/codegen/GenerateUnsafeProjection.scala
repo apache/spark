@@ -111,6 +111,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
+          case t: Decimal128Type if t.precision > Decimal.MAX_LONG_DIGITS =>
+            // Can't call setNullAt() for Decimal128Type with precision larger than 18.
+            s"$rowWriter.write($index, (Decimal128) null, ${t.precision}, ${t.scale});"
           case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
           case _ => s"$rowWriter.setNullAt($index);"
         }
@@ -166,6 +169,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val elementOrOffsetSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
+      case t: Decimal128Type if t.precision <= Decimal128.MAX_LONG_DIGITS => 8
       case _ if CodeGenerator.isPrimitiveType(jt) => et.defaultSize
       case _ => 8  // we need 8 bytes to store offset and length
     }
@@ -276,6 +280,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       writeMapToBuffer(ctx, input, index, kt, vt, vn, writer)
 
     case DecimalType.Fixed(precision, scale) =>
+      s"$writer.write($index, $input, $precision, $scale);"
+
+    case Decimal128Type.Fixed(precision, scale) =>
       s"$writer.write($index, $input, $precision, $scale);"
 
     case NullType => ""

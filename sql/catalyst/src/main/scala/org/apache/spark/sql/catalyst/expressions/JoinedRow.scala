@@ -108,6 +108,14 @@ class JoinedRow extends InternalRow {
     }
   }
 
+  override def getDecimal128(i: Int, precision: Int, scale: Int): Decimal128 = {
+    if (i < row1.numFields) {
+      row1.getDecimal128(i, precision, scale)
+    } else {
+      row2.getDecimal128(i - row1.numFields, precision, scale)
+    }
+  }
+
   override def getUTF8String(i: Int): UTF8String =
     if (i < row1.numFields) row1.getUTF8String(i) else row2.getUTF8String(i - row1.numFields)
 

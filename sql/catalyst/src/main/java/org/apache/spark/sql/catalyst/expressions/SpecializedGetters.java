@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -44,6 +45,8 @@ public interface SpecializedGetters {
   double getDouble(int ordinal);
 
   Decimal getDecimal(int ordinal, int precision, int scale);
+
+  Decimal128 getDecimal128(int ordinal, int precision, int scale);
 
   UTF8String getUTF8String(int ordinal);
 

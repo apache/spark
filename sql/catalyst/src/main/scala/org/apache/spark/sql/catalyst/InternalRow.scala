@@ -58,6 +58,14 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    */
   def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
 
+  /**
+   * Update the decimal128 column at `i`.
+   *
+   * Note: In order to support update decimal128 with precision > 18 in UnsafeRow, CAN NOT call
+   * setNullAt() for decimal128 column on UnsafeRow, call setDecimal128(i, null, precision).
+   */
+  def setDecimal128(i: Int, value: Decimal128, precision: Int): Unit = update(i, value)
+
   def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
 
   /**
@@ -142,6 +150,8 @@ object InternalRow {
       case BinaryType => (input, ordinal) => input.getBinary(ordinal)
       case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
       case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
+      case t: Decimal128Type =>
+        (input, ordinal) => input.getDecimal128(ordinal, t.precision, t.scale)
       case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
       case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
       case _: MapType => (input, ordinal) => input.getMap(ordinal)
@@ -180,6 +190,8 @@ object InternalRow {
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+    case Decimal128Type.Fixed(precision, _) =>
+      (input, v) => input.setDecimal128(ordinal, v.asInstanceOf[Decimal128], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())

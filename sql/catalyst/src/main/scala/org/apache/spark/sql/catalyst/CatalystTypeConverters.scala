@@ -70,6 +70,7 @@ object CatalystTypeConverters {
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
       case dt: DecimalType => new DecimalConverter(dt)
+      case dt: Decimal128Type => new Decimal128Converter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
@@ -392,6 +393,32 @@ object CatalystTypeConverters {
       row.getDecimal(column, dataType.precision, dataType.scale).toJavaBigDecimal
   }
 
+  private class Decimal128Converter(dataType: Decimal128Type)
+    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal128] {
+
+    private val nullOnOverflow = !SQLConf.get.ansiEnabled
+
+    override def toCatalystImpl(scalaValue: Any): Decimal128 = {
+      val decimal = scalaValue match {
+        case d: BigDecimal => Decimal128(d)
+        case d: JavaBigDecimal => Decimal128(d)
+        case d: JavaBigInteger => Decimal128(d)
+        case d: Decimal128 => d
+        case other => throw new IllegalArgumentException(
+          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+            + s"cannot be converted to ${dataType.catalogString}")
+      }
+      decimal.toPrecision(
+        dataType.precision, dataType.scale, BigDecimal.RoundingMode.HALF_UP, nullOnOverflow)
+    }
+    override def toScala(catalystValue: Decimal128): JavaBigDecimal = {
+      if (catalystValue == null) null
+      else catalystValue.toJavaBigDecimal
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): JavaBigDecimal =
+      row.getDecimal128(column, dataType.precision, dataType.scale).toJavaBigDecimal
+  }
+
   private abstract class PrimitiveConverter[T] extends CatalystTypeConverter[T, Any, Any] {
     final override def toScala(catalystValue: Any): Any = catalystValue
     final override def toCatalystImpl(scalaValue: T): Any = scalaValue
@@ -505,6 +532,10 @@ object CatalystTypeConverters {
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
+    case d: BigDecimal if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      new Decimal128Converter(Decimal128Type(d.precision, d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+      new Decimal128Converter(Decimal128Type(d.precision, d.scale)).toCatalyst(d)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)

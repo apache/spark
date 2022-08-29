@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -102,6 +103,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[Array[Byte]]) => BinaryType
       case t if isSubtype(t, localTypeOf[CalendarInterval]) => CalendarIntervalType
       case t if isSubtype(t, localTypeOf[Decimal]) => DecimalType.SYSTEM_DEFAULT
+      case t if isSubtype(t, localTypeOf[Decimal128]) => Decimal128Type.SYSTEM_DEFAULT
       case _ =>
         val className = getClassNameFromType(tpe)
         className match {
@@ -134,6 +136,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[Array[Byte]]) => classOf[Array[Array[Byte]]]
       case t if isSubtype(t, localTypeOf[CalendarInterval]) => classOf[Array[CalendarInterval]]
       case t if isSubtype(t, localTypeOf[Decimal]) => classOf[Array[Decimal]]
+      case t if isSubtype(t, localTypeOf[Decimal128]) => classOf[Array[Decimal128]]
       case other =>
         // There is probably a better way to do this, but I couldn't find it...
         val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
@@ -795,15 +798,35 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Period]) =>
         Schema(YearMonthIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
-        Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+          Schema(Decimal128Type.SYSTEM_DEFAULT, nullable = true)
+        } else {
+          Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        }
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
-        Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+          Schema(Decimal128Type.SYSTEM_DEFAULT, nullable = true)
+        } else {
+          Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        }
       case t if isSubtype(t, localTypeOf[java.math.BigInteger]) =>
-        Schema(DecimalType.BigIntDecimal, nullable = true)
+        if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+          Schema(Decimal128Type.BigIntDecimal, nullable = true)
+        } else {
+          Schema(DecimalType.BigIntDecimal, nullable = true)
+        }
       case t if isSubtype(t, localTypeOf[scala.math.BigInt]) =>
-        Schema(DecimalType.BigIntDecimal, nullable = true)
+        if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+          Schema(Decimal128Type.BigIntDecimal, nullable = true)
+        } else {
+          Schema(DecimalType.BigIntDecimal, nullable = true)
+        }
       case t if isSubtype(t, localTypeOf[Decimal]) =>
-        Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+          Schema(Decimal128Type.SYSTEM_DEFAULT, nullable = true)
+        } else {
+          Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        }
       case t if isSubtype(t, localTypeOf[java.lang.Integer]) => Schema(IntegerType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Long]) => Schema(LongType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Double]) => Schema(DoubleType, nullable = true)
@@ -911,6 +934,7 @@ object ScalaReflection extends ScalaReflection {
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
+      case _: Decimal128Type => classOf[Decimal128]
       case it: DayTimeIntervalType => classOf[it.InternalType]
       case it: YearMonthIntervalType => classOf[it.InternalType]
       case _: StructType => classOf[InternalRow]
@@ -924,6 +948,7 @@ object ScalaReflection extends ScalaReflection {
   @scala.annotation.tailrec
   def javaBoxedType(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
+    case _: Decimal128Type => classOf[Decimal128]
     case _: DayTimeIntervalType => classOf[java.lang.Long]
     case _: YearMonthIntervalType => classOf[java.lang.Integer]
     case BinaryType => classOf[Array[Byte]]

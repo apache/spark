@@ -64,7 +64,7 @@ case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
    */
   override def defaultSize: Int = if (precision <= Decimal128.MAX_LONG_DIGITS) 8 else 16
 
-  override def simpleString: String = s"decimal128($scale)"
+  override def simpleString: String = s"decimal128($precision,$scale)"
 
   override private[spark] def asNullable: Decimal128Type = this
 }
@@ -76,6 +76,12 @@ object Decimal128Type extends AbstractDataType {
   val DEFAULT_SCALE = 18
   val SYSTEM_DEFAULT: Decimal128Type = Decimal128Type(MAX_PRECISION, DEFAULT_SCALE)
   val USER_DEFAULT: Decimal128Type = Decimal128Type(10, 0)
+
+  // The decimal types compatible with other numeric types
+  private[sql] val BigIntDecimal = Decimal128Type(38, 0)
+
+  private[sql] def fromDecimal128(d: Decimal128): Decimal128Type =
+    Decimal128Type(d.precision, d.scale)
 
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
@@ -90,4 +96,8 @@ object Decimal128Type extends AbstractDataType {
   }
 
   override private[sql] def simpleString: String = "decimal128"
+
+  private[sql] object Fixed {
+    def unapply(t: Decimal128Type): Option[(Int, Int)] = Some((t.precision, t.scale))
+  }
 }

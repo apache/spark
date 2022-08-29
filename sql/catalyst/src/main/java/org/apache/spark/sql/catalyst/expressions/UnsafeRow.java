@@ -308,6 +308,42 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
   }
 
+  /**
+   * Updates the decimal128 column.
+   *
+   * Note: In order to support update a decimal128 with precision > 18, CAN NOT call
+   * setNullAt() for this column.
+   */
+  @Override
+  public void setDecimal128(int ordinal, Decimal128 value, int precision) {
+    assertIndexIsValid(ordinal);
+    if (precision <= Decimal128.MAX_LONG_DIGITS()) {
+      // compact format
+      if (value == null) {
+        setNullAt(ordinal);
+      } else {
+        setLong(ordinal, value.toUnscaledLong());
+      }
+    } else {
+      // fixed length
+      long cursor = getLong(ordinal) >>> 32;
+      assert cursor > 0 : "invalid cursor " + cursor;
+      // zero-out the bytes
+      Platform.putLong(baseObject, baseOffset + cursor, 0L);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+
+      if (value == null) {
+        setNullAt(ordinal);
+        // keep the offset for future update
+        Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+      } else {
+        Platform.putLong(baseObject, baseOffset + cursor, value.high());
+        Platform.putLong(baseObject, baseOffset + cursor + 8, value.low());
+        setLong(ordinal, (cursor << 32) | 16L);
+      }
+    }
+  }
+
   @Override
   public void setInterval(int ordinal, CalendarInterval value) {
     assertIndexIsValid(ordinal);
@@ -393,6 +429,22 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       BigInteger bigInteger = new BigInteger(bytes);
       BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
       return Decimal.apply(javaDecimal, precision, scale);
+    }
+  }
+
+  @Override
+  public Decimal128 getDecimal128(int ordinal, int precision, int scale) {
+    if (isNullAt(ordinal)) {
+      return null;
+    }
+    if (precision <= Decimal128.MAX_LONG_DIGITS()) {
+      return Decimal128.createUnsafe(getLong(ordinal), precision, scale);
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final long high = Platform.getLong(baseObject, baseOffset + offset);
+      final long low = Platform.getLong(baseObject, baseOffset + offset + 8);
+      return Decimal128.apply(high, low, precision, scale);
     }
   }
 

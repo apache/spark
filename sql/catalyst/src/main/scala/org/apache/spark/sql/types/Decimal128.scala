@@ -23,6 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.Int128Math
@@ -216,11 +217,35 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     }
   }
 
+  def toJavaBigDecimal: java.math.BigDecimal = {
+    if (int128.ne(null)) {
+      new java.math.BigDecimal(int128.toBigInteger, _scale)
+    } else {
+      java.math.BigDecimal.valueOf(longVal, _scale)
+    }
+  }
+
+  def toUnscaledLong: Long = {
+    if (int128.ne(null)) {
+      toJavaBigDecimal.unscaledValue().longValueExact()
+    } else {
+      longVal
+    }
+  }
+
   def isPositive: Boolean = int128.isPositive()
 
   def isNegative: Boolean = int128.isNegative()
 
   override def toString: String = toBigDecimal.toString()
+
+  def toDebugString: String = {
+    if (int128.ne(null)) {
+      s"Decimal128(expanded, $int128, $precision, $scale)"
+    } else {
+      s"Decimal128(compact, $longVal, $precision, $scale)"
+    }
+  }
 
   def toDouble: Double = toBigDecimal.doubleValue()
 
@@ -233,6 +258,106 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   def toInt: Int = toLong.toInt
+
+  /**
+   * Update precision and scale while keeping our value the same, and return true if successful.
+   *
+   * @return true if successful, false if overflow would occur
+   */
+  def changePrecision(precision: Int, scale: Int): Boolean = {
+    changePrecision(precision, scale, ROUND_HALF_UP)
+  }
+
+  /**
+   * Create new `Decimal128` with given precision and scale.
+   *
+   * @return a non-null `Decimal128` value if successful. Otherwise, if `nullOnOverflow` is true,
+   *         null is returned; if `nullOnOverflow` is false, an `ArithmeticException` is thrown.
+   */
+  private[sql] def toPrecision(
+      precision: Int,
+      scale: Int,
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
+      nullOnOverflow: Boolean = true,
+      context: SQLQueryContext = null): Decimal128 = {
+    val copy = clone()
+    if (copy.changePrecision(precision, scale, roundMode)) {
+      copy
+    } else {
+      if (nullOnOverflow) {
+        null
+      } else {
+        throw QueryExecutionErrors.cannotChangeDecimal128PrecisionError(
+          this, precision, scale, context)
+      }
+    }
+  }
+
+  /**
+   * Update precision and scale while keeping our value the same, and return true if successful.
+   *
+   * @return true if successful, false if overflow would occur
+   */
+  private[sql] def changePrecision(
+      precision: Int,
+      scale: Int,
+      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+    // fast path for UnsafeProjection
+    if (precision == this.precision && scale == this.scale) {
+      return true
+    }
+    Decimal128Type.checkNegativeScale(scale)
+    // First, update our longVal if we can, or transfer over to using an Int128
+    if (int128.eq(null)) {
+      if (scale < _scale) {
+        // Easier case: we just need to divide our scale down
+        val diff = _scale - scale
+        val pow10diff = POW_10(diff)
+        // % and / always round to 0
+        val droppedDigits = longVal % pow10diff
+        longVal /= pow10diff
+        roundMode match {
+          case BigDecimal.RoundingMode.FLOOR =>
+            if (droppedDigits < 0) {
+              longVal += -1L
+            }
+          case BigDecimal.RoundingMode.CEILING =>
+            if (droppedDigits > 0) {
+              longVal += 1L
+            }
+          case BigDecimal.RoundingMode.HALF_UP =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case BigDecimal.RoundingMode.HALF_EVEN =>
+            val doubled = math.abs(droppedDigits) * 2
+            if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case _ =>
+            throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
+        }
+      } else if (scale > _scale) {
+        // We might be able to multiply longVal by a power of 10 and not overflow, but if not,
+        // switch to using an Int128
+        val diff = scale - _scale
+        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
+        if (diff <= MAX_LONG_DIGITS && longVal > -p && longVal < p) {
+          // Multiplying longVal by POW_10(diff) will still keep it below MAX_LONG_DIGITS
+          longVal *= POW_10(diff)
+        } else {
+          // Give up on using Longs; switch to Int128, which we'll modify below
+          val (newLeftHigh, newLeftLow) = Int128Math.rescale(longVal >> 63, longVal, diff)
+          int128 = Int128(newLeftHigh, newLeftLow)
+        }
+      }
+      // In both cases, we will check whether our precision is okay below
+    }
+
+    _precision = precision
+    _scale = scale
+    true
+  }
 
   def + (that: Decimal128): Decimal128 = {
     if (this.int128.eq(null) && that.int128.eq(null) && this._scale == that.scale) {
@@ -367,6 +492,8 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
     }
   }
 
+  override def clone(): Decimal128 = new Decimal128().set(this)
+
   override def equals(other: Any): Boolean = other match {
     case d: Decimal128 =>
       compare(d) == 0
@@ -385,6 +512,8 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
 
 @Unstable
 object Decimal128 {
+
+  val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
@@ -446,6 +575,29 @@ object Decimal128 {
 
   def overflowError(msg: String): ArithmeticException = {
     new ArithmeticException(s"Decimal overflow: $msg")
+  }
+
+  // This is used for RowEncoder to handle Decimal inside external row.
+  def fromDecimal128(value: Any): Decimal128 = {
+    value match {
+      case j: java.math.BigDecimal => apply(j)
+      case d: BigDecimal => apply(d)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
+      case d: Decimal128 => d
+    }
+  }
+
+  /**
+   * Creates a decimal128 from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal128 = {
+    Decimal128Type.checkNegativeScale(scale)
+    val dec = new Decimal128()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
   }
 
   /** Common methods for Decimal128 evidence parameters */

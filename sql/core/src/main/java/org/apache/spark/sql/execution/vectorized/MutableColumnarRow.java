@@ -129,6 +129,11 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
+  public Decimal128 getDecimal128(int ordinal, int precision, int scale) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public UTF8String getUTF8String(int ordinal) {
     return columns[ordinal].getUTF8String(rowId);
   }

@@ -1469,6 +1469,7 @@ object CodeGenerator extends Logging {
       classOf[UnsafeRow].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
+      classOf[Decimal128].getName,
       classOf[CalendarInterval].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
@@ -1624,6 +1625,7 @@ object CodeGenerator extends Logging {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
       case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case t: Decimal128Type => s"$input.getDecimal128($ordinal, ${t.precision}, ${t.scale})"
       case StringType => s"$input.getUTF8String($ordinal)"
       case BinaryType => s"$input.getBinary($ordinal)"
       case CalendarIntervalType => s"$input.getInterval($ordinal)"
@@ -1699,6 +1701,7 @@ object CodeGenerator extends Logging {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case t: Decimal128Type => s"$row.setDecimal128($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
       // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
@@ -1724,6 +1727,7 @@ object CodeGenerator extends Logging {
       // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
       // offset
       if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
+        dataType.isInstanceOf[Decimal128Type] ||
         dataType.isInstanceOf[CalendarIntervalType])) {
         s"""
            |if (!${ev.isNull}) {
@@ -1755,6 +1759,7 @@ object CodeGenerator extends Logging {
       case _ if isPrimitiveType(jt) =>
         s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
       case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+//      case t: Decimal128Type => s"$vector.putDecimal128($rowId, $value, ${t.precision});"
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
@@ -1909,6 +1914,7 @@ object CodeGenerator extends Logging {
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case _: DecimalType => "Decimal"
+    case _: Decimal128Type => "Decimal128"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
     case CalendarIntervalType => "CalendarInterval"
@@ -1932,6 +1938,7 @@ object CodeGenerator extends Logging {
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
+    case _: Decimal128Type => classOf[Decimal128]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]

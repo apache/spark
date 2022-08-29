@@ -85,6 +85,7 @@ object AlwaysNull extends InternalRow {
   override def getFloat(ordinal: Int): Float = notSupported
   override def getDouble(ordinal: Int): Double = notSupported
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = notSupported
+  override def getDecimal128(ordinal: Int, precision: Int, scale: Int): Decimal128 = notSupported
   override def getUTF8String(ordinal: Int): UTF8String = notSupported
   override def getBinary(ordinal: Int): Array[Byte] = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported
@@ -114,6 +115,7 @@ object AlwaysNonNull extends InternalRow {
   override def getFloat(ordinal: Int): Float = notSupported
   override def getDouble(ordinal: Int): Double = notSupported
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = notSupported
+  override def getDecimal128(ordinal: Int, precision: Int, scale: Int): Decimal128 = notSupported
   override def getUTF8String(ordinal: Int): UTF8String = UTF8String.fromString("test")
   override def getBinary(ordinal: Int): Array[Byte] = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported

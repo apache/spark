@@ -304,6 +304,11 @@ object RandomDataGenerator {
           rand.nextLong() % math.pow(10, precision).toLong,
           scale,
           new MathContext(precision)).bigDecimal)
+      case Decimal128Type.Fixed(precision, scale) => Some(
+        () => BigDecimal.apply(
+          rand.nextLong() % math.pow(10, precision).toLong,
+          scale,
+          new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
           Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0, -0.0))

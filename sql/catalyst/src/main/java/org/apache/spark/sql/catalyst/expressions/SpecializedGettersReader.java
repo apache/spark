@@ -59,6 +59,10 @@ public final class SpecializedGettersReader {
       DecimalType dt = (DecimalType) dataType;
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }
+    if (dataType instanceof Decimal128Type) {
+      Decimal128Type dt = (Decimal128Type) dataType;
+      return obj.getDecimal128(ordinal, dt.precision(), dt.scale());
+    }
     if (dataType instanceof DateType) {
       return obj.getInt(ordinal);
     }

@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -113,6 +114,10 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
       case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
 
+      case c: Class[_] if c == classOf[java.math.BigDecimal] &&
+        SQLConf.get.allowDecimal128TypeConverterEnabled => (Decimal128Type.SYSTEM_DEFAULT, true)
+      case c: Class[_] if c == classOf[java.math.BigInteger] &&
+        SQLConf.get.allowDecimal128TypeConverterEnabled => (Decimal128Type.BigIntDecimal, true)
       case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType.SYSTEM_DEFAULT, true)
       case c: Class[_] if c == classOf[java.math.BigInteger] => (DecimalType.BigIntDecimal, true)
       case c: Class[_] if c == classOf[java.time.LocalDate] => (DateType, true)

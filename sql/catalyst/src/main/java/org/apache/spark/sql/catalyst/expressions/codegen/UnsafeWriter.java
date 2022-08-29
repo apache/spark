@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeMapData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -105,6 +106,7 @@ public abstract class UnsafeWriter {
   public abstract void write(int ordinal, float value);
   public abstract void write(int ordinal, double value);
   public abstract void write(int ordinal, Decimal input, int precision, int scale);
+  public abstract void write(int ordinal, Decimal128 input, int precision, int scale);
 
   public final void write(int ordinal, UTF8String input) {
     writeUnalignedBytes(ordinal, input.getBaseObject(), input.getBaseOffset(), input.numBytes());

@@ -171,6 +171,9 @@ object InterpretedUnsafeProjection {
       case DecimalType.Fixed(precision, scale) =>
         (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
 
+      case Decimal128Type.Fixed(precision, scale) =>
+        (v, i) => writer.write(i, v.getDecimal128(i, precision, scale), precision, scale)
+
       case CalendarIntervalType =>
         (v, i) => writer.write(i, v.getInterval(i))
 
@@ -266,6 +269,10 @@ object InterpretedUnsafeProjection {
         // We can't call setNullAt() for DecimalType with precision larger than 18, we call write
         // directly. We can use the unwrapped writer directly.
         unsafeWriter
+      case Decimal128Type.Fixed(precision, _) if precision > Decimal128.MAX_LONG_DIGITS =>
+        // We can't call setNullAt() for Decimal128Type with precision larger than 18, we call write
+        // directly. We can use the unwrapped writer directly.
+        unsafeWriter
       case BooleanType | ByteType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
@@ -310,7 +317,7 @@ object InterpretedUnsafeProjection {
    */
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | StringType | BinaryType | CalendarIntervalType |
-         _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
+         _: DecimalType | _: Decimal128Type | _: StructType | _: ArrayType | _: MapType => 8
     case _ => dataType.defaultSize
   }
 

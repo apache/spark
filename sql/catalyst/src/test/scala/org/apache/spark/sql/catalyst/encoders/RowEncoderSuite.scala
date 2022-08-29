@@ -105,6 +105,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("float", FloatType)
       .add("double", DoubleType)
       .add("decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("decimal128", Decimal128Type.SYSTEM_DEFAULT)
       .add("string", StringType)
       .add("binary", BinaryType)
       .add("date", DateType)
@@ -162,6 +163,29 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
     assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
     assert(convertedBack.getDecimal(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
+  }
+
+  test("encode/decode decimal128 type") {
+    val schema = new StructType()
+      .add("int", IntegerType)
+      .add("string", StringType)
+      .add("double", DoubleType)
+      .add("java_decimal", Decimal128Type.SYSTEM_DEFAULT)
+      .add("scala_decimal", Decimal128Type.SYSTEM_DEFAULT)
+      .add("catalyst_decimal", Decimal128Type.SYSTEM_DEFAULT)
+
+    val encoder = RowEncoder(schema).resolveAndBind()
+
+    val javaDecimal = new java.math.BigDecimal("1234.5678")
+    val scalaDecimal = BigDecimal("1234.5678")
+    val catalystDecimal = Decimal128("1234.5678")
+
+    val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
+    val convertedBack = roundTrip(encoder, input)
+    // Decimal128 will be converted back to Java BigDecimal when decoding.
+    assert(convertedBack.getDecimal128(3).compareTo(javaDecimal) == 0)
+    assert(convertedBack.getDecimal128(4).compareTo(scalaDecimal.bigDecimal) == 0)
+    assert(convertedBack.getDecimal128(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
   }
 
   test("RowEncoder should preserve decimal precision and scale") {
