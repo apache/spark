@@ -20,11 +20,13 @@ package org.apache.spark.sql.connector
 import java.util.Collections
 
 import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, StringSelfFunction, UnboundBucketFunction, UnboundStringSelfFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
+import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
@@ -36,13 +38,21 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.test.SQLTestData.TestData
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase {
   import testImplicits._
 
+  before {
+    Seq(UnboundBucketFunction, UnboundStringSelfFunction).foreach { f =>
+      catalog.createFunction(Identifier.of(Array.empty, f.name()), f)
+    }
+  }
+
   after {
+    catalog.clearTables()
+    catalog.clearFunctions()
     spark.sessionState.catalogManager.reset()
   }
 
@@ -987,6 +997,95 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     }
   }
 
+  test("clustered distribution and local sort contains v2 function: append") {
+    checkClusteredDistributionAndLocalSortContainsV2FunctionInVariousCases("append")
+  }
+
+  test("clustered distribution and local sort contains v2 function: overwrite") {
+    checkClusteredDistributionAndLocalSortContainsV2FunctionInVariousCases("overwrite")
+  }
+
+  test("clustered distribution and local sort contains v2 function: overwriteDynamic") {
+    checkClusteredDistributionAndLocalSortContainsV2FunctionInVariousCases("overwriteDynamic")
+  }
+
+  test("clustered distribution and local sort contains v2 function with numPartitions: append") {
+    checkClusteredDistributionAndLocalSortContainsV2Function("append", Some(10))
+  }
+
+  test("clustered distribution and local sort contains v2 function with numPartitions: " +
+    "overwrite") {
+    checkClusteredDistributionAndLocalSortContainsV2Function("overwrite", Some(10))
+  }
+
+  test("clustered distribution and local sort contains v2 function with numPartitions: " +
+    "overwriteDynamic") {
+    checkClusteredDistributionAndLocalSortContainsV2Function("overwriteDynamic", Some(10))
+  }
+
+  private def checkClusteredDistributionAndLocalSortContainsV2FunctionInVariousCases(
+    cmd: String): Unit = {
+    Seq(true, false).foreach { distributionStrictlyRequired =>
+      Seq(true, false).foreach { dataSkewed =>
+        Seq(true, false).foreach { coalesce =>
+          checkClusteredDistributionAndLocalSortContainsV2Function(
+            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+        }
+      }
+    }
+  }
+
+  private def checkClusteredDistributionAndLocalSortContainsV2Function(
+      command: String,
+      targetNumPartitions: Option[Int] = None,
+      distributionStrictlyRequired: Boolean = true,
+      dataSkewed: Boolean = false,
+      coalesce: Boolean = false): Unit = {
+    val tableOrdering = Array[SortOrder](
+      sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
+      sort(
+        BucketTransform(LiteralValue(10, IntegerType), Seq(FieldReference("id"))),
+        SortDirection.DESCENDING,
+        NullOrdering.NULLS_FIRST)
+    )
+    val tableDistribution = Distributions.clustered(Array(
+      ApplyTransform("string_self", Seq(FieldReference("data")))))
+
+    val writeOrdering = Seq(
+      catalyst.expressions.SortOrder(
+        attr("data"),
+        catalyst.expressions.Descending,
+        catalyst.expressions.NullsFirst,
+        Seq.empty
+      ),
+      catalyst.expressions.SortOrder(
+        ApplyFunctionExpression(BucketFunction, Seq(Literal(10), Cast(attr("id"), LongType))),
+        catalyst.expressions.Descending,
+        catalyst.expressions.NullsFirst,
+        Seq.empty
+      )
+    )
+
+    val writePartitioningExprs = Seq(
+      ApplyFunctionExpression(StringSelfFunction, Seq(attr("data"))))
+    val writePartitioning = if (!coalesce) {
+      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
+    } else {
+      clusteredWritePartitioning(writePartitioningExprs, Some(1))
+    }
+
+    checkWriteRequirements(
+      tableDistribution,
+      tableOrdering,
+      targetNumPartitions,
+      expectedWritePartitioning = writePartitioning,
+      expectedWriteOrdering = writeOrdering,
+      writeCommand = command,
+      distributionStrictlyRequired = distributionStrictlyRequired,
+      dataSkewed = dataSkewed,
+      coalesce = coalesce)
+  }
+
   // scalastyle:off argcount
   private def checkWriteRequirements(
       tableDistribution: Distribution,
@@ -1209,12 +1308,20 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     if (skewSplit) {
       assert(actualPartitioning.numPartitions > conf.numShufflePartitions)
     } else {
-      assert(actualPartitioning == expectedPartitioning, "partitioning must match")
+      (actualPartitioning, expectedPartitioning) match {
+        case (actual: catalyst.expressions.Expression, expected: catalyst.expressions.Expression) =>
+          assert(actual semanticEquals expected, "partitioning must match")
+        case (actual, expected) =>
+          assert(actual == expected, "partitioning must match")
+      }
     }
 
     val actualOrdering = plan.outputOrdering
     val expectedOrdering = ordering.map(resolveAttrs(_, plan))
-    assert(actualOrdering == expectedOrdering, "ordering must match")
+    assert(actualOrdering.length == expectedOrdering.length)
+    (actualOrdering zip expectedOrdering).foreach { case (actual, expected) =>
+      assert(actual semanticEquals expected, "ordering must match")
+    }
   }
 
   // executes a write operation and keeps the executed physical plan
