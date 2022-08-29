@@ -17,27 +17,25 @@
 
 package org.apache.spark.sql.sparkconnect.service
 
+import java.util
+import java.util.concurrent.TimeUnit
+
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{
-  AnalyzeResponse,
-  Request,
-  Response,
-  SparkConnectServiceGrpc
-}
+import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.ExtendedMode
 import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.{SparkContext, SparkEnv}
 
-import java.util
-import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
 
 /**
  * The SparkConnectService Implementation.
@@ -61,8 +59,9 @@ class SparkConnectService(debug: Boolean)
       case proto.Plan.OpTypeCase.ROOT =>
         SparkConnectPlanner(request.getPlan.getRoot, session).transform()
       case _ =>
-        responseObserver.onError(new UnsupportedOperationException(
-          s"${request.getPlan.getOpTypeCase} not supported for analysis."))
+        responseObserver.onError(
+          new UnsupportedOperationException(
+            s"${request.getPlan.getOpTypeCase} not supported for analysis."))
         return
     }
     val ds = Dataset.ofRows(session, logicalPlan)
@@ -158,8 +157,8 @@ object SparkConnectService {
  * This is the main entry point for Spark Connect.
  *
  * To decouple the build of Spark Connect and it's dependencies from the core of Spark, we implement
- * it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate JAR is available
- * in the CLASSPATH and the driver plugin is configured to load this class.
+ * it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate JAR is
+ * available in the CLASSPATH and the driver plugin is configured to load this class.
  */
 class SparkConnectPlugin extends SparkPlugin {
 
