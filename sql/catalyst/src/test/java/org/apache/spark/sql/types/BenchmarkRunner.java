@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 import java.lang.String;
 import java.time.format.DateTimeFormatter;
 
-import com.google.common.base.StandardSystemProperty;
+import org.apache.curator.shaded.com.google.common.base.StandardSystemProperty;
 import org.openjdk.jmh.profile.LinuxPerfAsmProfiler;
 import org.openjdk.jmh.results.format.ResultFormatType;
 import org.openjdk.jmh.runner.Runner;

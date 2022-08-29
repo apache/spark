@@ -33,7 +33,6 @@
   <properties>
     <sbt.project.name>catalyst</sbt.project.name>
     <jmh.version>1.23</jmh.version>
-    <guava.version>19.0</guava.version>
   </properties>
 
   <dependencies>
@@ -142,7 +141,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <scope>compile</scope>
     </dependency>
   </dependencies>
   <build>
