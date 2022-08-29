@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
-import dev.ludovic.netlib.{BLAS => NetlibBLAS}
-import dev.ludovic.netlib.blas.F2jBLAS
+import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, F2jBLAS}
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
