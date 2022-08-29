@@ -231,9 +231,15 @@ The size of the window needs to be set to handle this.
 is no need for a workflow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. Streams should only be checkpointed to a store implementing a fast and
-atomic `rename()` operation.
-Otherwise the checkpointing may be slow and potentially unreliable.
+1. In case of the default checkpoint file manager called `FileContextBasedCheckpointFileManager`
+streams should only be checkpointed to a store implementing a fast and
+atomic `rename()` operation. Otherwise the checkpointing may be slow and potentially unreliable.
+On AWS S3 with Hadoop 3.3.1 or later using the S3A connector the abortable stream based checkpoint
+file manager can be used (by setting the `spark.sql.streaming.checkpointFileManagerClass`
+configuration to `org.apache.spark.internal.io.cloud.AbortableStreamBasedCheckpointFileManager`)
+which eliminates the slow rename. In this case users must be extra careful to avoid the reuse of
+the checkpoint location among multiple queries running parallelly as that could lead to corruption
+of the checkpointing data.
 
 ## Committing work into cloud storage safely and fast.
 
