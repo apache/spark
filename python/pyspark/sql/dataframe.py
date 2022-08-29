@@ -41,7 +41,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import copy_func, since, _NoValue
+from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.rdd import (
@@ -84,7 +84,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     Examples
     --------
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
-    and can be created using various functions in :class:`SparkSession`::
+    and can be created using various functions in :class:`SparkSession`:
 
     >>> people = spark.createDataFrame([
     ...     {"deptId": 1, "age": 40, "name": "Hyukjin Kwon", "gender": "M", "salary": 50},
@@ -96,11 +96,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
 
-    To select a column from the :class:`DataFrame`, use the apply method::
+    To select a column from the :class:`DataFrame`, use the apply method:
 
     >>> age_col = people.age
 
-    A more concrete example::
+    A more concrete example:
 
     >>> # To create DataFrame using SparkSession
     ... department = spark.createDataFrame([
@@ -187,8 +187,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._session
 
-    @property  # type: ignore[misc]
-    @since(1.3)
+    @property
     def rdd(self) -> "RDD[Row]":
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
 
@@ -211,8 +210,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
         return self._lazy_rdd
 
-    @property  # type: ignore[misc]
-    @since("1.3.1")
+    @property
     def na(self) -> "DataFrameNaFunctions":
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
 
@@ -239,8 +237,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameNaFunctions(self)
 
-    @property  # type: ignore[misc]
-    @since(1.4)
+    @property
     def stat(self) -> "DataFrameStatFunctions":
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
 
@@ -300,7 +297,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         name : str
-            Name of the table to register.
+            Name of the temporary table to register.
 
         Examples
         --------
@@ -372,7 +369,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        Create a local temporary view named 'people'
+        Create a local temporary view named 'people'.
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> df.createOrReplaceTempView("people")
@@ -713,10 +710,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.exceptAll(other._jdf), self.sparkSession)
 
-    @since(1.3)
     def isLocal(self) -> bool:
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
         (without any Spark executors).
+
+        .. versionadded:: 1.3.0
 
         Returns
         -------
@@ -1010,6 +1008,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -----
         This is a feature only for Structured Streaming.
 
+        This API is evolving.
+
         Examples
         --------
         >>> from pyspark.sql import Row
@@ -1031,10 +1031,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     ).count().writeStream.outputMode("complete").format("console").start()
         >>> time.sleep(3)
         >>> query.stop()
-
-        Notes
-        -----
-        This API is evolving.
         """
         if not eventTime or type(eventTime) is not str:
             raise TypeError("eventTime should be provided as a string")
@@ -2670,7 +2666,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  5|
         +---+
 
-        Selecting multiple string columns as index.
+        Select multiple string columns as index.
 
         >>> df[["name", "age"]].show()
         +-----+---+
@@ -3347,15 +3343,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             raise ValueError("'observation' should be either `Observation` or `str`.")
 
-    @since(2.0)
     def union(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
-
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        Also as standard in SQL, this function resolves columns by position (not by name).
 
         .. versionadded:: 2.0.0
 
@@ -3371,6 +3361,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         See Also
         --------
         DataFrame.unionAll
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
 
         Examples
         --------
@@ -3393,17 +3390,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.union(other._jdf), self.sparkSession)
 
-    @since(1.3)
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
-
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        Also as standard in SQL, this function resolves columns by position (not by name).
-
-        :func:`unionAll` is an alias to :func:`union`
 
         .. versionadded:: 1.3.0
 
@@ -3416,6 +3405,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Combined DataFrame
+
+        Notes
+        -----
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+
+        :func:`unionAll` is an alias to :func:`union`
 
         See Also
         --------
@@ -3478,14 +3476,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
 
-    @since(1.3)
     def intersect(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows only in
         both this :class:`DataFrame` and another :class:`DataFrame`.
         Note that any duplicates are removed. To preserve duplicates
         use :func:`intersectAll`.
 
-        This is equivalent to `INTERSECT` in SQL.
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
@@ -3496,6 +3493,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Combined DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `INTERSECT` in SQL.
 
         Examples
         --------
@@ -3545,12 +3546,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.intersectAll(other._jdf), self.sparkSession)
 
-    @since(1.3)
     def subtract(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
         but not in another :class:`DataFrame`.
 
-        This is equivalent to `EXCEPT DISTINCT` in SQL.
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
@@ -3561,6 +3561,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             Subtracted DataFrame.
+
+        Notes
+        -----
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
 
         Examples
         --------
@@ -4058,9 +4062,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        Note that null values will be ignored in numerical columns before calculation.
-        For columns only containing null values, an empty list is returned.
-
         .. versionadded:: 2.0.0
 
         Parameters
@@ -4084,10 +4085,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         list
             the approximate quantiles at the given probabilities.
+
             * If the input `col` is a string, the output is a list of floats.
+
             * If the input `col` is a list or tuple of strings, the output is also a
                 list, but each element in it is a list of floats, i.e., the output
                 is a list of list of floats.
+
+        Notes
+        -----
+        Null values will be ignored in numerical columns before calculation.
+        For columns only containing null values, an empty list is returned.
         """
 
         if not isinstance(col, (str, list, tuple)):
@@ -4531,9 +4539,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        cols : str
-            new column names. The length of the list needs to be the same as the number
-            of columns in the initial :class:`DataFrame`
+        *cols : tuple
+            a tuple of string new column name or :class:`Column`. The length of the
+            list needs to be the same as the number of columns in the initial
+            :class:`DataFrame`
 
         Returns
         -------
