@@ -530,9 +530,12 @@ object PartitioningUtils extends SQLConfHelper {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType | ShortType | IntegerType => Integer.parseInt(value)
+    case ByteType => Integer.parseInt(value).toByte
+    case ShortType => Integer.parseInt(value).toShort
+    case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case FloatType | DoubleType => JDouble.parseDouble(value)
+    case FloatType => JDouble.parseDouble(value).toFloat
+    case DoubleType => JDouble.parseDouble(value)
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()

@@ -206,3 +206,14 @@ struct<grouping(k1):tinyint,k1:int,k2:int,avg(v):double>
 0	2	2	2.0
 0	2	2	2.0
 0	2	NULL	2.0
+
+
+-- !query
+SELECT grouping_id(k1, k2), avg(v) from (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY k1, k2 GROUPING SETS ((k2, k1), k1)
+-- !query schema
+struct<grouping_id(k1, k2):bigint,avg(v):double>
+-- !query output
+0	1.0
+0	2.0
+1	1.0
+1	2.0

@@ -187,3 +187,6 @@ SELECT c1, (
         UNION SELECT * FROM v3 WHERE c2 > 0
     ) WHERE c1 = v1.c1
 ) FROM v1;
+
+-- Multi-value subquery error
+SELECT (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b;

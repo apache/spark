@@ -214,7 +214,14 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 abstract class BinaryArithmetic extends BinaryOperator
   with NullIntolerant with SupportQueryContext {
 
-  protected val failOnError: Boolean
+  protected val evalMode: EvalMode.Value
+
+  protected def failOnError: Boolean = evalMode match {
+    // The TRY mode executes as if it would fail on errors, except that it would capture the errors
+    // and return null results.
+    case EvalMode.ANSI | EvalMode.TRY => true
+    case _ => false
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = (left.dataType, right.dataType) match {
     case (l: DecimalType, r: DecimalType) if inputType.acceptsType(l) && inputType.acceptsType(r) =>
@@ -240,11 +247,11 @@ abstract class BinaryArithmetic extends BinaryOperator
       s"${getClass.getSimpleName} must override `resultDecimalType`.")
   }
 
-  override def nullable: Boolean = super.nullable || {
+  override def nullable: Boolean = super.nullable || evalMode == EvalMode.TRY || {
     if (left.dataType.isInstanceOf[DecimalType]) {
       // For decimal arithmetic, we may return null even if both inputs are not null, if overflow
       // happens and this `failOnError` flag is false.
-      !failOnError
+      evalMode != EvalMode.ANSI
     } else {
       // For non-decimal arithmetic, the calculation always return non-null result when inputs are
       // not null. If overflow happens, we return either the overflowed value or fail.
@@ -349,6 +356,49 @@ abstract class BinaryArithmetic extends BinaryOperator
          """.stripMargin
       })
   }
+
+  override def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String) => String): ExprCode = {
+    if (evalMode == EvalMode.TRY) {
+      val tryBlock: (String, String) => String = (eval1, eval2) => {
+        s"""
+           |try {
+           | ${f(eval1, eval2)}
+           |} catch (Exception e) {
+           | ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      }
+      super.nullSafeCodeGen(ctx, ev, tryBlock)
+    } else {
+      super.nullSafeCodeGen(ctx, ev, f)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      if (value2 == null) {
+        null
+      } else {
+        if (evalMode == EvalMode.TRY) {
+          try {
+            nullSafeEval(value1, value2)
+          } catch {
+            case _: Exception =>
+              null
+          }
+        } else {
+          nullSafeEval(value1, value2)
+        }
+      }
+    }
+  }
 }
 
 object BinaryArithmetic {
@@ -367,9 +417,10 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -436,9 +487,10 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -511,9 +563,10 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -698,9 +751,14 @@ trait DivModLike extends BinaryArithmetic {
 case class Divide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
+
+  // `try_divide` has exactly the same behavior as the legacy divide, so here it only executes
+  // the error code path when `evalMode` is `ANSI`.
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -762,9 +820,10 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) = this(left, right,
+    EvalMode.fromSQLConf(SQLConf.get))
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true
@@ -835,9 +894,10 @@ case class IntegralDivide(
 case class Remainder(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends DivModLike {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
 
@@ -912,9 +972,10 @@ case class Remainder(
 case class Pmod(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def toString: String = s"pmod($left, $right)"
 

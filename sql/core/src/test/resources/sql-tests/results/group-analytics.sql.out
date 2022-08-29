@@ -497,8 +497,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
-  "messageParameters" : { }
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
 }
 
 
@@ -509,8 +508,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
-  "messageParameters" : { }
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
 }
 
 
@@ -567,8 +565,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
-  "messageParameters" : { }
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
 }
 
 
@@ -579,8 +576,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
-  "messageParameters" : { }
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION"
 }
 
 

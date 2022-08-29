@@ -63,7 +63,7 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import AtomicValue, RowLike
+    from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
@@ -197,11 +197,17 @@ class SparkSession(SparkConversionMixin):
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
             ...
 
+        @overload
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
+            ...
+
         def config(
             self,
             key: Optional[str] = None,
             value: Optional[Any] = None,
             conf: Optional[SparkConf] = None,
+            *,
+            map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
             """Sets a config option. Options set using this method are automatically propagated to
             both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
@@ -216,6 +222,10 @@ class SparkSession(SparkConversionMixin):
                 a value for configuration property
             conf : :class:`SparkConf`, optional
                 an instance of :class:`SparkConf`
+            map: dictionary, optional
+                a dictionary of configurations to set
+
+                .. versionadded:: 3.4.0
 
             Returns
             -------
@@ -233,13 +243,22 @@ class SparkSession(SparkConversionMixin):
 
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
             <pyspark.sql.session.SparkSession.Builder...
+
+            Additionally, you can pass a dictionary of configurations to set.
+
+            >>> SparkSession.builder.config(
+            ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
+            <pyspark.sql.session.SparkSession.Builder...
             """
             with self._lock:
-                if conf is None:
-                    self._options[cast(str, key)] = str(value)
-                else:
+                if conf is not None:
                     for (k, v) in conf.getAll():
                         self._options[k] = v
+                elif map is not None:
+                    for k, v in map.items():  # type: ignore[assignment]
+                        self._options[k] = str(v)
+                else:
+                    self._options[cast(str, key)] = str(value)
                 return self
 
         def master(self, master: str) -> "SparkSession.Builder":
