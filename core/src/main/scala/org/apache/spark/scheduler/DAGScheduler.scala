@@ -2300,7 +2300,7 @@ private[spark] class DAGScheduler(
           timedOutTask.run()
         } else {
           // Do not wait if we do not need the merge results
-          shuffleMergeFinalizeScheduler.schedule(timedOutTask, 0, TimeUnit.SECONDS)
+          new Thread(timedOutTask).start()
         }
       } catch {
         case _: TimeoutException =>
