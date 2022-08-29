@@ -1553,7 +1553,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal.create(null, StringType)), Literal(1), outOfBoundValue), null)
 
       checkExceptionInExpression[Exception](
-        ElementAt(str, Literal(0), outOfBoundValue), "The index 0 is invalid")
+        ElementAt(str, Literal(0), outOfBoundValue), "SQL array indices start at 1")
     }
   }
 
