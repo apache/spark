@@ -368,13 +368,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "GROUP_BY_POS_REFERS_AGG_EXPR",
-      messageParameters = Array(index.toString, expr.sql),
-      origin = expr.origin)
+      messageParameters = Array(index.toString, expr.sql))
   }
 
   def groupByPositionRangeError(index: Int, size: Int): Throwable = {
-    new AnalysisException(s"GROUP BY position $index is not in select list " +
-      s"(valid range is [1, $size])")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_OUT_OF_RANGE",
+      messageParameters = Array(index.toString, size.toString))
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
