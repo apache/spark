@@ -55,8 +55,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         )
         # Since we might create multiple Spark sessions, we need to creata global temporary view
         # that is specifically maintained in the "global_temp" schema.
-        df.createGlobalTempView(cls.tbl_name)
-        cls.tbl_name = "global_temp." + cls.tbl_name
+        df.write.saveAsTable(cls.tbl_name)
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):

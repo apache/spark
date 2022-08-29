@@ -61,8 +61,9 @@ class SparkConnectService(debug: Boolean)
       case proto.Plan.OpTypeCase.ROOT =>
         SparkConnectPlanner(request.getPlan.getRoot, session).transform()
       case _ =>
-        throw new UnsupportedOperationException(
-          s"${request.getPlan.getOpTypeCase} not supported for analysis.")
+        responseObserver.onError(new UnsupportedOperationException(
+          s"${request.getPlan.getOpTypeCase} not supported for analysis."))
+        return
     }
     val ds = Dataset.ofRows(session, logicalPlan)
     val explainString = ds.queryExecution.explainString(ExtendedMode)
@@ -75,6 +76,7 @@ class SparkConnectService(debug: Boolean)
     resp.addAllColumnTypes(ds.schema.fields.map(_.dataType.sql).toSeq.asJava)
     resp.addAllColumnNames(ds.schema.fields.map(_.name).toSeq.asJava)
     responseObserver.onNext(resp.build())
+    responseObserver.onCompleted()
   }
 }
 
