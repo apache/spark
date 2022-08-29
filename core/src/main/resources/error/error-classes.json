@@ -136,6 +136,12 @@
       "Grouping sets size cannot be greater than <maxSize>"
     ]
   },
+  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+    "message" : [
+      "GROUP BY <index> refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got <aggExpr>."
+    ],
+    "sqlState" : "42000"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
