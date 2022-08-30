@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.util;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Cast;
@@ -232,7 +233,7 @@ public class V2ExpressionSQLBuilder {
     if (list.isEmpty()) {
       return "CASE WHEN " + v + " IS NULL THEN NULL ELSE FALSE END";
     }
-    return v + " IN (" + list.stream().collect(Collectors.joining(", ")) + ")";
+    return joinListToString(list, ", ", v + " IN (", ")");
   }
 
   protected String visitIsNull(String v) {
@@ -324,16 +325,15 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitSQLFunction(String funcName, String[] inputs) {
-    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+    return joinArrayToString(inputs, ", ", funcName + "(", ")");
   }
 
   protected String visitAggregateFunction(
       String funcName, boolean isDistinct, String[] inputs) {
     if (isDistinct) {
-      return funcName +
-        "(DISTINCT " + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+      return joinArrayToString(inputs, ", ", funcName + "(DISTINCT ", ")");
     } else {
-      return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
+      return joinArrayToString(inputs, ", ", funcName + "(", ")");
     }
   }
 
@@ -374,5 +374,23 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitExtract(String field, String source) {
     return "EXTRACT(" + field + " FROM " + source + ")";
+  }
+
+  private String joinArrayToString(
+      String[] inputs, CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
+    StringJoiner joiner = new StringJoiner(delimiter, prefix, suffix);
+    for (String input : inputs) {
+      joiner.add(input);
+    }
+    return joiner.toString();
+  }
+
+  private String joinListToString(
+     List<String> inputs, CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
+    StringJoiner joiner = new StringJoiner(delimiter, prefix, suffix);
+    for (String input : inputs) {
+      joiner.add(input);
+    }
+    return joiner.toString();
   }
 }
