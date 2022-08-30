@@ -1797,7 +1797,7 @@ case class Cast(
         s"$evNull = true;"
       } else {
         s"""
-           |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+           |throw QueryExecutionErrors.cannotChangeDecimal128PrecisionError(
            |  $d, ${decimalType.precision}, ${decimalType.scale}, $errorContextCode);
          """.stripMargin
       }
