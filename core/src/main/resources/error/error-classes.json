@@ -144,7 +144,7 @@
   },
   "GROUP_BY_POS_REFERS_AGG_EXPR" : {
     "message" : [
-      "GROUP BY <index> refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got <aggExpr>."
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
     ],
     "sqlState" : "42000"
   },
