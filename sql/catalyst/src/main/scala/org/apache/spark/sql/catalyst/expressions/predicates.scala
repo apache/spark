@@ -145,7 +145,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         if (index > -1) {
           u.children
             .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
-            .sortBy(_._2.stats.sizeInBytes).lastOption
+            .headOption
         } else {
           None
         }
