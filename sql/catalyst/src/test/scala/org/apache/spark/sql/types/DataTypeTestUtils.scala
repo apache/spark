@@ -40,6 +40,9 @@ object DataTypeTestUtils {
     DecimalType.USER_DEFAULT,
     DecimalType(20, 5),
     DecimalType.SYSTEM_DEFAULT,
+    Decimal128Type.USER_DEFAULT,
+    Decimal128Type(20, 5),
+    Decimal128Type.SYSTEM_DEFAULT,
     DoubleType,
     FloatType
   )

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.BigInteger
+import java.math.{BigDecimal => JavaBigDecimal, BigInteger}
 
 import scala.math.BigDecimal.RoundingMode
 import scala.util.Try
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.Int128Math
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A mutable implementation of Decimal that can hold a Long if values are small enough.
@@ -239,6 +240,8 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
+  def toPlainString: String = toJavaBigDecimal.toPlainString
+
   def toDebugString: String = {
     if (int128.ne(null)) {
       s"Decimal128(expanded, $int128, $precision, $scale)"
@@ -258,6 +261,99 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   }
 
   def toInt: Int = toLong.toInt
+
+  /**
+   * @return the Byte value that is equal to the rounded decimal128.
+   * @throws ArithmeticException if the decimal128 is too big to fit in Byte type.
+   */
+  private[sql] def roundToByte(): Byte = {
+    if (int128.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toByte) {
+        actualLongVal.toByte
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ByteType)
+      }
+    } else {
+      val doubleVal = this.toDouble
+      if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
+        doubleVal.toByte
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ByteType)
+      }
+    }
+  }
+
+  /**
+   * @return the Short value that is equal to the rounded decimal128.
+   * @throws ArithmeticException if the decimal128 is too big to fit in Short type.
+   */
+  private[sql] def roundToShort(): Short = {
+    if (int128.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toShort) {
+        actualLongVal.toShort
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ShortType)
+      }
+    } else {
+      val doubleVal = this.toDouble
+      if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
+        doubleVal.toShort
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), ShortType)
+      }
+    }
+  }
+
+  /**
+   * @return the Int value that is equal to the rounded decimal128.
+   * @throws ArithmeticException if the decimal128 too big to fit in Int type.
+   */
+  private[sql] def roundToInt(): Int = {
+    if (int128.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toInt) {
+        actualLongVal.toInt
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), IntegerType)
+      }
+    } else {
+      val doubleVal = this.toDouble
+      if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
+        doubleVal.toInt
+      } else {
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          this, DecimalType(this.precision, this.scale), IntegerType)
+      }
+    }
+  }
+
+  /**
+   * @return the Long value that is equal to the rounded decimal128.
+   * @throws ArithmeticException if the decimal128 too big to fit in Long type.
+   */
+  private[sql] def roundToLong(): Long = {
+    if (int128.eq(null)) {
+      longVal / POW_10(_scale)
+    } else {
+      try {
+        // We cannot store Long.MAX_VALUE as a Double without losing precision.
+        // Here we simply convert the decimal to `BigInteger` and use the method
+        // `longValueExact` to make sure the range check is accurate.
+        toJavaBigDecimal.toBigInteger.longValueExact()
+      } catch {
+        case _: ArithmeticException =>
+          throw QueryExecutionErrors.castingCauseOverflowError(
+            this, DecimalType(this.precision, this.scale), LongType)
+      }
+    }
+  }
 
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.
@@ -585,6 +681,53 @@ object Decimal128 {
       case k: scala.math.BigInt => apply(k)
       case l: java.math.BigInteger => apply(l)
       case d: Decimal128 => d
+    }
+  }
+
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int = {
+    bigDecimal.precision - bigDecimal.scale
+  }
+
+  private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
+    // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+    // Please refer to https://github.com/apache/spark/pull/26640
+    new JavaBigDecimal(str.toString.trim)
+  }
+
+  def fromString(str: UTF8String): Decimal128 = {
+    try {
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
+      // For example: Decimal("6.0790316E+25569151")
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+        !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+        null
+      } else {
+        Decimal128(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        null
+    }
+  }
+
+  def fromStringANSI(
+      str: UTF8String,
+      to: Decimal128Type = Decimal128Type.USER_DEFAULT,
+      context: SQLQueryContext = null): Decimal128 = {
+    try {
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal128 is very slow.
+      // For example: Decimal128("6.0790316E+25569151")
+      if (numDigitsInIntegralPart(bigDecimal) > Decimal128Type.MAX_PRECISION &&
+        !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+        throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
+      } else {
+        Decimal128(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(to, str, context)
     }
   }
 

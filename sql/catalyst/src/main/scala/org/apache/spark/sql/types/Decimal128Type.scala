@@ -18,6 +18,7 @@
 
 package org.apache.spark.sql.types
 
+import scala.annotation.tailrec
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
@@ -59,6 +60,36 @@ case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
   private[sql] val asIntegral = Decimal128.Decimal128AsIfIntegral
 
   /**
+   * Returns whether this Decimal128Type is wider than `other`. If yes, it means `other`
+   * can be casted into `this` safely without losing any precision or range.
+   */
+  private[sql] def isWiderThan(other: DataType): Boolean = isWiderThanInternal(other)
+
+  @tailrec
+  private def isWiderThanInternal(other: DataType): Boolean = other match {
+    case dt: Decimal128Type =>
+      (precision - scale) >= (dt.precision - dt.scale) && scale >= dt.scale
+    case dt: IntegralType =>
+      isWiderThanInternal(Decimal128Type.forType(dt))
+    case _ => false
+  }
+
+  /**
+   * Returns whether this Decimal128Type is tighter than `other`. If yes, it means `this`
+   * can be casted into `other` safely without losing any precision or range.
+   */
+  private[sql] def isTighterThan(other: DataType): Boolean = isTighterThanInternal(other)
+
+  @tailrec
+  private def isTighterThanInternal(other: DataType): Boolean = other match {
+    case dt: Decimal128Type =>
+      (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
+    case dt: IntegralType =>
+      isTighterThanInternal(Decimal128Type.forType(dt))
+    case _ => false
+  }
+
+  /**
    * The default size of a value of the Decimal128Type is 8 bytes when precision is at most 18,
    * and 16 bytes otherwise.
    */
@@ -78,7 +109,23 @@ object Decimal128Type extends AbstractDataType {
   val USER_DEFAULT: Decimal128Type = Decimal128Type(10, 0)
 
   // The decimal types compatible with other numeric types
+  private[sql] val BooleanDecimal = Decimal128Type(1, 0)
+  private[sql] val ByteDecimal = Decimal128Type(3, 0)
+  private[sql] val ShortDecimal = Decimal128Type(5, 0)
+  private[sql] val IntDecimal = Decimal128Type(10, 0)
+  private[sql] val LongDecimal = Decimal128Type(20, 0)
+  private[sql] val FloatDecimal = Decimal128Type(14, 7)
+  private[sql] val DoubleDecimal = Decimal128Type(30, 15)
   private[sql] val BigIntDecimal = Decimal128Type(38, 0)
+
+  private[sql] def forType(dataType: DataType): Decimal128Type = dataType match {
+    case ByteType => ByteDecimal
+    case ShortType => ShortDecimal
+    case IntegerType => IntDecimal
+    case LongType => LongDecimal
+    case FloatType => FloatDecimal
+    case DoubleType => DoubleDecimal
+  }
 
   private[sql] def fromDecimal128(d: Decimal128): Decimal128Type =
     Decimal128Type(d.precision, d.scale)
@@ -100,4 +147,6 @@ object Decimal128Type extends AbstractDataType {
   private[sql] object Fixed {
     def unapply(t: Decimal128Type): Option[(Int, Int)] = Some((t.precision, t.scale))
   }
+
+  def unapply(t: DataType): Boolean = t.isInstanceOf[Decimal128Type]
 }

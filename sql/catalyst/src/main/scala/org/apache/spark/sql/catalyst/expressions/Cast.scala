@@ -290,7 +290,9 @@ object Cast {
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
+    case (from: NumericType, to: Decimal128Type) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
+    case (from: Decimal128Type, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
     case (_: AtomicType, StringType) => true
@@ -362,6 +364,15 @@ object Cast {
 
   def canNullSafeCastToDecimal(from: DataType, to: DecimalType): Boolean = from match {
     case from: BooleanType if to.isWiderThan(DecimalType.BooleanDecimal) => true
+    case from: NumericType if to.isWiderThan(from) => true
+    case from: DecimalType =>
+      // truncating or precision lose
+      (to.precision - to.scale) > (from.precision - from.scale)
+    case _ => false  // overflow
+  }
+
+  def canNullSafeCastToDecimal128(from: DataType, to: Decimal128Type): Boolean = from match {
+    case from: BooleanType if to.isWiderThan(Decimal128Type.BooleanDecimal) => true
     case from: NumericType if to.isWiderThan(from) => true
     case from: DecimalType =>
       // truncating or precision lose
@@ -1307,6 +1318,7 @@ case class Cast(
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
+    case decimal: Decimal128Type => castToDecimal128Code(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case TimestampNTZType => castToTimestampNTZCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
@@ -1585,6 +1597,8 @@ case class Cast(
       // notation if an exponent is needed.
       case _: DecimalType if ansiEnabled =>
         (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
+      case _: Decimal128Type if ansiEnabled =>
+        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -1764,6 +1778,133 @@ case class Cast(
     }
   }
 
+  private[this] def changePrecision(
+      d: ExprValue,
+      decimalType: Decimal128Type,
+      evPrim: ExprValue,
+      evNull: ExprValue,
+      canNullSafeCast: Boolean,
+      ctx: CodegenContext,
+      nullOnOverflow: Boolean): Block = {
+    if (canNullSafeCast) {
+      code"""
+            |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
+            |$evPrim = $d;
+       """.stripMargin
+    } else {
+      val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+      val overflowCode = if (nullOnOverflow) {
+        s"$evNull = true;"
+      } else {
+        s"""
+           |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+           |  $d, ${decimalType.precision}, ${decimalType.scale}, $errorContextCode);
+         """.stripMargin
+      }
+      code"""
+            |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+            |  $evPrim = $d;
+            |} else {
+            |  $overflowCode
+            |}
+       """.stripMargin
+    }
+  }
+
+  private[this] def changePrecision(
+      d: ExprValue,
+      decimalType: Decimal128Type,
+      evPrim: ExprValue,
+      evNull: ExprValue,
+      canNullSafeCast: Boolean,
+      ctx: CodegenContext): Block = {
+    changePrecision(d, decimalType, evPrim, evNull, canNullSafeCast, ctx, !ansiEnabled)
+  }
+
+  private[this] def castToDecimal128Code(
+      from: DataType,
+      target: Decimal128Type,
+      ctx: CodegenContext): CastFunction = {
+    val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal128])
+    val canNullSafeCast = Cast.canNullSafeCastToDecimal128(from, target)
+    from match {
+      case StringType if !ansiEnabled =>
+        (c, evPrim, evNull) =>
+          code"""
+              Decimal128 $tmp = Decimal128.fromString($c);
+              if ($tmp == null) {
+                $evNull = true;
+              } else {
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+              }
+          """
+      case StringType if ansiEnabled =>
+        val errorContext = getContextOrNullCode(ctx)
+        val toType = ctx.addReferenceObj("toType", target)
+        (c, evPrim, evNull) =>
+          code"""
+              Decimal128 $tmp = Decimal128.fromStringANSI($c, $toType, $errorContext);
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case BooleanType =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal128 $tmp = $c ? Decimal128.apply(1) : Decimal128.apply(0);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case DateType =>
+        // date can't cast to decimal in Hive
+        (c, evPrim, evNull) => code"$evNull = true;"
+      case TimestampType =>
+        // Note that we lose precision here.
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal128 $tmp = Decimal128.apply(
+              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case Decimal128Type() =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal128 $tmp = $c.clone();
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case x: IntegralType =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal128 $tmp = Decimal128.apply((long) $c);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case x: FractionalType =>
+        // All other numeric types can be represented precisely as Doubles
+        (c, evPrim, evNull) =>
+          code"""
+            try {
+              Decimal128 $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+            } catch (java.lang.NumberFormatException e) {
+              $evNull = true;
+            }
+          """
+      case x: DayTimeIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          code"""
+            Decimal128 $tmp = $u.dayTimeIntervalToDecimal128($c, (byte)${x.endField});
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx, false)}
+          """
+      case x: YearMonthIntervalType =>
+        (c, evPrim, evNull) =>
+          val u = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+          val tmpYm = ctx.freshVariable("tmpYm", classOf[Int])
+          code"""
+            int $tmpYm = $u.yearMonthIntervalToInt($c, (byte)${x.startField}, (byte)${x.endField});
+            Decimal128 $tmp = Decimal128.apply($tmpYm);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx, false)}
+          """
+    }
+  }
+
   private[this] def castToTimestampCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
@@ -1809,7 +1950,7 @@ case class Cast(
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, $zid, java.time.ZoneOffset.UTC);"
-    case DecimalType() =>
+    case DecimalType() | Decimal128Type() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       (c, evPrim, evNull) =>
@@ -1921,6 +2062,13 @@ case class Cast(
           $evPrim = $iu.decimalToDayTimeInterval(
             $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
         """
+    case Decimal128Type.Fixed(p, s) =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $iu.decimal128ToDayTimeInterval(
+            $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
+        """
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -1958,6 +2106,14 @@ case class Cast(
           $evPrim = $iu.decimalToYearMonthInterval(
             $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
         """
+    case Decimal128Type.Fixed(p, s) =>
+      val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $iu.decimal128ToYearMonthInterval(
+            $c, $p, $s, (byte)${it.startField}, (byte)${it.endField});
+        """
+
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -1996,7 +2152,7 @@ case class Cast(
     case DateType =>
       // Hive would return null when cast from date to boolean
       (c, evPrim, evNull) => code"$evNull = true;"
-    case DecimalType() =>
+    case DecimalType() | Decimal128Type() =>
       (c, evPrim, evNull) => code"$evPrim = !$c.isZero();"
     case n: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = $c != 0;"
@@ -2131,7 +2287,7 @@ case class Cast(
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte", from, ByteType)
-    case DecimalType() => castDecimalToIntegralTypeCode("byte")
+    case DecimalType() | Decimal128Type() => castDecimalToIntegralTypeCode("byte")
     case ShortType | IntegerType | LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode(ctx, "byte", from, ByteType)
     case FloatType | DoubleType if ansiEnabled =>
