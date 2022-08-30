@@ -6677,12 +6677,18 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         def style_negative(v, props=""):
             return props if v < 0 else None
 
-        # If the value is negative, the text color will be displayed as red.
-        pdf_style = pdf.style.applymap(style_negative, props="color:red;")
-        psdf_style = psdf.style.applymap(style_negative, props="color:red;")
+        def check_style():
+            # If the value is negative, the text color will be displayed as red.
+            pdf_style = pdf.style.applymap(style_negative, props="color:red;")
+            psdf_style = psdf.style.applymap(style_negative, props="color:red;")
 
-        # Test whether the same shape as pandas table is created including the color.
-        self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
+            # Test whether the same shape as pandas table is created including the color.
+            self.assert_eq(pdf_style.to_latex(), psdf_style.to_latex())
+
+        check_style()
+
+        with ps.option_context("compute.max_rows", None):
+            check_style()
 
 
 if __name__ == "__main__":
