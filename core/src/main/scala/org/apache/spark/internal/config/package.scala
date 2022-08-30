@@ -2445,5 +2445,5 @@ package object config {
     ConfigBuilder("spark.service.port.custom.origin")
       .intConf
       .checkValue(v => v >= 1024, "The threshold should be greater than or equal to 1024.")
-      .createWithDefault(49152)
+      .createOptional
 }
