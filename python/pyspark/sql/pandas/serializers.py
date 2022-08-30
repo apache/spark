@@ -19,6 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 import sys
+import time
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import to_arrow_type
@@ -380,7 +381,7 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(self, timezone, safecheck, assign_cols_by_name, state_object_schema,
-                 softLimitBytesPerBatch, minDataCountForSample):
+                 softLimitBytesPerBatch, minDataCountForSample, softTimeoutMillisPurgeBatch):
         super(ApplyInPandasWithStateSerializer, self).__init__(
             timezone, safecheck, assign_cols_by_name)
         self.pickleSer = CPickleSerializer()
@@ -396,6 +397,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
         self.softLimitBytesPerBatch = softLimitBytesPerBatch
         self.minDataCountForSample = minDataCountForSample
+        self.softTimeoutMillisPurgeBatch = softTimeoutMillisPurgeBatch
 
     def load_stream(self, stream):
         import pyarrow as pa
@@ -405,15 +407,19 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
         for batch in batches:
+            print("== <load_stream> batch: %s" % (batch, ), file=sys.stderr)
+
             batch_schema = batch.schema
             data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
             state_schema = pa.schema([batch_schema[-1], ])
+
+            print("== <load_stream> batch_schema: %s data_schema: %s state_schema: %s" % (batch_schema, data_schema, state_schema, ), file=sys.stderr)
 
             batch_columns = batch.columns
             data_columns = batch_columns[0:-1]
             state_column = batch_columns[-1]
 
-            print("== <load_stream> data_columns: %s state_column: %s" % (data_columns, state_column, ), file=sys.stderr)
+            print("== <load_stream> batch_columns: %s data_columns: %s state_column: %s" % (batch_columns, data_columns, state_column, ), file=sys.stderr)
 
             data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
             state_batch = pa.RecordBatch.from_arrays([state_column, ], schema=state_schema)
@@ -510,6 +516,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             # FIXME: sample with empty state size separately?
             sampled_empty_state_size = 0
 
+            last_purged_time_ns = time.time_ns()
+
             for data in iterator:
                 packaged_result = data[0]
 
@@ -552,8 +560,12 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 # This effectively works after the sampling has completed, size we multiply by 0
                 # if the sampling is still in progress.
-                if (sampled_data_size_per_row * pdf_data_cnt) + \
-                   (sampled_state_size * state_data_cnt) >= self.softLimitBytesPerBatch:
+                batch_over_limit_on_size = (sampled_data_size_per_row * pdf_data_cnt) + \
+                    (sampled_state_size * state_data_cnt) >= self.softLimitBytesPerBatch
+                cur_time_ns = time.time_ns()
+                is_timed_out_on_purge = ((cur_time_ns - last_purged_time_ns) // 1000000) >= \
+                    self.softTimeoutMillisPurgeBatch
+                if batch_over_limit_on_size or is_timed_out_on_purge:
                     batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
                                                    state_pdfs, state_data_cnt)
 
@@ -561,6 +573,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     state_pdfs = []
                     pdf_data_cnt = 0
                     state_data_cnt = 0
+                    last_purged_time_ns = cur_time_ns
 
                     if should_write_start_length:
                         write_int(SpecialLengths.START_ARROW_STREAM, stream)

@@ -107,6 +107,8 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
+  // FIXME: we haven't had any test to produce multiple outputs
+
   test("applyInPandasWithState - streaming + aggregation") {
     assume(shouldTestPandasUDFs)
 

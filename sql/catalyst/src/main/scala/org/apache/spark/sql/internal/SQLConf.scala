@@ -2719,6 +2719,13 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH =
+    buildConf("spark.sql.execution.applyInPandasWithState.softTimeoutPurgeBatch")
+      // FIXME: doc
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("100ms")
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -4544,10 +4551,13 @@ class SQLConf extends Serializable with Logging {
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
   def softLimitBytesPerBatchInApplyInPandasWithState: Long =
-      getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH)
+    getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH)
 
   def minDataCountForSampleInApplyInPandasWithState: Int =
-      getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE)
+    getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE)
+
+  def softTimeoutMillisPurgeBatchInApplyInPandasWithState: Long =
+    getConf(SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

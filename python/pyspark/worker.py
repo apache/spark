@@ -413,6 +413,11 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         minDataCountForSampleInApplyInPandasWithState = \
             int(minDataCountForSampleInApplyInPandasWithState)
+        softTimeoutMillisPurgeBatchInApplyInPandasWithState = runner_conf.get(
+            "spark.sql.execution.applyInPandasWithState.softTimeoutPurgeBatch", 100
+        )
+        softTimeoutMillisPurgeBatchInApplyInPandasWithState = \
+            int(softTimeoutMillisPurgeBatchInApplyInPandasWithState)
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
@@ -422,7 +427,8 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ApplyInPandasWithStateSerializer(timezone, safecheck, assign_cols_by_name,
                                                    state_object_schema,
                                                    softLimitBytesPerBatchInApplyInPandasWithState,
-                                                   minDataCountForSampleInApplyInPandasWithState)
+                                                   minDataCountForSampleInApplyInPandasWithState,
+                                                   softTimeoutMillisPurgeBatchInApplyInPandasWithState)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.

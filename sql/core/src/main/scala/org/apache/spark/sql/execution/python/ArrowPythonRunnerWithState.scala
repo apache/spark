@@ -60,7 +60,8 @@ class ArrowPythonRunnerWithState(
     valueSchema: StructType,
     stateSchema: StructType,
     softLimitBytesPerBatch: Long,
-    minDataCountForSample: Int)
+    minDataCountForSample: Int,
+    softTimeoutMillsPurgeBatch: Long)
   extends BasePythonRunner[
     (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]),
     (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])](
@@ -169,7 +170,11 @@ class ArrowPythonRunnerWithState(
 
           var sampledDataSizePerRow = 0
 
+          var lastBatchPurgedMillis = System.currentTimeMillis()
+
           while (inputIterator.hasNext) {
+            logWarning(s" <arrow writer in executor> writer content so far: ")
+
             val (keyRow, groupState, dataIter) = inputIterator.next()
 
             assert(dataIter.hasNext, "should have at least one data row!")
@@ -179,6 +184,7 @@ class ArrowPythonRunnerWithState(
             // Provide data rows
             while (dataIter.hasNext) {
               val dataRow = dataIter.next()
+              logWarning(s" <arrow writer in executor> dataRow: $dataRow")
               arrowWriterForData.write(dataRow)
               numRowsForCurGroup += 1
               totalNumRowsForBatch += 1
@@ -203,7 +209,8 @@ class ArrowPythonRunnerWithState(
             // FIXME: ignore state size for now, as we expect more number of data rather than
             //  number of state.
             // FIXME: sample with empty state size separately?
-            if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch) {
+            if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch ||
+                System.currentTimeMillis() - lastBatchPurgedMillis > softTimeoutMillsPurgeBatch) {
               // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
               // side, as we know there is at least one data row.
               arrowWriterForState.finish()
@@ -214,6 +221,7 @@ class ArrowPythonRunnerWithState(
 
               startOffsetForCurGroup = 0
               totalNumRowsForBatch = 0
+              lastBatchPurgedMillis = System.currentTimeMillis()
             }
           }
 

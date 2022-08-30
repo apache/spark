@@ -82,19 +82,27 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   private val softLimitBytesPerBatch = conf.softLimitBytesPerBatchInApplyInPandasWithState
   private val minDataCountForSample = conf.minDataCountForSampleInApplyInPandasWithState
+  private val softTimeoutMillsPurgeBatch = conf.softTimeoutMillisPurgeBatchInApplyInPandasWithState
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf) +
     (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH.key ->
       softLimitBytesPerBatch.toString) +
     (SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE.key ->
-      minDataCountForSample.toString)
+      minDataCountForSample.toString) +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH.key ->
+      softTimeoutMillsPurgeBatch.toString)
 
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
+
+  logWarning(s"<state exec> dedupAttributes: $dedupAttributes / child.output: ${child.output} / argOffsets: $argOffsets")
+
   private lazy val unsafeProj = UnsafeProjection.create(dedupAttributes, child.output)
+  private lazy val unsafeProjForTimeoutDummyRow =
+    UnsafeProjection.create(dedupAttributes, groupingAttributes ++ child.output)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -141,7 +149,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         }
 
         val processIter = timingOutPairs.map { stateData =>
-          val joinedKeyRow = unsafeProj(
+          val joinedKeyRow = unsafeProjForTimeoutDummyRow(
             new JoinedRow(
               stateData.keyRow,
               new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
@@ -168,7 +176,8 @@ case class FlatMapGroupsInPandasWithStateExec(
         child.output.toStructType,
         stateType,
         softLimitBytesPerBatch,
-        minDataCountForSample)
+        minDataCountForSample,
+        softTimeoutMillsPurgeBatch)
 
       val context = TaskContext.get()
 
