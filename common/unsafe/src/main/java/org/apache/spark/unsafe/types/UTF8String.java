@@ -1000,9 +1000,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
-    // This is a special case for converting string into array of symbols without a trailing empty
-    // string. E.g. `"hello".split("", 0) => ["h", "e", "l", "l", "o"].
-    // Note that negative limit will preserve a trailing empty string.
+    // For the empty `pattern` a `split` function ignores trailing empty strings unless original
+    // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
       int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
       byte[] input = getBytes();
