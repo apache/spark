@@ -43,7 +43,7 @@ private[spark] object Utils {
    * Equivalent entries will not be de-duplicated.
    *
    * Callers must ensure that the source iterators are already sorted by
-   * the same ordering `ord`, otherwise the result is likely to be incorrectly.
+   * the same ordering `ord`, otherwise the result is likely to be incorrect.
    */
   def mergeOrdered[T](iterators: Iterable[TraversableOnce[T]])(
     implicit ord: Ordering[T]): Iterator[T] = {

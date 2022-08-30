@@ -1531,7 +1531,7 @@ abstract class RDD[T: ClassTag](
           // Priority keeps the largest elements, so let's reverse the ordering.
           Iterator.single(collectionUtils.takeOrdered(iter, num)(ord).toArray)
         } else if (pid == 0) {
-          // partition 0 always returns an array to avoid reduce on empty RDD
+          // make sure partition 0 always returns an array to avoid reduce on empty RDD
           Iterator.single(Array.empty[T])
         } else {
           Iterator.empty
