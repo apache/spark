@@ -2188,7 +2188,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           .parquet(path.getCanonicalPath)
         withTempView("td") {
           spark.read.parquet(path.getCanonicalPath).createOrReplaceTempView("td")
-          Seq(false).foreach { enableAQE =>
+          Seq(false, true).foreach { enableAQE =>
             withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
               val df = sql(
                 """
