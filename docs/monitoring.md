@@ -1207,12 +1207,12 @@ This is the component with the largest amount of instrumented metrics
 - namespace=ExecutorAllocationManager
   - **note:** these metrics are only emitted when using dynamic allocation. Conditional to a configuration
     parameter `spark.dynamicAllocation.enabled` (default is false)
-  - executors.numberExecutorsToAdd  
-  - executors.numberExecutorsPendingToRemove
-  - executors.numberAllExecutors
-  - executors.numberTargetExecutors
-  - executors.numberMaxNeededExecutors
-  - executors.numberDecommissioningExecutors
+  - executors.numberExecutorsToAdd: Number of executors to add in the next round sync with cluster manager
+  - executors.numberExecutorsPendingToRemove: Number of executors to remove in the next round sync with cluster manager
+  - executors.numberAllExecutors: Number of all running executors including normal and decommissioning
+  - executors.numberTargetExecutors: Desired number of executors totally needed from cluster manager
+  - executors.numberMaxNeededExecutors: Maximum number of executors needed under the current load to satisfy all running and pending tasks, rounded up.
+  - executors.numberDecommissioningExecutors: Number of executors are decommissioning 
   - executors.numberExecutorsGracefullyDecommissioned.count
   - executors.numberExecutorsDecommissionUnfinished.count
   - executors.numberExecutorsExitedUnexpectedly.count
