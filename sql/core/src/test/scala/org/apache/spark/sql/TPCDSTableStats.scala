@@ -979,7 +979,7 @@ object TPCDSTableStatsSF1000 {
       "web_company_name" -> CatalogColumnStat(Some(6L), None, None, Some(2), Some(50), Some(50), None, CatalogColumnStat.VERSION),
       "web_rec_end_date" -> CatalogColumnStat(Some(3L), Some("1999-08-16"), Some("2001-08-15"), Some(27), Some(4), Some(4), None, CatalogColumnStat.VERSION),
       "web_class" -> CatalogColumnStat(Some(1L), None, None, Some(1), Some(7), Some(7), None, CatalogColumnStat.VERSION)
-    )),
+    ))
   )
   // scalastyle:on line.size.limit
 }
