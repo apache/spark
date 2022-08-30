@@ -181,9 +181,6 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   MergedShuffleFileManager shuffleMergeManager;
 
-  @VisibleForTesting
-  RemoteBlockPushResolver blockPushResolver;
-
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
   File registeredExecutorFile;
@@ -277,7 +274,6 @@ public class YarnShuffleService extends AuxiliaryService {
       if (shuffleMergeManager == null) {
         shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
-      blockPushResolver = new RemoteBlockPushResolver(transportConf, mergeManagerFile);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -311,13 +307,13 @@ public class YarnShuffleService extends AuxiliaryService {
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(metricsNamespace, blockHandler.getAllMetrics());
       YarnShuffleServiceMetrics mergeManagerMetrics =
-          new YarnShuffleServiceMetrics("mergeManagerMetrics", blockPushResolver.getMetrics());
+          new YarnShuffleServiceMetrics("mergeManagerMetrics", shuffleMergeManager.getMetrics());
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
           metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
       metricsSystem.register(
-          "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge",
+          "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge manager",
           mergeManagerMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
           metricsNamespace);
