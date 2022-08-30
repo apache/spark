@@ -107,7 +107,68 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  // FIXME: we haven't had any test to produce multiple outputs
+  test("applyInPandasWithState - streaming, multiple groups in partition, " +
+    "multiple outputs per grouping key") {
+    assume(shouldTestPandasUDFs)
+
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count if state is defined, otherwise does not return anything
+    val pythonScript =
+      """
+        |import pandas as pd
+        |from pyspark.sql.types import StructType, StructField, StringType
+        |
+        |tpe = StructType([
+        |    StructField("key", StringType()),
+        |    StructField("countAsString", StringType())])
+        |
+        |def func(key, pdf, state):
+        |    count = state.getOption
+        |    if count is None:
+        |        count = 0
+        |    else:
+        |        count = count[0]
+        |    count += len(pdf)
+        |    state.update((count,))
+        |    return pdf.rename(columns={"value": "key"}).assign(countAsString=str(count))
+        |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[String]
+      val outputStructType = StructType(
+        Seq(
+          StructField("key", StringType),
+          StructField("countAsString", StringType)))
+      val stateStructType = StructType(Seq(StructField("count", LongType)))
+      val inputDataDS = inputData.toDS()
+      val result =
+        inputDataDS
+          .groupBy("value")
+          .applyInPandasWithState(
+            pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+            outputStructType,
+            stateStructType,
+            "Update",
+            "NoTimeout")
+
+      testStream(result, Update)(
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        assertNumStateRows(total = 1, updated = 1),
+        AddData(inputData, "a", "a", "a", "b"),
+        CheckNewAnswer(("a", "4"), ("a", "4"), ("a", "4"), ("b", "1")),
+        assertNumStateRows(total = 2, updated = 2),
+        StopStream,
+        StartStream(),
+        AddData(inputData, "b", "c", "d", "e", "f", "g"),
+        CheckNewAnswer(("b", "2"), ("c", "1"), ("d", "1"), ("e", "1"),
+          ("f", "1"), ("g", "1")),
+        assertNumStateRows(total = 7, updated = 6)
+      )
+    }
+  }
 
   test("applyInPandasWithState - streaming + aggregation") {
     assume(shouldTestPandasUDFs)

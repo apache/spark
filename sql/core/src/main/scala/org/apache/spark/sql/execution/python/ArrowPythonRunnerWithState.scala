@@ -109,6 +109,9 @@ class ArrowPythonRunnerWithState(
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
+      private val EMPTY_STATE_INFO_ROW =
+        new GenericInternalRow(Array[Any](null, null, null, null, null))
+
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
@@ -165,16 +168,14 @@ class ArrowPythonRunnerWithState(
 
           var numRowsForCurGroup = 0
           var startOffsetForCurGroup = 0
-          var numStatesForCurBatch = 0
           var totalNumRowsForBatch = 0
+          var totalNumStatesForBatch = 0
 
           var sampledDataSizePerRow = 0
 
           var lastBatchPurgedMillis = System.currentTimeMillis()
 
           while (inputIterator.hasNext) {
-            logWarning(s" <arrow writer in executor> writer content so far: ")
-
             val (keyRow, groupState, dataIter) = inputIterator.next()
 
             assert(dataIter.hasNext, "should have at least one data row!")
@@ -184,7 +185,6 @@ class ArrowPythonRunnerWithState(
             // Provide data rows
             while (dataIter.hasNext) {
               val dataRow = dataIter.next()
-              logWarning(s" <arrow writer in executor> dataRow: $dataRow")
               arrowWriterForData.write(dataRow)
               numRowsForCurGroup += 1
               totalNumRowsForBatch += 1
@@ -194,7 +194,7 @@ class ArrowPythonRunnerWithState(
             val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
               numRowsForCurGroup)
             arrowWriterForState.write(stateInfoRow)
-            numStatesForCurBatch += 1
+            totalNumStatesForBatch += 1
 
             // start offset for next group would be same as the total number of rows for batch
             startOffsetForCurGroup = totalNumRowsForBatch
@@ -211,10 +211,10 @@ class ArrowPythonRunnerWithState(
             // FIXME: sample with empty state size separately?
             if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch ||
                 System.currentTimeMillis() - lastBatchPurgedMillis > softTimeoutMillsPurgeBatch) {
-              // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
-              // side, as we know there is at least one data row.
-
-              logWarning(" <arrow executor> purging batch!")
+              val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
+              (0 until remainingEmptyStateRows).foreach { _ =>
+                arrowWriterForState.write(EMPTY_STATE_INFO_ROW)
+              }
 
               arrowWriterForState.finish()
               arrowWriterForData.finish()
@@ -224,7 +224,7 @@ class ArrowPythonRunnerWithState(
 
               startOffsetForCurGroup = 0
               totalNumRowsForBatch = 0
-              numStatesForCurBatch = 0
+              totalNumStatesForBatch = 0
               lastBatchPurgedMillis = System.currentTimeMillis()
             }
           }
@@ -232,12 +232,12 @@ class ArrowPythonRunnerWithState(
           if (numRowsForCurGroup > 0) {
             // need to flush remaining batch
 
-            // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
-            // side, as we know there is at least one data row.
+            val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
+            (0 until remainingEmptyStateRows).foreach { _ =>
+              arrowWriterForState.write(EMPTY_STATE_INFO_ROW)
+            }
 
-            logWarning(" <arrow executor> purging batch!")
-
-            arrowWriterForState.finish()
+           arrowWriterForState.finish()
             arrowWriterForData.finish()
             writer.writeBatch()
             arrowWriterForState.reset()

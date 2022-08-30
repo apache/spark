@@ -98,11 +98,7 @@ case class FlatMapGroupsInPandasWithStateExec(
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
 
-  logWarning(s"<state exec> dedupAttributes: $dedupAttributes / child.output: ${child.output} / argOffsets: $argOffsets")
-
   private lazy val unsafeProj = UnsafeProjection.create(dedupAttributes, child.output)
-  private lazy val unsafeProjForTimeoutDummyRow =
-    UnsafeProjection.create(dedupAttributes, groupingAttributes ++ child.output)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -149,7 +145,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         }
 
         val processIter = timingOutPairs.map { stateData =>
-          val joinedKeyRow = unsafeProjForTimeoutDummyRow(
+          val joinedKeyRow = unsafeProj(
             new JoinedRow(
               stateData.keyRow,
               new GenericInternalRow(Array.fill(dedupAttributes.length)(null: Any))))
