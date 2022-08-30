@@ -141,16 +141,14 @@ trait PredicateHelper extends AliasHelper with Logging {
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case u: Union =>
-        val firstChild = u.children.head
-        val newOtherChildren = u.children.tail.map { child =>
-          val newProjectList = child.output.zip(firstChild.output).map {
-            case (c, f) => Alias(c, f.name)(f.exprId, f.qualifier)
-          }
-          Project(newProjectList, child)
+        val index = u.output.indexWhere(_.semanticEquals(exp))
+        if (index > -1) {
+          u.children
+            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
+            .sortBy(_._2.stats.sizeInBytes).lastOption
+        } else {
+          None
         }
-        (firstChild +: newOtherChildren)
-          .flatMap(findExpressionAndTrackLineageDown(exp, _))
-          .sortBy(_._2.stats.sizeInBytes).lastOption
       case other =>
         other.children.flatMap {
           child => if (exp.references.subsetOf(child.outputSet)) {
