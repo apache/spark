@@ -504,7 +504,7 @@ object TPCDSTableStats {
 
 object TPCDSTableStatsSF1000 {
   // These data statistics are extracted from generated TPCDS data with SF=1000
-  
+
   // scalastyle:off line.size.limit
   val tableStats = Map(
     "customer" -> CatalogStatistics(3600000000L, Some(12000000L), Map(
