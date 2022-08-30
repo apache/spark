@@ -2372,17 +2372,16 @@ private[spark] object Utils extends Logging {
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     val maxRetries = portMaxRetries(conf)
-    val customPortEnable = conf.get(config.CUSTOM_SERVICE_PORT)
     lazy val originPort = conf.get(config.CUSTOM_SERVICE_PORT_ORIGIN)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
-        if (customPortEnable) {
-          require(originPort >= 1024 && originPort + offset < 65536,
+        if (originPort.isDefined) {
+          require(originPort.get >= 1024 && originPort.get + offset < 65536,
             "The param spark.port.custom.origin should be >= 1024 and" +
               "the sum with (spark.port.custom.origin + spark.port.maxRetries)" +
               " should be < 65536.")
-          userPort(originPort, offset)
+          userPort(originPort.get, offset)
         } else startPort
       } else {
         userPort(startPort, offset)

@@ -2430,19 +2430,16 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5s")
 
-  private[spark] val CUSTOM_SERVICE_PORT =
-    ConfigBuilder("spark.service.port.custom")
-      .doc("Customize the spark service port range, " +
-        "service like SparkUI.port, SparkDriver.port, NettyService.port etc." +
-        "The starting port number is spark.service.port.custom.origin " +
-        "and the port range is limited by spark.port.maxRetries. " +
-        "e.g. spark.service.port.custom.origin=49152 and spark.port.maxRetries=10, " +
-        "the actual range of the port is greater than or equal to 49152 and less than 49163")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val CUSTOM_SERVICE_PORT_ORIGIN =
     ConfigBuilder("spark.service.port.custom.origin")
+      .doc("Customize the spark service port range, " +
+        "service like SparkUI.port, SparkDriver.port, NettyService.port etc. " +
+        "The starting port number is spark.service.port.custom.origin " +
+        "and the port range is limited by spark.port.maxRetries; " +
+        "the final port range is: spark.service.port.custom.origin <= port.range " +
+        "<= spark.service.port.custom.origin + spark.port.maxRetries" +
+        "e.g. spark.service.port.custom.origin=49152 and spark.port.maxRetries=10, " +
+        "the actual range of the port is greater than or equal to 49152 and less than 49163")
       .intConf
       .checkValue(v => v >= 1024, "The threshold should be greater than or equal to 1024.")
       .createOptional
