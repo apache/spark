@@ -304,7 +304,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // 2. The literals that can cast to fromExp.dataType
     // 3. The literals that cannot cast to fromExp.dataType
     // Note that:
-    // - null literals is special as we can cast null literals to any data type
+    // - null literals are special as we can cast null literals to any data type
     // - for 3, we have three cases
     //   1). the literal cannot cast to fromExp.dataType, and there is no min/max for the fromType,
     //     for instance:
@@ -316,55 +316,25 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     //     note that 3.14 will be rounded to 3.14000010... after casting to float
 
     val (nullList, canCastList) = (ArrayBuffer[Literal](), ArrayBuffer[Literal]())
-    var containsCannotCastLiteral = false
     val fromType = fromExp.dataType
     val ordering = toType.ordering.asInstanceOf[Ordering[Any]]
-    val minMaxInToType = getRange(fromType).map {
-      case (min, max) =>
-        (Cast(Literal(min), toType).eval(), Cast(Literal(max), toType).eval())
-    }
 
     list.foreach {
       case lit @ Literal(null, _) => nullList += lit
       case NonNullLiteral(value, _) =>
-        val minMaxCmp = minMaxInToType.map {
-          case (minInToType, maxInToType) =>
-            (ordering.compare(value, minInToType), ordering.compare(value, maxInToType))
-        }
-        minMaxCmp match {
-          // the literal value is out of fromType range
-          case Some((minCmp, maxCmp)) if maxCmp > 0 || minCmp < 0 =>
-            containsCannotCastLiteral = true
-          case _ =>
-            val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
-            if (newValue == null) {
-              // the literal cannot cast to fromExp.dataType, and there is no min/max for the
-              // fromType
-              containsCannotCastLiteral = true
-            } else {
-              val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
-              val cmp = ordering.compare(value, valueRoundTrip)
-              if (cmp == 0) {
-                canCastList += Literal(newValue, fromType)
-              } else {
-                // the literal value is rounded up/down after casting to `fromType`
-                containsCannotCastLiteral = true
-              }
-            }
+        val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
+        val valueRoundTrip = Cast(Literal(newValue, fromType), toType).eval()
+        if (newValue != null && ordering.compare(value, valueRoundTrip) == 0) {
+          canCastList += Literal(newValue, fromType)
         }
     }
 
-    // return None when list contains only null values.
-    if (canCastList.isEmpty && !containsCannotCastLiteral) {
-      None
+    if (nullList.isEmpty && canCastList.isEmpty) {
+      // only have cannot cast to fromExp.dataType literals
+      Option(falseIfNotNull(fromExp))
     } else {
       val unwrapExpr = buildExpr(nullList, canCastList)
-      if (!containsCannotCastLiteral) {
-        Option(unwrapExpr)
-      } else {
-        // the list contains a literal that cannot be cast to `fromExp.dataType`
-        Option(Or(falseIfNotNull(fromExp), unwrapExpr))
-      }
+      Option(unwrapExpr)
     }
   }
 
