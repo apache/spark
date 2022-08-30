@@ -84,6 +84,11 @@ object BuildCommons {
   val testTempDir = s"$sparkHome/target/tmp"
 
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
+
+  // Google Protobuf version used for generating the protobuf.
+  val protoVersion = "3.21.0"
+  // GRPC version used for Spark Connect.
+  val gprcVersion = "1.47.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -362,7 +367,10 @@ object SparkBuild extends PomBuild {
 
     // To prevent intermittent compilation failures, see also SPARK-33297
     // Apparently we can remove this when we use JDK 11.
-    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
+    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
+
+    // BUG fuck me
+    PB.protocVersion := "3.21.1",
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -604,17 +612,16 @@ object SparkConnect {
 
   lazy val settings = Seq(
     // Setting version
-    PB.protocVersion := "3.21.1",
-    // Adding import path
-    (Compile / PB.includePaths) := Seq(file("connect/src/main/protobuf")),
+    PB.protocVersion := BuildCommons.protoVersion,
+
     // Crap
     libraryDependencies ++= Seq(
-      "com.thesamet.scalapb" %% "compilerplugin" % "0.10.10",
-      "io.grpc"          % "grpc-all"             % "1.47.0",
-      "com.google.protobuf" % "protobuf-java" % "3.21.1" % "protobuf",
-      "io.grpc" % "protoc-gen-grpc-java" % "1.47.0" asProtocPlugin(),
-      "javax.annotation" % "javax.annotation-api" % "1.3.2", // needed for grpc-java on JDK9
+      // Neded for the overall
+      "io.grpc"          % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+      "io.grpc"          % "grpc-all"             % BuildCommons.gprcVersion,
+      "javax.annotation" % "javax.annotation-api" % "1.3.2"
     ),
+
     (Compile / PB.targets) := Seq(
       PB.gens.java                -> (Compile / sourceManaged).value,
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
