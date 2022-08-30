@@ -49,11 +49,11 @@ multi_value_column_unpivot:
 
 * **name_column**
 
-    The name for the column that holds the unpivoted column names.
+    The name for the column that holds the names of the unpivoted columns.
 
 * **values_column**
 
-    The name for the column that holds the unpivoted values.
+    The name for the column that holds the values of the unpivoted columns.
 
 ### Examples
 

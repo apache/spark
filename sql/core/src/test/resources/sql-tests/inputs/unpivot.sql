@@ -18,6 +18,16 @@ UNPIVOT EXCLUDE NULLS (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)
 );
 
+SELECT up.* FROM courseEarnings
+UNPIVOT (
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+) AS up;
+
+SELECT up.* FROM courseEarnings
+UNPIVOT (
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+);
+
 
 create temporary view courseEarningsAndSales as select * from values
   ("dotNET", 15000, 2, 48000, 1, 22500, 1),

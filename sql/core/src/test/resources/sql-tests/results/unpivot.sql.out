@@ -58,6 +58,34 @@ dotNET	2014	22500
 
 
 -- !query
+SELECT up.* FROM courseEarnings
+UNPIVOT (
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+) AS up
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+Java	2014	NULL
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+SELECT up.* FROM courseEarnings
+UNPIVOT (
+  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+cannot resolve 'up.*' given input columns 'course, 2012, 2013, 2014'; line 1 pos 7
+
+
+-- !query
 create temporary view courseEarningsAndSales as select * from values
   ("dotNET", 15000, 2, 48000, 1, 22500, 1),
   ("Java", 20000, 1, 30000, 2, NULL, NULL)
@@ -77,7 +105,13 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNPIVOT_VALUE_DATA_TYPE_MISMATCH] Unpivot value columns must share a least common type, some types do not: ["STRUCT<earnings2012: INT, sales2012: INT>" (`2012`), "STRUCT<earnings2013: INT, sales2013: INT>" (`2013`), "STRUCT<earnings2014: INT, sales2014: INT>" (`2014`)]
+{
+  "errorClass" : "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "types" : "\"STRUCT<earnings2012: INT, sales2012: INT>\" (`2012`), \"STRUCT<earnings2013: INT, sales2013: INT>\" (`2013`), \"STRUCT<earnings2014: INT, sales2014: INT>\" (`2014`)"
+  }
+}
 
 
 -- !query
@@ -105,15 +139,14 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 3, pos 22)
-
-== SQL ==
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  values FOR year IN ()
-----------------------^^^
-)
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -172,15 +205,14 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')': extra input ')'(line 3, pos 3)
-
-== SQL ==
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  () FOR year IN ((earnings2012, sales2012), (earnings2013, sales2013), (earnings2014, sales2014))
----^^^
-)
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ": extra input ')'"
+  }
+}
 
 
 -- !query
@@ -192,15 +224,14 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-[PARSE_SYNTAX_ERROR] Syntax error at or near ')'(line 3, pos 33)
-
-== SQL ==
-SELECT * FROM courseEarningsAndSales
-UNPIVOT (
-  (earnings, sales) FOR year IN ()
----------------------------------^^^
-)
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -212,7 +243,14 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNPIVOT_VALUE_SIZE_MISMATCH] All unpivot value columns must have the same size as there are value column names (3): [2, 2, 2]
+{
+  "errorClass" : "UNPIVOT_VALUE_SIZE_MISMATCH",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "names" : "3",
+    "sizes" : "2, 2, 2"
+  }
+}
 
 
 -- !query
@@ -224,4 +262,11 @@ UNPIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[UNPIVOT_VALUE_SIZE_MISMATCH] All unpivot value columns must have the same size as there are value column names (2): [1, 2, 3]
+{
+  "errorClass" : "UNPIVOT_VALUE_SIZE_MISMATCH",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "names" : "2",
+    "sizes" : "1, 2, 3"
+  }
+}
