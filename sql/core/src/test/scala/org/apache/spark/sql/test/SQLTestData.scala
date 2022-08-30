@@ -96,15 +96,23 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  private lazy val decimalDataList: List[DecimalData] =
+    DecimalData(1, 1) ::
+    DecimalData(1, 2) ::
+    DecimalData(2, 1) ::
+    DecimalData(2, 2) ::
+    DecimalData(3, 1) ::
+    DecimalData(3, 2) :: Nil
+
   protected lazy val decimalData: DataFrame = {
-    val df = spark.sparkContext.parallelize(
-      DecimalData(1, 1) ::
-      DecimalData(1, 2) ::
-      DecimalData(2, 1) ::
-      DecimalData(2, 2) ::
-      DecimalData(3, 1) ::
-      DecimalData(3, 2) :: Nil).toDF()
+    val df = spark.sparkContext.parallelize(decimalDataList).toDF()
     df.createOrReplaceTempView("decimalData")
+    df
+  }
+
+  protected lazy val decimal128Data: DataFrame = {
+    val df = spark.sparkContext.parallelize(decimalDataList).toDF()
+    df.createOrReplaceTempView("decimal128Data")
     df
   }
 

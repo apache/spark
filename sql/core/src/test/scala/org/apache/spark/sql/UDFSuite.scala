@@ -306,6 +306,15 @@ class UDFSuite extends QueryTest with SharedSparkSession {
            | SELECT tmp.t.* FROM
            | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
           """.stripMargin).toDF(), complexData.select("m", "a", "b"))
+    withSQLConf(SQLConf.DECIMAL128_TYPE_CONVERTER_ENABLED.key -> "true") {
+      spark.udf.register("decimal128DataFunc",
+        (a: java.math.BigDecimal, b: java.math.BigDecimal) => { (a, b) })
+      checkAnswer(
+        sql("""
+              | SELECT tmp.t.* FROM
+              | (SELECT decimal128DataFunc(a, b) AS t FROM decimal128Data) tmp
+              |""".stripMargin).toDF(), decimal128Data)
+    }
   }
 
   test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {

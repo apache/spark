@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.expressions.{CheckOverflow, CreateNamedStruct, Expression, IsNull, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{CheckDecimal128Overflow, CheckOverflow, CreateNamedStruct, Expression, IsNull, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -149,14 +149,22 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
-    CheckOverflow(StaticInvoke(
-      Decimal.getClass,
-      DecimalType.SYSTEM_DEFAULT,
-      "apply",
-      inputObject :: Nil,
-      returnNullable = false), DecimalType.SYSTEM_DEFAULT, nullOnOverflow)
-  }
+  def createSerializerForJavaBigDecimal(inputObject: Expression): Expression =
+    if (SQLConf.get.allowDecimal128TypeConverterEnabled) {
+      CheckDecimal128Overflow(StaticInvoke(
+        Decimal128.getClass,
+        Decimal128Type.SYSTEM_DEFAULT,
+        "apply",
+        inputObject :: Nil,
+        returnNullable = false), Decimal128Type.SYSTEM_DEFAULT, nullOnOverflow)
+    } else {
+      CheckOverflow(StaticInvoke(
+        Decimal.getClass,
+        DecimalType.SYSTEM_DEFAULT,
+        "apply",
+        inputObject :: Nil,
+        returnNullable = false), DecimalType.SYSTEM_DEFAULT, nullOnOverflow)
+    }
 
   def createSerializerForScalaBigDecimal(inputObject: Expression): Expression = {
     createSerializerForJavaBigDecimal(inputObject)
