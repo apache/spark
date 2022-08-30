@@ -559,6 +559,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_functions",
         "pyspark.ml.tests.test_image",
         "pyspark.ml.tests.test_linalg",
         "pyspark.ml.tests.test_param",
