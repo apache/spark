@@ -155,18 +155,13 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 Contributing and Maintaining Type Hints
 ----------------------------------------
 
-PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to:
-
-* ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API). 
-* pandas API on Spark (``pyspark.pandas`` package) where the type hints are inlined.
-
-As a rule of thumb, only public API is annotated.
+PySpark type hints are inlined, to take advantage of static type checking within the functions.
 
 Annotations should, when possible:
 
 * Reflect expectations of the underlying JVM API, to help avoid type related failures outside Python interpreter.
 * In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
-* Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
+* Indicate nonsensical combinations of arguments using ``@overload`` annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
 
   .. code-block:: python
 
@@ -188,9 +183,6 @@ Annotations should, when possible:
     ) -> None: ...
 
 * Be compatible with the current stable MyPy release.
-
-
-Complex supporting type definitions, should be placed in dedicated ``_typing.pyi`` stubs. See for example `pyspark.sql._typing.pyi <https://github.com/apache/spark/blob/master/python/pyspark/sql/_typing.pyi>`_.
 
 Annotations can be validated using ``dev/lint-python`` script or by invoking mypy directly:
 
