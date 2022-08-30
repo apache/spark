@@ -1528,6 +1528,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
   }
+
+  test("custom service port") {
+    val origin = 65435
+    val offset = 100
+    val incSets = scala.collection.mutable.Set[Int]()
+
+    for (j <- 0 to offset) {
+      val random1 = Utils.userPort(origin, j)
+      incSets.add(random1)
+      assert(origin <= random1 && random1 <= origin + offset && random1 < 65536)
+    }
+    assert(incSets.size == offset + 1)
+  }
 }
 
 private class SimpleExtension
