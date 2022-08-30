@@ -962,6 +962,11 @@ class FunctionsTests(ReusedSQLTestCase):
         actual = self.spark.range(1).select(lit(td)).first()[0]
         self.assertEqual(actual, td)
 
+    def test_lit_list(self):
+        test_list = [1, 2, 3]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, test_list)
+
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(

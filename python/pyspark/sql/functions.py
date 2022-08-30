@@ -149,7 +149,17 @@ def lit(col: Any) -> Column:
     +------+---+
     |     5|  0|
     +------+---+
+
+    Support for list
+
+    >>> spark.range(1).select(F.lit([1, 2, 3])).show()
+    +--------------+
+    |array(1, 2, 3)|
+    +--------------+
+    |     [1, 2, 3]|
+    +--------------+
     """
+    col = array(*[lit(item) for item in col]) if isinstance(col, list) else col
     return col if isinstance(col, Column) else _invoke_function("lit", col)
 
 
