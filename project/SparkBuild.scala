@@ -39,6 +39,9 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
+import sbtprotoc.ProtocPlugin.autoImport._
+
+
 object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
@@ -50,14 +53,14 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val sparkConnectProjects@Seq(connect) = Seq("connect").map(ProjectRef(buildLocation, _))
+  val connect = ProjectRef(buildLocation, "connect")
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ sparkConnectProjects
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connect)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
@@ -379,7 +382,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connect
     ).contains(x)
   }
 
@@ -419,6 +422,8 @@ object SparkBuild extends PomBuild {
 
   /* Hive console settings */
   enable(Hive.settings)(hive)
+
+  enable(SparkConnect.settings)(connect)
 
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -592,6 +597,28 @@ object Core {
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
     }.taskValue
+  )
+}
+
+object SparkConnect {
+
+  lazy val settings = Seq(
+    // Setting version
+    PB.protocVersion := "3.21.1",
+    // Adding import path
+    (Compile / PB.includePaths) := Seq(file("connect/src/main/protobuf")),
+    // Crap
+    libraryDependencies ++= Seq(
+      "com.thesamet.scalapb" %% "compilerplugin" % "0.10.10",
+      "io.grpc"          % "grpc-all"             % "1.47.0",
+      "com.google.protobuf" % "protobuf-java" % "3.21.1" % "protobuf",
+      "io.grpc" % "protoc-gen-grpc-java" % "1.47.0" asProtocPlugin(),
+      "javax.annotation" % "javax.annotation-api" % "1.3.2", // needed for grpc-java on JDK9
+    ),
+    (Compile / PB.targets) := Seq(
+      PB.gens.java                -> (Compile / sourceManaged).value,
+      PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+    )
   )
 }
 
@@ -1032,6 +1059,7 @@ object Unidoc {
                       JavaUnidocPlugin.projectSettings ++
                       Seq (
     publish := {},
+
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
