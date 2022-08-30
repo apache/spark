@@ -1310,14 +1310,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(topKs.size == 1)
     assert(sorts.isEmpty)
   }
-
-  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
-    val df = spark.sql("select * from values(1) where 1 < rand()").repartition(1)
-    assert(
-      df.queryExecution.optimizedPlan.collect {
-        case r: Repartition => r
-      }.size == 1)
-  }
 }
 
 // Used for unit-testing EnsureRequirements
