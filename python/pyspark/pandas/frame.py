@@ -3503,19 +3503,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Property returning a Styler object containing methods for
         building a styled HTML representation for the DataFrame.
 
-        .. note:: currently it collects top 1000 rows and return its
-            pandas `pandas.io.formats.style.Styler` instance.
-
         Examples
         --------
         >>> ps.range(1001).style  # doctest: +SKIP
         <pandas.io.formats.style.Styler object at ...>
         """
         max_results = get_option("compute.max_rows")
-        pdf = self.head(max_results + 1)._to_internal_pandas()
-        if len(pdf) > max_results:
-            warnings.warn("'style' property will only use top %s rows." % max_results, UserWarning)
-        return pdf.head(max_results).style
+        if max_results is not None:
+            pdf = self.head(max_results + 1)._to_internal_pandas()
+            if len(pdf) > max_results:
+                warnings.warn(
+                    "'style' property will only use top %s rows." % max_results, UserWarning
+                )
+            return pdf.head(max_results).style
+        else:
+            return self._to_internal_pandas().style
 
     def set_index(
         self,
