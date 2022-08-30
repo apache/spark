@@ -963,9 +963,26 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(actual, td)
 
     def test_lit_list(self):
+        # SPARK-40271: added list type supporting
         test_list = [1, 2, 3]
+        expected = [1, 2, 3]
         actual = self.spark.range(1).select(lit(test_list)).first()[0]
-        self.assertEqual(actual, test_list)
+        self.assertEqual(actual, expected)
+
+        test_list = [[1, 2, 3], [3, 4]]
+        expected = [[1, 2, 3], [3, 4]]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, expected)
+
+        test_list = ["a", 1, None, 1.0]
+        expected = ["a", "1", None, "1.0"]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, expected)
+
+        test_list = [["a", 1, None, 1.0], [1, None, "b"]]
+        expected = [["a", "1", None, "1.0"], ["1", None, "b"]]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, expected)
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
