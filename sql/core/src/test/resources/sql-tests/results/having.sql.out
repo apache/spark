@@ -35,7 +35,12 @@ SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(hav.v = array(1))' due to data type mismatch: differing types in '(hav.v = array(1))' (int and array<int>).; line 1 pos 43
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(hav.v = array(1))' due to data type mismatch: differing types in '(hav.v = array(1))' (int and array<int>).; line 1 pos 43;\n'Project [count(k)#xL]\n+- 'Filter (v#x = array(1))\n   +- Aggregate [v#x], [count(k#x) AS count(k)#xL, v#x]\n      +- SubqueryAlias hav\n         +- View (`hav`, [k#x,v#x])\n            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]\n               +- Project [k#x, v#x]\n                  +- SubqueryAlias hav\n                     +- LocalRelation [k#x, v#x]\n"
+  }
+}
 
 
 -- !query

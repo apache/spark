@@ -178,7 +178,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_cont'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -194,7 +199,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_disc'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [percentile_disc(salary#x, cast(0.25 as double), false, 0, 0) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -209,7 +219,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'median'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [median(salary#x) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -225,7 +240,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_cont'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -241,7 +261,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_disc'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [percentile_disc(salary#x, cast(0.25 as double), false, 0, 0) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -256,7 +281,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'median'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [median(salary#x) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -336,7 +366,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_cont'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -353,7 +388,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_disc'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [percentile_disc(salary#x, cast(0.25 as double), false, 0, 0) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -369,7 +409,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'median'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n      +- Window [median(salary#x) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS median(salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -386,7 +431,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_cont'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_cont'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [percentile_cont(salary#x, cast(0.25 as double), false) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_cont(salary#x, cast(0.25 as double), true) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -403,7 +453,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'percentile_disc'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'percentile_disc'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [percentile_disc(salary#x, cast(0.25 as double), false, 0, 0) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, percentile_disc(salary#x, cast(0.25 as double), true, 0, 0) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query
@@ -419,7 +474,12 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'median'.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Cannot specify order by or frame for 'median'.;\nSort [salary#x ASC NULLS FIRST], true\n+- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n   +- Project [employee_name#x, department#x, salary#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]\n      +- Window [median(salary#x) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]\n         +- Project [employee_name#x, department#x, salary#x]\n            +- SubqueryAlias basic_pays\n               +- View (`basic_pays`, [employee_name#x,department#x,salary#x])\n                  +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]\n                     +- Project [employee_name#x, department#x, salary#x]\n                        +- SubqueryAlias basic_pays\n                           +- LocalRelation [employee_name#x, department#x, salary#x]\n"
+  }
+}
 
 
 -- !query

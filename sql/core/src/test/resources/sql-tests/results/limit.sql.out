@@ -50,7 +50,12 @@ SELECT * FROM testdata LIMIT -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must be equal to or greater than 0, but got -1;\nGlobalLimit -1\n+- LocalLimit -1\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -59,7 +64,12 @@ SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must be equal to or greater than 0, but got -1;\nProject [key#x, value#x]\n+- GlobalLimit -1\n   +- LocalLimit -1\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -76,7 +86,12 @@ SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The evaluated limit expression must not be null, but got CAST(NULL AS INT)
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The evaluated limit expression must not be null, but got CAST(NULL AS INT);\nGlobalLimit cast(null as int)\n+- LocalLimit cast(null as int)\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -85,7 +100,12 @@ SELECT * FROM testdata LIMIT key > 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3)
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3);\nGlobalLimit (key#x > 3)\n+- LocalLimit (key#x > 3)\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -94,7 +114,12 @@ SELECT * FROM testdata LIMIT true
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got boolean
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must be integer type, but got boolean;\nGlobalLimit true\n+- LocalLimit true\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -103,7 +128,12 @@ SELECT * FROM testdata LIMIT 'a'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got string
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must be integer type, but got string;\nGlobalLimit a\n+- LocalLimit a\n   +- Project [key#x, value#x]\n      +- SubqueryAlias spark_catalog.default.testdata\n         +- Relation spark_catalog.default.testdata[key#x,value#x] parquet\n"
+  }
+}
 
 
 -- !query

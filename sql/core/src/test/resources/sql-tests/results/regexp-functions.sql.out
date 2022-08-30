@@ -299,7 +299,12 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', -2)' due to data type mismatch: Position expression must be positive, but got: -2; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', -2)' due to data type mismatch: Position expression must be positive, but got: -2; line 1 pos 7;\n'Project [unresolvedalias(regexp_replace(healthy, wealthy, and wise, \\w+thy, something, -2), None)]\n+- OneRowRelation\n"
+  }
+}
 
 
 -- !query
@@ -308,7 +313,12 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\w+thy', 'something', 0)' due to data type mismatch: Position expression must be positive, but got: 0; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'regexp_replace('healthy, wealthy, and wise', '\\\\w+thy', 'something', 0)' due to data type mismatch: Position expression must be positive, but got: 0; line 1 pos 7;\n'Project [unresolvedalias(regexp_replace(healthy, wealthy, and wise, \\w+thy, something, 0), None)]\n+- OneRowRelation\n"
+  }
+}
 
 
 -- !query

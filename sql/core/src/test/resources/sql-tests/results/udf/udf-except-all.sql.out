@@ -138,7 +138,12 @@ SELECT array(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ExceptAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "ExceptAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table;\n'ExceptAll true\n:- Project [cast(udf(cast(c1#x as string)) as int) AS udf(c1)#x]\n:  +- SubqueryAlias tab1\n:     +- View (`tab1`, [c1#x])\n:        +- Project [cast(c1#x as int) AS c1#x]\n:           +- Project [c1#x]\n:              +- SubqueryAlias tab1\n:                 +- LocalRelation [c1#x]\n+- Project [array(1) AS array(1)#x]\n   +- OneRowRelation\n"
+  }
+}
 
 
 -- !query
@@ -210,7 +215,12 @@ SELECT k, v FROM tab4
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ExceptAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "ExceptAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns;\n'ExceptAll true\n:- Project [k#x]\n:  +- SubqueryAlias tab3\n:     +- View (`tab3`, [k#x,v#x])\n:        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]\n:           +- Project [k#x, v#x]\n:              +- SubqueryAlias tab3\n:                 +- LocalRelation [k#x, v#x]\n+- Project [k#x, v#x]\n   +- SubqueryAlias tab4\n      +- View (`tab4`, [k#x,v#x])\n         +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias tab4\n                  +- LocalRelation [k#x, v#x]\n"
+  }
+}
 
 
 -- !query

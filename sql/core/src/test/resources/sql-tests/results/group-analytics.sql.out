@@ -131,12 +131,12 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in ROLLUP grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nEmpty set in ROLLUP grouping sets is not supported.(line 1, pos 61)\n\n== SQL ==\nSELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year\n-------------------------------------------------------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -193,12 +193,12 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, 
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-Empty set in CUBE grouping sets is not supported.(line 1, pos 61)
-
-== SQL ==
-SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year
--------------------------------------------------------------^^^
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nEmpty set in CUBE grouping sets is not supported.(line 1, pos 61)\n\n== SQL ==\nSELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year\n-------------------------------------------------------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -451,7 +451,12 @@ SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "grouping() can only be used with GroupingSets/Cube/Rollup;\n!Aggregate [course#x, year#x], [course#x, year#x, grouping(course#x) AS grouping(course)#x]\n+- SubqueryAlias coursesales\n   +- View (`courseSales`, [course#x,year#x,earnings#x])\n      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]\n         +- Project [course#x, year#x, earnings#x]\n            +- SubqueryAlias courseSales\n               +- LocalRelation [course#x, year#x, earnings#x]\n"
+  }
+}
 
 
 -- !query
@@ -460,7 +465,12 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping_id() can only be used with GroupingSets/Cube/Rollup
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "grouping_id() can only be used with GroupingSets/Cube/Rollup;\n!Aggregate [course#x, year#x], [course#x, year#x, grouping_id(course#x, year#x) AS grouping_id(course, year)#xL]\n+- SubqueryAlias coursesales\n   +- View (`courseSales`, [course#x,year#x,earnings#x])\n      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]\n         +- Project [course#x, year#x, earnings#x]\n            +- SubqueryAlias courseSales\n               +- LocalRelation [course#x, year#x, earnings#x]\n"
+  }
+}
 
 
 -- !query

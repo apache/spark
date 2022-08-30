@@ -232,4 +232,9 @@ SELECT * FROM t2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: t1; line 5 pos 20
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view not found: t1; line 5 pos 20;\n'Project [*]\n+- 'SubqueryAlias t2\n   +- 'Project [*]\n      +- 'SubqueryAlias t3\n         +- 'Project [*]\n            +- 'UnresolvedRelation [t1], [], false\n"
+  }
+}

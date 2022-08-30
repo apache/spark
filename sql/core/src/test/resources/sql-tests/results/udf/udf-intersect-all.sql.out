@@ -95,7 +95,12 @@ SELECT array(1), udf(2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "IntersectAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table;\n'IntersectAll true\n:- Project [k#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]\n:  +- SubqueryAlias tab1\n:     +- View (`tab1`, [k#x,v#x])\n:        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]\n:           +- Project [k#x, v#x]\n:              +- SubqueryAlias tab1\n:                 +- LocalRelation [k#x, v#x]\n+- Project [array(1) AS array(1)#x, cast(udf(cast(2 as string)) as int) AS udf(2)#x]\n   +- OneRowRelation\n"
+  }
+}
 
 
 -- !query
@@ -106,7 +111,12 @@ SELECT udf(k), udf(v) FROM tab2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns;\n'IntersectAll true\n:- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x]\n:  +- SubqueryAlias tab1\n:     +- View (`tab1`, [k#x,v#x])\n:        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]\n:           +- Project [k#x, v#x]\n:              +- SubqueryAlias tab1\n:                 +- LocalRelation [k#x, v#x]\n+- Project [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]\n   +- SubqueryAlias tab2\n      +- View (`tab2`, [k#x,v#x])\n         +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]\n            +- Project [k#x, v#x]\n               +- SubqueryAlias tab2\n                  +- LocalRelation [k#x, v#x]\n"
+  }
+}
 
 
 -- !query

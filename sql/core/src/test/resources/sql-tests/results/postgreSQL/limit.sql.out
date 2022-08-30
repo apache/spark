@@ -131,7 +131,12 @@ select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The limit expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END;\nProject [q1#xL, q2#xL]\n+- GlobalLimit CASE WHEN (_nondeterministic#x < cast(0.5 as double)) THEN cast(null as bigint) END\n   +- Project [q1#xL, q2#xL, random(-4760675230943192677) AS _nondeterministic#x]\n      +- Project [q1#xL, q2#xL]\n         +- LocalLimit CASE WHEN (_nondeterministic#x < cast(0.5 as double)) THEN cast(null as bigint) END\n            +- Project [q1#xL, q2#xL, random(-2324117446299422284) AS _nondeterministic#x]\n               +- Project [q1#xL, q2#xL]\n                  +- SubqueryAlias int8_tbl\n                     +- View (`INT8_TBL`, [q1#xL,q2#xL])\n                        +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]\n                           +- Project [q1#xL, q2#xL]\n                              +- SubqueryAlias v\n                                 +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]\n                                    +- LocalRelation [col1#xL, col2#xL]\n"
+  }
+}
 
 
 -- !query
@@ -140,7 +145,12 @@ select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The offset expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "The offset expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END;\nProject [q1#xL, q2#xL]\n+- Offset CASE WHEN (_nondeterministic#x < cast(0.5 as double)) THEN cast(null as bigint) END\n   +- Project [q1#xL, q2#xL, random(-7895636458212179908) AS _nondeterministic#x]\n      +- Project [q1#xL, q2#xL]\n         +- SubqueryAlias int8_tbl\n            +- View (`INT8_TBL`, [q1#xL,q2#xL])\n               +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]\n                  +- Project [q1#xL, q2#xL]\n                     +- SubqueryAlias v\n                        +- Project [col1#xL AS q1#xL, col2#xL AS q2#xL]\n                           +- LocalRelation [col1#xL, col2#xL]\n"
+  }
+}
 
 
 -- !query

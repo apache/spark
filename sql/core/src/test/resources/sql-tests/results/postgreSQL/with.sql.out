@@ -216,7 +216,12 @@ SELECT * FROM outermost ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: outermost; line 4 pos 23
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view not found: outermost; line 4 pos 23;\n'WithCTE\n:- CTERelationDef 137, false\n:  +- SubqueryAlias innermost\n:     +- Project [2 AS 2#x]\n:        +- OneRowRelation\n:- 'CTERelationDef 138, false\n:  +- 'SubqueryAlias outermost\n:     +- 'UnresolvedSubqueryColumnAliases [x]\n:        +- 'Distinct\n:           +- 'Union false, false\n:              :- Project [1 AS 1#x]\n:              :  +- OneRowRelation\n:              +- 'Distinct\n:                 +- 'Union false, false\n:                    :- 'Project [*]\n:                    :  +- 'UnresolvedRelation [outermost], [], false\n:                    +- Project [2#x]\n:                       +- SubqueryAlias innermost\n:                          +- CTERelationRef 137, true, [2#x]\n+- 'Sort [unresolvedordinal(1) ASC NULLS FIRST], true\n   +- 'Project [*]\n      +- 'SubqueryAlias outermost\n         +- 'CTERelationRef 138, false\n"
+  }
+}
 
 
 -- !query
@@ -346,12 +351,12 @@ create table foo (with baz)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-DataType baz is not supported.(line 1, pos 23)
-
-== SQL ==
-create table foo (with baz)
------------------------^^^
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nDataType baz is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with baz)\n-----------------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -360,12 +365,12 @@ create table foo (with ordinality)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-DataType ordinality is not supported.(line 1, pos 23)
-
-== SQL ==
-create table foo (with ordinality)
------------------------^^^
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nDataType ordinality is not supported.(line 1, pos 23)\n\n== SQL ==\ncreate table foo (with ordinality)\n-----------------------^^^\n"
+  }
+}
 
 
 -- !query
@@ -382,7 +387,12 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: test; line 1 pos 37
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table not found: test; line 1 pos 37;\n'InsertIntoStatement 'UnresolvedRelation [test], [], false, false, false\n+- LocalRelation [col1#x]\n"
+  }
+}
 
 
 -- !query

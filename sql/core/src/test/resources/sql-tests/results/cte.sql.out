@@ -21,7 +21,12 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s; line 1 pos 25
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view not found: s; line 1 pos 25;\n'WithCTE\n:- 'CTERelationDef 0, false\n:  +- 'SubqueryAlias s\n:     +- 'Project [unresolvedalias(1, None)]\n:        +- 'UnresolvedRelation [s], [], false\n+- 'Project [*]\n   +- 'SubqueryAlias s\n      +- 'CTERelationRef 0, false\n"
+  }
+}
 
 
 -- !query
@@ -31,7 +36,12 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: r; line 1 pos 33
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view not found: r; line 1 pos 33;\n'WithCTE\n:- 'CTERelationDef 1, false\n:  +- 'SubqueryAlias r\n:     +- 'Project [unresolvedalias(scalar-subquery#x [], None)]\n:        :  +- 'Project [*]\n:        :     +- 'UnresolvedRelation [r], [], false\n:        +- OneRowRelation\n+- 'Project [*]\n   +- 'SubqueryAlias r\n      +- 'CTERelationRef 1, false\n"
+  }
+}
 
 
 -- !query
@@ -50,7 +60,12 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s2; line 1 pos 26
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Table or view not found: s2; line 1 pos 26;\n'WithCTE\n:- 'CTERelationDef 3, false\n:  +- 'SubqueryAlias s1\n:     +- 'Project [unresolvedalias(1, None)]\n:        +- 'UnresolvedRelation [s2], [], false\n:- 'CTERelationDef 4, false\n:  +- 'SubqueryAlias s2\n:     +- 'Project [unresolvedalias(1, None)]\n:        +- 'SubqueryAlias s1\n:           +- 'CTERelationRef 3, false\n+- 'Project [*]\n   +- 'Join Inner\n      :- 'SubqueryAlias s1\n      :  +- 'CTERelationRef 3, false\n      +- 'SubqueryAlias s2\n         +- 'CTERelationRef 4, false\n"
+  }
+}
 
 
 -- !query
@@ -148,15 +163,12 @@ SELECT * FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
-
-CTE definition can't have duplicate names: 't'.(line 1, pos 0)
-
-== SQL ==
-WITH
-^^^
-  t(x) AS (SELECT 1),
-  t(x) AS (SELECT 2)
-SELECT * FROM t
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nCTE definition can't have duplicate names: 't'.(line 1, pos 0)\n\n== SQL ==\nWITH\n^^^\n  t(x) AS (SELECT 1),\n  t(x) AS (SELECT 2)\nSELECT * FROM t\n"
+  }
+}
 
 
 -- !query

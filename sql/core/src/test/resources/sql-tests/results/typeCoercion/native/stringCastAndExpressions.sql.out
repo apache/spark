@@ -101,7 +101,12 @@ select cast(a as array<string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as array<string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
+  }
+}
 
 
 -- !query
@@ -110,7 +115,12 @@ select cast(a as struct<s:string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as struct<s:string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
+  }
+}
 
 
 -- !query
@@ -119,7 +129,12 @@ select cast(a as map<string, string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7;\n'Project [unresolvedalias(cast(a#x as map<string,string>), None)]\n+- SubqueryAlias t\n   +- View (`t`, [a#x])\n      +- Project [cast(a#x as string) AS a#x]\n         +- Project [aa AS a#x]\n            +- OneRowRelation\n"
+  }
+}
 
 
 -- !query

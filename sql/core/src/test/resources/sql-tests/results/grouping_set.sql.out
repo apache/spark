@@ -166,7 +166,12 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 't.c1' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "expression 't.c1' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;\nAggregate [spark_grouping_id#xL], [c1#x]\n+- Expand [[c1#x, c2#x, 0]], [c1#x, c2#x, spark_grouping_id#xL]\n   +- Project [c1#x, c2#x]\n      +- SubqueryAlias t\n         +- Project [col1#x AS c1#x, col2#x AS c2#x]\n            +- LocalRelation [col1#x, col2#x]\n"
+  }
+}
 
 
 -- !query

@@ -69,11 +69,12 @@ insert into datetimes values
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): [CAST_INVALID_INPUT] The value '11:00 BST' of the type "STRING" cannot be cast to "TIMESTAMP" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 2, position 24) ==
-(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-; line 1 pos 22
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): [CAST_INVALID_INPUT] The value '11:00 BST' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 24) ==\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n; line 1 pos 22"
+  }
+}
 
 
 -- !query
@@ -246,7 +247,12 @@ from t1 where f1 = f2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(PARTITION BY spark_catalog.default.t1.f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 24;\n'Project [f1#x, unresolvedalias(sum(f1#x) windowspecdefinition(f1#x, specifiedwindowframe(RangeFrame, -1, 1)), None)]\n+- Filter (f1#x = f2#x)\n   +- SubqueryAlias spark_catalog.default.t1\n      +- Relation spark_catalog.default.t1[f1#x,f2#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -296,7 +302,12 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "It is not allowed to use window functions inside WHERE clause"
+  }
+}
 
 
 -- !query
@@ -305,10 +316,12 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Join` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe query operator `Join` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];\nProject [depname#x, empno#x, salary#x, enroll_date#x, unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]\n+- Join Inner, (row_number() windowspecdefinition(salary#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) < 10)\n   :- SubqueryAlias spark_catalog.default.empsalary\n   :  +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet\n   +- SubqueryAlias spark_catalog.default.tenk1\n      +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -317,10 +330,12 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-
-The query operator `Aggregate` contains one or more unsupported
-expression types Aggregate, Window or Generate.
-Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "\nThe query operator `Aggregate` contains one or more unsupported\nexpression types Aggregate, Window or Generate.\nInvalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];\nProject [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, count(1)#xL]\n+- Project [count(1)#xL, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Window [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [1 ASC NULLS FIRST]\n      +- Aggregate [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$()))], [count(1) AS count(1)#xL]\n         +- SubqueryAlias spark_catalog.default.empsalary\n            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -345,7 +360,12 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "It is not allowed to use window functions inside WHERE clause"
+  }
+}
 
 
 -- !query
@@ -354,7 +374,12 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "It is not allowed to use window functions inside WHERE clause"
+  }
+}
 
 
 -- !query
@@ -379,7 +404,12 @@ SELECT range(1, 100) OVER () FROM empsalary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Undefined function: range. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.range.; line 1 pos 7"
+  }
+}
 
 
 -- !query
@@ -388,7 +418,12 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0; line 1 pos 7;\n'Project [unresolvedalias(ntile(0) windowspecdefinition(ten#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())), None), ten#x, four#x]\n+- SubqueryAlias spark_catalog.default.tenk1\n   +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet\n"
+  }
+}
 
 
 -- !query
@@ -397,7 +432,12 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'nth_value(spark_catalog.default.tenk1.four, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve 'nth_value(spark_catalog.default.tenk1.four, 0)' due to data type mismatch: The 'offset' argument of nth_value must be greater than zero but it is 0.; line 1 pos 7;\n'Project [unresolvedalias(nth_value(four#x, 0, false) windowspecdefinition(ten#x ASC NULLS FIRST, unspecifiedframe$()), None), ten#x, four#x]\n+- SubqueryAlias spark_catalog.default.tenk1\n   +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet\n"
+  }
+}
 
 
 -- !query

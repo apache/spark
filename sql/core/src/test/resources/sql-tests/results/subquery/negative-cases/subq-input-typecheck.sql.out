@@ -61,7 +61,12 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Scalar subquery must return only one column, but got 2;\nProject [scalar-subquery#x [t1b#x] AS scalarsubquery(t1b)#x]\n:  +- Aggregate [t2b#x], [max(t2b#x) AS max(t2b)#x, min(t2b#x) AS min(t2b)#x]\n:     +- Filter (t2b#x = outer(t1b#x))\n:        +- SubqueryAlias t2\n:           +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n:              +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n:                 +- Project [t2a#x, t2b#x, t2c#x]\n:                    +- SubqueryAlias t2\n:                       +- LocalRelation [t2a#x, t2b#x, t2c#x]\n+- SubqueryAlias t1\n   +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n      +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n         +- Project [t1a#x, t1b#x, t1c#x]\n            +- SubqueryAlias t1\n               +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
+  }
+}
 
 
 -- !query
@@ -76,7 +81,12 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "Scalar subquery must return only one column, but got 2;\nProject [scalar-subquery#x [] AS scalarsubquery()#x]\n:  +- Aggregate [t2b#x], [max(t2b#x) AS max(t2b)#x, min(t2b#x) AS min(t2b)#x]\n:     +- Filter (t2b#x > 0)\n:        +- SubqueryAlias t2\n:           +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n:              +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n:                 +- Project [t2a#x, t2b#x, t2c#x]\n:                    +- SubqueryAlias t2\n:                       +- LocalRelation [t2a#x, t2b#x, t2c#x]\n+- SubqueryAlias t1\n   +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n      +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n         +- Project [t1a#x, t1b#x, t1c#x]\n            +- SubqueryAlias t1\n               +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
+  }
+}
 
 
 -- !query
@@ -89,15 +99,12 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 1.
-#columns in right hand side: 2.
-Left side columns:
-[t1.t1a].
-Right side columns:
-[t2.t2a, t2.t2b].; line 3 pos 4
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(t1.t1a IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 1.\n#columns in right hand side: 2.\nLeft side columns:\n[t1.t1a].\nRight side columns:\n[t2.t2a, t2.t2b].; line 3 pos 4;\n'Project [*]\n+- 'Filter t1a#x IN (list#x [t1a#x])\n   :  +- Project [t2a#x, t2b#x]\n   :     +- Filter (outer(t1a#x) = t2a#x)\n   :        +- SubqueryAlias t2\n   :           +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n   :              +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n   :                 +- Project [t2a#x, t2b#x, t2c#x]\n   :                    +- SubqueryAlias t2\n   :                       +- LocalRelation [t2a#x, t2b#x, t2c#x]\n   +- SubqueryAlias t1\n      +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n         +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n            +- Project [t1a#x, t1b#x, t1c#x]\n               +- SubqueryAlias t1\n                  +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
+  }
+}
 
 
 -- !query
@@ -110,15 +117,12 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: 
-The number of columns in the left hand side of an IN subquery does not match the
-number of columns in the output of subquery.
-#columns in left hand side: 2.
-#columns in right hand side: 1.
-Left side columns:
-[t1.t1a, t1.t1b].
-Right side columns:
-[t2.t2a].; line 3 pos 11
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(named_struct('t1a', t1.t1a, 't1b', t1.t1b) IN (listquery(t1.t1a)))' due to data type mismatch: \nThe number of columns in the left hand side of an IN subquery does not match the\nnumber of columns in the output of subquery.\n#columns in left hand side: 2.\n#columns in right hand side: 1.\nLeft side columns:\n[t1.t1a, t1.t1b].\nRight side columns:\n[t2.t2a].; line 3 pos 11;\n'Project [*]\n+- 'Filter named_struct(t1a, t1a#x, t1b, t1b#x) IN (list#x [t1a#x])\n   :  +- Project [t2a#x]\n   :     +- Filter (outer(t1a#x) = t2a#x)\n   :        +- SubqueryAlias t2\n   :           +- View (`t2`, [t2a#x,t2b#x,t2c#x])\n   :              +- Project [cast(t2a#x as int) AS t2a#x, cast(t2b#x as int) AS t2b#x, cast(t2c#x as int) AS t2c#x]\n   :                 +- Project [t2a#x, t2b#x, t2c#x]\n   :                    +- SubqueryAlias t2\n   :                       +- LocalRelation [t2a#x, t2b#x, t2c#x]\n   +- SubqueryAlias t1\n      +- View (`t1`, [t1a#x,t1b#x,t1c#x])\n         +- Project [cast(t1a#x as int) AS t1a#x, cast(t1b#x as int) AS t1b#x, cast(t1c#x as int) AS t1c#x]\n            +- Project [t1a#x, t1b#x, t1c#x]\n               +- SubqueryAlias t1\n                  +- LocalRelation [t1a#x, t1b#x, t1c#x]\n"
+  }
+}
 
 
 -- !query
@@ -132,12 +136,9 @@ WHERE
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: 
-The data type of one or more elements in the left hand side of an IN subquery
-is not compatible with the data type of the output of the subquery
-Mismatched columns:
-[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]
-Left side:
-[double, string, string].
-Right side:
-[timestamp, string, bigint].; line 3 pos 16
+{
+  "errorClass" : "LEGACY",
+  "messageParameters" : {
+    "message" : "cannot resolve '(named_struct('t4a', t4.t4a, 't4b', t4.t4b, 't4c', t4.t4c) IN (listquery()))' due to data type mismatch: \nThe data type of one or more elements in the left hand side of an IN subquery\nis not compatible with the data type of the output of the subquery\nMismatched columns:\n[(t4.t4a:double, t5.t5a:timestamp), (t4.t4c:string, t5.t5c:bigint)]\nLeft side:\n[double, string, string].\nRight side:\n[timestamp, string, bigint].; line 3 pos 16;\n'Project [*]\n+- 'Filter named_struct(t4a, t4a#x, t4b, t4b#x, t4c, t4c#x) IN (list#x [])\n   :  +- Project [t5a#x, t5b#x, t5c#xL]\n   :     +- SubqueryAlias t5\n   :        +- View (`t5`, [t5a#x,t5b#x,t5c#xL])\n   :           +- Project [cast(t5a#x as timestamp) AS t5a#x, cast(t5b#x as string) AS t5b#x, cast(t5c#xL as bigint) AS t5c#xL]\n   :              +- Project [t5a#x, t5b#x, t5c#xL]\n   :                 +- SubqueryAlias t1\n   :                    +- LocalRelation [t5a#x, t5b#x, t5c#xL]\n   +- SubqueryAlias t4\n      +- View (`t4`, [t4a#x,t4b#x,t4c#x])\n         +- Project [cast(t4a#x as double) AS t4a#x, cast(t4b#x as string) AS t4b#x, cast(t4c#x as string) AS t4c#x]\n            +- Project [t4a#x, t4b#x, t4c#x]\n               +- SubqueryAlias t1\n                  +- LocalRelation [t4a#x, t4b#x, t4c#x]\n"
+  }
+}
