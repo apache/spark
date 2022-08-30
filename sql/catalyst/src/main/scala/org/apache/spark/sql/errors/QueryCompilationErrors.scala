@@ -1190,8 +1190,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
-    new AnalysisException(
-      s"$format data source does not support ${field.dataType.catalogString} data type.")
+    new AnalysisException(s"Column `${field.name}` has a data type of " +
+      s"${field.dataType.catalogString}, which is not supported by $format."
+    )
   }
 
   def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
