@@ -3404,7 +3404,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.1.1640084764.9f463a9</version>
+        <version>1.0.4</version>
         <configuration>
           <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
