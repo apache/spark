@@ -21,8 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame
-import Row}
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for binary classification.
@@ -152,8 +151,20 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   @Since("1.0.0")
   def areaUnderPR(): Double = AreaUnderCurve.of(pr())
 
+
+  def brierScore(): Double = {
+    val (scores, weights) = scoreLabelsWeight.map {
+      case (score: Double, (label: Double, weight: Double)) =>
+        ((label - score) * (label - score), weight)
+    }.reduce {
+      case ((sqr1, sqr2), (wt1, wt2)) => ((sqr1 * wt1) + (sqr2 * wt2), (wt1 + wt2))
+    }
+    scores / weights
+  }
+
   /**
    * Returns the (threshold, F-Measure) curve.
+   *
    * @param beta the beta factor in F-Measure computation.
    * @return an RDD of (threshold, F-Measure) pairs.
    * @see <a href="http://en.wikipedia.org/wiki/F1_score">F1 score (Wikipedia)</a>
@@ -193,7 +204,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     ).sortByKey(ascending = false)
 
     val binnedCounts =
-      // Only down-sample if bins is > 0
+    // Only down-sample if bins is > 0
       if (numBins == 0) {
         // Use original directly
         counts
