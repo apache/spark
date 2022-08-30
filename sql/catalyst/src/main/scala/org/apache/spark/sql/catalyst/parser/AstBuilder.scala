@@ -1158,10 +1158,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     // exclude null values
-    if (ctx.nullOperator != null && ctx.nullOperator.EXCLUDE() != null) {
+    val filtered = if (ctx.nullOperator != null && ctx.nullOperator.EXCLUDE() != null) {
       Filter(IsNotNull(Coalesce(valueColumnNames.map(UnresolvedAttribute(_)))), unpivot)
     } else {
       unpivot
+    }
+
+    // alias unpivot result
+    if (ctx.identifier() != null) {
+      val alias = ctx.identifier().getText
+      SubqueryAlias(alias, filtered)
+    } else {
+      filtered
     }
   }
 
