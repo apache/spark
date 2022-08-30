@@ -2100,7 +2100,7 @@ class Dataset[T] private[sql](
    * value column:
    * {{{
    *   val df = Seq((1, 11, 12L), (2, 21, 22L)).toDF("id", "int", "long")
-   *   df.unpivot(Array($"id" * 2), "var", "val").show()
+   *   df.unpivot(Array($"id" * 2), "variable", "value").show()
    *   // output:
    *   // +--------+--------+-----+
    *   // |(id * 2)|variable|value|

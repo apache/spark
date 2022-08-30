@@ -26,6 +26,7 @@ import org.apache.spark.sql.types._
  */
 class DatasetUnpivotSuite extends QueryTest
   with SharedSparkSession {
+
   import testImplicits._
 
   lazy val wideDataDs: Dataset[WideData] = Seq(
@@ -246,11 +247,13 @@ class DatasetUnpivotSuite extends QueryTest
       StructField("var", StringType, nullable = false),
       StructField("val", LongType, nullable = true))))
 
-    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row => Seq(
-      Row(row.id, "id", row.id),
-      Row(row.id, "int1", row.int1.orNull),
-      Row(row.id, "long1", row.long1.orNull)
-    )})
+    checkAnswer(unpivoted, wideDataDs.collect().flatMap { row =>
+      Seq(
+        Row(row.id, "id", row.id),
+        Row(row.id, "int1", row.int1.orNull),
+        Row(row.id, "long1", row.long1.orNull)
+      )
+    })
   }
 
   test("unpivot with expressions") {
@@ -324,11 +327,13 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
-        "types" ->
-          (""""BIGINT" \(`long1`, `long2`\), """ +
-           """"INT" \(`int1`, `int2`, `int3`, ...\), """ +
-           """"STRING" \(`str1`\)""")),
-      matchPVals = true)
+        "types" -> (
+          """"BIGINT" (`long1`, `long2`), """ +
+            """"INT" (`int1`, `int2`, `int3`, ...), """ +
+            """"STRING" (`str1`)"""
+          )
+      )
+    )
   }
 
   test("unpivot with compatible value types") {
@@ -411,9 +416,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e3,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
-        "types" -> """"BIGINT" \(`long1`\), "INT" \(`id`, `int1`\), "STRING" \(`str1`, `str2`\)"""
-      ),
-      matchPVals = true)
+        "types" -> """"BIGINT" (`long1`), "INT" (`id`, `int1`), "STRING" (`str1`, `str2`)"""
+      )
+    )
 
     // unpivoting with star id columns so that no value columns are left
     val e4 = intercept[AnalysisException] {
@@ -426,7 +431,8 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e4,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      parameters = Map())
+      parameters = Map()
+    )
 
     // unpivoting with star value columns
     // where potential value columns are of incompatible types
@@ -442,9 +448,9 @@ class DatasetUnpivotSuite extends QueryTest
       exception = e5,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map(
-        "types" -> """"BIGINT" \(`long1`\), "INT" \(`id`, `int1`\), "STRING" \(`str1`, `str2`\)"""
-      ),
-      matchPVals = true)
+        "types" -> """"BIGINT" (`long1`), "INT" (`id`, `int1`), "STRING" (`str1`, `str2`)"""
+      )
+    )
 
     // unpivoting without giving values and no non-id columns
     val e6 = intercept[AnalysisException] {
@@ -457,7 +463,8 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e6,
       errorClass = "UNPIVOT_REQUIRES_VALUE_COLUMNS",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("unpivot after pivot") {
@@ -486,17 +493,17 @@ class DatasetUnpivotSuite extends QueryTest
       .withColumnRenamed("str2", "str.two")
 
     val unpivoted = ds.unpivot(
-        Array($"`an.id`"),
-        Array($"`str.one`", $"`str.two`"),
-        variableColumnName = "var",
-        valueColumnName = "val")
+      Array($"`an.id`"),
+      Array($"`str.one`", $"`str.two`"),
+      variableColumnName = "var",
+      valueColumnName = "val")
     checkAnswer(unpivoted, longDataRows.map(row => Row(
-        row.getInt(0),
-        row.getString(1) match {
-          case "str1" => "str.one"
-          case "str2" => "str.two"
-        },
-        row.getString(2))))
+      row.getInt(0),
+      row.getString(1) match {
+        case "str1" => "str.one"
+        case "str2" => "str.two"
+      },
+      row.getString(2))))
 
     // without backticks, this references struct fields, which do not exist
     val e = intercept[AnalysisException] {
@@ -608,11 +615,13 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e1,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      parameters = Map("types" -> (
-        """\"STRUCT<str1: STRING, int1: INT>\" \(`str-int`\), """ +
-        """\"STRUCT<str2: STRING, long1: BIGINT>\" \(`str-long`\)"""
-        )),
-      matchPVals = true)
+      parameters = Map(
+        "types" -> (
+          """"STRUCT<str1: STRING, int1: INT>" (`str-int`), """ +
+            """"STRUCT<str2: STRING, long1: BIGINT>" (`str-long`)"""
+          )
+      )
+    )
 
     // different struct field names fail
     val e2 = intercept[AnalysisException] {
@@ -628,11 +637,13 @@ class DatasetUnpivotSuite extends QueryTest
     checkError(
       exception = e2,
       errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
-      parameters = Map("types" -> (
-        """\"STRUCT<str1: STRING, int1: BIGINT>\" \(`str-int`\), """ +
-          """\"STRUCT<str2: STRING, long1: BIGINT>\" \(`str-long`\)"""
-        )),
-      matchPVals = true)
+      parameters = Map(
+        "types" -> (
+          """"STRUCT<str1: STRING, int1: BIGINT>" (`str-int`), """ +
+            """"STRUCT<str2: STRING, long1: BIGINT>" (`str-long`)"""
+          )
+      )
+    )
   }
 }
 
