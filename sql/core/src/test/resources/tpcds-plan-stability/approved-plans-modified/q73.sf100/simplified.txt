@@ -46,7 +46,7 @@ WholeStageCodegen (7)
                                       BroadcastExchange #6
                                         WholeStageCodegen (3)
                                           Project [hd_demo_sk]
-                                            Filter [hd_vehicle_count,hd_dep_count,hd_buy_potential,hd_demo_sk]
+                                            Filter [hd_vehicle_count,hd_buy_potential,hd_dep_count,hd_demo_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet spark_catalog.default.household_demographics [hd_demo_sk,hd_buy_potential,hd_dep_count,hd_vehicle_count]
