@@ -164,8 +164,8 @@ class ArrowPythonRunnerWithState(
           writer.start()
 
           var numRowsForCurGroup = 0
-          var numStatesForCurGroup = 0
           var startOffsetForCurGroup = 0
+          var numStatesForCurBatch = 0
           var totalNumRowsForBatch = 0
 
           var sampledDataSizePerRow = 0
@@ -194,7 +194,7 @@ class ArrowPythonRunnerWithState(
             val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
               numRowsForCurGroup)
             arrowWriterForState.write(stateInfoRow)
-            numStatesForCurGroup += 1
+            numStatesForCurBatch += 1
 
             // start offset for next group would be same as the total number of rows for batch
             startOffsetForCurGroup = totalNumRowsForBatch
@@ -213,6 +213,9 @@ class ArrowPythonRunnerWithState(
                 System.currentTimeMillis() - lastBatchPurgedMillis > softTimeoutMillsPurgeBatch) {
               // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
               // side, as we know there is at least one data row.
+
+              logWarning(" <arrow executor> purging batch!")
+
               arrowWriterForState.finish()
               arrowWriterForData.finish()
               writer.writeBatch()
@@ -221,6 +224,7 @@ class ArrowPythonRunnerWithState(
 
               startOffsetForCurGroup = 0
               totalNumRowsForBatch = 0
+              numStatesForCurBatch = 0
               lastBatchPurgedMillis = System.currentTimeMillis()
             }
           }
@@ -230,6 +234,9 @@ class ArrowPythonRunnerWithState(
 
             // DO NOT CHANGE THE ORDER OF FINISH! We are picking up the number of rows from data
             // side, as we know there is at least one data row.
+
+            logWarning(" <arrow executor> purging batch!")
+
             arrowWriterForState.finish()
             arrowWriterForData.finish()
             writer.writeBatch()
