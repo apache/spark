@@ -29,7 +29,7 @@ import org.openjdk.jmh.runner.RunnerException;
 
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(value = 1, jvmArgsAppend = {"-XX:+UnlockDiagnosticVMOptions", "-XX:PrintAssemblyOptions=intel"})
+@Fork(value = 1, jvmArgsAppend = {"-XX:+UnlockDiagnosticVMOptions"})
 @Warmup(iterations = 10, time = 50, timeUnit = TimeUnit.MILLISECONDS)
 @Measurement(iterations = 10, time = 50, timeUnit = TimeUnit.MILLISECONDS)
 public class BenchmarkAdd {
