@@ -307,7 +307,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // value itself is pretty small(empty arrays)
     // Even setting MAX_RESULT_SIZE to a small value(1M here), it should not throw exception
     // because the actual result is small
-    rdd.filter(_ < 0).collect()
+    assert(rdd.filter(_ < 0).collect() === 0)
   }
 
 }
