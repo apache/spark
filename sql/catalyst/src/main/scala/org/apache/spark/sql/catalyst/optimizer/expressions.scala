@@ -771,9 +771,6 @@ object LikeSimplification extends Rule[LogicalPlan] {
     }
   }
 
-  private def isSimplifyMultiLike(child: Expression): Boolean =
-    child.isInstanceOf[Attribute] || child.foldable
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(LIKE_FAMLIY), ruleId) {
     case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
@@ -783,13 +780,13 @@ object LikeSimplification extends Rule[LogicalPlan] {
       } else {
         simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
-    case l @ LikeAll(child, patterns) if isSimplifyMultiLike(child) =>
+    case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
-    case l @ NotLikeAll(child, patterns) if isSimplifyMultiLike(child) =>
+    case l @ NotLikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
-    case l @ LikeAny(child, patterns) if isSimplifyMultiLike(child) =>
+    case l @ LikeAny(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
-    case l @ NotLikeAny(child, patterns) if isSimplifyMultiLike(child) =>
+    case l @ NotLikeAny(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)
   }
 }
