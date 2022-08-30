@@ -111,15 +111,14 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     "multiple outputs per grouping key") {
     assume(shouldTestPandasUDFs)
 
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count if state is defined, otherwise does not return anything
     val pythonScript =
       """
         |import pandas as pd
-        |from pyspark.sql.types import StructType, StructField, StringType
+        |from pyspark.sql.types import IntegerType, StructType, StructField, StringType
         |
         |tpe = StructType([
         |    StructField("key", StringType()),
+        |    StructField("value", IntegerType()),
         |    StructField("countAsString", StringType())])
         |
         |def func(key, pdf, state):
@@ -128,44 +127,45 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |        count = 0
         |    else:
         |        count = count[0]
-        |    count += len(pdf)
+        |    count = count + len(pdf)
         |    state.update((count,))
-        |    return pdf.rename(columns={"value": "key"}).assign(countAsString=str(count))
+        |    return pdf.assign(countAsString=str(count))
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
 
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val inputData = MemoryStream[String]
+      val inputData = MemoryStream[(String, Int)]
       val outputStructType = StructType(
         Seq(
           StructField("key", StringType),
+          StructField("value", IntegerType),
           StructField("countAsString", StringType)))
       val stateStructType = StructType(Seq(StructField("count", LongType)))
-      val inputDataDS = inputData.toDS()
+      val inputDataDS = inputData.toDS().selectExpr("_1 AS key", "_2 AS value")
       val result =
         inputDataDS
-          .groupBy("value")
+          .groupBy("key")
           .applyInPandasWithState(
-            pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+            pythonFunc(inputDataDS("key"), inputDataDS("value")).expr.asInstanceOf[PythonUDF],
             outputStructType,
             stateStructType,
             "Update",
             "NoTimeout")
+          .select("key", "value", "countAsString")
 
       testStream(result, Update)(
-        AddData(inputData, "a"),
-        CheckNewAnswer(("a", "1")),
+        AddData(inputData, ("a", 1)),
+        CheckNewAnswer(("a", 1, "1")),
         assertNumStateRows(total = 1, updated = 1),
-        AddData(inputData, "a", "a", "a", "b"),
-        CheckNewAnswer(("a", "4"), ("a", "4"), ("a", "4"), ("b", "1")),
+        AddData(inputData, ("a", 2), ("a", 3), ("b", 1)),
+        CheckNewAnswer(("a", 2, "3"), ("a", 3, "3"), ("b", 1, "1")),
         assertNumStateRows(total = 2, updated = 2),
         StopStream,
         StartStream(),
-        AddData(inputData, "b", "c", "d", "e", "f", "g"),
-        CheckNewAnswer(("b", "2"), ("c", "1"), ("d", "1"), ("e", "1"),
-          ("f", "1"), ("g", "1")),
-        assertNumStateRows(total = 7, updated = 6)
+        AddData(inputData, ("b", 2), ("c", 1), ("d", 1), ("e", 1)),
+        CheckNewAnswer(("b", 2, "2"), ("c", 1, "1"), ("d", 1, "1"), ("e", 1, "1")),
+        assertNumStateRows(total = 5, updated = 4)
       )
     }
   }
