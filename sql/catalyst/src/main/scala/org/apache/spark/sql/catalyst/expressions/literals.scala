@@ -76,8 +76,19 @@ object Literal {
       val decimal = Decimal(d)
       Literal(decimal, DecimalType.fromDecimal(decimal))
     case d: JavaBigDecimal =>
-      val decimal = Decimal(d)
-      Literal(decimal, DecimalType.fromDecimal(decimal))
+      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+      if (d.abs().compareTo(new JavaBigDecimal("0")) == 0) {
+        if (Math.max(d.precision, d.scale) == 38) {
+          Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()-1))
+        } else if (Math.max(d.precision, d.scale) > 38) {
+          Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+        } else {
+          Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale) + 1, d.scale()))
+        }
+      }
+      else {
+        Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+      }
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
