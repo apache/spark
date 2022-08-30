@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types;
 
 import org.apache.spark.sql.util.Int128Holder;
-import org.apache.spark.sql.util.Int128Math;
 import org.apache.spark.sql.util.MoreMath;
 
 import java.math.BigInteger;

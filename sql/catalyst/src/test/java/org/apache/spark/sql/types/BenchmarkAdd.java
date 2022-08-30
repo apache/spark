@@ -29,31 +29,26 @@ import org.openjdk.jmh.runner.RunnerException;
 
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(value = 1, jvmArgsAppend = {
-        "-XX:+UnlockDiagnosticVMOptions",
-//        "-verbose:gc",
-//        "-XX:+PrintGCDetails",
-//        "-XX:CompileCommand=print,*int128*.*",
-        "-XX:PrintAssemblyOptions=intel"})
+@Fork(value = 1, jvmArgsAppend = {"-XX:+UnlockDiagnosticVMOptions", "-XX:PrintAssemblyOptions=intel"})
 @Warmup(iterations = 10, time = 50, timeUnit = TimeUnit.MILLISECONDS)
 @Measurement(iterations = 10, time = 50, timeUnit = TimeUnit.MILLISECONDS)
 public class BenchmarkAdd {
 
-//  @Benchmark
-//  @OperationsPerInvocation(BenchmarkData.COUNT)
-//  public void addBigint(BenchmarkData data) {
-//    for (int i = 0; i < BenchmarkData.COUNT; i++) {
-//      sink(data.bigintDividends[i].add(data.bigintDivisors[i]));
-//    }
-//  }
+  //  @Benchmark
+  //  @OperationsPerInvocation(BenchmarkData.COUNT)
+  //  public void addBigint(BenchmarkData data) {
+  //    for (int i = 0; i < BenchmarkData.COUNT; i++) {
+  //      sink(data.bigintDividends[i].add(data.bigintDivisors[i]));
+  //    }
+  //  }
 
-//  @Benchmark
-//  @OperationsPerInvocation(BenchmarkData.COUNT)
-//  public void addBigDecimal(BenchmarkData data) {
-//    for (int i = 0; i < BenchmarkData.COUNT; i++) {
-//      sink(data.bigDecimalDividends[i].add(data.bigDecimalDivisors[i]));
-//    }
-//  }
+  //  @Benchmark
+  //  @OperationsPerInvocation(BenchmarkData.COUNT)
+  //  public void addBigDecimal(BenchmarkData data) {
+  //    for (int i = 0; i < BenchmarkData.COUNT; i++) {
+  //      sink(data.bigDecimalDividends[i].add(data.bigDecimalDivisors[i]));
+  //    }
+  //  }
 
   @Benchmark
   @OperationsPerInvocation(BenchmarkData.COUNT)
@@ -71,13 +66,13 @@ public class BenchmarkAdd {
     }
   }
 
-//  @Benchmark
-//  @OperationsPerInvocation(BenchmarkData.COUNT)
-//  public void addInt128(BenchmarkData data) {
-//    for (int i = 0; i < BenchmarkData.COUNT; i++) {
-//      sink(data.dividends[i].$plus(data.divisors[i]));
-//    }
-//  }
+  //  @Benchmark
+  //  @OperationsPerInvocation(BenchmarkData.COUNT)
+  //  public void addInt128(BenchmarkData data) {
+  //    for (int i = 0; i < BenchmarkData.COUNT; i++) {
+  //      sink(data.dividends[i].$plus(data.divisors[i]));
+  //    }
+  //  }
 
   @CompilerControl(CompilerControl.Mode.DONT_INLINE)
   public static void sink(BigInteger value) {
@@ -138,8 +133,8 @@ public class BenchmarkAdd {
         Int128 dividend = Int128MathTest.random(dividendMagnitude);
         Int128 divisor = Int128MathTest.random(divisorMagnitude);
 
-//        int dividendScale = RANDOM.nextInt(10);
-//        int divisorScale = RANDOM.nextInt(10);
+        // int dividendScale = RANDOM.nextInt(10);
+        // int divisorScale = RANDOM.nextInt(10);
 
         if (ThreadLocalRandom.current().nextBoolean()) {
           dividend = dividend.unary_$minus();
@@ -175,12 +170,7 @@ public class BenchmarkAdd {
   public void test() {
     BenchmarkData data = new BenchmarkData();
     data.setup();
-
-//    addBigint(data);
-//    addBigDecimal(data);
-//    addDecimal(data);
     addDecimal128(data);
-//    addInt128(data);
   }
 
   public static void main(String[] args) throws RunnerException {

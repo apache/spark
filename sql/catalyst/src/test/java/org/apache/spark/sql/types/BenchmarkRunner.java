@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types;
 
 import java.time.LocalDateTime;
-import java.lang.String;
 import java.time.format.DateTimeFormatter;
 
 import org.apache.curator.shaded.com.google.common.base.StandardSystemProperty;
