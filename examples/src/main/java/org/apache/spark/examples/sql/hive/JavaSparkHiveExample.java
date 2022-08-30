@@ -112,7 +112,8 @@ public class JavaSparkHiveExample {
     }
     Dataset<Row> recordsDF = spark.createDataFrame(records, Record.class);
     recordsDF.createOrReplaceTempView("records");
-
+    // Queries can see group by result
+    spark.sql("SELECT key,count(1) FROM records group by key").show();
     // Queries can then join DataFrames data with data stored in Hive.
     spark.sql("SELECT * FROM records r JOIN src s ON r.key = s.key").show();
     // +---+------+---+------+
