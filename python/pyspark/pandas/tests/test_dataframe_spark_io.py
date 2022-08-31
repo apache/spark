@@ -247,6 +247,7 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
+    @unittest.skip("openpyxl")
     def test_read_excel(self):
         with self.temp_dir() as tmp:
 
