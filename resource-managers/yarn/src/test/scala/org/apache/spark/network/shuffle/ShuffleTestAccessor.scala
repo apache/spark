@@ -21,23 +21,19 @@ import java.nio.channels.FileChannel
 import java.util.List
 import java.util.concurrent.ConcurrentMap
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.yarn.api.records.ApplicationId
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
-import org.apache.spark.network.shuffledb.DB
-import org.apache.spark.network.shuffledb.DBBackend
+import org.apache.spark.network.shuffledb.{DB, DBBackend, StoreVersion}
 import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
  * just a cheat to get package-visible members in tests
  */
 object ShuffleTestAccessor {
-
-  import com.fasterxml.jackson.databind.ObjectMapper
-
-  import org.apache.spark.network.shuffledb.StoreVersion
 
   def getBlockResolver(handler: ExternalBlockHandler): ExternalShuffleBlockResolver = {
     handler.blockManager
