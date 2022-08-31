@@ -26,8 +26,9 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
-import org.apache.spark.network.shuffledb.{DB, DBBackend, LevelDB}
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.shuffledb.DB
+import org.apache.spark.network.shuffledb.DBBackend
+import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
  * just a cheat to get package-visible members in tests
@@ -209,7 +210,7 @@ object ShuffleTestAccessor {
   def reloadRegisteredExecutors(
     dbBackend: DBBackend,
     file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val db = initDB(dbBackend, file)
+    val db = DBProvider.initDB(dbBackend, file)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result
@@ -218,22 +219,5 @@ object ShuffleTestAccessor {
   def reloadRegisteredExecutors(
       db: DB): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
     ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
-  }
-
-  private def initDB(dbBackend: DBBackend, file: File): DB = {
-    if (file != null) {
-      // TODO: SPARK-38888, add rocksdb implementation.
-      dbBackend match {
-        case DBBackend.LEVELDB =>
-          val options = new org.iq80.leveldb.Options()
-          options.createIfMissing(true)
-          val factory = new org.fusesource.leveldbjni.JniDBFactory()
-          new LevelDB(factory.open(file, options))
-        case _ =>
-          throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend)
-      }
-    } else {
-      null
-    }
   }
 }
