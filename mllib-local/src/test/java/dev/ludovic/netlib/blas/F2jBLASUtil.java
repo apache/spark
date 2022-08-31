@@ -20,7 +20,7 @@ package dev.ludovic.netlib.blas;
 /**
  * This is a workaround since class {@link F2jBLAS} are not public
  */
-public class F2jBLASUtil {
+public final class F2jBLASUtil {
 
     private F2jBLASUtil() {}
 
