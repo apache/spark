@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
@@ -105,18 +105,27 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           TransformExpression(bound, resolvedRefs, Some(numBuckets))
         }
       }
-    case NamedTransform(name, refs)
-        if refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
-      val resolvedRefs = refs.map(_.asInstanceOf[NamedReference]).map { r =>
-        resolveRef[NamedExpression](r, query)
-      }
+    case NamedTransform(name, args) =>
+      val catalystArgs = convertTransformArgs(args, query)
       funCatalogOpt.flatMap { catalog =>
-        loadV2FunctionOpt(catalog, name, resolvedRefs).map { bound =>
-          TransformExpression(bound, resolvedRefs)
+        loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
+          TransformExpression(bound, catalystArgs)
         }
       }
-    case _ =>
-      throw new AnalysisException(s"Transform $trans is not currently supported")
+  }
+
+  private def convertTransformArgs(
+      args: Seq[V2Expression],
+      query: LogicalPlan): Seq[Expression] = {
+    args.map {
+      case r: NamedReference =>
+        resolveRef[NamedExpression](r, query)
+      case l: V2Literal[_] =>
+        Literal.create(l.value, l.dataType)
+      case arg =>
+        throw new AnalysisException(
+          s"Only references and literals are supported as transform arguments: $arg")
+    }
   }
 
   private def loadV2FunctionOpt(
