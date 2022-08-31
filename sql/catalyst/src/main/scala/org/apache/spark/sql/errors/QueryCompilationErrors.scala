@@ -2527,4 +2527,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
   }
+
+  def columnNotInGroupByClauseError(expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+      messageParameters = Array(expression.sql)
+    )
+  }
 }

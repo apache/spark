@@ -65,6 +65,12 @@
     ],
     "sqlState" : "22005"
   },
+  "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
+    "message" : [
+      "expression '<expression>' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.",
+    ],
+    "sqlState" : "42000"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
