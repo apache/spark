@@ -50,7 +50,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
-        assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
+        if (c.name.length > 1) {
+          throw QueryCompilationErrors
+            .operationOnlySupportedWithV2TableError("ADD COLUMN with qualified column")
+        }
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
@@ -571,12 +574,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         }
         Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
       case _ => None
-    }
-  }
-
-  private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {
-    if (colName.length > 1) {
-      throw QueryCompilationErrors.commandNotSupportNestedColumnError(command, colName.quoted)
     }
   }
 

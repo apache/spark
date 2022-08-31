@@ -293,7 +293,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
 
         case _ =>
-          throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DELETE")
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>
