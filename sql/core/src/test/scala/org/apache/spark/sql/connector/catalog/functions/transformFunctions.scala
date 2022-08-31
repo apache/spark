@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.connector.catalog.functions
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object UnboundYearsFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
@@ -70,9 +72,30 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
-object BucketFunction extends BoundFunction {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+object BucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
   override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    (input.getLong(1) % input.getInt(0)).toInt
+  }
+}
+
+object UnboundStringSelfFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = StringSelfFunction
+  override def description(): String = name()
+  override def name(): String = "string_self"
+}
+
+object StringSelfFunction extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "string_self"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): UTF8String = {
+    input.getUTF8String(0)
+  }
 }
