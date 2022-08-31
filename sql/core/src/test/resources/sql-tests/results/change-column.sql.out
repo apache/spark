@@ -47,7 +47,7 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-RENAME COLUMN is only supported with v2 tables.
+RENAME COLUMN is only supported with v2 tables. To use v2 tables, please config the catalog correctly using spark.sql.catalog and/or add the catalog prefix in the table identifier.
 
 
 -- !query
@@ -85,7 +85,7 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables. To use v2 tables, please config the catalog correctly using spark.sql.catalog and/or add the catalog prefix in the table identifier.
 
 
 -- !query
@@ -94,7 +94,7 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables. To use v2 tables, please config the catalog correctly using spark.sql.catalog and/or add the catalog prefix in the table identifier.
 
 
 -- !query

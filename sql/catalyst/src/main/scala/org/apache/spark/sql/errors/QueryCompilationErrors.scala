@@ -543,7 +543,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
     new AnalysisException(s"$operation is only supported with v2 tables. To use" +
-      s" v2 tables, please config the catalog correctly using spark.sql.catalog " +
+      s" v2 tables, please config the catalog correctly using spark.sql.catalog" +
       s" and/or add the catalog prefix in the table identifier.")
   }
 
