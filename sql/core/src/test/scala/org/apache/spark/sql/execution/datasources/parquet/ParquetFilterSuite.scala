@@ -76,7 +76,6 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * within the test.
  */
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
-
   protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None,
@@ -370,6 +369,38 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
+  test("filter pushdown - int SPARK-40280") {
+    implicit val df = readResourceParquetFile("test-data/tagged_int.parquet")
+
+    val intAttr = df("_c0").expr
+    assert(intAttr.dataType === IntegerType)
+
+    checkFilterPredicate(intAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+    checkFilterPredicate(intAttr.isNotNull, classOf[NotEq[_]],
+      (1 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(intAttr === 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(intAttr <=> 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(intAttr =!= 1, classOf[NotEq[_]],
+      (2 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(intAttr < 2, classOf[Lt[_]], 1)
+    checkFilterPredicate(intAttr > 3, classOf[Gt[_]], 4)
+    checkFilterPredicate(intAttr <= 1, classOf[LtEq[_]], 1)
+    checkFilterPredicate(intAttr >= 4, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(Literal(1) === intAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(1) <=> intAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(2) > intAttr, classOf[Lt[_]], 1)
+    checkFilterPredicate(Literal(3) < intAttr, classOf[Gt[_]], 4)
+    checkFilterPredicate(Literal(1) >= intAttr, classOf[LtEq[_]], 1)
+    checkFilterPredicate(Literal(4) <= intAttr, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], 4)
+    checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
+      Seq(Row(1), Row(4)))
+  }
+
   test("filter pushdown - long") {
     val data = (1 to 4).map(i => Tuple1(Option(i.toLong)))
     withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
@@ -412,6 +443,38 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         }
       }
     }
+  }
+
+  test("filter pushdown - long SPARK-40280") {
+    implicit val df = readResourceParquetFile("test-data/tagged_long.parquet")
+
+    val longAttr = df("_c0").expr
+    assert(longAttr.dataType === LongType)
+
+    checkFilterPredicate(longAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+    checkFilterPredicate(longAttr.isNotNull, classOf[NotEq[_]],
+      (1 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(longAttr === 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(longAttr <=> 1, classOf[Eq[_]], 1)
+    checkFilterPredicate(longAttr =!= 1, classOf[NotEq[_]],
+      (2 to 4).map(i => Row.apply(i)))
+
+    checkFilterPredicate(longAttr < 2, classOf[Lt[_]], 1)
+    checkFilterPredicate(longAttr > 3, classOf[Gt[_]], 4)
+    checkFilterPredicate(longAttr <= 1, classOf[LtEq[_]], 1)
+    checkFilterPredicate(longAttr >= 4, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(Literal(1) === longAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(1) <=> longAttr, classOf[Eq[_]], 1)
+    checkFilterPredicate(Literal(2) > longAttr, classOf[Lt[_]], 1)
+    checkFilterPredicate(Literal(3) < longAttr, classOf[Gt[_]], 4)
+    checkFilterPredicate(Literal(1) >= longAttr, classOf[LtEq[_]], 1)
+    checkFilterPredicate(Literal(4) <= longAttr, classOf[GtEq[_]], 4)
+
+    checkFilterPredicate(!(longAttr < 4), classOf[GtEq[_]], 4)
+    checkFilterPredicate(longAttr < 2 || longAttr > 3, classOf[Operators.Or],
+      Seq(Row(1), Row(4)))
   }
 
   test("filter pushdown - float") {

@@ -30,7 +30,7 @@ import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.SparkFilterApi._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{GroupType, LogicalTypeAnnotation, MessageType, PrimitiveComparator, PrimitiveType, Type}
-import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnotation, TimeUnit}
+import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnotation, IntLogicalTypeAnnotation, TimeUnit}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
@@ -59,6 +59,21 @@ class ParquetFilters(
   // nested columns. If any part of the names contains `dots`, it is quoted to avoid confusion.
   // See `org.apache.spark.sql.connector.catalog.quote` for implementation details.
   private val nameToParquetField : Map[String, ParquetPrimitiveField] = {
+    def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
+      // signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but the rest of
+      // the code here assumes they are not set, so normalize them to not being set. SPARK-40280
+      p.getLogicalTypeAnnotation match {
+        case la : IntLogicalTypeAnnotation if la.isSigned &&
+            la.getBitWidth == 32 && p.getPrimitiveTypeName == PrimitiveTypeName.INT32 =>
+          null
+        case la : IntLogicalTypeAnnotation if la.isSigned &&
+            la.getBitWidth == 64 && p.getPrimitiveTypeName == PrimitiveTypeName.INT64 =>
+          null
+        case other =>
+          other
+      }
+    }
+
     // Recursively traverse the parquet schema to get primitive fields that can be pushed-down.
     // `parentFieldNames` is used to keep track of the current nested level when traversing.
     def getPrimitiveFields(
@@ -70,7 +85,7 @@ class ParquetFilters(
         //                    repeated columns (https://issues.apache.org/jira/browse/PARQUET-34)
         case p: PrimitiveType if p.getRepetition != Repetition.REPEATED =>
           Some(ParquetPrimitiveField(fieldNames = parentFieldNames :+ p.getName,
-            fieldType = ParquetSchemaType(p.getLogicalTypeAnnotation,
+            fieldType = ParquetSchemaType(getNormalizedLogicalType(p),
               p.getPrimitiveTypeName, p.getTypeLength)))
         // Note that when g is a `Struct`, `g.getOriginalType` is `null`.
         // When g is a `Map`, `g.getOriginalType` is `MAP`.
