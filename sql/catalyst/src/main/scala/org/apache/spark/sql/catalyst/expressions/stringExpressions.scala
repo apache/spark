@@ -2569,10 +2569,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 case class ToBinary(
-  expr: Expression,
-  format: Option[Expression],
-  nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
-  with ImplicitCastInputTypes {
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
+    with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
     assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
@@ -2615,12 +2615,12 @@ case class ToBinary(
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
-    if (format.isDefined) {
-      copy(expr = newChildren.head, format = Some(newChildren.last))
-    } else {
-      copy(expr = newChildren.head)
-    }
+      newChildren: IndexedSeq[Expression]): Expression = {
+      if (format.isDefined) {
+        copy(expr = newChildren.head, format = Some(newChildren.last))
+      } else {
+        copy(expr = newChildren.head)
+      }
   }
 }
 

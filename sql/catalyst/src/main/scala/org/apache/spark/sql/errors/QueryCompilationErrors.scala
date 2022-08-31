@@ -801,10 +801,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidFormatInConversion(
-    argName: String,
-    funcName: String,
-    expected: String,
-    context: SQLQueryContext): Throwable = {
+      argName: String,
+      funcName: String,
+      expected: String,
+      context: SQLQueryContext): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters =
