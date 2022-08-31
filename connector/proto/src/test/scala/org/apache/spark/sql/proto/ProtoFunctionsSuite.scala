@@ -16,15 +16,19 @@
  */
 package org.apache.spark.sql.proto
 
+import com.google.protobuf.ByteString
 import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.proto.SimpleMessageRepeatedProtos.SimpleMessageRepeated
+import org.apache.spark.sql.proto.RepeatedMessageProtos.{BasicMessage, RepeatedMessage}
 import org.apache.spark.sql.proto.SimpleMessageEnumProtos.{BasicEnum, SimpleMessageEnum}
 import org.apache.spark.sql.proto.SimpleMessageMapProtos.SimpleMessageMap
 import org.apache.spark.sql.proto.MessageMultipleMessage.{IncludedExample, MultipleExample, OtherExample}
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.proto.SimpleMessageEnumProtos.SimpleMessageEnum.NestedEnum
+
+import java.util
 
 class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Serializable {
   import testImplicits._
@@ -105,6 +109,62 @@ class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Seriali
     val fromProtoDF = df.select(functions.from_proto($"value", messagePath, "SimpleMessageRepeated").as("value_from"))
     val toProtoDF = fromProtoDF.select(functions.to_proto($"value_from", messagePath, "SimpleMessageRepeated").as("value_to"))
     val toFromProtoDF = toProtoDF.select(functions.from_proto($"value_to", messagePath, "SimpleMessageRepeated").as("value_to_from"))
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("roundtrip in from_proto and to_proto - Repeated Message Once") {
+    val messagePath = testFile("protobuf/repeated_message.desc").replace("file:/", "/")
+    val basicMessage = BasicMessage.newBuilder()
+      .setId(1111L)
+      .setStringValue("value")
+      .setInt32Value(12345)
+      .setInt64Value(0x90000000000L)
+      .setDoubleValue(10000000000.0D)
+      .setBoolValue(true)
+      .setBytesValue(ByteString.copyFromUtf8("ProtobufDeserializer"))
+      .build()
+    val repeatedMessage = RepeatedMessage.newBuilder()
+      .addBasicMessage(basicMessage)
+      .build()
+
+    val df = Seq(repeatedMessage.toByteArray).toDF("value")
+    val fromProtoDF = df.select(functions.from_proto($"value", messagePath, "RepeatedMessage").as("value_from"))
+    val toProtoDF = fromProtoDF.select(functions.to_proto($"value_from", messagePath, "RepeatedMessage").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(functions.from_proto($"value_to", messagePath, "RepeatedMessage").as("value_to_from"))
+    checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+  }
+
+  test("roundtrip in from_proto and to_proto - Repeated Message Twice") {
+    val messagePath = testFile("protobuf/repeated_message.desc").replace("file:/", "/")
+    val baseArray = new util.ArrayList[BasicMessage]();
+    val basicMessage1 = BasicMessage.newBuilder()
+      .setId(1111L)
+      .setStringValue("value1")
+      .setInt32Value(12345)
+      .setInt64Value(0x20000000000L)
+      .setDoubleValue(10000000000.0D)
+      .setBoolValue(true)
+      .setBytesValue(ByteString.copyFromUtf8("ProtobufDeserializer1"))
+      .build()
+    val basicMessage2 = BasicMessage.newBuilder()
+      .setId(2222L)
+      .setStringValue("value2")
+      .setInt32Value(54321)
+      .setInt64Value(0x20000000000L)
+      .setDoubleValue(20000000000.0D)
+      .setBoolValue(false)
+      .setBytesValue(ByteString.copyFromUtf8("ProtobufDeserializer2"))
+      .build()
+    baseArray.add(basicMessage1)
+    baseArray.add(basicMessage2)
+    val repeatedMessage = RepeatedMessage.newBuilder()
+      .addAllBasicMessage(baseArray)
+      .build()
+
+    val df = Seq(repeatedMessage.toByteArray).toDF("value")
+    val fromProtoDF = df.select(functions.from_proto($"value", messagePath, "RepeatedMessage").as("value_from"))
+    val toProtoDF = fromProtoDF.select(functions.to_proto($"value_from", messagePath, "RepeatedMessage").as("value_to"))
+    val toFromProtoDF = toProtoDF.select(functions.from_proto($"value_to", messagePath, "RepeatedMessage").as("value_to_from"))
     checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
   }
 
