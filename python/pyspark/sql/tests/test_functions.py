@@ -57,7 +57,7 @@ from pyspark.sql.functions import (
     hypot,
     pow,
     pmod,
-    round
+    round,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -1035,14 +1035,9 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual([Row(c=1), Row(c=0)], res)
 
     def test_binary_math_function(self):
-        for func, res in [(atan2, 0.13664),
-                          (hypot, 8.07527),
-                          (pow, 2.14359),
-                          (pmod, 1.1)]:
+        for func, res in [(atan2, 0.13664), (hypot, 8.07527), (pow, 2.14359), (pmod, 1.1)]:
             df = self.spark.range(1).select(round(func(1.1, 8), 5).alias("a"))
-            self.assertEqual(
-                Row(a=res), df.first()
-            )
+            self.assertEqual(Row(a=res), df.first())
 
 
 if __name__ == "__main__":
