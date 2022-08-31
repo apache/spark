@@ -61,8 +61,9 @@ object ExpressionEncoder {
   }
 
   // TODO: improve error message for java bean encoder.
-  def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
-    val schema = JavaTypeInference.inferDataType(beanClass)._1
+  def javaBean[T](beanClass: Class[T], skipCircularRefField: Boolean = false)
+  : ExpressionEncoder[T] = {
+    val schema = JavaTypeInference.inferDataType(beanClass, skipCircularRefField)._1
     assert(schema.isInstanceOf[StructType])
 
     val objSerializer = JavaTypeInference.serializerFor(beanClass)

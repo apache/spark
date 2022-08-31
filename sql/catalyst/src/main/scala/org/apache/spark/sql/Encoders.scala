@@ -176,7 +176,8 @@ object Encoders {
    *
    * @since 1.6.0
    */
-  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
+  def bean[T](beanClass: Class[T], skipCircularRefField: Boolean = false)
+  : Encoder[T] = ExpressionEncoder.javaBean(beanClass, skipCircularRefField)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.

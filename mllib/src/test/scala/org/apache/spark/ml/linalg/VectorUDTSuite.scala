@@ -40,7 +40,7 @@ class VectorUDTSuite extends SparkFunSuite {
   }
 
   test("JavaTypeInference with VectorUDT") {
-    val (dataType, _) = JavaTypeInference.inferDataType(classOf[LabeledPoint])
+    val (dataType, _) = JavaTypeInference.inferDataType(classOf[LabeledPoint], false)
     assert(dataType.asInstanceOf[StructType].fields.map(_.dataType)
       === Seq(new VectorUDT, DoubleType))
   }
