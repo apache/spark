@@ -17,10 +17,11 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.codahale.metrics.MetricSet;
 import java.io.IOException;
-
 import java.util.Collections;
+
+import com.codahale.metrics.MetricSet;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
