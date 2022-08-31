@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -742,7 +742,7 @@ object BinaryExpression {
  * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
-abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
+abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes with QueryErrorsBase {
 
   /**
    * Expected input type from both left/right child expressions, similar to the
@@ -762,12 +762,12 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (!left.dataType.sameType(right.dataType)) {
       DataTypeMismatch(
-        errorSubClass = "BINARY_OP_DIFFERENT_TYPES",
-        messageParameters = Array(sql, left.dataType.catalogString, right.dataType.catalogString))
+        errorSubClass = "BINARY_OP_DIFF_TYPES",
+        messageParameters = Array(toSQLType(left.dataType), toSQLType(right.dataType)))
     } else if (!inputType.acceptsType(left.dataType)) {
       DataTypeMismatch(
-        errorSubClass = "BINARY_OP_WRONG_INPUT_TYPE",
-        messageParameters = Array(sql, inputType.simpleString, left.dataType.catalogString))
+        errorSubClass = "BINARY_OP_WRONG_TYPE",
+        messageParameters = Array(toSQLType(inputType), toSQLType(left.dataType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

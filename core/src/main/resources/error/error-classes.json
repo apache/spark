@@ -75,14 +75,14 @@
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
     "subClass" : {
-      "BINARY_OP_DIFFERENT_TYPES" : {
+      "BINARY_OP_DIFF_TYPES" : {
         "message" : [
-          "differing types in <sql> (<left> and <right>)."
+          "the left and right arguments of the binary operator have different types (<left> and <right>)."
         ]
       },
-      "BINARY_OP_WRONG_INPUT_TYPE" : {
+      "BINARY_OP_WRONG_TYPE" : {
         "message" : [
-          "<sql> requires <inputType> type, not <leftDataType>."
+          "the binary operator requires the input type <inputType>, not <leftDataType>."
         ]
       }
     }
