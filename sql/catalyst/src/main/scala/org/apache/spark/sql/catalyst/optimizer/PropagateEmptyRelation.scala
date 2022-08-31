@@ -130,7 +130,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         p
       }
 
-    // the only case can be matched here is that LogicalQueryStage is empty
+    // In AQE, the `Repartition` will be replaced with `LogicalQueryStage`,
+    // so the only case can be matched here is that `LogicalQueryStage` is empty
     case p: LeafNode if !p.isInstanceOf[LocalRelation] && isEmpty(p) => empty(p)
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
