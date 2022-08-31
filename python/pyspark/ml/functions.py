@@ -125,6 +125,17 @@ def batched(
             yield batch
 
 
+def has_tensor_cols(df: pd.DataFrame):
+    """Check if input DataFrame contains any tensor-valued columns"""
+    if any(df.dtypes == np.object_):
+        # pd.DataFrame object types can contain different types, e.g. string, dates, etc.
+        # so inspect a row and check for array/list type
+        sample = df.iloc[0]
+        return any([isinstance(x, np.ndarray) or isinstance(x, list) for x in sample])
+    else:
+        return False
+
+
 def batch_infer_udf(
     predict_batch_fn: Callable,
     return_type: DataType = ArrayType(FloatType()),
@@ -200,6 +211,7 @@ def batch_infer_udf(
             exec_global.model_uuid = model_uuid
 
         for partition in data:
+            has_tensors = has_tensor_cols(partition)
             for batch in batched(partition, batch_size):
                 if input_names:
                     # input names provided, expect a dictionary of named numpy arrays
@@ -207,14 +219,15 @@ def batch_infer_udf(
                     num_expected = len(input_names)
                     num_actual = len(batch.columns)
                     if num_actual != num_expected:
-                        print("==== input_names: {}".format(input_names))
-                        print("==== batch.columns: {}".format(batch.columns))
                         msg = "Model expected {} inputs, but received {} columns"
                         raise ValueError(msg.format(num_expected, num_actual))
 
                     # rename dataframe column names to match model input names, if needed
                     if input_names != list(batch.columns):
                         batch.columns = input_names
+
+                    if has_tensors:
+                        raise ValueError("Tensor columns require an input_tensor_shape")
 
                     # create a dictionary of named inputs
                     inputs = batch.to_dict('series')
@@ -243,6 +256,8 @@ def batch_infer_udf(
                             msg = "Multiple input_tensor_shapes require associated input_names: {}"
                             raise ValueError(msg.format(input_tensor_shapes))
                     else:
+                        if has_tensors:
+                            raise ValueError("Tensor columns require an input_tensor_shape")
                         inputs = batch.to_numpy()
 
                 # run model prediction function on transformed (numpy) inputs

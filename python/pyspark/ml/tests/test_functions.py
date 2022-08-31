@@ -175,11 +175,10 @@ class BatchInferUDFTests(SparkSessionTestCase):
         sum_cols = batch_infer_udf(array_sum_fn,
                              return_type=DoubleType(),
                              batch_size=5)
-        # TODO: raise better error
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
-        # tensor column with input_name=> ERROR
+        # tensor column with input_names => ERROR
         def dict_sum_fn():
             def predict(inputs):
                 result = np.sum(inputs['dense_input'])
@@ -190,8 +189,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
                              return_type=DoubleType(),
                              batch_size=5,
                              input_names=['dense_input'])
-        # TODO: raise better error
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
         # tensor column with tensor_input_shape => single numpy array
