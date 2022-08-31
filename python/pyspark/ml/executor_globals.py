@@ -16,5 +16,9 @@
 #
 
 # Module to hold globals for python processes on executors
-model_uuid = None
-predict_fn = None
+from typing import Callable, Optional
+from uuid import UUID
+
+
+model_uuid: Optional[UUID] = None
+predict_fn: Optional[Callable] = None

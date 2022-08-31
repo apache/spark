@@ -22,7 +22,7 @@ from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.types import ArrayType, DataType, FloatType, StructType
-from typing import Callable, Iterator, Union
+from typing import Any, Callable, Iterator, Union
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -112,10 +112,7 @@ def array_to_vector(col: Column) -> Column:
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
-def batched(
-    df: Union[pd.Series, pd.DataFrame],
-    batch_size: int = -1
-) -> Iterator[Union[pd.DataFrame, pd.Series]]:
+def batched(df: pd.DataFrame, batch_size: int = -1) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
     if batch_size <= 0 or batch_size >= len(df):
         yield df
@@ -125,7 +122,7 @@ def batched(
             yield batch
 
 
-def has_tensor_cols(df: pd.DataFrame):
+def has_tensor_cols(df: pd.DataFrame) -> bool:
     """Check if input DataFrame contains any tensor-valued columns"""
     if any(df.dtypes == np.object_):
         # pd.DataFrame object types can contain different types, e.g. string, dates, etc.
@@ -137,12 +134,13 @@ def has_tensor_cols(df: pd.DataFrame):
 
 
 def batch_infer_udf(
-        predict_batch_fn: Callable,
-        return_type: DataType = ArrayType(FloatType()),
-        batch_size: int = -1,
-        input_names: list[str] = [],
-        input_tensor_shapes: list[list[int]] = [],
-        **kwargs):
+    predict_batch_fn: Callable,
+    return_type: DataType = ArrayType(FloatType()),
+    batch_size: int = -1,
+    input_names: list[str] = [],
+    input_tensor_shapes: list[list[int]] = [],
+    **kwargs: Any,
+) -> Callable:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
     This will handle:
@@ -158,12 +156,13 @@ def batch_infer_udf(
     For the conversion of Spark DataFrame to numpy, the following table describes the behavior,
     where tensor columns in the Spark DataFrame must be represented as a flattened 1-D array/list.
 
-    | dataframe \ model | single input | multiple inputs |
-    | :---------------- | :----------- | :-------------- |
-    | single-col scalar | 1            | N/A             |
-    | single-col tensor | 1,2          | N/A             |
-    | multi-col scalar  | 3            | 4               |
-    | multi-col tensor  | N/A          | 4,2             |
+    | dataframe \\ model | single input | multiple inputs |
+    | :----------------- | :----------- | :-------------- |
+    | single-col scalar  | 1            | N/A             |
+    | single-col tensor  | 1,2          | N/A             |
+    | multi-col scalar   | 3            | 4               |
+    | multi-col tensor   | N/A          | 4,2             |
+
 
     Notes:
     1. pass thru dataframe column => model input as single numpy array.
@@ -213,6 +212,7 @@ def batch_infer_udf(
         for partition in data:
             has_tensors = has_tensor_cols(partition)
             for batch in batched(partition, batch_size):
+                inputs: Union[np.ndarray, dict[str, np.ndarray]]
                 if input_names:
                     # input names provided, expect a dictionary of named numpy arrays
                     # check if the number of inputs matches expected
@@ -230,15 +230,17 @@ def batch_infer_udf(
                         raise ValueError("Tensor columns require an input_tensor_shape")
 
                     # create a dictionary of named inputs
-                    inputs = batch.to_dict('series')
+                    inputs_dict = batch.to_dict(orient="series")
 
                     # reshape inputs, if needed
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == num_actual:
-                            for i, (k, v) in enumerate(inputs.items()):
-                                inputs[k] = v.reshape(input_tensor_shapes[i])
+                            for i, (k, v) in enumerate(inputs_dict.items()):
+                                inputs_dict[k] = v.reshape(input_tensor_shapes[i])  # type: ignore
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
+
+                    inputs = inputs_dict  # type: ignore
                 else:
                     # no input names provided, expect a single numpy array
                     if input_tensor_shapes:
@@ -246,7 +248,7 @@ def batch_infer_udf(
                             if len(batch.columns) == 1:
                                 # if one tensor input and one column, vstack and reshape the batch
                                 input_shape = input_tensor_shapes[0]
-                                input_shape[0] = -1     # replace None with -1 in batch dimension
+                                input_shape[0] = -1  # replace None with -1 in batch dimension
                                 # input = np.vstack(batch).reshape(input_shape)     # name, col
                                 inputs = np.vstack(batch.iloc[:, 0]).reshape(input_shape)  # struct
                             else:
@@ -267,11 +269,11 @@ def batch_infer_udf(
                 if isinstance(return_type, StructType):
                     yield pd.DataFrame(list(preds))
                 elif isinstance(return_type, ArrayType):
-                    yield pd.Series(list(preds))
+                    yield pd.Series(list(preds))  # type: ignore
                 else:
-                    yield pd.Series(np.squeeze(preds))
+                    yield pd.Series(np.squeeze(preds))  # type: ignore
 
-    return pandas_udf(predict, return_type)
+    return pandas_udf(predict, return_type)  # type: ignore
 
 
 def _test() -> None:
