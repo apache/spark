@@ -1181,14 +1181,16 @@ abstract class AvroSuite
           sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.contains("Cannot save interval data type into external storage.") ||
-          msg.contains("AVRO data source does not support interval data type."))
+          msg.contains("Column `INTERVAL '1' DAY` has a data type of interval day, " +
+            "which is not supported by Avro."))
 
         msg = intercept[AnalysisException] {
           spark.udf.register("testType", () => new IntervalData())
           sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"avro data source does not support interval data type."))
+          .contains("column `testtype()` has a data type of interval, " +
+            "which is not supported by avro."))
       }
     }
   }

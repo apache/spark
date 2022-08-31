@@ -92,7 +92,14 @@ select a, b from data group by -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position -1 is not in select list (valid range is [1, 2]); line 1 pos 31
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "-1",
+    "size" : "2"
+  }
+}
 
 
 -- !query
@@ -101,7 +108,14 @@ select a, b from data group by 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position 0 is not in select list (valid range is [1, 2]); line 1 pos 31
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "0",
+    "size" : "2"
+  }
+}
 
 
 -- !query
@@ -110,7 +124,14 @@ select a, b from data group by 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position 3 is not in select list (valid range is [1, 2]); line 1 pos 31
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "size" : "2"
+  }
+}
 
 
 -- !query
@@ -119,7 +140,14 @@ select a, b, sum(b) from data group by 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY 3 refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got sum(data.b) AS `sum(b)`; line 1 pos 39
+{
+  "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "aggExpr" : "sum(data.b) AS `sum(b)`"
+  }
+}
 
 
 -- !query
@@ -128,7 +156,14 @@ select a, b, sum(b) + 2 from data group by 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY 3 refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got (sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`; line 1 pos 43
+{
+  "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`"
+  }
+}
 
 
 -- !query
@@ -349,7 +384,14 @@ select a, b, count(1) from data group by a, -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position -1 is not in select list (valid range is [1, 3]); line 1 pos 44
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "-1",
+    "size" : "3"
+  }
+}
 
 
 -- !query
@@ -358,7 +400,14 @@ select a, b, count(1) from data group by a, 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY 3 refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got count(1) AS `count(1)`; line 1 pos 44
+{
+  "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "aggExpr" : "count(1) AS `count(1)`"
+  }
+}
 
 
 -- !query
@@ -367,7 +416,14 @@ select a, b, count(1) from data group by cube(-1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY position -1 is not in select list (valid range is [1, 3]); line 1 pos 46
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "-1",
+    "size" : "3"
+  }
+}
 
 
 -- !query
@@ -376,7 +432,14 @@ select a, b, count(1) from data group by cube(1, 3)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-GROUP BY 3 refers to an expression that is or contains an aggregate function. Aggregate functions are not allowed in GROUP BY, but got count(1) AS `count(1)`; line 1 pos 49
+{
+  "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "index" : "3",
+    "aggExpr" : "count(1) AS `count(1)`"
+  }
+}
 
 
 -- !query

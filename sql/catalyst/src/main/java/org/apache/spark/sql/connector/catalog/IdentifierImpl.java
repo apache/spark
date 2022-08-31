@@ -19,8 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.StringJoiner;
 
 import com.google.common.base.Preconditions;
 
@@ -55,9 +54,12 @@ class IdentifierImpl implements Identifier {
 
   @Override
   public String toString() {
-    return Stream.concat(Stream.of(namespace), Stream.of(name))
-      .map(package$.MODULE$::quoteIfNeeded)
-      .collect(Collectors.joining("."));
+    StringJoiner joiner = new StringJoiner(".");
+    for (String p : namespace) {
+      joiner.add(package$.MODULE$.quoteIfNeeded(p));
+    }
+    joiner.add(package$.MODULE$.quoteIfNeeded(name));
+    return joiner.toString();
   }
 
   @Override

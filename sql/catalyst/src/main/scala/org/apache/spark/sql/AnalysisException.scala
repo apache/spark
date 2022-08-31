@@ -100,7 +100,7 @@ class AnalysisException protected[sql] (
       line = origin.line,
       startPosition = origin.startPosition,
       errorClass = Some(errorClass),
-      errorSubClass = Some(errorSubClass),
+      errorSubClass = Option(errorSubClass),
       messageParameters = messageParameters)
 
   def copy(

@@ -17,6 +17,12 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_DECODE_URL" : {
+    "message" : [
+      "Cannot decode url : <url>."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_INFER_DATE" : {
     "message" : [
       "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
@@ -129,6 +135,18 @@
     "message" : [
       "Grouping sets size cannot be greater than <maxSize>"
     ]
+  },
+  "GROUP_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
+  },
+  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+    "message" : [
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
+    ],
+    "sqlState" : "42000"
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
