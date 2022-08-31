@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
@@ -51,6 +52,14 @@ package object analysis {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    def failAnalysis(res: DataTypeMismatch): Nothing = {
+      throw new AnalysisException(
+        errorClass = "DATATYPE_MISMATCH",
+        errorSubClass = res.errorSubClass,
+        messageParameters = res.messageParameters,
         origin = t.origin)
     }
   }

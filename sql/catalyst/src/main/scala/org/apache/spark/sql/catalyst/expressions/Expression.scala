@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -760,11 +761,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (!left.dataType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${left.dataType.catalogString} and ${right.dataType.catalogString}).")
+      DataTypeMismatch(
+        errorSubClass = "BINARY_OP_DIFFERENT_TYPES",
+        messageParameters = Array(sql, left.dataType.catalogString, right.dataType.catalogString))
     } else if (!inputType.acceptsType(left.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
-        s" not ${left.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "BINARY_OP_WRONG_INPUT_TYPE",
+        messageParameters = Array(sql, inputType.simpleString, left.dataType.catalogString))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

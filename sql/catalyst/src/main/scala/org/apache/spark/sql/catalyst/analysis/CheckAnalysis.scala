@@ -189,6 +189,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case hof: HigherOrderFunction
               if hof.argumentsResolved && hof.checkArgumentDataTypes().isFailure =>
             hof.checkArgumentDataTypes() match {
+              case r: TypeCheckResult.DataTypeMismatch =>
+                hof.failAnalysis(r)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
@@ -211,6 +213,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
+              case r: TypeCheckResult.DataTypeMismatch =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.failAnalysis(r)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
@@ -694,7 +699,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) =>
+            case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
               issueFixedIfAnsiOff = false
           }
 
