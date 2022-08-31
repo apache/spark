@@ -173,32 +173,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       to: DataType,
       s: UTF8String,
       fmt: UTF8String,
-      hint: String = "",
-      context: SQLQueryContext): SparkIllegalArgumentException = {
-    val alternative = if (hint.nonEmpty) {
-      s" Use '$hint' to tolerate malformed input and return NULL instead."
-    } else ""
-    new SparkIllegalArgumentException(
-      errorClass = "CONVERSION_INVALID_INPUT",
-      messageParameters =
-        Array(toSQLValue(s, StringType), toSQLValue(fmt, StringType), toSQLType(to), alternative),
-      context = getQueryContext(context),
-      summary = getSummary(context)
-    )
-  }
-
-  def invalidFormatInConversion(
-      argName: String,
-      funcName: String,
-      expected: String,
-      context: SQLQueryContext): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters =
-        Array(toSQLId(argName), toSQLId(funcName), expected),
-      context = getQueryContext(context),
-      summary = getSummary(context)
-    )
+      hint: String): SparkIllegalArgumentException = {
+      new SparkIllegalArgumentException(
+        errorClass = "CONVERSION_INVALID_INPUT",
+        messageParameters = Array(
+          toSQLValue(s, StringType),
+          toSQLValue(fmt, StringType),
+          toSQLType(to),
+          toSQLId(hint)))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {

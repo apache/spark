@@ -73,7 +73,7 @@
   },
   "CONVERSION_INVALID_INPUT" : {
     "message" : [
-      "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format.<hint>"
+      "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
   "DATETIME_OVERFLOW" : {

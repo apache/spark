@@ -61,25 +61,9 @@ class QueryExecutionErrorsSuite
       errorClass = "CONVERSION_INVALID_INPUT",
       parameters = Map(
         "str" -> "'???'",
-        "fmt" -> "'base64'",
+        "fmt" -> "'BASE64'",
         "targetType" -> "\"BINARY\"",
-        "hint" -> " Use 'try_to_binary' to tolerate malformed input and return NULL instead."),
-      context = ExpectedContext(fragment = "to_binary('???', 'base64')", start = 7, stop = 32))
-  }
-
-  test("INVALID_PARAMETER_VALUE: to_binary conversion function") {
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        sql("select to_binary('string', 'base32')").collect()
-      },
-      errorClass = "INVALID_PARAMETER_VALUE",
-      parameters = Map(
-        "parameter" -> "`format`",
-        "functionName" -> "`to_binary`",
-        "expected" -> ("expects a case-insensitive string " +
-          "literal of 'hex', 'utf-8', 'utf8', or 'base64' but got 'base32'")),
-      sqlState = "22023",
-      context = ExpectedContext(fragment = "to_binary('string', 'base32')", start = 7, stop = 35))
+        "suggestion" -> "`try_to_binary`"))
   }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {

@@ -123,6 +123,20 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
+    withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select format_string('%0$s', 'Hello')")
+        },
+        errorClass = "INVALID_PARAMETER_VALUE",
+        parameters = Map(
+          "parameter" -> "strfmt",
+          "functionName" -> "`format_string`",
+          "expected" -> "expects %1$, %2$ and so on, but got %0$."))
+    }
+  }
+
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
     assume(shouldTestGroupedAggPandasUDFs)
