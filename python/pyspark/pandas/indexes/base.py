@@ -2509,7 +2509,7 @@ class Index(IndexOpsMixin):
         elif is_list_like(other):
             other_idx = Index(other)
             if isinstance(other_idx, MultiIndex):
-                return other_idx.to_frame().head(0).index
+                raise ValueError("Names should be list-like for a MultiIndex")
             spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         else:
