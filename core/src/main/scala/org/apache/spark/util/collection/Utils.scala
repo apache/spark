@@ -38,20 +38,20 @@ private[spark] object Utils {
   }
 
   /**
-   * Returns an iterator over the merged contents of all given iterators,
+   * Returns an iterator over the merged contents of all given input iterators,
    * traversing every element of the input iterators.
    * Equivalent entries will not be de-duplicated.
    *
-   * Callers must ensure that the source iterators are already sorted by
+   * Callers must ensure that all the input iterators are already sorted by
    * the same ordering `ord`, otherwise the result is likely to be incorrect.
    */
-  def mergeOrdered[T](iterators: Iterable[TraversableOnce[T]])(
+  def mergeOrdered[T](inputs: Iterable[TraversableOnce[T]])(
     implicit ord: Ordering[T]): Iterator[T] = {
     val ordering = new GuavaOrdering[T] {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
     GuavaIterators.mergeSorted(
-      iterators.map(_.toIterator.asJava).asJava, ordering).asScala
+      inputs.map(_.toIterator.asJava).asJava, ordering).asScala
   }
 
   /**

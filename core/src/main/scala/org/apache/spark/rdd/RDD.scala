@@ -1537,7 +1537,14 @@ abstract class RDD[T: ClassTag](
           Iterator.empty
         }
       }.reduce { (array1, array2) =>
-        collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord).take(num).toArray
+        val iterator = collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord)
+        val array = Array.ofDim[T](math.min(num, array1.length + array2.length))
+        var i = 0
+        while (i < array.length) {
+          array(i) = iterator.next()
+          i += 1
+        }
+        array
       }
     }
   }
