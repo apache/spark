@@ -279,9 +279,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       (f1: Long => T) (f2: Double => T): T = {
     if (decimalVal.eq(null)) {
       val actualLongVal = longVal / POW_10(_scale)
-      val intVal = f1(actualLongVal)
-      if (actualLongVal == intVal) {
-        intVal
+      val numericVal = f1(actualLongVal)
+      if (actualLongVal == numericVal) {
+        numericVal
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
           this, DecimalType(this.precision, this.scale), integralType)
