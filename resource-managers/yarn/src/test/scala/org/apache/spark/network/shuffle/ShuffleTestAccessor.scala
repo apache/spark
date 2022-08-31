@@ -35,6 +35,10 @@ import org.apache.spark.network.util.{DBProvider, TransportConf}
  */
 object ShuffleTestAccessor {
 
+  import com.fasterxml.jackson.databind.ObjectMapper
+
+  import org.apache.spark.network.shuffledb.StoreVersion
+
   def getBlockResolver(handler: ExternalBlockHandler): ExternalShuffleBlockResolver = {
     handler.blockManager
   }
@@ -208,9 +212,12 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
-    dbBackend: DBBackend,
-    file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val db = DBProvider.initDB(dbBackend, file)
+      dbBackend: DBBackend,
+      file: File,
+      version: StoreVersion,
+      mapper: ObjectMapper)
+    : ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    val db = DBProvider.initDB(dbBackend, file, version, mapper)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result

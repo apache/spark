@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.LevelDB;
@@ -41,19 +40,6 @@ public class DBProvider {
             return levelDB != null ? new LevelDB(levelDB) : null;
           default:
             throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
-        }
-      }
-      return null;
-    }
-
-    @VisibleForTesting
-    public static DB initDB(DBBackend dbBackend, File file) throws IOException {
-      if (file != null) {
-        // TODO: SPARK-38888, add rocksdb implementation.
-        switch (dbBackend) {
-          case LEVELDB: return new LevelDB(LevelDBProvider.initLevelDB(file));
-        default:
-          throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
         }
       }
       return null;
