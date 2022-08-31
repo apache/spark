@@ -158,7 +158,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
                                    return_type=DoubleType(),
                                    batch_size=5,
                                    input_tensor_shapes=[[-1, 2], [-1, 2]])
-        with self.assertRaisesRegex(Exception, 
+        with self.assertRaisesRegex(Exception,
                                     "Multiple input_tensor_shapes require associated input_names"):
             self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
@@ -173,8 +173,8 @@ class BatchInferUDFTests(SparkSessionTestCase):
             return predict
 
         sum_cols = batch_infer_udf(array_sum_fn,
-                             return_type=DoubleType(),
-                             batch_size=5)
+                                   return_type=DoubleType(),
+                                   batch_size=5)
         with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
@@ -186,9 +186,9 @@ class BatchInferUDFTests(SparkSessionTestCase):
             return predict
 
         sum_cols = batch_infer_udf(dict_sum_fn,
-                             return_type=DoubleType(),
-                             batch_size=5,
-                             input_names=['dense_input'])
+                                   return_type=DoubleType(),
+                                   batch_size=5,
+                                   input_names=['dense_input'])
         with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
@@ -202,10 +202,10 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
         # tensor column with multiple tensor_input_shapes => ERROR
         sum_cols = batch_infer_udf(array_sum_fn,
-                             return_type=DoubleType(),
-                             batch_size=5,
-                             input_tensor_shapes=[[-1,4], [-1,4]])
-        with self.assertRaisesRegex(Exception, 
+                                   return_type=DoubleType(),
+                                   batch_size=5,
+                                   input_tensor_shapes=[[-1, 4], [-1, 4]])
+        with self.assertRaisesRegex(Exception,
                                     "Multiple input_tensor_shapes require associated input_names"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 

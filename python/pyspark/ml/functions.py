@@ -137,12 +137,12 @@ def has_tensor_cols(df: pd.DataFrame):
 
 
 def batch_infer_udf(
-    predict_batch_fn: Callable,
-    return_type: DataType = ArrayType(FloatType()),
-    batch_size: int = -1,
-    input_names: list[str] = [],
-    input_tensor_shapes: list[list[int]] = [],
-    **kwargs):
+        predict_batch_fn: Callable,
+        return_type: DataType = ArrayType(FloatType()),
+        batch_size: int = -1,
+        input_names: list[str] = [],
+        input_tensor_shapes: list[list[int]] = [],
+        **kwargs):
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
     This will handle:
@@ -235,7 +235,7 @@ def batch_infer_udf(
                     # reshape inputs, if needed
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == num_actual:
-                            for i,(k, v) in enumerate(inputs.items()):
+                            for i, (k, v) in enumerate(inputs.items()):
                                 inputs[k] = v.reshape(input_tensor_shapes[i])
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
@@ -248,7 +248,7 @@ def batch_infer_udf(
                                 input_shape = input_tensor_shapes[0]
                                 input_shape[0] = -1     # replace None with -1 in batch dimension
                                 # input = np.vstack(batch).reshape(input_shape)     # name, col
-                                inputs = np.vstack(batch.iloc[:,0]).reshape(input_shape)  # struct
+                                inputs = np.vstack(batch.iloc[:, 0]).reshape(input_shape)  # struct
                             else:
                                 # otherwise, try to convert entire dataframe to a single np array
                                 inputs = batch.to_numpy()
@@ -261,7 +261,7 @@ def batch_infer_udf(
                         inputs = batch.to_numpy()
 
                 # run model prediction function on transformed (numpy) inputs
-                preds =  predict_fn(inputs)
+                preds = predict_fn(inputs)
 
                 # return predictions to Spark
                 if isinstance(return_type, StructType):
