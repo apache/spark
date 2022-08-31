@@ -108,12 +108,14 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
+    def align_type(c):
+        # For legacy reasons, the arguments here can be implicitly converted into column
+        return c if isinstance(c, (str, Column)) else lit(c)
+
     return _invoke_function(
         name,
-        # For legacy reasons, the arguments here can be implicitly converted into floats,
-        # if they are not columns or strings.
-        _to_java_column(col1) if isinstance(col1, (str, Column)) else float(col1),
-        _to_java_column(col2) if isinstance(col2, (str, Column)) else float(col2),
+        _to_java_column(align_type(col1)),
+        _to_java_column(align_type(col2))
     )
 
 
@@ -1994,21 +1996,6 @@ def radians(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("radians", col)
 
 
-@overload
-def atan2(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def atan2(col1: float, col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def atan2(col1: "ColumnOrName", col2: float) -> Column:
-    ...
-
-
 def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     .. versionadded:: 1.4.0
@@ -2038,21 +2025,6 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     return _invoke_binary_math_function("atan2", col1, col2)
 
 
-@overload
-def hypot(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def hypot(col1: float, col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def hypot(col1: "ColumnOrName", col2: float) -> Column:
-    ...
-
-
 def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
     """
     Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.
@@ -2078,21 +2050,6 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     Row(HYPOT(1, 2)=2.23606...)
     """
     return _invoke_binary_math_function("hypot", col1, col2)
-
-
-@overload
-def pow(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def pow(col1: float, col2: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def pow(col1: "ColumnOrName", col2: float) -> Column:
-    ...
 
 
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
