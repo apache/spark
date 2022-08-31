@@ -273,7 +273,7 @@ private[spark] class DAGScheduler(
   private val shuffleMergeFinalizeNumThreads =
     sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS)
 
-  private val shuffleSendFinalizeRPCThreads =
+  private val shuffleSendFinalizeRpcThreads =
     sc.getConf.get(config.PUSH_BASED_SHUFFLE_SEND_FINALIZE_RPC_THREADS)
 
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
@@ -296,7 +296,7 @@ private[spark] class DAGScheduler(
   // if finalize RPC is not received due to network issues.
   private val shuffleSendFinalizeRpcExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(
-      shuffleSendFinalizeRPCThreads, "send-shuffle-merge-finalize-rpc")
+      shuffleSendFinalizeRpcThreads, "send-shuffle-merge-finalize-rpc")
 
   /**
    * Called by the TaskSetManager to report task's starting.
