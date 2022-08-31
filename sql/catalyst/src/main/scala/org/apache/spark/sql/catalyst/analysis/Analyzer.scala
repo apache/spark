@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.{Method, Modifier}
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -47,8 +46,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
-import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -2388,33 +2386,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
-        val declaredInputTypes = scalarFunc.inputTypes().toSeq
-        val argClasses = declaredInputTypes.map(ScalaReflection.dataTypeJavaClass)
-        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
-          case Some(m) if Modifier.isStatic(m.getModifiers) =>
-            StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
-                propagateNull = false, returnNullable = scalarFunc.isResultNullable,
-                isDeterministic = scalarFunc.isDeterministic)
-          case Some(_) =>
-            val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
-            Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-              arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable,
-              isDeterministic = scalarFunc.isDeterministic)
-          case _ =>
-            // TODO: handle functions defined in Scala too - in Scala, even if a
-            //  subclass do not override the default method in parent interface
-            //  defined in Java, the method can still be found from
-            //  `getDeclaredMethod`.
-            findMethod(scalarFunc, "produceResult", Seq(classOf[InternalRow])) match {
-              case Some(_) =>
-                ApplyFunctionExpression(scalarFunc, arguments)
-              case _ =>
-                failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
-                  s" magic method nor override 'produceResult'")
-            }
-        }
+        V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
       }
     }
 
@@ -2428,23 +2400,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
       aggregator.toAggregateExpression(u.isDistinct, u.filter)
-    }
-
-    /**
-     * Check if the input `fn` implements the given `methodName` with parameter types specified
-     * via `argClasses`.
-     */
-    private def findMethod(
-        fn: BoundFunction,
-        methodName: String,
-        argClasses: Seq[Class[_]]): Option[Method] = {
-      val cls = fn.getClass
-      try {
-        Some(cls.getDeclaredMethod(methodName, argClasses: _*))
-      } catch {
-        case _: NoSuchMethodException =>
-          None
-      }
     }
   }
 
