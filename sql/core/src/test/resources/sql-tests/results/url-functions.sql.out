@@ -105,8 +105,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "CANNOT_DECODE_URL",
   "sqlState" : "42000",
   "messageParameters" : {
-    "url" : "http%3A%2F%2spark.apache.org",
-    "details" : "URLDecoder: Illegal hex characters in escape (%) pattern - For input string: \"2s\""
+    "url" : "http%3A%2F%2spark.apache.org"
   }
 }
 

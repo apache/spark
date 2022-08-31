@@ -20,7 +20,6 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
 import org.apache.spark.util.collection.Utils.sequenceToOption
@@ -41,14 +40,9 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
 
   private def partitioning(plan: LogicalPlan) = plan.transformDown {
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, None, _) =>
-      val funCatalogOpt = relation.catalog.flatMap {
-        case c: FunctionCatalog => Some(c)
-        case _ => None
-      }
-
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.keys().map(
-          V2ExpressionUtils.toCatalystOpt(_, relation, funCatalogOpt)))
+          V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog)))
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
             "type: " + p.getClass.getSimpleName)

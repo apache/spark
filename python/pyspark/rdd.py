@@ -1122,6 +1122,7 @@ class RDD(Generic[T_co]):
 
         Examples
         --------
+        >>> import sys
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
         20
@@ -1129,12 +1130,19 @@ class RDD(Generic[T_co]):
         5
         >>> len(rdd.takeSample(False, 15, 3))
         10
+        >>> sc.range(0, 10).takeSample(False, sys.maxsize)
+        Traceback (most recent call last):
+            ...
+        ValueError: Sample size cannot be greater than ...
         """
         numStDev = 10.0
-
+        maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
         if num < 0:
             raise ValueError("Sample size cannot be negative.")
-        elif num == 0:
+        elif num > maxSampleSize:
+            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
+
+        if num == 0 or self.getNumPartitions() == 0:
             return []
 
         initialCount = self.count()
@@ -1148,10 +1156,6 @@ class RDD(Generic[T_co]):
             samples = self.collect()
             rand.shuffle(samples)
             return samples
-
-        maxSampleSize = sys.maxsize - int(numStDev * sqrt(sys.maxsize))
-        if num > maxSampleSize:
-            raise ValueError("Sample size cannot be greater than %d." % maxSampleSize)
 
         fraction = RDD._computeFractionForSampleSize(num, initialCount, withReplacement)
         samples = self.sample(withReplacement, fraction, seed).collect()

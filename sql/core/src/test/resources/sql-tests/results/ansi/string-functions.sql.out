@@ -156,6 +156,38 @@ struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 
 
 -- !query
+SELECT split('hello', '')
+-- !query schema
+struct<split(hello, , -1):array<string>>
+-- !query output
+["h","e","l","l","o"]
+
+
+-- !query
+SELECT split('', '')
+-- !query schema
+struct<split(, , -1):array<string>>
+-- !query output
+[""]
+
+
+-- !query
+SELECT split('abc', null)
+-- !query schema
+struct<split(abc, NULL, -1):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+SELECT split(null, 'b')
+-- !query schema
+struct<split(NULL, b, -1):array<string>>
+-- !query output
+NULL
+
+
+-- !query
 SELECT split_part('11.12.13', '.', 2)
 -- !query schema
 struct<split_part(11.12.13, ., 2):string>

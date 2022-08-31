@@ -26,6 +26,10 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
+SELECT split('hello', '');
+SELECT split('', '');
+SELECT split('abc', null);
+SELECT split(null, 'b');
 
 -- split_part function
 SELECT split_part('11.12.13', '.', 2);

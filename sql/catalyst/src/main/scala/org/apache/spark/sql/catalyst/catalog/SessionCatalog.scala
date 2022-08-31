@@ -697,6 +697,24 @@ class SessionCatalog(
   }
 
   /**
+   * Generate a [[View]] operator from the local or global temporary view stored.
+   */
+  def getLocalOrGlobalTempView(name: TableIdentifier): Option[View] = {
+    getRawLocalOrGlobalTempView(toNameParts(name)).map(getTempViewPlan)
+  }
+
+  /**
+   * Return the raw logical plan of a temporary local or global view for the given name.
+   */
+  def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
+    name match {
+      case Seq(v) => getRawTempView(v)
+      case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
+      case _ => None
+    }
+  }
+
+  /**
    * Drop a local temporary view.
    *
    * Returns true if this view is dropped successfully, false otherwise.
@@ -712,6 +730,22 @@ class SessionCatalog(
    */
   def dropGlobalTempView(name: String): Boolean = {
     globalTempViewManager.remove(format(name))
+  }
+
+  private def toNameParts(ident: TableIdentifier): Seq[String] = {
+    ident.database.toSeq :+ ident.table
+  }
+
+  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
+    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
+    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
+  }
+
+  /**
+   * Generates a [[SubqueryAlias]] operator from the stored temporary view.
+   */
+  def getTempViewRelation(viewInfo: TemporaryViewRelation): SubqueryAlias = {
+    SubqueryAlias(toNameParts(viewInfo.tableMeta.identifier).map(format), getTempViewPlan(viewInfo))
   }
 
   // -------------------------------------------------------------
@@ -868,11 +902,6 @@ class SessionCatalog(
     }
   }
 
-  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
-    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
-    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-  }
-
   private def buildViewDDL(metadata: CatalogTable, isTempView: Boolean): Option[String] = {
     if (isTempView) {
       None
@@ -965,61 +994,22 @@ class SessionCatalog(
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
 
-  def lookupTempView(table: String): Option[SubqueryAlias] = {
-    val formattedTable = format(table)
-    getTempView(formattedTable).map { view =>
-      SubqueryAlias(formattedTable, view)
-    }
-  }
-
-  def lookupGlobalTempView(db: String, table: String): Option[SubqueryAlias] = {
-    val formattedDB = format(db)
-    if (formattedDB == globalTempViewManager.database) {
-      val formattedTable = format(table)
-      getGlobalTempView(formattedTable).map { view =>
-        SubqueryAlias(formattedTable, formattedDB, view)
-      }
-    } else {
-      None
-    }
+  def isGlobalTempViewDB(dbName: String): Boolean = {
+    globalTempViewManager.database.equalsIgnoreCase(dbName)
   }
 
   /**
    * Return whether the given name parts belong to a temporary or global temporary view.
    */
   def isTempView(nameParts: Seq[String]): Boolean = {
-    if (nameParts.length > 2) return false
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    isTempView(nameParts.asTableIdentifier)
-  }
-
-  def isGlobalTempViewDB(dbName: String): Boolean = {
-    globalTempViewManager.database.equalsIgnoreCase(dbName)
-  }
-
-  def lookupTempView(name: TableIdentifier): Option[View] = {
-    lookupLocalOrGlobalRawTempView(name.database.toSeq :+ name.table).map(getTempViewPlan)
-  }
-
-  /**
-   * Return the raw logical plan of a temporary local or global view for the given name.
-   */
-  def lookupLocalOrGlobalRawTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
-    name match {
-      case Seq(v) => getRawTempView(v)
-      case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
-      case _ => None
-    }
+    getRawLocalOrGlobalTempView(nameParts).isDefined
   }
 
   /**
    * Return whether a table with the specified name is a temporary view.
-   *
-   * Note: The temporary view cache is checked only when database is not
-   * explicitly specified.
    */
   def isTempView(name: TableIdentifier): Boolean = synchronized {
-    lookupTempView(name).isDefined
+    isTempView(toNameParts(name))
   }
 
   def isView(nameParts: Seq[String]): Boolean = {
@@ -1135,7 +1125,7 @@ class SessionCatalog(
    *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    lookupTempView(name).map(_.refresh).getOrElse {
+    getLocalOrGlobalTempView(name).map(_.refresh).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
