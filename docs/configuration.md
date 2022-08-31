@@ -1102,29 +1102,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>3.0.0</td>
 </tr>
-<tr>
-  <td><code>spark.shuffle.service.db.enabled</code></td>
-  <td>true</td>
-  <td>
-    To determine whether external shuffle service uses db to store shuffle state.
-    In standalone mode, for more detail, see
-    <a href="spark-standalone.html#Cluster Launch Scripts">this description</a>.
-  </td>
-  <td>3.0.0</td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.service.db.backend</code></td>
-  <td>LEVELDB</td>
-  <td>
-    To specify a disk-based store used in shuffle service local db when 
-    <code>spark.shuffle.service.db.enabled</code> is true, LEVELDB or ROCKSDB.
-    In standalone mode, for more detail, see
-    <a href="spark-standalone.html#Cluster Launch Scripts">this description</a>.
-    In Yarn mode, for more detail, see
-    <a href="running-on-yarn.html#Configuring the External Shuffle Service">this description</a>.
-  </td>
-  <td>3.4.0</td>
-</tr>
 </table>
 
 ### Spark UI
