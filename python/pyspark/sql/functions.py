@@ -109,7 +109,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
 
-    def align_type(c):
+    def align_type(c: Any) -> Union[str, Column]:
         # For legacy reasons, the arguments here can be implicitly converted into column
         return c if isinstance(c, (str, Column)) else lit(c)
 
