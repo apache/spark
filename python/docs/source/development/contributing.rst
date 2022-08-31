@@ -155,7 +155,9 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 Contributing and Maintaining Type Hints
 ----------------------------------------
 
-PySpark type hints are inlined, to take advantage of static type checking within the functions.
+PySpark type hints are inlined, to take advantage of static type checking.
+
+As a rule of thumb, only public API is annotated.
 
 Annotations should, when possible:
 
