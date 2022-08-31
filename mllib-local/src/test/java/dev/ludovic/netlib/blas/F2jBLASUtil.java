@@ -21,10 +21,11 @@ package dev.ludovic.netlib.blas;
  * This is a workaround since class {@link F2jBLAS} are not public
  */
 public final class F2jBLASUtil {
+    public static final JavaBLAS instance;
+
+    static {
+        instance = F2jBLAS.getInstance();
+    }
 
     private F2jBLASUtil() {}
-
-    public static JavaBLAS getInstance() {
-        return F2jBLAS.getInstance();
-    }
 }
