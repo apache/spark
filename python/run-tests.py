@@ -131,7 +131,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         # Adding Spark Connect JAR and Config
         "--conf", "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin",
         # We manaully add the Spark Connect build jar file here.
-        "--jars", spark_connect_path,
+        # "--jars", spark_connect_path,
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)

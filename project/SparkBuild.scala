@@ -39,8 +39,9 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
+import coursier.ShadingPlugin
+import coursier.ShadingPlugin.autoImport._
 import sbtprotoc.ProtocPlugin.autoImport._
-
 
 object BuildCommons {
 
@@ -619,13 +620,25 @@ object SparkConnect {
       // Neded for the overall
       "io.grpc"          % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
       "io.grpc"          % "grpc-all"             % BuildCommons.gprcVersion,
-      "javax.annotation" % "javax.annotation-api" % "1.3.2"
+      "javax.annotation" % "javax.annotation-api" % "1.3.2",
+      "com.google.guava" % "guava"                % "31.0.1-jre",
+      "com.google.guava" % "failureaccess"        % "1.0.1"
     ),
 
     (Compile / PB.targets) := Seq(
       PB.gens.java                -> (Compile / sourceManaged).value,
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
-    )
+    ),
+
+
+    shadedModules := Set("io.grpc" % "grpc-all"),
+    shadedModules += "com.goole.guava" % "guava",
+    shadedModules += "com.goole.guava" % "failureaccess",
+
+    shadingRules := Seq(ShadingRule.moveUnder("io.grpc", "org.sparkproject.shaded.grpc")),
+    shadingRules += ShadingRule.moveUnder("com.google.common", "org.sparkproject.shaded.guava"),
+    shadingRules += ShadingRule.moveUnder("org.eclipse.jetty", "org.sparkproject.shaded.jetty"),
+    validNamespaces := Set("com.google.common")
   )
 }
 
