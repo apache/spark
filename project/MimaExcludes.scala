@@ -34,7 +34,7 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
-  // Exclude rules for 3.4.x
+  // Exclude rules for 3.4.x from 3.3.0
   lazy val v34excludes = v33excludes ++ Seq(
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast"),
@@ -64,44 +64,51 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.this"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.deploy.DeployMessages#RequestExecutors.apply"),
 
+    // [SPARK-38929][SQL] Improve error messages for cast failures in ANSI
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
+
+    // [SPARK-39704][SQL] Implement createIndex & dropIndex & indexExists in JDBC (H2 dialect)
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DB2Dialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DB2Dialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DB2Dialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DB2Dialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DerbyDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DerbyDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DerbyDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DerbyDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MsSqlServerDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MsSqlServerDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MsSqlServerDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MsSqlServerDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MySQLDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MySQLDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MySQLDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MySQLDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.NoopDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.NoopDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.NoopDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.NoopDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.OracleDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.OracleDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.OracleDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.OracleDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.PostgresDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.PostgresDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.PostgresDialect.indexExists"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.PostgresDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.TeradataDialect.createIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.TeradataDialect.dropIndex"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.TeradataDialect.indexExists"),
+
+    // [SPARK-39759][SQL] Implement listIndexes in JDBC (H2 dialect)
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DB2Dialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.DerbyDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.JdbcDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MsSqlServerDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.MySQLDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.NoopDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.OracleDialect.listIndexes"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.PostgresDialect.listIndexes"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.jdbc.TeradataDialect.listIndexes"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
+
+    // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
     ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil")
   )
 
