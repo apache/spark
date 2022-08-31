@@ -40,7 +40,7 @@ object BLASBenchmark extends BenchmarkBase {
     val iters = 1e2.toInt
     val rnd = new scala.util.Random(0)
 
-    val f2jBLAS = F2jBLASUtil.instance
+    val f2jBLAS = F2jBLASUtil.getInstance
     val javaBLAS = BLAS.javaBLAS
     val nativeBLAS = BLAS.nativeBLAS
 
