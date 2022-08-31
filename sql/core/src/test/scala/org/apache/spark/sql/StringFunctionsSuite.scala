@@ -624,20 +624,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
 
-    val selectExpr =
-      """str_to_map(str,
-        |if(flag = 0, '&', '%'),
-        |if(flag = 0, '=', '#'))
-        |""".stripMargin
-
-    checkAnswer(
-      df3.selectExpr(selectExpr),
-      Seq(
-        Row(Map("a" -> "1", "b" -> "2")),
-        Row(Map("k" -> "2", "v" -> "3"))
-      )
-    )
-
     val df4 = Seq(
       ("a:1&b:2", "&"),
       ("k:2%v:3", "%")
