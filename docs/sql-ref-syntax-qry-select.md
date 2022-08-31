@@ -76,7 +76,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 
     An expression with an assigned name. In general, it denotes a column expression.
 
-    **Syntax:** `expression [AS] [alias]`
+    **Syntax:** `expression [[AS] alias]`
 
 * **from_item**
 

@@ -38,14 +38,14 @@ single_value_column_unpivot:
 multi_value_column_unpivot:
     (values_column [, ...])
     FOR name_column
-    IN ((unpivot_column [[AS] alias] [, ...]) [, ...])
+    IN ((unpivot_column [, ...]) [[AS] alias] [, ...])
 ```
 
 ### Parameters
 
 * **unpivot_column**
 
-    Column in the `FROM` clause to be unpivoted.
+    Column or expression to be unpivoted.
 
 * **name_column**
 
@@ -91,8 +91,8 @@ SELECT * FROM sales_quarterly
 -- unpivot result can be referenced via its alias
 SELECT up.* FROM sales_quarterly
     UNPIVOT EXCLUDE NULLS (
-        sales FOR quarter IN (q1 AS `Q1`, q2 AS `Q2`, q3 AS `Q3`, q4 AS `Q4`)
-    ) AS `up`;
+        sales FOR quarter IN (q1 AS Q1, q2 AS Q2, q3 AS Q3, q4 AS Q4)
+    ) AS up;
 +------+---------+-------+
 | year | quarter | sales |
 +------+---------+-------+
@@ -112,8 +112,8 @@ SELECT * FROM sales_quarterly
     UNPIVOT EXCLUDE NULLS (
         (first_quarter, second_quarter)
         FOR half_of_the_year IN (
-            (q1, q2) AS `H1`,
-            (q3, q4) AS `H2`
+            (q1, q2) AS H1,
+            (q3, q4) AS H2
         )
     );
 +------+------------------+---------------+----------------+
