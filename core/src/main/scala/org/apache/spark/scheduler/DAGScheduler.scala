@@ -294,9 +294,9 @@ private[spark] class DAGScheduler(
   // Send finalize RPC tasks to merger ESS, one thread per RPC and will be cancelled after
   // PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT. Please close the opened files in the merger ESS
   // if finalize RPC is not received due to network issues.
-  private val shuffleSendFinalizeRPCExecutor: ExecutorService =
-  ThreadUtils.newDaemonFixedThreadPool(
-    shuffleSendFinalizeRPCThreads, "send-shuffle-merge-finalize-rpc")
+  private val shuffleSendFinalizeRpcExecutor: ExecutorService =
+    ThreadUtils.newDaemonFixedThreadPool(
+      shuffleSendFinalizeRPCThreads, "send-shuffle-merge-finalize-rpc")
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -2256,7 +2256,7 @@ private[spark] class DAGScheduler(
           // Sends async request to shuffle service to finalize shuffle merge on that host
           // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
           // TODO: during shuffleMergeFinalizeWaitSec
-          shuffleSendFinalizeRPCExecutor.submit(new Runnable() {
+          shuffleSendFinalizeRpcExecutor.submit(new Runnable() {
             override def run(): Unit = {
               shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
                 shuffleServiceLoc.port, shuffleId, shuffleMergeId,
