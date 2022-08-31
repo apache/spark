@@ -1537,8 +1537,9 @@ abstract class RDD[T: ClassTag](
           Iterator.empty
         }
       }.reduce { (array1, array2) =>
-        val array = Array.ofDim[T](math.min(num, array1.length + array2.length))
-        collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord).copyToArray(array)
+        val size = math.min(num, array1.length + array2.length)
+        val array = Array.ofDim[T](size)
+        collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord).copyToArray(array, 0, size)
         array
       }
     }
