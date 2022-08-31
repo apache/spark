@@ -1131,8 +1131,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Resolves relations to `ResolvedTable` or `ResolvedView`. This is for resolving DDL and
-     * misc commands.
+     * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
+     * for resolving DDL and misc commands.
      */
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
       lookupTempView(identifier).map { tempView =>
