@@ -2591,7 +2591,7 @@ case class ToBinary(
               other,
               Some(
                 "The value has to be a case-insensitive string literal of " +
-                "'hex', 'utf-8', or 'base64'."))
+                "'hex', 'utf-8', 'utf8', or 'base64'."))
       }
     }
   }.getOrElse(Unhex(expr, failOnError = true))
