@@ -2809,6 +2809,39 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output = queryExecution.analyzed.output
+
+    val renamedColumns: ArrayBuffer[Option[Column]] = ArrayBuffer.fill(output.size) {None}
+
+    output.zipWithIndex.foreach{ case(col, idx) =>
+      colsMap.foreach{
+        case (existingName, newName) =>
+          if (resolver(col.name, existingName)) {
+            renamedColumns.update(idx, Some(Column(col).as(newName)))
+          }
+      }
+    }
+    renamedColumns.zipWithIndex.foreach{
+      case(col, idx) =>
+        if (col.isEmpty) {
+          renamedColumns.update(idx, Some(Column(output(idx))))
+        }
+    }
+
+    select(renamedColumns.flatten : _*)
+  }
+
+  /**
    * Returns a new Dataset by updating an existing column with metadata.
    *
    * @group untypedrel
