@@ -1830,9 +1830,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     catalogAndNamespace: Seq[String],
     fullName: Option[Seq[String]]): Throwable = {
     if (rawName.length == 1 && rawName.head.toLowerCase(Locale.ROOT) == "distinct") {
+      val argumentsStr = arguments.map(e => s"$e").mkString(",")
       new AnalysisException(
         errorClass = "DISTINCT_FUNCTION_NOT_FOUND",
-        messageParameters = Array(catalogAndNamespace.quoted, s"$arguments")
+        messageParameters = Array(catalogAndNamespace.quoted, argumentsStr)
       )
     } else {
       noSuchFunctionError(rawName, t, fullName)
