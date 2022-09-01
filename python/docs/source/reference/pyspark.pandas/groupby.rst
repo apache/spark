@@ -73,6 +73,7 @@ Computations / Descriptive Stats
    GroupBy.median
    GroupBy.min
    GroupBy.rank
+   GroupBy.sem
    GroupBy.std
    GroupBy.sum
    GroupBy.var

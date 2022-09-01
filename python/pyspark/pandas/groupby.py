@@ -827,7 +827,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._prepare_return(DataFrame(internal))
 
-
     def sem(self, ddof: int = 1) -> FrameLike:
         """
         Compute standard error of the mean of groups, excluding missing values.
@@ -843,18 +842,24 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
-        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        ...                    "C": [3, None, 3, 4], "D": ["a", "b", "b", "a"]})
 
-        >>> df.groupby("A").mad()
+        >>> df.groupby("A").sem()
                   B         C
         A
-        1  0.444444  0.444444
-        2  0.000000  0.000000
+        1  0.333333  0.333333
+        2       NaN       NaN
 
-        >>> df.B.groupby(df.A).mad()
+        >>> df.groupby("D").sem(ddof=1)
+             A    B    C
+        D
+        a  0.0  0.0  0.5
+        b  0.5  0.0  NaN
+
+        >>> df.B.groupby(df.A).sem()
         A
-        1    0.444444
-        2    0.000000
+        1    0.333333
+        2         NaN
         Name: B, dtype: float64
 
         See Also
@@ -862,54 +867,35 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.sem
         pyspark.pandas.DataFrame.sem
         """
-        if not ddof in [0, 1]:
+        if ddof not in [0, 1]:
             raise TypeError("ddof must be 0 or 1")
 
-        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
-        internal, agg_columns, sdf = self._prepare_reduce(
-            groupkey_names=groupkey_names,
-            accepted_spark_types=(NumericType, BooleanType),
-            bool_to_numeric=False,
-        )
-        psdf: DataFrame = DataFrame(internal)
-
-        if len(psdf._internal.column_labels) > 0:
-            window = Window.partitionBy(groupkey_names).rowsBetween(
-                Window.unboundedPreceding, Window.unboundedFollowing
+        # Raise the TypeError when all aggregation columns are of unaccepted data types
+        all_unaccepted = True
+        for _agg_col in self._agg_columns:
+            if isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
+                all_unaccepted = False
+                break
+        if all_unaccepted:
+            raise TypeError(
+                "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
-            new_agg_scols = {}
-            new_stat_scols = []
-            for agg_column in agg_columns:
-                # it is not able to directly use 'self._reduce_for_stat_function', due to
-                # 'it is not allowed to use a window function inside an aggregate function'.
-                # so we need to create temporary columns to compute the 'abs(x - avg(x))' here.
-                agg_column_name = agg_column._internal.data_spark_column_names[0]
-                new_agg_column_name = verify_temp_column_name(
-                    psdf._internal.spark_frame, "__tmp_agg_col_{}__".format(agg_column_name)
-                )
-                casted_agg_scol = F.col(agg_column_name).cast("double")
-                new_agg_scols[new_agg_column_name] = F.abs(
-                    casted_agg_scol - F.avg(casted_agg_scol).over(window)
-                )
-                new_stat_scols.append(F.avg(F.col(new_agg_column_name)).alias(agg_column_name))
 
-            sdf = (
-                psdf._internal.spark_frame.withColumns(new_agg_scols)
-                .groupby(groupkey_names)
-                .agg(*new_stat_scols)
-            )
+        if ddof == 0:
+
+            def sem(col: Column) -> Column:
+                return F.stddev_pop(col) / F.sqrt(F.count(col))
+
         else:
-            sdf = sdf.select(*groupkey_names).distinct()
 
-        internal = internal.copy(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
-            data_fields=None,
+            def sem(col: Column) -> Column:
+                return F.stddev_samp(col) / F.sqrt(F.count(col))
+
+        return self._reduce_for_stat_function(
+            sem,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
         )
-
-        return self._prepare_return(DataFrame(internal))
-
 
     def all(self, skipna: bool = True) -> FrameLike:
         """
