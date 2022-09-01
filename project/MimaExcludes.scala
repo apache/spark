@@ -67,6 +67,11 @@ object MimaExcludes {
     // [SPARK-38679][CORE] Expose the number of partitions in a stage to TaskContext
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.numPartitions"),
 
+    // [SPARK-39506] In terms of 3 layer namespace effort, add currentCatalog, setCurrentCatalog and listCatalogs API to Catalog interface
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.currentCatalog"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.setCurrentCatalog"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
+
     // [SPARK-38929][SQL] Improve error messages for cast failures in ANSI
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
@@ -91,9 +96,8 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
-    // SPARK-40283: add jdbc and catalog as default excludes
+    // SPARK-40283: add jdbc as default excludes
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
