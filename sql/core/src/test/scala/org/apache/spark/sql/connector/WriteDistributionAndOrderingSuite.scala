@@ -1083,10 +1083,11 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
 
+    val writePartitioningExprs = Seq(truncateExpr)
     val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(Seq(truncateExpr), targetNumPartitions)
+      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
     } else {
-      clusteredWritePartitioning(Seq(truncateExpr), Some(1))
+      clusteredWritePartitioning(writePartitioningExprs, Some(1))
     }
 
     checkWriteRequirements(
