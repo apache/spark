@@ -121,7 +121,7 @@ object MimaExcludes {
   )
 
   // Exclude rules for 3.3.x from 3.2.0
-  lazy val v33excludes = sparkInternalexcludes ++ Seq(
+  lazy val v33excludes = defaultExcludes ++ Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
     // The followings are necessary for Scala 2.13.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
@@ -157,7 +157,8 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
-  lazy val sparkInternalexcludes = Seq(
+  // Defulat exclude rules
+  lazy val defaultExcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
     ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
