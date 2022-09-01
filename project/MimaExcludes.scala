@@ -113,7 +113,7 @@ object MimaExcludes {
   )
 
   // Exclude rules for 3.3.x from 3.2.0
-  lazy val v33excludes = Seq(
+  lazy val v33excludes = sparkInternalexcludes ++ Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
     // The followings are necessary for Scala 2.13.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
@@ -147,6 +147,22 @@ object MimaExcludes {
     // [SPARK-38908][SQL] Provide query context in runtime error of Casting from String to
     // Number/Date/Timestamp/Boolean
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
+  )
+
+  lazy val sparkInternalexcludes = Seq(
+    // Spark Internals
+    ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
+    ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.util.collection.unsafe.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
   )
 
   def excludes(version: String) = version match {
