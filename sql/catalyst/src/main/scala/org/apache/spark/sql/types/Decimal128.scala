@@ -266,70 +266,41 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
    * @return the Byte value that is equal to the rounded decimal128.
    * @throws ArithmeticException if the decimal128 is too big to fit in Byte type.
    */
-  private[sql] def roundToByte(): Byte = {
-    if (int128.eq(null)) {
-      val actualLongVal = longVal / POW_10(_scale)
-      if (actualLongVal == actualLongVal.toByte) {
-        actualLongVal.toByte
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), ByteType)
-      }
-    } else {
-      val doubleVal = this.toDouble
-      if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
-        doubleVal.toByte
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), ByteType)
-      }
-    }
-  }
+  private[sql] def roundToByte(): Byte =
+    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
 
   /**
    * @return the Short value that is equal to the rounded decimal128.
    * @throws ArithmeticException if the decimal128 is too big to fit in Short type.
    */
-  private[sql] def roundToShort(): Short = {
-    if (int128.eq(null)) {
-      val actualLongVal = longVal / POW_10(_scale)
-      if (actualLongVal == actualLongVal.toShort) {
-        actualLongVal.toShort
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), ShortType)
-      }
-    } else {
-      val doubleVal = this.toDouble
-      if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
-        doubleVal.toShort
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), ShortType)
-      }
-    }
-  }
+  private[sql] def roundToShort(): Short =
+    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
 
   /**
    * @return the Int value that is equal to the rounded decimal128.
    * @throws ArithmeticException if the decimal128 too big to fit in Int type.
    */
-  private[sql] def roundToInt(): Int = {
+  private[sql] def roundToInt(): Int =
+    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
+
+  private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
+      (f1: Long => T) (f2: Double => T): T = {
     if (int128.eq(null)) {
       val actualLongVal = longVal / POW_10(_scale)
-      if (actualLongVal == actualLongVal.toInt) {
-        actualLongVal.toInt
+      val numericVal = f1(actualLongVal)
+      if (actualLongVal == numericVal) {
+        numericVal
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), IntegerType)
+          this, Decimal128Type(this.precision, this.scale), integralType)
       }
     } else {
       val doubleVal = this.toDouble
-      if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
-        doubleVal.toInt
+      if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
+        f2(doubleVal)
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), IntegerType)
+          this, Decimal128Type(this.precision, this.scale), integralType)
       }
     }
   }
@@ -350,7 +321,7 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
       } catch {
         case _: ArithmeticException =>
           throw QueryExecutionErrors.castingCauseOverflowError(
-            this, DecimalType(this.precision, this.scale), LongType)
+            this, Decimal128Type(this.precision, this.scale), LongType)
       }
     }
   }
