@@ -113,7 +113,7 @@ object MimaExcludes {
   )
 
   // Exclude rules for 3.3.x from 3.2.0
-  lazy val v33excludes = v32excludes ++ Seq(
+  lazy val v33excludes = Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
     // The followings are necessary for Scala 2.13.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
@@ -149,95 +149,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
-  // Exclude rules for 3.2.x from 3.1.1
-  lazy val v32excludes = Seq(
-    // Spark Internals
-    ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
-    ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.util.collection.unsafe.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
-    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
-    // Avro source implementation is internal.
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
-
-    // [SPARK-34848][CORE] Add duration to TaskMetricDistributions
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this"),
-
-    // [SPARK-34488][CORE] Support task Metrics Distributions and executor Metrics Distributions
-    // in the REST API call for a specified stage
-    ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
-
-    // [SPARK-36173][CORE] Support getting CPU number in TaskContext
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpus"),
-
-    // [SPARK-38679][CORE] Expose the number of partitions in a stage to TaskContext
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.numPartitions"),
-
-    // [SPARK-35896] Include more granular metrics for stateful operators in StreamingQueryProgress
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.this"),
-
-    (problem: Problem) => problem match {
-      case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
-          !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
-      case _ => true
-    },
-
-    // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.write.V1WriteBuilder"),
-
-    // [SPARK-33955] Add latest offsets to source progress
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SourceProgress.this"),
-
-    // [SPARK-34862][SQL] Support nested column in ORC vectorized reader
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getBoolean"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getByte"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getShort"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getInt"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getLong"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getFloat"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getDouble"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getDecimal"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getUTF8String"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getBinary"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getArray"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getMap"),
-    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getChild"),
-
-    // [SPARK-35135][CORE] Turn WritablePartitionedIterator from trait into a default implementation class
-    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.WritablePartitionedIterator"),
-
-    // [SPARK-35757][CORE] Add bitwise AND operation and functionality for intersecting bloom filters
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.BloomFilter.intersectInPlace"),
-
-    // [SPARK-35276][CORE] Calculate checksum for shuffle data and write as checksum file
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.io.LocalDiskShuffleMapOutputWriter.commitAllPartitions"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.io.LocalDiskSingleSpillMapOutputWriter.transferMapSpillFile"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter.transferMapSpillFile"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter.transferMapSpillFile"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
-
-    // [SPARK-39506] In terms of 3 layer namespace effort, add currentCatalog, setCurrentCatalog and listCatalogs API to Catalog interface
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.currentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.setCurrentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs")
-  )
-
   def excludes(version: String) = version match {
     case v if v.startsWith("3.4") => v34excludes
     case v if v.startsWith("3.3") => v33excludes
-    case v if v.startsWith("3.2") => v32excludes
     case _ => Seq()
   }
 }
