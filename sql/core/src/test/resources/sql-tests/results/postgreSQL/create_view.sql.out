@@ -53,7 +53,13 @@ CREATE VIEW key_dependent_view AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[COLUMN_NOT_IN_GROUP_BY_CLAUSE] column (spark_catalog.default.view_base_table.data) must appear in the GROUP BY clause or be used in an aggregate function. Add it to GROUP BY clause or wrap in first() if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "spark_catalog.default.view_base_table.data"
+  }
+}
 
 
 -- !query

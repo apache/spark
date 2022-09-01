@@ -43,7 +43,13 @@ SELECT a, COUNT(b) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[COLUMN_NOT_IN_GROUP_BY_CLAUSE] column (testdata.a) must appear in the GROUP BY clause or be used in an aggregate function. Add it to GROUP BY clause or wrap in first() if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "testdata.a"
+  }
+}
 
 
 -- !query
@@ -107,7 +113,13 @@ SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[COLUMN_NOT_IN_GROUP_BY_CLAUSE] column (testdata.a) must appear in the GROUP BY clause or be used in an aggregate function. Add it to GROUP BY clause or wrap in first() if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "testdata.a"
+  }
+}
 
 
 -- !query
@@ -198,7 +210,13 @@ SELECT k AS a, COUNT(v) FROM testDataHasSameNameWithAlias GROUP BY a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[COLUMN_NOT_IN_GROUP_BY_CLAUSE] column (testdatahassamenamewithalias.k) must appear in the GROUP BY clause or be used in an aggregate function. Add it to GROUP BY clause or wrap in first() if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "testdatahassamenamewithalias.k"
+  }
+}
 
 
 -- !query

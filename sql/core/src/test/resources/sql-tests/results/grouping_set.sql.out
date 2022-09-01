@@ -166,7 +166,13 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[COLUMN_NOT_IN_GROUP_BY_CLAUSE] column (t.c1) must appear in the GROUP BY clause or be used in an aggregate function. Add it to GROUP BY clause or wrap in first() if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "t.c1"
+  }
+}
 
 
 -- !query
