@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -44,7 +45,7 @@ public class JavaUtils {
    * Define a default value for driver memory here since this value is referenced across the code
    * base and nearly all files already use Utils.scala
    */
-  public static final long DEFAULT_DRIVER_MEM_MB = 1024;
+  public static final long DEFAULT_DRIVER_MEM_MB = 1024L;
 
   /** Closes the given object, ignoring IOExceptions. */
   public static void closeQuietly(Closeable closeable) {
@@ -119,32 +120,34 @@ public class JavaUtils {
   }
 
   private static void deleteRecursivelyUsingJavaIO(
-      File file,
-      FilenameFilter filter) throws IOException {
-    if (file.isDirectory() && !isSymlink(file)) {
-      IOException savedIOException = null;
-      for (File child : listFilesSafely(file, filter)) {
-        try {
-          deleteRecursively(child, filter);
-        } catch (IOException e) {
-          // In case of multiple exceptions, only last one will be thrown
-          savedIOException = e;
+            File file,
+            FilenameFilter filter) throws IOException {
+        // for Multiple file
+        BasicFileAttributes basicFileAttributes = Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+        if (basicFileAttributes.isDirectory() && !isSymlink(file)) {
+            IOException savedIOException = null;
+            for (File child : listFilesSafely(file, filter)) {
+                try {
+                    deleteRecursively(child, filter);
+                } catch (IOException e) {
+                    // In case of multiple exceptions, only last one will be thrown
+                    savedIOException = e;
+                }
+            }
+            if (savedIOException != null) {
+                throw savedIOException;
+            }
         }
-      }
-      if (savedIOException != null) {
-        throw savedIOException;
-      }
-    }
 
-    // Delete file only when it's a normal file or an empty directory.
-    if (file.isFile() || (file.isDirectory() && listFilesSafely(file, null).length == 0)) {
-      boolean deleted = file.delete();
-      // Delete can also fail if the file simply did not exist.
-      if (!deleted && file.exists()) {
-        throw new IOException("Failed to delete: " + file.getAbsolutePath());
-      }
+        // Delete file only when it's a normal file or an empty directory.
+        if (basicFileAttributes.isRegularFile() || (basicFileAttributes.isDirectory() && listFilesSafely(file, null).length == 0)) {
+            boolean deleted = file.delete();
+            // Delete can also fail if the file simply did not exist.
+            if (!deleted && file.exists()) {
+                throw new IOException("Failed to delete: " + file.getAbsolutePath());
+            }
+        }
     }
-  }
 
   private static void deleteRecursivelyUsingUnixNative(File file) throws IOException {
     ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
