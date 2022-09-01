@@ -899,7 +899,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             }.getMessage
             assert(
               e.contains("COLUMN_NOT_IN_GROUP_BY_CLAUSE") &&
-                e.contains("spark_catalog.default.t.c1"))
+                e.contains("\"c1\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
