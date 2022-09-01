@@ -52,6 +52,8 @@ case class Sum(
 
   private def shouldTrackIsEmpty: Boolean = resultType match {
     case _: DecimalType => true
+    // For try_sum(), the result of following data types can be null on overflow.
+    // Thus we need additional buffer to keep track of whether overflow happens.
     case _: IntegralType | _: AnsiIntervalType if evalMode == EvalMode.TRY => true
     case _ => false
   }
