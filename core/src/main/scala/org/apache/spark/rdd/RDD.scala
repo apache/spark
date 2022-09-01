@@ -46,7 +46,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
   Utils => collectionUtils}
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -1523,22 +1523,24 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
-    if (num == 0) {
+    if (num == 0 || this.getNumPartitions == 0) {
       Array.empty
     } else {
-      val mapRDDs = mapPartitions { items =>
-        // Priority keeps the largest elements, so let's reverse the ordering.
-        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-        queue ++= collectionUtils.takeOrdered(items, num)(ord)
-        Iterator.single(queue)
-      }
-      if (mapRDDs.partitions.length == 0) {
-        Array.empty
-      } else {
-        mapRDDs.reduce { (queue1, queue2) =>
-          queue1 ++= queue2
-          queue1
-        }.toArray.sorted(ord)
+      this.mapPartitionsWithIndex { case (pid, iter) =>
+        if (iter.nonEmpty) {
+          // Priority keeps the largest elements, so let's reverse the ordering.
+          Iterator.single(collectionUtils.takeOrdered(iter, num)(ord).toArray)
+        } else if (pid == 0) {
+          // make sure partition 0 always returns an array to avoid reduce on empty RDD
+          Iterator.single(Array.empty[T])
+        } else {
+          Iterator.empty
+        }
+      }.reduce { (array1, array2) =>
+        val size = math.min(num, array1.length + array2.length)
+        val array = Array.ofDim[T](size)
+        collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord).copyToArray(array, 0, size)
+        array
       }
     }
   }
