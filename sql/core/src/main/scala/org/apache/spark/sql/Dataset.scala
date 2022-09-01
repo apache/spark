@@ -2809,6 +2809,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Returns a new Dataset with a columns renamed.
    * This is a no-op if schema doesn't contain existingName.
    *
@@ -2840,6 +2841,19 @@ class Dataset[T] private[sql](
 
     select(renamedColumns.flatten.toSeq : _*)
   }
+
+  /**
+   * (java-specific)
+   * Returns a new Dataset with a columns renamed.
+   * This is a no-op if schema doesn't contain existingName.
+   *
+   * `colsMap` is a map of existing column name and new column name.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def withColumnsRenamed(colsMap: java.util.Map[String, String]): DataFrame =
+    withColumnsRenamed(colsMap.asScala.toMap)
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.
