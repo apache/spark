@@ -68,6 +68,13 @@ private[deploy] object DeployMessages {
   case class DecommissionWorkers(ids: Seq[String]) extends DeployMessage
 
   /**
+   * An internal message that used by Master itself, in order to handle the
+   * `RecommissionWorkersOnHosts` request from `MasterWebUI` asynchronously.
+   * @param ids A collection of Worker ids, which should be recommissioned.
+   */
+  case class RecommissionWorkers(ids: Seq[String]) extends DeployMessage
+
+  /**
    * A message that sent from Master to Worker to decommission the Worker.
    * It's used for the case where decommission is triggered at MasterWebUI.
    *
@@ -75,6 +82,8 @@ private[deploy] object DeployMessages {
    * to be decommissioned as well.
    */
   object DecommissionWorker extends DeployMessage
+
+  object RecommissionWorker extends DeployMessage
 
   /**
    * A message that sent by the Worker to itself when it receives a signal,
@@ -136,6 +145,13 @@ private[deploy] object DeployMessages {
    * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
    */
   case class DecommissionWorkersOnHosts(hostnames: Seq[String])
+
+  /**
+   * Used by the MasterWebUI to request the master to recommission all workers that are
+   * decommissioned on any of the given hostnames.
+   * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   */
+  case class RecommissionWorkersOnHosts(hostnames: Seq[String])
 
   // Master to Worker
 

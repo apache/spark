@@ -263,6 +263,19 @@ private[deploy] class Master(
         }
       )
 
+    case RecommissionWorkers(ids) =>
+      // The caller has already checked the state when handling DecommissionWorkersOnHosts,
+      // so it should not be the STANDBY
+      assert(state != RecoveryState.STANDBY)
+      ids.foreach ( id =>
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach { w =>
+          recommissionWorker(w)
+          // Also send a message to the worker node to notify.
+          w.endpoint.send(RecommissionWorker)
+        }
+      )
+
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
       masterAddress, resources) =>
@@ -492,6 +505,13 @@ private[deploy] class Master(
     case DecommissionWorkersOnHosts(hostnames) =>
       if (state != RecoveryState.STANDBY) {
         context.reply(decommissionWorkersOnHosts(hostnames))
+      } else {
+        context.reply(0)
+      }
+
+    case RecommissionWorkersOnHosts(hostnames) =>
+      if (state != RecoveryState.STANDBY) {
+        context.reply(recommissionWorkersOnHosts(hostnames))
       } else {
         context.reply(0)
       }
@@ -929,6 +949,22 @@ private[deploy] class Master(
     workersToRemove.size
   }
 
+  private def recommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
+    val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
+    val workersToRemove = addressToWorker
+      .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
+      .values
+
+    val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
+    logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
+
+    // The workers are removed async to avoid blocking the receive loop for the entire batch
+    self.send(RecommissionWorkers(workersToRemove.map(_.id).toSeq))
+
+    // Return the count of workers actually removed
+    workersToRemove.size
+  }
+
   private def decommissionWorker(worker: WorkerInfo): Unit = {
     if (worker.state != WorkerState.DECOMMISSIONED) {
       logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
@@ -952,6 +988,18 @@ private[deploy] class Master(
         format(worker.id, worker.host, worker.port))
     }
   }
+
+  private def recommissionWorker(worker: WorkerInfo): Unit = {
+    if (worker.state == WorkerState.DECOMMISSIONED) {
+      logInfo("Recommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
+      worker.setState(WorkerState.ALIVE)
+      // TODO: Notify driver about worker recommission
+    } else {
+      logWarning("Skipping recommissioning worker %s on %s:%d as worker is alive".
+        format(worker.id, worker.host, worker.port))
+    }
+  }
+
 
   private def removeWorker(worker: WorkerInfo, msg: String): Unit = {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
