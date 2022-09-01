@@ -110,7 +110,10 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     """
 
     # For legacy reasons, the arguments here can be implicitly converted into column
-    cols = [_to_java_column(c if isinstance(c, (str, Column)) else lit(c)) for c in (col1, col2)]
+    cols = [
+        _to_java_column(c) if isinstance(c, (str, Column)) else _create_column_from_literal(c)
+        for c in (col1, col2)
+    ]
     return _invoke_function(name, *cols)
 
 
