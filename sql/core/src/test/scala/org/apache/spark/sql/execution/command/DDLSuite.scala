@@ -190,7 +190,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
-      assert(e.message.contains("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables"))
+      assert(e.message.contains("Table `spark_catalog`.`default`.`t1` does not support " +
+        "ALTER COLUMN ... FIRST | ALTER"))
     }
   }
 
