@@ -1904,7 +1904,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"${dt.getClass.getSimpleName} as output data type")
   }
 
-  def invalidStartIndexError(numRows: Int, startIndex: Int): Throwable = {
+  def invalidStartIndexError(numRows: Long, startIndex: Long): Throwable = {
     new ArrayIndexOutOfBoundsException(
       "Invalid `startIndex` provided for generating iterator over the array. " +
         s"Total elements: $numRows, requested `startIndex`: $startIndex")

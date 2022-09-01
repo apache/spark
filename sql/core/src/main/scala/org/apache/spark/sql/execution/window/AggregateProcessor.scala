@@ -129,12 +129,12 @@ private[window] final class AggregateProcessor(
   updateProjection.target(buffer)
 
   /** Create the initial state. */
-  def initialize(size: Int): Unit = {
+  def initialize(size: Long): Unit = {
     // Some initialization expressions are dependent on the partition size so we have to
     // initialize the size before initializing all other fields, and we have to pass the buffer to
     // the initialization projection.
     if (trackPartitionSize) {
-      buffer.setInt(0, size)
+      buffer.setLong(0, size)
     }
     initialProjection(buffer)
     var i = 0

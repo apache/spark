@@ -76,7 +76,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
   private var spillableArray: UnsafeExternalSorter = _
   private var totalSpillBytes: Long = 0
-  private var numRows = 0
+  private var numRows = 0L
 
   // A counter to keep track of total modifications done to this array since its creation.
   // This helps to invalidate iterators when there are changes done to the backing array.
@@ -84,7 +84,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
   private var numFieldsPerRow = 0
 
-  def length: Int = numRows
+  def length: Long = numRows
 
   def isEmpty: Boolean = numRows == 0
 
@@ -172,13 +172,13 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
    * the iterator, then the iterator is invalidated thus saving clients from thinking that they
    * have read all the data while there were new rows added to this array.
    */
-  def generateIterator(startIndex: Int): Iterator[UnsafeRow] = {
+  def generateIterator(startIndex: Long): Iterator[UnsafeRow] = {
     if (startIndex < 0 || (numRows > 0 && startIndex > numRows)) {
       throw QueryExecutionErrors.invalidStartIndexError(numRows, startIndex)
     }
 
     if (spillableArray == null) {
-      new InMemoryBufferIterator(startIndex)
+      new InMemoryBufferIterator(startIndex.toInt)
     } else {
       new SpillableArrayIterator(spillableArray.getIterator(startIndex), numFieldsPerRow)
     }

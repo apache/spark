@@ -752,7 +752,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *
    * TODO: support forced spilling
    */
-  public UnsafeSorterIterator getIterator(int startIndex) throws IOException {
+  public UnsafeSorterIterator getIterator(long startIndex) throws IOException {
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
       UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
@@ -760,7 +760,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
-      int i = 0;
+      long i = 0;
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         if (i + spillWriter.recordsSpilled() > startIndex) {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
@@ -778,10 +778,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
-  private void moveOver(UnsafeSorterIterator iter, int steps)
+  private void moveOver(UnsafeSorterIterator iter, long steps)
       throws IOException {
     if (steps > 0) {
-      for (int i = 0; i < steps; i++) {
+      for (long i = 0; i < steps; i++) {
         if (iter.hasNext()) {
           iter.loadNext();
         } else {

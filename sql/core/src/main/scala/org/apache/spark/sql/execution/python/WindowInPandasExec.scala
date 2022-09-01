@@ -356,9 +356,9 @@ case class WindowInPandasExec(
                 frames(frameIndex).write(index, current)
                 // If the window is unbounded we don't need to write out window bounds.
                 if (isBounded(frameIndex)) {
-                  indexRow.setInt(
+                  indexRow.setLong(
                     lowerBoundIndex(frameIndex), frames(frameIndex).currentLowerBound())
-                  indexRow.setInt(
+                  indexRow.setLong(
                     upperBoundIndex(frameIndex), frames(frameIndex).currentUpperBound())
                 }
                 frameIndex += 1
