@@ -2838,7 +2838,7 @@ class Dataset[T] private[sql](
         }
     }
 
-    select(renamedColumns.flatten : _*)
+    select(renamedColumns.flatten.toSeq : _*)
   }
 
   /**
