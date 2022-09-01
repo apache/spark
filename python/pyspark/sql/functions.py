@@ -109,13 +109,9 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
 
-    def align_type(c: Any) -> Union[str, Column]:
-        # For legacy reasons, the arguments here can be implicitly converted into column
-        return c if isinstance(c, (str, Column)) else lit(c)
-
-    return _invoke_function(
-        name, _to_java_column(align_type(col1)), _to_java_column(align_type(col2))
-    )
+    # For legacy reasons, the arguments here can be implicitly converted into column
+    cols = [_to_java_column(c if isinstance(c, (str, Column)) else lit(c)) for c in (col1, col2)]
+    return _invoke_function(name, *cols)
 
 
 def _options_to_str(options: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
