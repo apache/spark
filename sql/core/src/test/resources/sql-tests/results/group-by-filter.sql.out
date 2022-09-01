@@ -232,7 +232,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "testdata.a"
+    "expression" : "\"a\""
   }
 }
 
@@ -718,7 +718,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "testdata.a"
+    "expression" : "\"a\""
   }
 }
 

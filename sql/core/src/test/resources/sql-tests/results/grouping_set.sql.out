@@ -170,7 +170,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "expression" : "t.c1"
+    "expression" : "\"c1\""
   }
 }
 
