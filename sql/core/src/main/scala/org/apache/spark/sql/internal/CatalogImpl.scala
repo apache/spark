@@ -23,12 +23,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedNonPersistentFunc, ResolvedPersistentFunc, ResolvedTable, ResolvedView, UnresolvedFunc, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, SubqueryAlias, TableSpec, View}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, IdentifierHelper, MultipartIdentifierHelper, TransformHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -137,7 +137,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   private def makeTable(nameParts: Seq[String]): Table = {
-    sessionCatalog.lookupLocalOrGlobalRawTempView(nameParts).map { tempView =>
+    sessionCatalog.getRawLocalOrGlobalTempView(nameParts).map { tempView =>
       new Table(
         name = tempView.tableMeta.identifier.table,
         catalog = null,
@@ -312,34 +312,33 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case ResolvedTable(_, _, table, _) =>
         val (partitionColumnNames, bucketSpecOpt) = table.partitioning.toSeq.convertTransforms
         val bucketColumnNames = bucketSpecOpt.map(_.bucketColumnNames).getOrElse(Nil)
-        table.schema.map { field =>
-          new Column(
-            name = field.name,
-            description = field.getComment().orNull,
-            dataType = field.dataType.simpleString,
-            nullable = field.nullable,
-            isPartition = partitionColumnNames.contains(field.name),
-            isBucket = bucketColumnNames.contains(field.name))
-        }
+        schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains)
 
-      case ResolvedView(identifier, _) =>
-        val catalog = sparkSession.sessionState.catalog
-        val table = identifier.asTableIdentifier
-        val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
-        schema.map { field =>
-          new Column(
-            name = field.name,
-            description = field.getComment().orNull,
-            dataType = field.dataType.simpleString,
-            nullable = field.nullable,
-            isPartition = false,
-            isBucket = false)
-        }
+      case ResolvedPersistentView(_, _, schema) =>
+        schemaToColumns(schema)
+
+      case ResolvedTempView(_, schema) =>
+        schemaToColumns(schema)
 
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
 
     CatalogImpl.makeDataset(columns, sparkSession)
+  }
+
+  private def schemaToColumns(
+      schema: StructType,
+      isPartCol: String => Boolean = _ => false,
+      isBucketCol: String => Boolean = _ => false): Seq[Column] = {
+    schema.map { field =>
+      new Column(
+        name = field.name,
+        description = field.getComment().orNull,
+        dataType = field.dataType.simpleString,
+        nullable = field.nullable,
+        isPartition = isPartCol(field.name),
+        isBucket = isBucketCol(field.name))
+    }
   }
 
   private def getNamespace(catalog: CatalogPlugin, ns: Seq[String]): Database = catalog match {
@@ -744,7 +743,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // if `tableName` is not 2 part name, then we directly uncache it from the cache manager.
     try {
       val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      sessionCatalog.lookupTempView(tableIdent).map(uncacheView).getOrElse {
+      sessionCatalog.getLocalOrGlobalTempView(tableIdent).map(uncacheView).getOrElse {
         sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
           cascade = true)
       }
