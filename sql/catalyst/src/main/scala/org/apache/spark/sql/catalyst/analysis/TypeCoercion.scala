@@ -502,7 +502,8 @@ abstract class TypeCoercionBase {
 
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
-      case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
+      case d: Divide if d.dataType.isInstanceOf[DecimalType] ||
+        d.dataType.isInstanceOf[Decimal128Type] => d
       case d @ Divide(left, right, _) if isNumericOrNull(left) && isNumericOrNull(right) =>
         d.copy(left = Cast(left, DoubleType), right = Cast(right, DoubleType))
     }
@@ -862,12 +863,17 @@ object TypeCoercion extends TypeCoercionBase {
 
       case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
         Some(t2)
+      case (t1: IntegralType, t2: Decimal128Type) if t2.isWiderThan(t1) =>
+        Some(t2)
       case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+        Some(t1)
+      case (t1: Decimal128Type, t2: IntegralType) if t1.isWiderThan(t2) =>
         Some(t1)
 
       // Promote numeric types to the highest of the two
       case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] &&
+            !t1.isInstanceOf[Decimal128Type] && !t2.isInstanceOf[Decimal128Type] =>
         val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
         Some(numericPrecedence(index))
 

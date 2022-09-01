@@ -2687,6 +2687,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
+      case ("decimal" | "dec" | "numeric", Nil)
+        if SQLConf.get.allowDecimal128TypeConverterEnabled => Decimal128Type.USER_DEFAULT
+      case ("decimal" | "dec" | "numeric", precision :: Nil)
+        if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+        Decimal128Type(precision.getText.toInt, 0)
+      case ("decimal" | "dec" | "numeric", precision :: scale :: Nil)
+        if SQLConf.get.allowDecimal128TypeConverterEnabled =>
+        Decimal128Type(precision.getText.toInt, scale.getText.toInt)
       case ("decimal" | "dec" | "numeric", Nil) => DecimalType.USER_DEFAULT
       case ("decimal" | "dec" | "numeric", precision :: Nil) =>
         DecimalType(precision.getText.toInt, 0)

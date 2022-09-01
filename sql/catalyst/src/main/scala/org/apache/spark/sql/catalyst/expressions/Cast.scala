@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToDecimal128, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1130,6 +1130,75 @@ case class Cast(
           nullOnOverflow = false))
   }
 
+  private[this] def changePrecision(value: Decimal128, decimalType: Decimal128Type): Decimal128 = {
+    changePrecision(value, decimalType, !ansiEnabled)
+  }
+
+  private[this] def changePrecision(
+      value: Decimal128,
+      decimalType: Decimal128Type,
+      nullOnOverflow: Boolean): Decimal128 = {
+    if (value.changePrecision(decimalType.precision, decimalType.scale)) {
+      value
+    } else {
+      if (nullOnOverflow) {
+        null
+      } else {
+        throw QueryExecutionErrors.cannotChangeDecimal128PrecisionError(
+          value, decimalType.precision, decimalType.scale, getContextOrNull())
+      }
+    }
+  }
+
+  private[this] def toPrecision(
+      value: Decimal128,
+      decimalType: Decimal128Type,
+      context: SQLQueryContext): Decimal128 =
+    value.toPrecision(
+      decimalType.precision, decimalType.scale, Decimal128.ROUND_HALF_UP, !ansiEnabled, context)
+
+  private[this] def castToDecimal128(
+      from: DataType, target: Decimal128Type): Any => Any = from match {
+    case StringType if !ansiEnabled =>
+      buildCast[UTF8String](_, s => {
+        val d = Decimal128.fromString(s)
+        if (d == null) null else changePrecision(d, target)
+      })
+    case StringType if ansiEnabled =>
+      buildCast[UTF8String](_,
+        s => changePrecision(Decimal128.fromStringANSI(s, target, getContextOrNull()), target))
+    case BooleanType =>
+      buildCast[Boolean](_,
+        b => toPrecision(if (b) Decimal128.ONE else Decimal128.ZERO, target, getContextOrNull()))
+    case DateType =>
+      buildCast[Int](_, d => null) // date can't cast to decimal in Hive
+    case TimestampType =>
+      // Note that we lose precision here.
+      buildCast[Long](_, t => changePrecision(Decimal128(timestampToDouble(t)), target))
+    case dt: Decimal128Type =>
+      b => toPrecision(b.asInstanceOf[Decimal128], target, getContextOrNull())
+    case t: IntegralType =>
+      b => changePrecision(Decimal128(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+    case x: FractionalType =>
+      b => try {
+        changePrecision(Decimal128(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
+      } catch {
+        case _: NumberFormatException => null
+      }
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, dt =>
+        changePrecision(
+          value = dayTimeIntervalToDecimal128(dt, x.endField),
+          decimalType = target,
+          nullOnOverflow = false))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, ym =>
+        changePrecision(
+          value = Decimal128(yearMonthIntervalToInt(ym, x.startField, x.endField)),
+          decimalType = target,
+          nullOnOverflow = false))
+  }
+
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
@@ -1243,6 +1312,7 @@ case class Cast(
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
+        case decimal: Decimal128Type => castToDecimal128(from, decimal)
         case TimestampType => castToTimestamp(from)
         case TimestampNTZType => castToTimestampNTZ(from)
         case CalendarIntervalType => castToInterval(from)

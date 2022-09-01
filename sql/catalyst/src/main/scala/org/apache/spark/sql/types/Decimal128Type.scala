@@ -102,11 +102,14 @@ case class Decimal128Type(precision: Int, scale: Int) extends FractionalType {
 
 @Unstable
 object Decimal128Type extends AbstractDataType {
+  import scala.math.min
 
   val MAX_PRECISION = 38
+  val MAX_SCALE = 38
   val DEFAULT_SCALE = 18
   val SYSTEM_DEFAULT: Decimal128Type = Decimal128Type(MAX_PRECISION, DEFAULT_SCALE)
   val USER_DEFAULT: Decimal128Type = Decimal128Type(10, 0)
+  val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
   private[sql] val BooleanDecimal = Decimal128Type(1, 0)
@@ -130,9 +133,41 @@ object Decimal128Type extends AbstractDataType {
   private[sql] def fromDecimal128(d: Decimal128): Decimal128Type =
     Decimal128Type(d.precision, d.scale)
 
+  private[sql] def bounded(precision: Int, scale: Int): Decimal128Type = {
+    Decimal128Type(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
       throw QueryCompilationErrors.negativeScaleNotAllowedError(scale)
+    }
+  }
+
+  private[sql] def adjustPrecisionScale(precision: Int, scale: Int): Decimal128Type = {
+    // Assumptions:
+    checkNegativeScale(scale)
+    assert(precision >= scale)
+
+    if (precision <= MAX_PRECISION) {
+      // Adjustment only needed when we exceed max precision
+      Decimal128Type(precision, scale)
+    } else if (scale < 0) {
+      // Decimal can have negative scale (SPARK-24468). In this case, we cannot allow a precision
+      // loss since we would cause a loss of digits in the integer part.
+      // In this case, we are likely to meet an overflow.
+      Decimal128Type(MAX_PRECISION, scale)
+    } else {
+      // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
+      val intDigits = precision - scale
+      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
+      // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
+      val minScaleValue = Math.min(scale, MINIMUM_ADJUSTED_SCALE)
+      // The resulting scale is the maximum between what is available without causing a loss of
+      // digits for the integer part of the decimal and the minimum guaranteed scale, which is
+      // computed above
+      val adjustedScale = Math.max(MAX_PRECISION - intDigits, minScaleValue)
+
+      Decimal128Type(MAX_PRECISION, adjustedScale)
     }
   }
 

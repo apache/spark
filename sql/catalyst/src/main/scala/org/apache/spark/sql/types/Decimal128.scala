@@ -403,32 +403,34 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
       return true
     }
     Decimal128Type.checkNegativeScale(scale)
+    var lv = longVal
+    var llv = int128
     // First, update our longVal if we can, or transfer over to using an Int128
-    if (int128.eq(null)) {
+    if (llv.eq(null)) {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
         val pow10diff = POW_10(diff)
         // % and / always round to 0
-        val droppedDigits = longVal % pow10diff
-        longVal /= pow10diff
+        val droppedDigits = lv % pow10diff
+        lv /= pow10diff
         roundMode match {
           case BigDecimal.RoundingMode.FLOOR =>
             if (droppedDigits < 0) {
-              longVal += -1L
+              lv += -1L
             }
           case BigDecimal.RoundingMode.CEILING =>
             if (droppedDigits > 0) {
-              longVal += 1L
+              lv += 1L
             }
           case BigDecimal.RoundingMode.HALF_UP =>
             if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+              lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case BigDecimal.RoundingMode.HALF_EVEN =>
             val doubled = math.abs(droppedDigits) * 2
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
+              lv += (if (droppedDigits < 0) -1L else 1L)
             }
           case _ =>
             throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
@@ -440,16 +442,30 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
         val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
         if (diff <= MAX_LONG_DIGITS && longVal > -p && longVal < p) {
           // Multiplying longVal by POW_10(diff) will still keep it below MAX_LONG_DIGITS
-          longVal *= POW_10(diff)
+          lv *= POW_10(diff)
         } else {
           // Give up on using Longs; switch to Int128, which we'll modify below
-          val (newLeftHigh, newLeftLow) = Int128Math.rescale(longVal >> 63, longVal, diff)
-          int128 = Int128(newLeftHigh, newLeftLow)
+          val (newLeftHigh, newLeftLow) = Int128Math.rescale(lv >> 63, lv, diff)
+          llv = Int128(newLeftHigh, newLeftLow)
         }
       }
       // In both cases, we will check whether our precision is okay below
     }
 
+    if (int128.ne(null)) {
+      val diff = scale - _scale
+      val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.high, this.low, diff)
+      llv = Int128(newLeftHigh, newLeftLow)
+    } else {
+      // We're still using Longs, but we should check whether we match the new precision
+      val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
+      if (lv <= -p || lv >= p) {
+        // Note that we shouldn't have been able to fix this by switching to BigDecimal
+        return false
+      }
+    }
+    int128 = llv
+    longVal = lv
     _precision = precision
     _scale = scale
     true
@@ -615,6 +631,9 @@ object Decimal128 {
   val MAX_LONG_DIGITS = 18
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
+
+  private[sql] val ZERO = Decimal128(0)
+  private[sql] val ONE = Decimal128(1)
 
   def apply(value: Double): Decimal128 = new Decimal128().set(value)
 
