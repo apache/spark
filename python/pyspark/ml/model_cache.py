@@ -14,11 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-# Module to hold globals for python processes on executors
 from typing import Callable, Optional
 from uuid import UUID
 
 
-model_uuid: Optional[UUID] = None
-predict_fn: Optional[Callable] = None
+class ModelCache:
+    """Cache for model prediction functions on executors."""
+
+    _models: dict[UUID, Callable] = {}
+
+    @staticmethod
+    def add(uuid: UUID, predict_fn: Callable) -> None:
+        ModelCache._models[uuid] = predict_fn
+
+    @staticmethod
+    def get(uuid: UUID) -> Optional[Callable]:
+        return ModelCache._models.get(uuid)
