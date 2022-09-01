@@ -35,7 +35,7 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
 
   // Exclude rules for 3.4.x from 3.3.0
-  lazy val v34excludes = v33excludes ++ Seq(
+  lazy val v34excludes = defaultExcludes ++ Seq(
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast"),
 
@@ -67,54 +67,12 @@ object MimaExcludes {
     // [SPARK-38679][CORE] Expose the number of partitions in a stage to TaskContext
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.numPartitions"),
 
-    // [SPARK-39506] In terms of 3 layer namespace effort, add currentCatalog, setCurrentCatalog and listCatalogs API to Catalog interface
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.currentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.setCurrentCatalog"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
-
     // [SPARK-38929][SQL] Improve error messages for cast failures in ANSI
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
 
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
     ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil")
-  )
-
-  // Exclude rules for 3.3.x from 3.2.0
-  lazy val v33excludes = defaultExcludes ++ Seq(
-    // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
-    // The followings are necessary for Scala 2.13.
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$"),
-
-    // [SPARK-37391][SQL] JdbcConnectionProvider tells if it modifies security context
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
-
-    // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
-    // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this"),
-    // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
-
-    // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
-
-    // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4SafeDecompressor"),
-
-    // [SPARK-37377][SQL] Initial implementation of Storage-Partitioned Join
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.Distribution"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
-
-    // [SPARK-38908][SQL] Provide query context in runtime error of Casting from String to
-    // Number/Date/Timestamp/Boolean
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
   // Defulat exclude rules
@@ -133,8 +91,9 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
-    // SPARK-40283: add jdbc as default excludes
+    // SPARK-40283: add jdbc and catalog as default excludes
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
@@ -150,7 +109,6 @@ object MimaExcludes {
 
   def excludes(version: String) = version match {
     case v if v.startsWith("3.4") => v34excludes
-    case v if v.startsWith("3.3") => v33excludes
     case _ => Seq()
   }
 }
