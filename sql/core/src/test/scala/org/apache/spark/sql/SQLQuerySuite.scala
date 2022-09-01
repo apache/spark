@@ -4473,6 +4473,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
+
+  test("SPARK-40296: DISTINCT function not found") {
+    val e = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT SUM(c1), DISTINCT(c1, c2) FROM VALUES(1, 2), (2, 2), (1, 2) AS T(c1, c2);
+          |""".stripMargin)
+    }
+    assert(e.message.contains("The function `DISTINCT` does not exist in the current schema"))
+  }
 }
 
 case class Foo(bar: Option[String])

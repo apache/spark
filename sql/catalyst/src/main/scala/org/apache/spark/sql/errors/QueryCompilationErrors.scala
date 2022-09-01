@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -1819,6 +1821,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def tableOrViewNotFoundError(table: String): Throwable = {
     new AnalysisException(s"Table or view not found: $table")
+  }
+
+  def noSuchFunctionError(
+    rawName: Seq[String],
+    t: TreeNode[_],
+    arguments: Seq[Expression],
+    catalogAndNamespace: Seq[String],
+    fullName: Option[Seq[String]]): Throwable = {
+    if (rawName.length == 1 && rawName.head.toLowerCase(Locale.ROOT) == "distinct") {
+      new AnalysisException(
+        errorClass = "DISTINCT_FUNCTION_NOT_FOUND",
+        messageParameters = Array(catalogAndNamespace.quoted, s"$arguments")
+      )
+    } else {
+      noSuchFunctionError(rawName, t, fullName)
+    }
   }
 
   def noSuchFunctionError(

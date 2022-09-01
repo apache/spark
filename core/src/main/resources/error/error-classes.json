@@ -98,6 +98,11 @@
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)"
     ]
   },
+  "DISTINCT_FUNCTION_NOT_FOUND": {
+    "message": [
+      "The function `DISTINCT` does not exist in the current schema <current_schema>. To deduplicate columns use SELECT DISTINCT <column_list> … . Otherwise, verify the function name or qualify the function name with its schema."
+    ]
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists"

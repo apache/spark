@@ -2059,19 +2059,21 @@ class Analyzer(override val catalogManager: CatalogManager)
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, arguments, _, _, _) =>
           if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
           } else {
             val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
             val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
+            val catalogAndNamespace = normalizeFuncName(catalog.name +: ident.namespace)
             if (externalFunctionNameSet.contains(fullName)) {
               f
             } else if (catalog.asFunctionCatalog.functionExists(ident)) {
               externalFunctionNameSet.add(fullName)
               f
             } else {
-              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+              throw QueryCompilationErrors.noSuchFunctionError(
+                nameParts, f, arguments, catalogAndNamespace, Some(fullName))
             }
           }
       }
