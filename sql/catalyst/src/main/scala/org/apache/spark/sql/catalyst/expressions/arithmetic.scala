@@ -981,9 +981,6 @@ case class Pmod(
 
   override def symbol: String = "pmod"
 
-  protected def checkTypesInternal(t: DataType): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(t, "pmod")
-
   override def inputType: AbstractDataType = NumericType
 
   override def nullable: Boolean = true
