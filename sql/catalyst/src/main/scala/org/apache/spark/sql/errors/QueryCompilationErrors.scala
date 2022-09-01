@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
-import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -793,6 +793,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       funcName: String, argName: String, requiredType: String): Throwable = {
     new AnalysisException(
       s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidFormatInConversion(
+      argName: String,
+      funcName: String,
+      expected: String,
+      context: SQLQueryContext): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Array(toSQLId(argName), toSQLId(funcName), expected),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def invalidStringLiteralParameter(
