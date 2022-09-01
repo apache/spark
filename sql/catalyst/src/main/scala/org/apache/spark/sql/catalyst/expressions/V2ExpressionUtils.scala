@@ -75,6 +75,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = {
     expr match {
+      case l: V2Literal[_] =>
+        Some(Literal.create(l.value, l.dataType))
       case t: Transform =>
         toCatalystTransformOpt(t, query, funCatalogOpt)
       case SortValue(child, direction, nullOrdering) =>
@@ -106,26 +108,12 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         }
       }
     case NamedTransform(name, args) =>
-      val catalystArgs = convertTransformArgs(args, query)
+      val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>
         loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
           TransformExpression(bound, catalystArgs)
         }
       }
-  }
-
-  private def convertTransformArgs(
-      args: Seq[V2Expression],
-      query: LogicalPlan): Seq[Expression] = {
-    args.map {
-      case r: NamedReference =>
-        resolveRef[NamedExpression](r, query)
-      case l: V2Literal[_] =>
-        Literal.create(l.value, l.dataType)
-      case arg =>
-        throw new AnalysisException(
-          s"Only references and literals are supported as transform arguments: $arg")
-    }
   }
 
   private def loadV2FunctionOpt(

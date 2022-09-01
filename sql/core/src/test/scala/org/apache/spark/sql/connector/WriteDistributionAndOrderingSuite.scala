@@ -1041,9 +1041,17 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
+
+    val stringSelfTransform = ApplyTransform(
+      "string_self",
+      Seq(FieldReference("data")))
+    val truncateTransform = ApplyTransform(
+      "truncate",
+      Seq(stringSelfTransform, LiteralValue(2, IntegerType)))
+
     val tableOrdering = Array[SortOrder](
       sort(
-        ApplyTransform("string_self", Seq(FieldReference("data"))),
+        stringSelfTransform,
         SortDirection.DESCENDING,
         NullOrdering.NULLS_FIRST),
       sort(
@@ -1051,12 +1059,18 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         SortDirection.DESCENDING,
         NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = Distributions.clustered(Array(
-      ApplyTransform("truncate", Seq(FieldReference("data"), LiteralValue(2, IntegerType)))))
+    val tableDistribution = Distributions.clustered(Array(truncateTransform))
+
+    val stringSelfExpr = ApplyFunctionExpression(
+      StringSelfFunction,
+      Seq(attr("data")))
+    val truncateExpr = ApplyFunctionExpression(
+      TruncateFunction,
+      Seq(stringSelfExpr, Literal(2)))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
-        ApplyFunctionExpression(StringSelfFunction, Seq(attr("data"))),
+        stringSelfExpr,
         catalyst.expressions.Descending,
         catalyst.expressions.NullsFirst,
         Seq.empty
@@ -1069,12 +1083,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       )
     )
 
-    val writePartitioningExprs = Seq(
-      ApplyFunctionExpression(TruncateFunction, Seq(attr("data"), Literal(2))))
     val writePartitioning = if (!coalesce) {
-      clusteredWritePartitioning(writePartitioningExprs, targetNumPartitions)
+      clusteredWritePartitioning(Seq(truncateExpr), targetNumPartitions)
     } else {
-      clusteredWritePartitioning(writePartitioningExprs, Some(1))
+      clusteredWritePartitioning(Seq(truncateExpr), Some(1))
     }
 
     checkWriteRequirements(
