@@ -2309,7 +2309,7 @@ package object config {
         " shuffle is enabled.")
       .version("3.3.0")
       .intConf
-      .createWithDefault(3)
+      .createWithDefault(8)
 
   private[spark] val PUSH_BASED_SHUFFLE_SEND_FINALIZE_RPC_THREADS =
     ConfigBuilder("spark.shuffle.push.sendFinalizeRPCThreads")
@@ -2318,7 +2318,7 @@ package object config {
         " PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.")
       .version("3.3.0")
       .intConf
-      .createWithDefault(6)
+      .createWithDefault(8)
 
   private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
     ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
