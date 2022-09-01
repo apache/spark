@@ -18,10 +18,12 @@
 package org.apache.spark.ml.linalg
 
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
-import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, F2jBLASUtil}
+import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, JavaBLAS}
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.util.Utils
 
 /**
  * Serialization benchmark for BLAS.
@@ -35,12 +37,25 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  */
 object BLASBenchmark extends BenchmarkBase {
 
+  private def getF2jBLAS(): Option[JavaBLAS] = {
+    try {
+      val f2jBLASClazz = Utils.classForName("dev.ludovic.netlib.blas.F2jBLAS")
+      val getInstanceMethod = f2jBLASClazz.getDeclaredMethod("getInstance")
+      getInstanceMethod.setAccessible(true)
+      val f2jBLAS = getInstanceMethod.invoke(null).asInstanceOf[JavaBLAS]
+      Some(f2jBLAS)
+    } catch {
+      case NonFatal(_) =>
+        None
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     val iters = 1e2.toInt
     val rnd = new scala.util.Random(0)
 
-    val f2jBLAS = F2jBLASUtil.getInstance
+    val f2jBLAS = getF2jBLAS.getOrElse(throw new RuntimeException("can't load F2jBLAS"))
     val javaBLAS = BLAS.javaBLAS
     val nativeBLAS = BLAS.nativeBLAS
 
