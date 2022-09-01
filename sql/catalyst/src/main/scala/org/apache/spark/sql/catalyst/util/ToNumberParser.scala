@@ -896,3 +896,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
   }
 }
+
+class NullToNumberParser(numberFormat: String = "999", errorOnFail: Boolean = true)
+  extends ToNumberParser(numberFormat, errorOnFail) {
+}

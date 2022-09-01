@@ -1019,6 +1019,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+
+    // if null format, to_number should return null
+    val toNumberExpr = ToNumber(Literal("454"), Literal(null, StringType))
+    assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    checkEvaluation(toNumberExpr, null)
+
+    val tryToNumberExpr = TryToNumber(Literal("454"), Literal(null, StringType))
+    assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    checkEvaluation(tryToNumberExpr, null)
   }
 
   test("ToNumber and ToCharacter: negative tests (the format string is invalid)") {

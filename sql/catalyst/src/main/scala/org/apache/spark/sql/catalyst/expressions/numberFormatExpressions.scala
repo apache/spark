@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.util.ToNumberParser
+import org.apache.spark.sql.catalyst.util.{NullToNumberParser, ToNumberParser}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -71,8 +71,15 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "string_funcs")
 case class ToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new ToNumberParser(numberFormat, true)
+
+  private lazy val numberFormatter = {
+    val value = right.eval()
+    if (value != null) {
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+    } else {
+      new NullToNumberParser()
+    }
+  }
 
   override def dataType: DataType = numberFormatter.parsedDecimalType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
@@ -104,10 +111,11 @@ case class ToNumber(left: Expression, right: Expression)
     val builder =
       ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
     val eval = left.genCode(ctx)
+    val isNullFormatCode = numberFormatter.isInstanceOf[NullToNumberParser].toString
     ev.copy(code =
       code"""
         |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
+        |boolean ${ev.isNull} = ${eval.isNull} || $isNullFormatCode;
         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         |if (!${ev.isNull}) {
         |  ${ev.value} = $builder.parse(${eval.value});
@@ -146,8 +154,15 @@ case class ToNumber(left: Expression, right: Expression)
   group = "string_funcs")
 case class TryToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new ToNumberParser(numberFormat, false)
+
+  private lazy val numberFormatter = {
+    val value = right.eval()
+    if (value != null) {
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+    } else {
+      new NullToNumberParser()
+    }
+  }
 
   override def dataType: DataType = numberFormatter.parsedDecimalType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
@@ -162,10 +177,11 @@ case class TryToNumber(left: Expression, right: Expression)
     val builder =
       ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
     val eval = left.genCode(ctx)
+    val isNullFormatCode = numberFormatter.isInstanceOf[NullToNumberParser].toString
     ev.copy(code =
       code"""
         |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
+        |boolean ${ev.isNull} = ${eval.isNull} || $isNullFormatCode;
         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         |if (!${ev.isNull}) {
         |  ${ev.value} = $builder.parse(${eval.value});
