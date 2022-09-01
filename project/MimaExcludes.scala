@@ -149,6 +149,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
+  // Exclude rules for 3.2.x from 3.1.1
   lazy val sparkInternalexcludes = Seq(
     // Spark Internals
     ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
@@ -163,6 +164,18 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
+    // Avro source implementation is internal.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
+
+    (problem: Problem) => problem match {
+      case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
+          !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
+      case _ => true
+    }
   )
 
   def excludes(version: String) = version match {
