@@ -47,14 +47,23 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains(errorMessage))
   }
 
+  def assertTypeMismatch(expr: Expression, errorMessage: String): Unit = {
+    val e = intercept[AnalysisException] {
+      assertSuccess(expr)
+    }
+    assert(e.getMessage.contains(
+      s"""Cannot resolve "${expr.sql}" due to data type mismatch:"""))
+    assert(e.getMessage.contains(errorMessage))
+  }
+
   def assertSuccess(expr: Expression): Unit = {
     val analyzed = testRelation.select(expr.as("c")).analyze
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
-    assertError(expr,
-      s"differing types in '${expr.sql}'")
+    assertTypeMismatch(expr,
+      "the left and right arguments of the binary operator have different types")
   }
 
   test("check types for unary arithmetic") {
@@ -79,20 +88,23 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
     assertErrorForDifferingTypes(BitwiseOr($"intField", $"booleanField"))
     assertErrorForDifferingTypes(BitwiseXor($"intField", $"booleanField"))
 
-    assertError(Add($"booleanField", $"booleanField"),
-      "requires (numeric or interval day to second or interval year to month or interval) type")
-    assertError(Subtract($"booleanField", $"booleanField"),
-      "requires (numeric or interval day to second or interval year to month or interval) type")
-    assertError(Multiply($"booleanField", $"booleanField"), "requires numeric type")
-    assertError(Divide($"booleanField", $"booleanField"),
-      "requires (double or decimal) type")
-    assertError(Remainder($"booleanField", $"booleanField"), "requires numeric type")
+    assertTypeMismatch(Add($"booleanField", $"booleanField"),
+      """"NUMERIC" or "INTERVAL DAY TO SECOND" or "INTERVAL YEAR TO MONTH" or "INTERVAL"""")
+    assertTypeMismatch(Subtract($"booleanField", $"booleanField"),
+      """"NUMERIC" or "INTERVAL DAY TO SECOND" or "INTERVAL YEAR TO MONTH" or "INTERVAL"""")
+    assertTypeMismatch(Multiply($"booleanField", $"booleanField"),
+      """requires the input type "NUMERIC"""")
+    assertTypeMismatch(Divide($"booleanField", $"booleanField"),
+      """requires the input type ("DOUBLE" or "DECIMAL")""")
+    assertTypeMismatch(Remainder($"booleanField", $"booleanField"),
+      """requires the input type "NUMERIC"""")
 
-    assertError(BitwiseAnd($"booleanField", $"booleanField"),
-      "requires integral type")
-    assertError(BitwiseOr($"booleanField", $"booleanField"), "requires integral type")
-    assertError(BitwiseXor($"booleanField", $"booleanField"),
-      "requires integral type")
+    assertTypeMismatch(BitwiseAnd($"booleanField", $"booleanField"),
+      """requires the input type "INTEGRAL"""")
+    assertTypeMismatch(BitwiseOr($"booleanField", $"booleanField"),
+      """requires the input type "INTEGRAL"""")
+    assertTypeMismatch(BitwiseXor($"booleanField", $"booleanField"),
+      """requires the input type "INTEGRAL"""")
   }
 
   test("check types for predicates") {
@@ -110,8 +122,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       assertSuccess(EqualNullSafe($"intField", $"booleanField"))
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      assertError(EqualTo($"intField", $"booleanField"), "differing types")
-      assertError(EqualNullSafe($"intField", $"booleanField"), "differing types")
+      assertTypeMismatch(EqualTo($"intField", $"booleanField"),
+        "the binary operator have different types")
+      assertTypeMismatch(EqualNullSafe($"intField", $"booleanField"),
+        "the binary operator have different types")
     }
 
     assertErrorForDifferingTypes(EqualTo($"intField", $"mapField"))
@@ -136,8 +150,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
 
     assertError(If($"intField", $"stringField", $"stringField"),
       "type of predicate expression in If should be boolean")
-    assertErrorForDifferingTypes(
-      If($"booleanField", $"intField", $"booleanField"))
+    assertError(If($"booleanField", $"intField", $"booleanField"),
+      "data type mismatch")
 
     assertError(
       CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
