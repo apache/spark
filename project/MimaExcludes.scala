@@ -96,8 +96,8 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
-    // SPARK-40283: add jdbc as default excludes
-    ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.*"),
+    // SPARK-40283: add jdbc.JdbcDialect as default excludes
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.jdbc.JdbcDialect.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
