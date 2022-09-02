@@ -23,13 +23,13 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
-import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -271,12 +271,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableOrPermanentViewNotTempViewError(
-      quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def readNonStreamingTempViewError(quoted: String): Throwable = {
     new AnalysisException(s"$quoted is not a temp view of streaming " +
       "logical plan, please use batch API such as `DataFrameReader.table` to read it.")
@@ -306,10 +300,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def expectTableNotViewError(
-      v: ResolvedView, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val viewStr = if (v.isTemp) "temp view" else "view"
+      nameParts: Seq[String],
+      isTemp: Boolean,
+      cmd: String,
+      mismatchHint: Option[String],
+      t: TreeNode[_]): Throwable = {
+    val viewStr = if (isTemp) "temp view" else "view"
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+    new AnalysisException(s"${nameParts.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(s"${nameParts.quoted} is a temp view. '$cmd' expects a permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -317,6 +323,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectTableOrPermanentViewNotTempViewError(
+      nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      s"${nameParts.quoted} is a temp view. '$cmd' expects a table or permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -780,6 +793,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       funcName: String, argName: String, requiredType: String): Throwable = {
     new AnalysisException(
       s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidFormatInConversion(
+      argName: String,
+      funcName: String,
+      expected: String,
+      context: SQLQueryContext): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Array(toSQLId(argName), toSQLId(funcName), expected),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def invalidStringLiteralParameter(
