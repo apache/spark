@@ -82,7 +82,7 @@
     "subClass" : {
       "BINARY_OP_DIFF_TYPES" : {
         "message" : [
-          "the left and right arguments of the binary operator have different types (<left> and <right>)."
+          "the left and right operands of the binary operator have incompatible types (<left> and <right>)."
         ]
       },
       "BINARY_OP_WRONG_TYPE" : {
