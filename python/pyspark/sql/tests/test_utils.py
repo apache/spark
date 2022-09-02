@@ -80,12 +80,27 @@ class UtilsTests(ReusedSQLTestCase):
         def conf_str_to_bool(conf_str: str) -> bool:
             return eval(conf_str.title())
 
+        # Set one Spark SQL conf
         k = "spark.sql.execution.arrow.pyspark.enabled"
         old_conf = conf_str_to_bool(self.spark.conf.get(k))
         new_conf = not old_conf
         with sql_conf({k: new_conf}):
             self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), new_conf)
         self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), old_conf)
+
+        with self.assertRaisesRegex(AssertionError, "pairs should be a dictionary"):
+            with sql_conf(new_conf):
+                pass
+
+        # Set multiple Spark SQL confs
+        k2 = "spark.sql.execution.arrow.pyspark.fallback.enabled"
+        old_conf2 = conf_str_to_bool(self.spark.conf.get(k2))
+        new_conf2 = not old_conf2
+        with sql_conf({k: new_conf, k2: new_conf2}):
+            self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), new_conf)
+            self.assertEquals(conf_str_to_bool(self.spark.conf.get(k2)), new_conf2)
+        self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), old_conf)
+        self.assertEquals(conf_str_to_bool(self.spark.conf.get(k2)), old_conf2)
 
 
 if __name__ == "__main__":
