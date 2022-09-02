@@ -116,7 +116,8 @@ class ArrowPythonRunnerWithState(
           keyRow: UnsafeRow,
           groupState: GroupStateImpl[Row],
           startOffset: Int,
-          numRows: Int): InternalRow = {
+          numRows: Int,
+          isLastChunk: Boolean): InternalRow = {
         // NOTE: see ArrowPythonRunnerWithState.STATE_METADATA_SCHEMA
         val stateUnderlyingRow = new GenericInternalRow(
           Array[Any](
@@ -124,7 +125,8 @@ class ArrowPythonRunnerWithState(
             keyRow.getBytes,
             groupState.getOption.map(PythonSQLUtils.toPyRow).orNull,
             startOffset,
-            numRows
+            numRows,
+            isLastChunk
           )
         )
         new GenericInternalRow(Array[Any](stateUnderlyingRow))
@@ -227,11 +229,50 @@ class ArrowPythonRunnerWithState(
               arrowWriterForData.write(dataRow)
               numRowsForCurGroup += 1
               totalNumRowsForBatch += 1
+
+              // Currently, this only works when the number of rows are greater than the minimum
+              // data count for sampling. And we technically have no way to pick some rows from
+              // record batch and measure the size of data, hence we leverage all data in current
+              // record batch. We only sample once as it could be costly.
+              if (sampledDataSizePerRow == 0 && totalNumRowsForBatch > minDataCountForSample) {
+                sampledDataSizePerRow = arrowWriterForData.sizeInBytes() / totalNumRowsForBatch
+              }
+
+              // If it exceeds the condition of batch (only size, not about timeout) and
+              // there is more data for the same group, flush and construct a new batch.
+
+              //  if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch &&
+              //      dataIter.hasNext) {
+              // FIXME: DEBUGGING now... split the data per 10 elements <- 1 element for testing
+              if (numRowsForCurGroup % 10 == 1 && dataIter.hasNext) {
+                // Provide state metadata row as intermediate
+                val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
+                  numRowsForCurGroup, isLastChunk = false)
+                arrowWriterForState.write(stateInfoRow)
+                totalNumStatesForBatch += 1
+
+                val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
+                (0 until remainingEmptyStateRows).foreach { _ =>
+                  arrowWriterForState.write(EMPTY_STATE_METADATA_ROW)
+                }
+
+                arrowWriterForState.finish()
+                arrowWriterForData.finish()
+                writer.writeBatch()
+                arrowWriterForState.reset()
+                arrowWriterForData.reset()
+
+                startOffsetForCurGroup = 0
+                numRowsForCurGroup = 0
+                totalNumRowsForBatch = 0
+                totalNumStatesForBatch = 0
+                lastBatchPurgedMillis = System.currentTimeMillis()
+              }
             }
 
             // Provide state metadata row
             val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
-              numRowsForCurGroup)
+              numRowsForCurGroup, isLastChunk = true)
             arrowWriterForState.write(stateInfoRow)
             totalNumStatesForBatch += 1
 
@@ -282,7 +323,7 @@ class ArrowPythonRunnerWithState(
               arrowWriterForState.write(EMPTY_STATE_METADATA_ROW)
             }
 
-           arrowWriterForState.finish()
+            arrowWriterForState.finish()
             arrowWriterForData.finish()
             writer.writeBatch()
             arrowWriterForState.reset()
@@ -470,10 +511,12 @@ object ArrowPythonRunnerWithState {
       StructField("keyRowAsUnsafe", BinaryType),
       StructField("object", BinaryType),
       StructField("startOffset", IntegerType),
-      StructField("numRows", IntegerType)
+      StructField("numRows", IntegerType),
+      StructField("isLastChunk", BooleanType)
     )
   )
 
   // To avoid initializing a new row for empty state metadata row.
-  val EMPTY_STATE_METADATA_ROW = new GenericInternalRow(Array[Any](null, null, null, null, null))
+  val EMPTY_STATE_METADATA_ROW = new GenericInternalRow(
+    Array[Any](null, null, null, null, null, null))
 }

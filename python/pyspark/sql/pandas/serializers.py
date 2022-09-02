@@ -406,6 +406,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
+        state_for_current_group = None
         for batch in batches:
             batch_schema = batch.schema
             data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
@@ -434,6 +435,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
                 data_start_offset = state_info_col['startOffset']
                 num_data_rows = state_info_col['numRows']
+                is_last_chunk = state_info_col['isLastChunk']
 
                 state_properties = json.loads(state_info_col_properties)
                 if state_info_col_object:
@@ -442,17 +444,30 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     state_object = None
                 state_properties["optionalValue"] = state_object
 
-                state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
-                                       valueSchema=self.state_object_schema, **state_properties)
+                if state_for_current_group:
+                    # use the state, we already have state for same group and there should be some
+                    # data in same group being processed earlier
+                    state = state_for_current_group
+                else:
+                    # there is no state being stored for same group, construct one
+                    state = GroupStateImpl(keyAsUnsafe=state_info_col_key_row,
+                                           valueSchema=self.state_object_schema, **state_properties)
+
+                if is_last_chunk:
+                    # discard the state being cached for same group
+                    state_for_current_group = None
+                elif not state_for_current_group:
+                    # there's no cached state but expected to have additional data in same group
+                    # cache the current state
+                    state_for_current_group = state
 
                 data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
-
                 data_arrow = pa.Table.from_batches([data_batch_for_group]).itercolumns()
 
                 data_pandas = [self.arrow_to_pandas(c) for c in data_arrow]
 
                 # state info
-                yield (data_pandas, state, )
+                yield (data_pandas, state, is_last_chunk, )
 
     def dump_stream(self, iterator, stream):
         """
@@ -511,7 +526,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 packaged_result = data[0]
 
                 pdf = packaged_result[0][0]
-                state = packaged_result[0][-1]
+                state = packaged_result[0][1]
+                is_last_chunk = packaged_result[0][2]
                 # this won't change across batches
                 return_schema = packaged_result[1]
 
@@ -522,20 +538,22 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     pdf_data_cnt += len(pdf)
                     pdfs.append(pdf)
 
-                state_properties = state.json().encode("utf-8")
-                state_key_row_as_binary = state._keyAsUnsafe
-                state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+                if is_last_chunk:
+                    # pick up state for only last chunk as state should have been updated so far
+                    state_properties = state.json().encode("utf-8")
+                    state_key_row_as_binary = state._keyAsUnsafe
+                    state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
 
-                state_dict = {
-                    'properties': [state_properties, ],
-                    'keyRowAsUnsafe': [state_key_row_as_binary, ],
-                    'object': [state_object, ],
-                }
+                    state_dict = {
+                        'properties': [state_properties, ],
+                        'keyRowAsUnsafe': [state_key_row_as_binary, ],
+                        'object': [state_object, ],
+                    }
 
-                state_pdf = pd.DataFrame.from_dict(state_dict)
+                    state_pdf = pd.DataFrame.from_dict(state_dict)
 
-                state_pdfs.append(state_pdf)
-                state_data_cnt += 1
+                    state_pdfs.append(state_pdf)
+                    state_data_cnt += 1
 
                 # FIXME: threshold of sample data
                 if sampled_data_size_per_row == 0 and pdf_data_cnt > self.minDataCountForSample:

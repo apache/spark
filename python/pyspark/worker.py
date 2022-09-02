@@ -210,15 +210,16 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
-    def wrapped(key_series, value_series, state):
+    def wrapped(key_series, value_series, state, is_last_chunk):
         import pandas as pd
 
         key = tuple(s[0] for s in key_series)
         if state.hasTimedOut:
             # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
-            result = f(key, pd.DataFrame(columns=pd.concat(value_series, axis=1).columns), state)
+            result = f(key, pd.DataFrame(columns=pd.concat(value_series, axis=1).columns),
+                       state, is_last_chunk)
         else:
-            result = f(key, pd.concat(value_series, axis=1), state)
+            result = f(key, pd.concat(value_series, axis=1), state, is_last_chunk)
 
         if not isinstance(result, pd.DataFrame):
             raise TypeError(
@@ -236,9 +237,9 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
             )
 
-        return (result, state, )
+        return (result, state, is_last_chunk, )
 
-    return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
+    return lambda k, v, s, l: [(wrapped(k, v, s, l), to_arrow_type(return_type))]
 
 
 def wrap_grouped_agg_pandas_udf(f, return_type):
@@ -572,7 +573,8 @@ def read_udfs(pickleSer, infile, eval_type):
             keys = [a[0][o] for o in parsed_offsets[0][0]]
             vals = [a[0][o] for o in parsed_offsets[0][1]]
             state = a[1]
-            return f(keys, vals, state)
+            is_last_chunk = a[2]
+            return f(keys, vals, state, is_last_chunk)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't

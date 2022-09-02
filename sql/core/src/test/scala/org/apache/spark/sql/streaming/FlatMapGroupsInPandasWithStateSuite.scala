@@ -45,7 +45,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    StructField("key", StringType()),
         |    StructField("countAsString", StringType())])
         |
-        |def func(key, pdf, state):
+        |def func(key, pdf, state, is_last_chunk):
         |    assert state.getCurrentProcessingTimeMs() >= 0
         |    try:
         |        state.getCurrentWatermarkMs()
@@ -64,7 +64,10 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |        return pd.DataFrame()
         |    else:
         |        state.update((count,))
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |        if is_last_chunk:
+        |            return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |        else:
+        |            return pd.DataFrame()
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -121,7 +124,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    StructField("value", IntegerType()),
         |    StructField("countAsString", StringType())])
         |
-        |def func(key, pdf, state):
+        |def func(key, pdf, state, is_last_chunk):
         |    count = state.getOption
         |    if count is None:
         |        count = 0
@@ -184,7 +187,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    StructField("key", StringType()),
         |    StructField("countAsString", StringType())])
         |
-        |def func(key, pdf, state):
+        |def func(key, pdf, state, is_last_chunk):
         |    count = state.getOption
         |    if count is None:
         |        count = 0
