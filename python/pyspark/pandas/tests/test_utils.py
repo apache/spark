@@ -114,9 +114,7 @@ class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
         spark = default_session()
         k = "spark.sql.execution.arrow.pyspark.enabled"
         old_conf = conf_str_to_bool(spark.conf.get(k))
-        print(old_conf)
         new_conf = not old_conf
-        print(new_conf)
         with sql_conf({k: new_conf}, spark=spark):
             self.assertEquals(conf_str_to_bool(spark.conf.get(k)), new_conf)
         self.assertEquals(conf_str_to_bool(spark.conf.get(k)), old_conf)
