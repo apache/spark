@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.util.hashing.MurmurHash3
+
 import java.util.{Map => JavaMap}
 
 /**
@@ -34,6 +36,29 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
 
   override def toString: String = {
     s"keys: $keyArray, values: $valueArray"
+  }
+
+  override def equals(obj: Any): Boolean = {
+    if (obj == null && this == null) {
+      return true
+    }
+
+    if (obj == null || !obj.isInstanceOf[ArrayBasedMapData]) {
+      return false
+    }
+
+    val other = obj.asInstanceOf[ArrayBasedMapData]
+
+    keyArray.equals(other.keyArray) && valueArray.equals(other.valueArray)
+  }
+
+  // Hash this class as a Product of two hashCodes. We don't know the DataType which prevents us
+  // from getting individual rows for hashing as a Map.
+  override def hashCode(): Int = {
+    val seed = MurmurHash3.productSeed
+    val keyHash = scala.util.hashing.MurmurHash3.mix(seed, keyArray.hashCode())
+    val valueHash = scala.util.hashing.MurmurHash3.mix(keyHash, valueArray.hashCode())
+    scala.util.hashing.MurmurHash3.finalizeHash(valueHash, 2)
   }
 }
 

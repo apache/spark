@@ -142,4 +142,36 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         Map(new GenericArrayData(Seq(1, 1)) -> 3, new GenericArrayData(Seq(2, 2)) -> 2))
     }
   }
+
+  test("simple equal() and hashCode() semantics") {
+    val dataToAdd: Map[Int, Int] = Map(0 -> -7, 1 -> 3, 10 -> 4, 20 -> 5)
+    val builder1 = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    val builder2 = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    val builder3 = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    dataToAdd.foreach { case (key, value) =>
+      builder1.put(key, value)
+      builder2.put(key, value)
+      // Replace the value by something slightly different in builder3 for one of the keys.
+      if (key == 20) {
+        builder3.put(key, value - 1)
+      } else {
+        builder3.put(key, value)
+      }
+    }
+    val arrayBasedMapData1 = builder1.build()
+    val arrayBasedMapData2 = builder2.build()
+    val arrayBasedMapData3 = builder3.build()
+
+    // We expect two objects to be equal and to have the same hashCode if they have the same
+    // elements.
+    assert(arrayBasedMapData1 == arrayBasedMapData2)
+    assert(arrayBasedMapData1.equals(arrayBasedMapData2))
+    assert(arrayBasedMapData1.hashCode() == arrayBasedMapData2.hashCode())
+
+    // If two objects have different elements, we expect them to not be equal and their hashCode
+    // to be different.
+    assert(arrayBasedMapData1 != arrayBasedMapData3)
+    assert(!arrayBasedMapData1.equals(arrayBasedMapData3))
+    assert(arrayBasedMapData1.hashCode() != arrayBasedMapData3.hashCode())
+  }
 }
