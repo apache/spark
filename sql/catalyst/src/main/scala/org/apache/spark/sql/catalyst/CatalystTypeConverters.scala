@@ -245,6 +245,9 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): InternalRow = scalaValue match {
       case row: Row =>
         val ar = new Array[Any](row.size)
+        if (converters.size != row.size){
+          throw new IllegalArgumentException(s"${converters.size} converters found but ${row.size} to convert")
+        }
         var idx = 0
         while (idx < row.size) {
           ar(idx) = converters(idx).toCatalyst(row(idx))
