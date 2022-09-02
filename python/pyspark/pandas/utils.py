@@ -493,8 +493,6 @@ def sql_conf(pairs: Dict[str, Any], *, spark: Optional[SparkSession] = None) -> 
     A convenient context manager to set `value` to the Spark SQL configuration `key` and
     then restores it back when it exits.
     """
-    assert isinstance(pairs, dict), "pairs should be a dictionary."
-
     if spark is None:
         spark = default_session()
 
