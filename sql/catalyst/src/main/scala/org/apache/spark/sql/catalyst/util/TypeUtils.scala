@@ -26,13 +26,6 @@ import org.apache.spark.sql.types._
  * Functions to help with checking for valid data types and value comparison of various types.
  */
 object TypeUtils {
-  def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (dt.isInstanceOf[NumericType] || dt == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.catalogString}")
-    }
-  }
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {

@@ -985,7 +985,7 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
-        with self.assertRaisesRegex(ValueError, "lit does not allow for list of Columns"):
+        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
             lit([df.id, df.id])
 
     # Test added for SPARK-39832; change Python API to accept both col & str as input

@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, when}
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -52,6 +52,19 @@ class QueryExecutionErrorsSuite
   with QueryErrorsSuiteBase {
 
   import testImplicits._
+
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql("select to_binary('???', 'base64')").collect()
+      },
+      errorClass = "CONVERSION_INVALID_INPUT",
+      parameters = Map(
+        "str" -> "'???'",
+        "fmt" -> "'BASE64'",
+        "targetType" -> "\"BINARY\"",
+        "suggestion" -> "`try_to_binary`"))
+  }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
