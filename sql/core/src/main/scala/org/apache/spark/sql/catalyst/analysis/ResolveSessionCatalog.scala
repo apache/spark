@@ -204,13 +204,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
+    case DropTable(_: ResolvedPersistentView, ifExists, purge) =>
+      throw QueryCompilationErrors.cannotDropViewWithDropTableError
+
     // v1 DROP TABLE supports temp view.
-    case DropTable(r: ResolvedView, ifExists, purge) =>
-      if (!r.isTemp) {
-        throw QueryCompilationErrors.cannotDropViewWithDropTableError
-      }
-      val ResolvedViewIdentifier(ident) = r
-      DropTableCommand(ident, ifExists, isView = false, purge = purge)
+    case DropTable(ResolvedTempView(ident, _), ifExists, purge) =>
+      DropTableCommand(ident.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     case DropView(ResolvedViewIdentifier(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
@@ -535,14 +534,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedView(ident, isTemp) =>
-        if (isTemp) {
-          Some(ident.asTableIdentifier)
-        } else {
-          // TODO: we should get the v1 identifier from v1 view directly, similar to `V1Table`. But
-          //       there is no general view representation in DS v2 yet.
-          Some(catalogManager.v1SessionCatalog.qualifyIdentifier(ident.asTableIdentifier))
-        }
+      case ResolvedPersistentView(catalog, ident, _) =>
+        assert(isSessionCatalog(catalog))
+        assert(ident.namespace().length == 1)
+        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+
+      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+
       case _ => None
     }
   }

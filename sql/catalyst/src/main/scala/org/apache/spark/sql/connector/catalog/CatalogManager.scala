@@ -84,7 +84,7 @@ class CatalogManager(
   private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
       catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-    }.getOrElse(catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, defaultSessionCatalog))
+    }.getOrElse(defaultSessionCatalog)
   }
 
   private var _currentNamespace: Option[Array[String]] = None
@@ -135,7 +135,7 @@ class CatalogManager(
   }
 
   def listCatalogs(pattern: Option[String]): Seq[String] = {
-    val allCatalogs = synchronized(catalogs.keys.toSeq).sorted
+    val allCatalogs = (synchronized(catalogs.keys.toSeq) :+ SESSION_CATALOG_NAME).distinct.sorted
     pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
   }
 
