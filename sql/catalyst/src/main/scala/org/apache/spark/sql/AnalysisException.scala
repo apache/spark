@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{QueryContext, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -37,7 +37,8 @@ class AnalysisException protected[sql] (
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
     val errorSubClass: Option[String] = None,
-    val messageParameters: Array[String] = Array.empty)
+    val messageParameters: Array[String] = Array.empty,
+    val context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
     // Needed for binary compatibility
@@ -64,6 +65,19 @@ class AnalysisException protected[sql] (
       errorSubClass = None,
       messageParameters = messageParameters,
       cause = cause)
+
+  def this(
+      errorClass: String,
+      messageParameters: Array[String],
+      context: Array[QueryContext],
+      summary: String) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, null, messageParameters, summary),
+      errorClass = Some(errorClass),
+      errorSubClass = None,
+      messageParameters = messageParameters,
+      cause = null,
+      context = context)
 
   def this(errorClass: String, messageParameters: Array[String]) =
     this(errorClass = errorClass, messageParameters = messageParameters, cause = None)
@@ -138,4 +152,5 @@ class AnalysisException protected[sql] (
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass.orNull
   override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
 }

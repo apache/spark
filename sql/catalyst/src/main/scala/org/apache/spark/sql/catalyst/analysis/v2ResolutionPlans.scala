@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, I
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.types.{DataType, StructField}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -54,7 +54,7 @@ case class UnresolvedTable(
 
 /**
  * Holds the name of a view that has yet to be looked up. It will be resolved to
- * [[ResolvedView]] during analysis.
+ * [[ResolvedPersistentView]] or [[ResolvedTempView]] during analysis.
  */
 case class UnresolvedView(
     multipartIdentifier: Seq[String],
@@ -68,7 +68,8 @@ case class UnresolvedView(
 
 /**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
- * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
+ * be resolved to [[ResolvedTable]], [[ResolvedPersistentView]] or [[ResolvedTempView]] during
+ * analysis.
  */
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
@@ -195,11 +196,22 @@ case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
 
 /**
- * A plan containing resolved (temp) views.
+ * A plan containing resolved persistent views.
  */
-// TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
-//       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNodeWithoutStats {
+// TODO: create a generic representation for views, after we add view support to v2 catalog. For now
+//       we only hold the view schema.
+case class ResolvedPersistentView(
+    catalog: CatalogPlugin,
+    identifier: Identifier,
+    viewSchema: StructType) extends LeafNodeWithoutStats {
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved (global) temp views.
+ */
+case class ResolvedTempView(identifier: Identifier, viewSchema: StructType)
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
