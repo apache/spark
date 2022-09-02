@@ -541,11 +541,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
+  def operationOnlySupportedWithV2TableError(
+      catalog: String,
+      nameSpace: String,
+      tableName: String,
+      operation: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = "OPERATION_ONLY_SUPPORTED_WITH_V2_TABLE",
-      messageParameters = Array(operation))
+      errorSubClass = "TABLE_OPERATION",
+      messageParameters = Array(catalog, nameSpace, tableName, operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {

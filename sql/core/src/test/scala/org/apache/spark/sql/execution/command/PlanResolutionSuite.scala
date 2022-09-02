@@ -1257,8 +1257,8 @@ class PlanResolutionSuite extends AnalysisTest {
           val e2 = intercept[AnalysisException] {
             parseAndResolve(sql4)
           }
-          assert(e2.getMessage.contains(
-            "ALTER COLUMN with qualified column is only supported with v2 tables"))
+          assert(e2.getMessage.contains("Table 'spark_catalog'.'default'.'v1Table' does not " +
+            "support ALTER COLUMN with qualified column."))
         } else {
           parsed1 match {
             case AlterColumn(

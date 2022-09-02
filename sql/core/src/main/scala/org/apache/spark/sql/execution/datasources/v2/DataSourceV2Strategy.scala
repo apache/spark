@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -291,9 +291,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
-
+        case LogicalRelation(_, _, catalogTable, _) =>
+          val catalog = catalogTable.get.identifier.catalog.getOrElse("")
+          val nameSpace = catalogTable.get.identifier.database.getOrElse("")
+          val table = catalogTable.get.identifier.table
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+            catalog, nameSpace, table, "DELETE")
         case _ =>
-          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DELETE")
+          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
+            "", "", "", "DELETE")
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>

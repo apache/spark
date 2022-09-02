@@ -49,9 +49,12 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "OPERATION_ONLY_SUPPORTED_WITH_V2_TABLE",
+  "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "catalog" : "spark_catalog",
+    "nameSpace" : "default",
+    "tableName" : "test_change",
     "operation" : "RENAME COLUMN"
   }
 }
@@ -94,9 +97,12 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "OPERATION_ONLY_SUPPORTED_WITH_V2_TABLE",
+  "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "catalog" : "spark_catalog",
+    "nameSpace" : "default",
+    "tableName" : "test_change",
     "operation" : "ALTER COLUMN ... FIRST | ALTER"
   }
 }
@@ -110,9 +116,12 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
-  "errorSubClass" : "OPERATION_ONLY_SUPPORTED_WITH_V2_TABLE",
+  "errorSubClass" : "TABLE_OPERATION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "catalog" : "spark_catalog",
+    "nameSpace" : "default",
+    "tableName" : "test_change",
     "operation" : "ALTER COLUMN ... FIRST | ALTER"
   }
 }
