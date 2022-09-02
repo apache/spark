@@ -104,7 +104,7 @@ case class Sum(
       Seq(Literal(null, resultType))
     }
 
-  override val updateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
+  override lazy val updateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     // If shouldTrackIsEmpty is true, the initial value of `sum` is 0. We need to keep `sum`
     // unchanged if the input is null, as SUM function ignores null input. The `sum` can only be
     // null if overflow happens under non-ansi mode.
@@ -146,7 +146,7 @@ case class Sum(
    * isEmpty:  Set to false if either one of the left or right is set to false. This
    * means we have seen at least a value that was not null.
    */
-  override val mergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
+  override lazy val mergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     val bufferOverflow = !isEmpty.left && sum.left.isNull
     val inputOverflow = !isEmpty.right && sum.right.isNull
     Seq(
@@ -171,7 +171,7 @@ case class Sum(
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  override val evaluateExpression: Expression = {
+  override lazy val evaluateExpression: Expression = {
     resultType match {
       case d: DecimalType =>
         val checkOverflowInSum =
