@@ -982,9 +982,11 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
-        p.copy(
+        val newProj = p.copy(
           projectList = p.metadataOutput ++ p.projectList,
           child = addMetadataCol(p.child))
+        newProj.copyTagsFrom(p)
+        newProj
       case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
   }
@@ -3523,8 +3525,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
-        project.child.metadataOutput.filter(_.supportsQualifiedStar))
+      hiddenList.map(_.markAsQualifiedAccess()) ++
+        project.child.metadataOutput.filter(_.qualifiedAccess))
     project
   }
 

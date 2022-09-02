@@ -191,20 +191,20 @@ package object util extends Logging {
     /**
      * If set, this metadata column is a candidate during qualified star expansions.
      */
-    val SUPPORTS_QUALIFIED_STAR = "__supports_qualified_star"
+    val QUALIFIED_ACCESS = "__qualified_access"
 
     def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
       attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
 
-    def supportsQualifiedStar: Boolean = attr.isMetadataCol &&
-      attr.metadata.contains(SUPPORTS_QUALIFIED_STAR) &&
-      attr.metadata.getBoolean(SUPPORTS_QUALIFIED_STAR)
+    def qualifiedAccess: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(QUALIFIED_ACCESS) &&
+      attr.metadata.getBoolean(QUALIFIED_ACCESS)
 
-    def markAsSupportsQualifiedStar(): Attribute = attr.withMetadata(
+    def markAsQualifiedAccess(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
         .putBoolean(METADATA_COL_ATTR_KEY, true)
-        .putBoolean(SUPPORTS_QUALIFIED_STAR, true)
+        .putBoolean(QUALIFIED_ACCESS, true)
         .build()
     )
   }
