@@ -26,6 +26,10 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
+SELECT split('hello', '');
+SELECT split('', '');
+SELECT split('abc', null);
+SELECT split(null, 'b');
 
 -- split_part function
 SELECT split_part('11.12.13', '.', 2);
@@ -170,12 +174,41 @@ select to_number('00,454.8-', '00,000.9MI');
 select to_number('<00,454.8>', '00,000.9PR');
 
 -- to_binary
-select to_binary('abc');
-select to_binary('abc', 'utf-8');
-select to_binary('abc', 'base64');
-select to_binary('abc', 'hex');
+-- base64 valid
+select to_binary('', 'base64');
+select to_binary('  ', 'base64');
+select to_binary(' ab cd ', 'base64');
+select to_binary(' ab c=', 'base64');
+select to_binary(' ab cdef= = ', 'base64');
+select to_binary(
+  concat(' b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0',
+         'd2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl'), 'base64');
+-- base64 invalid
+select to_binary('a', 'base64');
+select to_binary('a?', 'base64');
+select to_binary('abcde', 'base64');
+select to_binary('abcd=', 'base64');
+select to_binary('a===', 'base64');
+select to_binary('ab==f', 'base64');
+-- utf-8
+select to_binary(
+  '∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)', 'utf-8');
+select to_binary('大千世界', 'utf8');
+select to_binary('', 'utf-8');
+select to_binary('  ', 'utf8');
+-- hex valid
+select to_binary('737472696E67');
+select to_binary('737472696E67', 'hex');
+select to_binary('');
+select to_binary('1', 'hex');
+select to_binary('FF');
+-- hex invalid
+select to_binary('GG');
+select to_binary('01 AF', 'hex');
 -- 'format' parameter can be any foldable string value, not just literal.
 select to_binary('abc', concat('utf', '-8'));
+select to_binary(' ab cdef= = ', substr('base64whynot', 0, 6));
+select to_binary(' ab cdef= = ', replace('HEX0', '0'));
 -- 'format' parameter is case insensitive.
 select to_binary('abc', 'Hex');
 -- null inputs lead to null result.
@@ -183,10 +216,6 @@ select to_binary('abc', null);
 select to_binary(null, 'utf-8');
 select to_binary(null, null);
 select to_binary(null, cast(null as string));
--- 'format' parameter must be string type or void type.
-select to_binary(null, cast(null as int));
-select to_binary('abc', 1);
 -- invalid format
+select to_binary('abc', 1);
 select to_binary('abc', 'invalidFormat');
--- invalid string input
-select to_binary('a!', 'base64');

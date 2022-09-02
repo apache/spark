@@ -131,9 +131,12 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or Python primitive type.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
+
+        .. versionchanged:: 3.4.0
+            Since 3.4.0, it supports the list type.
 
     Returns
     -------
@@ -149,8 +152,24 @@ def lit(col: Any) -> Column:
     +------+---+
     |     5|  0|
     +------+---+
+
+    Create a literal from a list.
+
+    >>> spark.range(1).select(lit([1, 2, 3])).show()
+    +--------------+
+    |array(1, 2, 3)|
+    +--------------+
+    |     [1, 2, 3]|
+    +--------------+
     """
-    return col if isinstance(col, Column) else _invoke_function("lit", col)
+    if isinstance(col, Column):
+        return col
+    elif isinstance(col, list):
+        if any(isinstance(c, Column) for c in col):
+            raise ValueError("lit does not allow a column in a list")
+        return array(*[lit(item) for item in col])
+    else:
+        return _invoke_function("lit", col)
 
 
 def col(col: str) -> Column:

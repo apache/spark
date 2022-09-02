@@ -23,18 +23,17 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
-import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
@@ -272,12 +271,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableOrPermanentViewNotTempViewError(
-      quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def readNonStreamingTempViewError(quoted: String): Throwable = {
     new AnalysisException(s"$quoted is not a temp view of streaming " +
       "logical plan, please use batch API such as `DataFrameReader.table` to read it.")
@@ -307,10 +300,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def expectTableNotViewError(
-      v: ResolvedView, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val viewStr = if (v.isTemp) "temp view" else "view"
+      nameParts: Seq[String],
+      isTemp: Boolean,
+      cmd: String,
+      mismatchHint: Option[String],
+      t: TreeNode[_]): Throwable = {
+    val viewStr = if (isTemp) "temp view" else "view"
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
-    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+    new AnalysisException(s"${nameParts.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectViewNotTempViewError(
+      nameParts: Seq[String],
+      cmd: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(s"${nameParts.quoted} is a temp view. '$cmd' expects a permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -318,6 +323,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectTableOrPermanentViewNotTempViewError(
+      nameParts: Seq[String], cmd: String, t: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      s"${nameParts.quoted} is a temp view. '$cmd' expects a table or permanent view.",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -367,14 +379,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def groupByPositionRefersToAggregateFunctionError(
       index: Int,
       expr: Expression): Throwable = {
-    new AnalysisException(s"GROUP BY $index refers to an expression that is or contains " +
-      "an aggregate function. Aggregate functions are not allowed in GROUP BY, " +
-      s"but got ${expr.sql}")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_REFERS_AGG_EXPR",
+      messageParameters = Array(index.toString, expr.sql))
   }
 
   def groupByPositionRangeError(index: Int, size: Int): Throwable = {
-    new AnalysisException(s"GROUP BY position $index is not in select list " +
-      s"(valid range is [1, $size])")
+    new AnalysisException(
+      errorClass = "GROUP_BY_POS_OUT_OF_RANGE",
+      messageParameters = Array(index.toString, size.toString))
   }
 
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
@@ -476,20 +489,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"CalendarIntervalType, but got ${dt}")
   }
 
-  def viewOutputNumberMismatchQueryColumnNamesError(
-      output: Seq[Attribute], queryColumnNames: Seq[String]): Throwable = {
-    new AnalysisException(
-      s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
-        "number of columns with the query column names " +
-        s"${queryColumnNames.mkString("[", ",", "]")}")
-  }
-
-  def attributeNotFoundError(colName: String, child: LogicalPlan): Throwable = {
-    new AnalysisException(
-      s"Attribute with name '$colName' is not found in " +
-        s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
-  }
-
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(s"undefined function $name")
   }
@@ -581,10 +580,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       db: Seq[String], v1TableName: TableIdentifier): Throwable = {
     new AnalysisException("SHOW COLUMNS with conflicting databases: " +
         s"'${db.head}' != '${v1TableName.database.get}'")
-  }
-
-  def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
-    new AnalysisException(s"$sql is only supported with v1 tables.")
   }
 
   def cannotCreateTableWithBothProviderAndSerdeError(
@@ -798,6 +793,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       funcName: String, argName: String, requiredType: String): Throwable = {
     new AnalysisException(
       s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidFormatInConversion(
+      argName: String,
+      funcName: String,
+      expected: String,
+      context: SQLQueryContext): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters =
+        Array(toSQLId(argName), toSQLId(funcName), expected),
+      context = getQueryContext(context),
+      summary = getSummary(context))
   }
 
   def invalidStringLiteralParameter(
@@ -1209,8 +1217,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
-    new AnalysisException(
-      s"$format data source does not support ${field.dataType.catalogString} data type.")
+    new AnalysisException(s"Column `${field.name}` has a data type of " +
+      s"${field.dataType.catalogString}, which is not supported by $format."
+    )
   }
 
   def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
@@ -1453,10 +1462,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("Cannot use interval type in the table schema.")
   }
 
-  def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {
-    new AnalysisException(s"Cannot partition by nested column: $reference")
-  }
-
   def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
     new AnalysisException(s"Catalog ${plugin.name} does not support $ability")
   }
@@ -1528,12 +1533,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val msg = "Found an aggregate function in a correlated predicate that has both " +
       "outer and local references, which is not supported: " + funcStr
     new AnalysisException(msg)
-  }
-
-  def lookupFunctionInNonFunctionCatalogError(
-      ident: Identifier, catalog: CatalogPlugin): Throwable = {
-    new AnalysisException(s"Trying to lookup function '$ident' in " +
-      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
   }
 
   def functionCannotProcessInputError(
@@ -1722,10 +1721,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       .map(i => s"$i (${YearMonthIntervalType.fieldToString(i)})")
     new AnalysisException(s"Invalid field id '$field' in year-month interval. " +
       s"Supported interval fields: ${supportedIds.mkString(", ")}.")
-  }
-
-  def invalidYearMonthIntervalType(startFieldName: String, endFieldName: String): Throwable = {
-    new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
   }
 
   def configRemovedInVersionError(
@@ -2233,18 +2228,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidBoundaryEndError(end: Long): Throwable = {
     new AnalysisException(s"Boundary end is not a valid integer: $end")
-  }
-
-  def databaseDoesNotExistError(dbName: String): Throwable = {
-    new AnalysisException(s"Database '$dbName' does not exist.")
-  }
-
-  def tableDoesNotExistInDatabaseError(tableName: String, dbName: String): Throwable = {
-    new AnalysisException(s"Table '$tableName' does not exist in database '$dbName'.")
-  }
-
-  def tableOrViewNotFoundInDatabaseError(tableName: String, dbName: String): Throwable = {
-    new AnalysisException(s"Table or view '$tableName' not found in database '$dbName'")
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {

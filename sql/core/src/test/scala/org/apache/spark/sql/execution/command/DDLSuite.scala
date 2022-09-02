@@ -1872,8 +1872,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains(
-        "default.v1 is a view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
+      assert(e.message.contains(s"${SESSION_CATALOG_NAME}.default.v1 is a view. " +
+        "'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 
