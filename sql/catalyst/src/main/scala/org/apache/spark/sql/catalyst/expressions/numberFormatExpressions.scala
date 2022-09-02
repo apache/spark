@@ -158,7 +158,7 @@ case class TryToNumber(left: Expression, right: Expression)
   private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
-      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), false)
     } else {
       new NullToNumberParser()
     }
