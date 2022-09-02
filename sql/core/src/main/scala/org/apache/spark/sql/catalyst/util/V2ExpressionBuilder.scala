@@ -52,10 +52,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         Some(ref)
       }
-    case in @ InSet(child, hset) =>
+    case InSet(child, hset) =>
       generateExpression(child).map { v =>
         val children =
-          (v +: hset.toSeq.map(elem => LiteralValue(elem, in.dataType))).toArray[V2Expression]
+          (v +: hset.toSeq.map(elem => LiteralValue(elem, child.dataType))).toArray[V2Expression]
         new V2Predicate("IN", children)
       }
     // Because we only convert In to InSet in Optimizer when there are more than certain
