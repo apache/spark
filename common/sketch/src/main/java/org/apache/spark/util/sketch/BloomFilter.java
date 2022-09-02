@@ -205,7 +205,7 @@ public abstract class BloomFilter {
     return (long) (-n * Math.log(p) / (Math.log(2) * Math.log(2)));
   }
 
-  static final double DEFAULT_FPP = 0.03;
+  public static final double DEFAULT_FPP = 0.03;
 
   /**
    * Creates a {@link BloomFilter} with the expected number of insertions and a default expected
