@@ -461,6 +461,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2, -1), null, row2)
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
+    // Empty regex
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 0), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), -1), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "l"), row1)
+    checkEvaluation(
+      StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), -1), Seq(""), row1)
+    checkEvaluation(
+      StringSplit(Literal(""), Literal(""), 0), Seq(""), row1)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(

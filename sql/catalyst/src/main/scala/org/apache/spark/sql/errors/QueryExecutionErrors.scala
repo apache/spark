@@ -168,6 +168,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def invalidInputInConversionError(
+      to: DataType,
+      s: UTF8String,
+      fmt: UTF8String,
+      hint: String): SparkIllegalArgumentException = {
+      new SparkIllegalArgumentException(
+        errorClass = "CONVERSION_INVALID_INPUT",
+        messageParameters = Array(
+          toSQLValue(s, StringType),
+          toSQLValue(fmt, StringType),
+          toSQLType(to),
+          toSQLId(hint)))
+  }
+
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
     new SparkException(errorClass = "CANNOT_CAST_DATATYPE",
       messageParameters = Array(NullType.typeName, to.typeName), null)
@@ -325,8 +339,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.", e)
   }
 
-  def illegalUrlError(url: UTF8String):
-  Throwable with SparkThrowable = {
+  def illegalUrlError(url: UTF8String): Throwable = {
     new SparkIllegalArgumentException(errorClass = "CANNOT_DECODE_URL",
       messageParameters = Array(url.toString)
     )

@@ -2379,7 +2379,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3") {
       assertAnalysisError(
         "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
-        "Parquet data source does not support void data type")
+        "Column `null_col` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
@@ -2393,7 +2393,7 @@ class HiveDDLSuite
     withTable("t1", "t2", "t3", "t4") {
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
-        "Parquet data source does not support void data type")
+        "Column `v` has a data type of void, which is not supported by Parquet.")
 
       assertAnalysisError(
         "CREATE TABLE t2 (v VOID) STORED AS PARQUET",

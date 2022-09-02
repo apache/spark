@@ -303,14 +303,18 @@ private[spark] class SparkNoSuchMethodException(
 private[spark] class SparkIllegalArgumentException(
     errorClass: String,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
+    messageParameters: Array[String],
+    context: Array[QueryContext] = Array.empty,
+    summary: String = "")
   extends IllegalArgumentException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, summary))
     with SparkThrowable {
 
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
 
 /**
  * Index out of bounds exception thrown from Spark with an error class.
