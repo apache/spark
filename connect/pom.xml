@@ -32,7 +32,7 @@
     <url>https://spark.apache.org/</url>
     <properties>
         <!-- Package to use when relocating shaded classes. -->
-        <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
+        <spark.shade.packageName>org.sparkproject.connect</spark.shade.packageName>
 
         <sbt.project.name>connect</sbt.project.name>
         <protobuf.version>3.21.1</protobuf.version>
@@ -46,6 +46,13 @@
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
@@ -58,11 +65,25 @@
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- #if scala-2.13 --><!--
     <dependency>
@@ -74,12 +95,23 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>31.0.1-jre</version>
+            <scope>compile</scope>
         </dependency>
         <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-servlet</artifactId>
-            <version>${jetty.version}</version>
+            <groupId>com.google.guava</groupId>
+            <artifactId>failureaccess</artifactId>
+            <version>1.0.1</version>
         </dependency>
+        <!--dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${protobuf.version}</version>
+        </dependency-->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
@@ -111,6 +143,7 @@
             <groupId>com.thesamet.scalapb</groupId>
             <artifactId>scalapb-runtime-grpc_${scala.binary.version}</artifactId>
             <version>0.11.11</version>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.scalacheck</groupId>
@@ -122,11 +155,7 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>failureaccess</artifactId>
-            <version>1.0.1</version>
-        </dependency>
+
     </dependencies>
     <build>
         <!-- Protobuf compilation for Spark Connect -->
@@ -229,36 +258,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--plugin>
-                <groupId>com.github.os72</groupId>
-                <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.11.4</version>
-                <executions>
-                    <execution>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <protocArtifact>com.google.protobuf:protoc:3.21.1</protocArtifact>
-                    <includeMavenTypes>transitive</includeMavenTypes>
-                    <inputDirectories>
-                        <include>src/main/protobuf</include>
-                    </inputDirectories>
-                    <includeDirectories>
-                        <include>src/main/protobuf</include>
-                    </includeDirectories>
-                    <outputTargets>
-                        <outputTarget>
-                            <type>scalapb</type>
-                            <outputOptions>grpc,flat_package</outputOptions>
-                            <pluginArtifact>com.thesamet.scalapb:protoc-gen-scala:0.11.11:sh:unix</pluginArtifact>
-                        </outputTarget>
-                    </outputTargets>
-                </configuration>
-            </plugin -->
             <!-- Shade all GRPC / Guava / Protobuf depencies of this build -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -268,7 +267,7 @@
                     <artifactSet>
                         <includes>
                             <include>com.google.guava:*</include>
-                            <include>io.grpc:*</include>
+                            <include>io.grpc:*:</include>
                             <include>com.google.protobuf:*</include>
                         </includes>
                     </artifactSet>
@@ -276,12 +275,15 @@
                         <relocation>
                             <pattern>com.google.common</pattern>
                             <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+                            <includes>
+                                <include>com.google.common.**</include>
+                            </includes>
                         </relocation>
                         <relocation>
-                            <pattern>org.eclipse.jetty</pattern>
-                            <shadedPattern>${spark.shade.packageName}.jetty</shadedPattern>
+                            <pattern>com.google.protobuf</pattern>
+                            <shadedPattern>${spark.shade.packageName}.protobuf</shadedPattern>
                             <includes>
-                                <include>org.eclipse.jetty.**</include>
+                                <include>com.google.protobuf.**</include>
                             </includes>
                         </relocation>
                         <relocation>
@@ -293,22 +295,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>hadoop-2</id>
-            <dependencies>
-                <dependency>
-                    <groupId>org.codehaus.jackson</groupId>
-                    <artifactId>jackson-core-asl</artifactId>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.codehaus.jackson</groupId>
-                    <artifactId>jackson-mapper-asl</artifactId>
-                    <scope>test</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 </project>
