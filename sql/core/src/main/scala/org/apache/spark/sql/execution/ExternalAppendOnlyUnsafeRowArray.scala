@@ -76,7 +76,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
   private var spillableArray: UnsafeExternalSorter = _
   private var totalSpillBytes: Long = 0
-  private var numRows = 0L
+  private var numRows: Long = 0L
 
   // A counter to keep track of total modifications done to this array since its creation.
   // This helps to invalidate iterators when there are changes done to the backing array.
