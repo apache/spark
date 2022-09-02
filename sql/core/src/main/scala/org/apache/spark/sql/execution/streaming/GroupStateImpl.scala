@@ -251,14 +251,14 @@ private[sql] object GroupStateImpl {
     case _ => throw new IllegalStateException("Invalid string for GroupStateTimeout: " + clazz)
   }
 
-  def fromJson[S](key: Option[S], json: JValue): GroupStateImpl[S] = {
+  def fromJson[S](value: Option[S], json: JValue): GroupStateImpl[S] = {
     implicit val formats = org.json4s.DefaultFormats
 
     val hmap = json.extract[Map[String, Any]]
 
     // Constructor
     val newGroupState = new GroupStateImpl[S](
-      key,
+      value,
       hmap("batchProcessingTimeMs").asInstanceOf[Number].longValue(),
       hmap("eventTimeWatermarkMs").asInstanceOf[Number].longValue(),
       groupStateTimeoutFromString(hmap("timeoutConf").asInstanceOf[String]),

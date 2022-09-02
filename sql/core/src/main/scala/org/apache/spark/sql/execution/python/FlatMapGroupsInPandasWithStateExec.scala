@@ -80,18 +80,8 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override def output: Seq[Attribute] = outAttributes
 
-  private val softLimitBytesPerBatch = conf.softLimitBytesPerBatchInApplyInPandasWithState
-  private val minDataCountForSample = conf.minDataCountForSampleInApplyInPandasWithState
-  private val softTimeoutMillsPurgeBatch = conf.softTimeoutMillisPurgeBatchInApplyInPandasWithState
-
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf) +
-    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH.key ->
-      softLimitBytesPerBatch.toString) +
-    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE.key ->
-      minDataCountForSample.toString) +
-    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH.key ->
-      softTimeoutMillsPurgeBatch.toString)
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
   private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
@@ -115,10 +105,6 @@ case class FlatMapGroupsInPandasWithStateExec(
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
 
-    /**
-     * For every group, get the key, values and corresponding state and call the function,
-     * and return an iterator of rows
-     */
     override def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
       val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
       val processIter = groupedIter.map { case (keyRow, valueRowIter) =>
@@ -130,7 +116,6 @@ case class FlatMapGroupsInPandasWithStateExec(
       process(processIter, hasTimedOut = false)
     }
 
-    /** Find the groups that have timeout set and are timing out right now, and call the function */
     override def processTimedOutState(): Iterator[InternalRow] = {
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
@@ -171,9 +156,9 @@ case class FlatMapGroupsInPandasWithStateExec(
         groupingAttributes.toStructType,
         child.output.toStructType,
         stateType,
-        softLimitBytesPerBatch,
-        minDataCountForSample,
-        softTimeoutMillsPurgeBatch)
+        conf.softLimitBytesPerBatchInApplyInPandasWithState,
+        conf.minDataCountForSampleInApplyInPandasWithState,
+        conf.softTimeoutMillisPurgeBatchInApplyInPandasWithState)
 
       val context = TaskContext.get()
 
@@ -189,8 +174,8 @@ case class FlatMapGroupsInPandasWithStateExec(
       }
       runner.compute(processIter, context.partitionId(), context).flatMap {
         case (stateIter, outputIter) =>
-          // When the iterator is consumed, then write changes to state
-          // state does not affect each others, hence when to update does not affect to the result
+          // When the iterator is consumed, then write changes to state.
+          // state does not affect each others, hence when to update does not affect to the result.
           def onIteratorCompletion: Unit = {
             stateIter.foreach { case (keyRow, newGroupState) =>
               if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {

@@ -58,7 +58,7 @@ class ArrowPythonRunnerWithState(
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     valueSchema: StructType,
-    stateSchema: StructType,
+    stateValueSchema: StructType,
     softLimitBytesPerBatch: Long,
     minDataCountForSample: Int,
     softTimeoutMillsPurgeBatch: Long)
@@ -67,38 +67,46 @@ class ArrowPythonRunnerWithState(
     (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
+  import ArrowPythonRunnerWithState._
+
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
-  // FIXME: should we use this instead?
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(
     bufferSize >= 4,
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 
-  val schemaWithState = inputSchema.add("!__state__!",
-    StructType(
-      Array(
-        StructField("properties", StringType),
-        StructField("keyRowAsUnsafe", BinaryType),
-        StructField("object", BinaryType),
-        StructField("startOffset", IntegerType),
-        StructField("numRows", IntegerType)
-      )
+  private val stateMetadataSchema = StructType(
+    Array(
+      StructField("properties", StringType),
+      StructField("keyRowAsUnsafe", BinaryType),
+      StructField("object", BinaryType),
+      StructField("startOffset", IntegerType),
+      StructField("numRows", IntegerType)
     )
   )
 
-  val stateRowSerializer = stateEncoder.createSerializer()
-  val stateRowDeserializer = stateEncoder.createDeserializer()
+  private val schemaWithState = inputSchema.add("!__state__!", stateMetadataSchema)
+
+  private val stateRowDeserializer = stateEncoder.createDeserializer()
+
+  private val workerConfWithRunnerConfs = workerConf +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH.key ->
+      softLimitBytesPerBatch.toString) +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE.key ->
+      minDataCountForSample.toString) +
+    (SQLConf.MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH.key ->
+      softTimeoutMillsPurgeBatch.toString)
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     // Write config for the worker as a number of key -> value pairs of strings
-    stream.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
+    stream.writeInt(workerConfWithRunnerConfs.size)
+    for ((k, v) <- workerConfWithRunnerConfs) {
       PythonRDD.writeUTF(k, stream)
       PythonRDD.writeUTF(v, stream)
     }
-    PythonRDD.writeUTF(stateSchema.json, stream)
+    PythonRDD.writeUTF(stateValueSchema.json, stream)
   }
 
   protected override def newWriterThread(
@@ -108,9 +116,6 @@ class ArrowPythonRunnerWithState(
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
-
-      private val EMPTY_STATE_INFO_ROW =
-        new GenericInternalRow(Array[Any](null, null, null, null, null))
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         handleMetadataBeforeExec(dataOut)
@@ -122,12 +127,7 @@ class ArrowPythonRunnerWithState(
           groupState: GroupStateImpl[Row],
           startOffset: Int,
           numRows: Int): InternalRow = {
-        // FIXME: document the schema
-        //   - properties
-        //   - keyRowAsUnsafe
-        //   - state object as Row
-        //   - startOffset
-        //   - numRows
+        // NOTE: see ArrowPythonRunnerWithState.STATE_METADATA_SCHEMA
         val stateUnderlyingRow = new GenericInternalRow(
           Array[Any](
             UTF8String.fromString(groupState.json()),
@@ -141,12 +141,21 @@ class ArrowPythonRunnerWithState(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        // We initialize all columns in data & state metadata for Arrow RecordBatch.
         val arrowSchema = ArrowUtils.toArrowSchema(schemaWithState, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
+          // We logically group the columns by family and initialize writer separately, since it's
+          // lot more easier and probably performant to write the row directly rather than
+          // projecting the row to match up with the overall schema.
+          // The number of data rows and state metadata rows can be different which seems to matter
+          // for Arrow RecordBatch, so we append empty rows to cover it.
+          // We always produce at least one data row per grouping key whereas we only produce one
+          // state metadata row per grouping key, so we only need to fill up the empty rows in
+          // state metadata side.
           val arrowWriterForData = {
             val children = root.getFieldVectors().asScala.dropRight(1).map { vector =>
               vector.allocateNew()
@@ -166,13 +175,45 @@ class ArrowPythonRunnerWithState(
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
+          // We apply bin-packing the data from multiple groups into one Arrow RecordBatch to
+          // gain the performance. In many cases, the amount of data per grouping key is quite
+          // small, which does not seem to maximize the benefits of using Arrow.
+          //
+          // We have to split the record batch down to each group in Python worker to convert the
+          // data for group to Pandas, but hopefully, Arrow RecordBatch provides the way to split
+          // the range of data and give a view, say, "zero-copy". To help splitting the range for
+          // data, we provide the "start offset" and the "number of data" in the state metadata.
+          //
+          // FIXME: probably need to change this as "hard limit" when addressing scalability. Worth
+          //  noting that we may need to break down the data into chunks for a specific group
+          //  having "small" number of data, because we also do bin-packing as well. Maybe we could
+          //  concatenate these chunks in Python worker (serializer), with some hints e.g.
+          //  We can get the information - the number of data in the chunk before reading.
+          //
+          // Pretty sure we don't bin-pack all groups into a single record batch. We have a soft
+          // limit on the size - it's not a hard limit since we allow current group to write all
+          // data even it's going to exceed the limit.
+          //
+          // We perform some basic sampling for data to guess the size of the data very roughly,
+          // and simply multiply by the number of data to estimate the size. We extract the size of
+          // data from the record batch rather than UnsafeRow, as we don't hold the memory for
+          // UnsafeRow once we write to the record batch. If there is a memory bound here, it
+          // should come from record batch.
+          //
+          // In the meanwhile, we don't also want to let the current record batch collect the data
+          // indefinitely, since we are pipelining the process between executor and python worker.
+          // Python worker won't process any data if executor is not yet finalized a record
+          // batch, which defeats the purpose of pipelining. To address this, we also introduce
+          // timeout for constructing a record batch. This is a soft limit indeed as same as limit
+          // on the size - we allow current group to write all data even it's timed-out.
+
+          // FIXME: Maybe better if we can extract out the batching logic into a separate class.
           var numRowsForCurGroup = 0
           var startOffsetForCurGroup = 0
           var totalNumRowsForBatch = 0
           var totalNumStatesForBatch = 0
 
           var sampledDataSizePerRow = 0
-
           var lastBatchPurgedMillis = System.currentTimeMillis()
 
           while (inputIterator.hasNext) {
@@ -185,35 +226,50 @@ class ArrowPythonRunnerWithState(
             // Provide data rows
             while (dataIter.hasNext) {
               val dataRow = dataIter.next()
+              // TODO: if we think there will be non-small amount of data per grouping key,
+              //  we could probably try out "dictionary encoding" for the optimization
+              //  of storing same grouping keys multiple times. This may complicate the logic, as
+              //  in IPC streaming format, DictionaryBatch will be provided separately along with
+              //  RecordBatch, and I'm not sure whether the record batch can be directly converted
+              //  to Pandas DataFrame / Series if the record batch refers to the dictionary batch.
+              //  https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout
+              //  https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
               arrowWriterForData.write(dataRow)
               numRowsForCurGroup += 1
               totalNumRowsForBatch += 1
             }
 
-            // Provide state info row in the first row
+            // Provide state metadata row
             val stateInfoRow = buildStateInfoRow(keyRow, groupState, startOffsetForCurGroup,
               numRowsForCurGroup)
             arrowWriterForState.write(stateInfoRow)
             totalNumStatesForBatch += 1
 
-            // start offset for next group would be same as the total number of rows for batch
+            // The start offset for next group would be same as the total number of rows for batch,
+            // unless the next group starts with new batch.
             startOffsetForCurGroup = totalNumRowsForBatch
 
-            // FIXME: threshold of sample data
+            // FIXME: Do we need to come up with sampling "across record batches"?
+            // FIXME: Do we need to also come up with the size of state metadata as well?
+            // FIXME: Do we need to separate the case of "state with value" vs
+            //  "state without value" on sampling?
+
+            // Currently, this only works when the number of rows are greater than the minimum
+            // data count for sampling. And we technically have no way to pick some rows from
+            // record batch and measure the size of data, hence we leverage all data in current
+            // record batch. We only sample once as it could be costly.
             if (sampledDataSizePerRow == 0 && totalNumRowsForBatch > minDataCountForSample) {
               sampledDataSizePerRow = arrowWriterForData.sizeInBytes() / totalNumRowsForBatch
             }
 
-            // This effectively works after the sampling has completed, size we multiply by 0
-            // if the sampling is still in progress.
-            // FIXME: ignore state size for now, as we expect more number of data rather than
-            //  number of state.
-            // FIXME: sample with empty state size separately?
+            // The soft-limit on size effectively works after the sampling has completed, since we
+            // multiply the number of rows by 0 if the sampling is still in progress. The
+            // soft-limit on timeout always applies.
             if (sampledDataSizePerRow * totalNumRowsForBatch >= softLimitBytesPerBatch ||
                 System.currentTimeMillis() - lastBatchPurgedMillis > softTimeoutMillsPurgeBatch) {
               val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
               (0 until remainingEmptyStateRows).foreach { _ =>
-                arrowWriterForState.write(EMPTY_STATE_INFO_ROW)
+                arrowWriterForState.write(EMPTY_STATE_METADATA_ROW)
               }
 
               arrowWriterForState.finish()
@@ -230,11 +286,10 @@ class ArrowPythonRunnerWithState(
           }
 
           if (numRowsForCurGroup > 0) {
-            // need to flush remaining batch
-
+            // We still have some rows in the current record batch. Need to flush them as well.
             val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
             (0 until remainingEmptyStateRows).foreach { _ =>
-              arrowWriterForState.write(EMPTY_STATE_INFO_ROW)
+              arrowWriterForState.write(EMPTY_STATE_METADATA_ROW)
             }
 
            arrowWriterForState.finish()
@@ -321,11 +376,9 @@ class ArrowPythonRunnerWithState(
               case SpecialLengths.START_ARROW_STREAM =>
                 reader = new ArrowStreamReader(stream, allocator)
                 root = reader.getVectorSchemaRoot()
-                // FIXME: should we validate schema here with value schema and state schema?
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())
 
                 val dataAttributes = schema(0).dataType.asInstanceOf[StructType].toAttributes
-
                 unsafeProjForData = UnsafeProjection.create(dataAttributes, dataAttributes)
 
                 vectors = root.getFieldVectors().asScala.map { vector =>
@@ -347,13 +400,16 @@ class ArrowPythonRunnerWithState(
 
       private def deserializeColumnarBatch(batch: ColumnarBatch)
         : (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow]) = {
-        // this should at least have one row for state
+        // This should at least have one row for state. Also, we ensure that all columns across
+        // data and state metadata have same number of rows, which is required by Arrow record
+        // batch.
         assert(batch.numRows() > 0)
         assert(schema.length == 2)
 
         def constructIterForData(batch: ColumnarBatch): Iterator[InternalRow] = {
           //  UDF returns a StructType column in ColumnarBatch, select the children here
           val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+          // FIXME: should we validate schema here with value schema?
           val outputVectors = schema(0).dataType.asInstanceOf[StructType]
             .indices.map(structVector.getChild)
           val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
@@ -361,8 +417,10 @@ class ArrowPythonRunnerWithState(
 
           flattenedBatch.rowIterator.asScala.flatMap { row =>
             if (row.isNullAt(0)) {
+              // The entire row in record batch seems to be for state metadata.
               None
             } else {
+              // FIXME: would it work without this projection?
               Some(unsafeProjForData(row))
             }
           }
@@ -370,28 +428,28 @@ class ArrowPythonRunnerWithState(
 
         def constructIterForState(
             batch: ColumnarBatch): Iterator[(UnsafeRow, GroupStateImpl[Row])] = {
-          val structVectorForState = batch.column(1).asInstanceOf[ArrowColumnVector]
-          val outputVectorsForState = schema(1).dataType.asInstanceOf[StructType]
-            .indices.map(structVectorForState.getChild)
-          val flattenedBatchForState = new ColumnarBatch(outputVectorsForState.toArray)
+          //  UDF returns a StructType column in ColumnarBatch, select the children here
+          val structVector = batch.column(1).asInstanceOf[ArrowColumnVector]
+          // FIXME: should we validate schema here with state metadata schema?
+          val outputVectors = schema(1).dataType.asInstanceOf[StructType]
+            .indices.map(structVector.getChild)
+          val flattenedBatchForState = new ColumnarBatch(outputVectors.toArray)
           flattenedBatchForState.setNumRows(batch.numRows())
 
           flattenedBatchForState.rowIterator().asScala.flatMap { row =>
             implicit val formats = org.json4s.DefaultFormats
 
-            // FIXME: we rely on known schema for state info, but would we want to access this by
-            //  column name?
-            // Received state information does not need schemas - this class already knows them.
-            /*
-            Array(
-              StructField("properties", StringType),
-              StructField("keyRowAsUnsafe", BinaryType),
-              StructField("object", BinaryType),
-            )
-            */
             if (row.isNullAt(0)) {
+              // The entire row in record batch seems to be for data.
               None
             } else {
+              // Received state metadata does not need schema - this class already knows them.
+              // Array(
+              //   StructField("properties", StringType),
+              //   StructField("keyRowAsUnsafe", BinaryType),
+              //   StructField("object", BinaryType),
+              // )
+              // TODO: Do we want to rely on the column name rather than the ordinal for safety?
               val propertiesAsJson = parse(row.getUTF8String(0).toString)
               val keyRowAsUnsafeAsBinary = row.getBinary(1)
               val keyRowAsUnsafe = new UnsafeRow(keySchema.fields.length)
@@ -399,8 +457,9 @@ class ArrowPythonRunnerWithState(
               val maybeObjectRow = if (row.isNullAt(2)) {
                 None
               } else {
-                val pickledRow = row.getBinary(2)
-                Some(PythonSQLUtils.toJVMRow(pickledRow, stateSchema, stateRowDeserializer))
+                val pickledStateValue = row.getBinary(2)
+                Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema,
+                  stateRowDeserializer))
               }
 
               Some(keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson))
@@ -412,4 +471,19 @@ class ArrowPythonRunnerWithState(
       }
     }
   }
+}
+
+object ArrowPythonRunnerWithState {
+  val STATE_METADATA_SCHEMA: StructType = StructType(
+    Array(
+      StructField("properties", StringType),
+      StructField("keyRowAsUnsafe", BinaryType),
+      StructField("object", BinaryType),
+      StructField("startOffset", IntegerType),
+      StructField("numRows", IntegerType)
+    )
+  )
+
+  // To avoid initializing a new row for empty state metadata row.
+  val EMPTY_STATE_METADATA_ROW = new GenericInternalRow(Array[Any](null, null, null, null, null))
 }
