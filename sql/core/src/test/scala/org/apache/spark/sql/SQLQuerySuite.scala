@@ -30,10 +30,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4472,6 +4472,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
+  }
+
+  test("SPARK-40288: After `RemoveRedundantAggregates`, `PullOutGroupingExpressions`" +
+    "should applied to avoid attribute missing when use complex expression".stripMargin) {
+    val id = AttributeReference("id", IntegerType)()
+    val name = AttributeReference("name", StringType)()
+    val age = AttributeReference("age", DoubleType)()
+    val rows = new GenericRow(Seq(1, "ox", 1.0).toArray)
+    val relation = LocalRelation
+      .fromExternalRows(Seq(id, name, age), Seq(rows))
+
+    val dataset = Dataset.ofRows(spark, relation)
+    dataset.createOrReplaceTempView("miss_expr")
+    val sql =
+      """
+        |select id,name,nage as nnnnn from(
+        |select id,name,if(age>3,100,200) as nage from miss_expr group by id,name,age
+        |) group by id,name,nage
+        |""".stripMargin
+    spark.sql(sql).collect()
   }
 }
 
