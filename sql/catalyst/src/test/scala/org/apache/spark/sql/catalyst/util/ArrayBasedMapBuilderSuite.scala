@@ -143,7 +143,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("simple equal() and hashCode() semantics") {
+  test("SPARK-40315: simple equal() and hashCode() semantics") {
     val dataToAdd: Map[Int, Int] = Map(0 -> -7, 1 -> 3, 10 -> 4, 20 -> 5)
     val builder1 = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     val builder2 = new ArrayBasedMapBuilder(IntegerType, IntegerType)
