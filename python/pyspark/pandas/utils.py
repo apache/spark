@@ -39,6 +39,7 @@ import warnings
 
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
+from pyspark.sql.utils import sql_conf as sql_sql_conf
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
@@ -497,19 +498,8 @@ def sql_conf(pairs: Dict[str, Any], *, spark: Optional[SparkSession] = None) -> 
     if spark is None:
         spark = default_session()
 
-    keys = pairs.keys()
-    new_values = pairs.values()
-    old_values = [spark.conf.get(key, None) for key in keys]
-    for key, new_value in zip(keys, new_values):
-        spark.conf.set(key, new_value)
-    try:
-        yield
-    finally:
-        for key, old_value in zip(keys, old_values):
-            if old_value is None:
-                spark.conf.unset(key)
-            else:
-                spark.conf.set(key, old_value)
+    with sql_sql_conf(pairs, spark=spark) as c:
+        yield c
 
 
 def validate_arguments_and_invoke_function(

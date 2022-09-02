@@ -19,7 +19,9 @@ import pandas as pd
 
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.utils import (
+    default_session,
     lazy_property,
+    sql_conf,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
     validate_index_loc,
@@ -104,6 +106,20 @@ class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
         err_msg = "index -4 is out of bounds for axis 0 with size 3"
         with self.assertRaisesRegex(IndexError, err_msg):
             validate_index_loc(psidx, -4)
+
+    def test_sql_conf(self):
+        def conf_str_to_bool(conf_str: str) -> bool:
+            return eval(conf_str.title())
+
+        spark = default_session()
+        k = "spark.sql.execution.arrow.pyspark.enabled"
+        old_conf = conf_str_to_bool(spark.conf.get(k))
+        print(old_conf)
+        new_conf = not old_conf
+        print(new_conf)
+        with sql_conf({k: new_conf}, spark=spark):
+            self.assertEquals(conf_str_to_bool(spark.conf.get(k)), new_conf)
+        self.assertEquals(conf_str_to_bool(spark.conf.get(k)), old_conf)
 
 
 class TestClassForLazyProp:
