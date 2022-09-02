@@ -617,6 +617,21 @@ class QueryCompilationErrorsSuite
         "functionName" -> "`array_contains`",
         "classCanonicalName" -> "org.apache.spark.sql.catalyst.expressions.ArrayContains"))
   }
+
+  test("SPARK-40296: DISTINCT_FUNCTION_NOT_FOUND") {
+    val e = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT SUM(c1), DISTINCT(c1, c2) FROM VALUES(1, 2), (2, 2), (1, 2) AS T(c1, c2);
+          |""".stripMargin)
+    }
+    checkError(
+      exception = e,
+      errorClass = "DISTINCT_FUNCTION_NOT_FOUND",
+      parameters = Map(
+        "current_schema" -> "spark_catalog.default",
+        "column_list" -> "'c1,'c2"))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
