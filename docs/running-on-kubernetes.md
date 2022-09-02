@@ -1811,6 +1811,42 @@ spec:
   queue: default
 ```
 
+#### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
+
+[Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
+capabilities, such as job queuing, resource fairness, min/max queue capacity and flexible job ordering policies.
+For available Apache YuniKorn features, please refer to [core features](https://yunikorn.apache.org/docs/get_started/core_features).
+
+##### Prerequisites
+
+Install Apache YuniKorn:
+
+```bash
+helm repo add yunikorn https://apache.github.io/yunikorn-release
+helm repo update
+kubectl create namespace yunikorn
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.0.0
+```
+
+The above steps will install YuniKorn v1.0.0 on an existing Kubernetes cluster.
+
+##### Get started
+
+Submit Spark jobs with the following extra options:
+
+```bash
+--conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+--conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={{APP_ID}}
+```
+
+Note that `{{APP_ID}}` is the built-in variable that will be substituted with Spark job ID automatically.
+With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
+
+##### Limitations
+
+- Apache YuniKorn currently only supports x86 Linux, running Spark on ARM64 (or other platform) with Apache YuniKorn is not supported at present.
+
 ### Stage Level Scheduling Overview
 
 Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.

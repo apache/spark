@@ -624,6 +624,14 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
   <td>2.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.yarn.report.interval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between reports of the current Spark job status in cluster mode.
+  </td>
+  <td>0.9.0</td>
+</tr>
 </table>
 
 #### Available patterns for SHS custom executor log URL

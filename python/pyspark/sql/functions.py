@@ -166,7 +166,7 @@ def lit(col: Any) -> Column:
         return col
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
-            raise ValueError("lit does not allow for list of Columns")
+            raise ValueError("lit does not allow a column in a list")
         return array(*[lit(item) for item in col])
     else:
         return _invoke_function("lit", col)
