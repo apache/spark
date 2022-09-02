@@ -53,6 +53,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.network.yarn.util.HadoopConfigProvider
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
+
 abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private[yarn] var yarnConfig: YarnConfiguration = null
