@@ -77,17 +77,7 @@ class ArrowPythonRunnerWithState(
     "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 
-  private val stateMetadataSchema = StructType(
-    Array(
-      StructField("properties", StringType),
-      StructField("keyRowAsUnsafe", BinaryType),
-      StructField("object", BinaryType),
-      StructField("startOffset", IntegerType),
-      StructField("numRows", IntegerType)
-    )
-  )
-
-  private val schemaWithState = inputSchema.add("!__state__!", stateMetadataSchema)
+  private val schemaWithState = inputSchema.add("!__state__!", STATE_METADATA_SCHEMA)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 
