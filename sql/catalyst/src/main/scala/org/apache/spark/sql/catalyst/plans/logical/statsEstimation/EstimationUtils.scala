@@ -107,16 +107,16 @@ object EstimationUtils {
         val value = Option(expr.eval(EmptyRow))
         val length = EstimationUtils.getConstantLen(expr)
         // String and binary data do not get min or max
-        val minMax = if (alias.dataType.isInstanceOf[StringType] ||
-          alias.dataType.isInstanceOf[BinaryType]) {
-          None
-        } else {
-          value
+        val minMax = alias.dataType match {
+          case StringType | BinaryType => None
+          case _ => value
         }
-        val distinctCount = if (value.isDefined) 1 else 0
-        alias.toAttribute ->
-          ColumnStat(
-            Some(distinctCount), minMax, minMax, Some(rowCount), Some(length), Some(length))
+        val columnStat = if (value.isDefined) {
+          ColumnStat(Some(1), minMax, minMax, Some(0), Some(length), Some(length))
+        } else {
+          ColumnStat(Some(0), minMax, minMax, Some(rowCount), Some(length), Some(length))
+        }
+        alias.toAttribute -> columnStat
     }
   }
 
