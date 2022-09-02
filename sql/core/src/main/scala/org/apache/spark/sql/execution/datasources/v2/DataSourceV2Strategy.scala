@@ -292,14 +292,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
         case LogicalRelation(_, _, catalogTable, _) =>
-          val catalog = catalogTable.get.identifier.catalog.getOrElse("")
-          val nameSpace = catalogTable.get.identifier.database.getOrElse("")
-          val table = catalogTable.get.identifier.table
+          val tableIdentifier = catalogTable.get.identifier
           throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            catalog, nameSpace, table, "DELETE")
+            Seq(tableIdentifier.catalog.get, tableIdentifier.database.get, tableIdentifier.table),
+            "DELETE")
         case _ =>
           throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            "", "", "", "DELETE")
+            Seq(), "DELETE")
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>

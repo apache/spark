@@ -52,9 +52,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       cols.foreach { c =>
         if (c.name.length > 1) {
           throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            ident.catalog.getOrElse(""),
-            ident.database.getOrElse(""),
-            ident.table,
+            Seq(ident.catalog.get, ident.database.get, ident.table),
             "ADD COLUMN with qualified column")
         }
         if (!c.nullable) {
@@ -65,18 +63,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        ident.catalog.getOrElse(""),
-        ident.database.getOrElse(""),
-        ident.table,
+        Seq(ident.catalog.get, ident.database.get, ident.table),
         "REPLACE COLUMNS")
 
     case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
         if isSessionCatalog(catalog) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          catalog.name,
-          ident.namespace()(0),
-          ident.name,
+          Seq(catalog.name, ident.namespace()(0), ident.name),
           "ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
@@ -84,9 +78,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       if (a.position.isDefined) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          catalog.name,
-          ident.namespace()(0),
-          ident.name,
+          Seq(catalog.name, ident.namespace()(0), ident.name),
           "ALTER COLUMN ... FIRST | ALTER")
       }
       val builder = new MetadataBuilder
@@ -112,16 +104,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        ident.catalog.getOrElse(""),
-        ident.database.getOrElse(""),
-        ident.table,
+        Seq(ident.catalog.get, ident.database.get, ident.table),
         "RENAME COLUMN")
 
     case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        ident.catalog.getOrElse(""),
-        ident.database.getOrElse(""),
-        ident.table,
+        Seq(ident.catalog.get, ident.database.get, ident.table),
         "DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
@@ -212,9 +200,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          ident.catalog.getOrElse(""),
-          ident.database.getOrElse(""),
-          ident.table,
+          Seq(ident.catalog.get, ident.database.get, ident.table),
           "REPLACE TABLE")
       } else {
         c
@@ -224,9 +210,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          ident.catalog.getOrElse(""),
-          ident.database.getOrElse(""),
-          ident.table,
+          Seq(ident.catalog.get, ident.database.get, ident.table),
           "REPLACE TABLE AS SELECT")
       } else {
         c

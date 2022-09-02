@@ -542,14 +542,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def operationOnlySupportedWithV2TableError(
-      catalog: String,
-      nameSpace: String,
-      tableName: String,
+      nameParts: Seq[String],
       operation: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "TABLE_OPERATION",
-      messageParameters = Array(catalog, nameSpace, tableName, operation))
+      messageParameters = Array(toSQLId(nameParts), operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
