@@ -22,6 +22,7 @@ from pyspark.sql.utils import (
     ParseException,
     IllegalArgumentException,
     SparkUpgradeException,
+    sql_conf,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
@@ -74,6 +75,17 @@ class UtilsTests(ReusedSQLTestCase):
         except AnalysisException as e:
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN")
             self.assertEquals(e.getSqlState(), "42000")
+
+    def test_sql_conf(self):
+        def conf_str_to_bool(conf_str: str) -> bool:
+            return eval(conf_str.title())
+
+        k = "spark.sql.execution.arrow.pyspark.enabled"
+        old_conf = conf_str_to_bool(self.spark.conf.get(k))
+        new_conf = not old_conf
+        with sql_conf({k: new_conf}):
+            self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), new_conf)
+        self.assertEquals(conf_str_to_bool(self.spark.conf.get(k)), old_conf)
 
 
 if __name__ == "__main__":

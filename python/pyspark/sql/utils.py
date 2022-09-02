@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Optional, Sequence, TYPE_CHECKING, cast
 
 import py4j
 from py4j.java_collections import JavaArray
@@ -303,3 +304,31 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     jvm = SparkContext._jvm
     return jvm is not None and jvm.PythonSQLUtils.isTimestampNTZPreferred()
+
+
+@contextmanager
+def sql_conf(pairs: Dict[str, Any], *, spark: Optional["SparkSession"] = None) -> Iterator[None]:
+    """
+    A convenient context manager to set `value` to the Spark SQL configuration `key` and
+    then restores it back when it exits.
+    """
+    from pyspark.sql.session import SparkSession
+
+    assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+    if spark is None:
+        spark = SparkSession._getActiveSessionOrCreate()
+
+    keys = pairs.keys()
+    new_values = pairs.values()
+    old_values = [spark.conf.get(key, None) for key in keys]
+    for key, new_value in zip(keys, new_values):
+        spark.conf.set(key, new_value)
+    try:
+        yield
+    finally:
+        for key, old_value in zip(keys, old_values):
+            if old_value is None:
+                spark.conf.unset(key)
+            else:
+                spark.conf.set(key, old_value)
