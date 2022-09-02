@@ -1211,7 +1211,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS BINARY))\"",
     "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
-    "leftDataType" : "\"BINARY\""
+    "actualDataType" : "\"BINARY\""
   }
 }
 
@@ -1432,7 +1432,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / CAST(1 AS BOOLEAN))\"",
     "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
-    "leftDataType" : "\"BOOLEAN\""
+    "actualDataType" : "\"BOOLEAN\""
   }
 }
 
@@ -1653,7 +1653,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
-    "leftDataType" : "\"TIMESTAMP\""
+    "actualDataType" : "\"TIMESTAMP\""
   }
 }
 
@@ -1874,6 +1874,6 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / CAST(2017-12-11 09:30:00 AS DATE))\"",
     "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
-    "leftDataType" : "\"DATE\""
+    "actualDataType" : "\"DATE\""
   }
 }

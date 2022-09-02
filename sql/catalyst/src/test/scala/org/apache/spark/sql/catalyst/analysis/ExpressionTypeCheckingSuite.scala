@@ -140,50 +140,50 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField + booleanField)\"",
         "inputType" -> "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = Subtract($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField - booleanField)\"",
         "inputType" -> "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = Multiply($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField * booleanField)\"",
         "inputType" -> "\"NUMERIC\"",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = Divide($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField / booleanField)\"",
         "inputType" -> "(\"DOUBLE\" or \"DECIMAL\")",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = Remainder($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField % booleanField)\"",
         "inputType" -> "\"NUMERIC\"",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
 
     assertForWrongType(
       expr = BitwiseAnd($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField & booleanField)\"",
         "inputType" -> "\"INTEGRAL\"",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = BitwiseOr($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField | booleanField)\"",
         "inputType" -> "\"INTEGRAL\"",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     assertForWrongType(
       expr = BitwiseXor($"booleanField", $"booleanField"),
       messageParameters = Map(
         "sqlExpr" -> "\"(booleanField ^ booleanField)\"",
         "inputType" -> "\"INTEGRAL\"",
-        "leftDataType" -> "\"BOOLEAN\""))
+        "actualDataType" -> "\"BOOLEAN\""))
     // scalastyle:on line.size.limit
   }
 

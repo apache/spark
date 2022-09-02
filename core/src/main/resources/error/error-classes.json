@@ -87,7 +87,7 @@
       },
       "BINARY_OP_WRONG_TYPE" : {
         "message" : [
-          "the binary operator requires the input type <inputType>, not <leftDataType>."
+          "the binary operator requires the input type <inputType>, not <actualDataType>."
         ]
       }
     }
