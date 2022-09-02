@@ -23,7 +23,6 @@ import scala.util.control.NonFatal
 import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, JavaBLAS}
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.util.Utils
 
 /**
  * Serialization benchmark for BLAS.
@@ -39,7 +38,9 @@ object BLASBenchmark extends BenchmarkBase {
 
   private def getF2jBLAS(): Option[JavaBLAS] = {
     try {
-      val f2jBLASClazz = Utils.classForName("dev.ludovic.netlib.blas.F2jBLAS")
+      // scalastyle:off classforname
+      val f2jBLASClazz = Class.forName("dev.ludovic.netlib.blas.F2jBLAS")
+      // scalastyle:on classforname
       val getInstanceMethod = f2jBLASClazz.getDeclaredMethod("getInstance")
       getInstanceMethod.setAccessible(true)
       val f2jBLAS = getInstanceMethod.invoke(null).asInstanceOf[JavaBLAS]
