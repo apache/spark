@@ -580,7 +580,7 @@ trait SizeBasedWindowFunction extends AggregateWindowFunction {
 }
 
 object SizeBasedWindowFunction {
-  val n = AttributeReference("window__partition__size", LongType, nullable = false)()
+  val n = AttributeReference("window__partition__size", IntegerType, nullable = false)()
 }
 
 /**

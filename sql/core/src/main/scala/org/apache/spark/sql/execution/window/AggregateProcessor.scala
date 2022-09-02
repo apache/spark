@@ -134,7 +134,7 @@ private[window] final class AggregateProcessor(
     // initialize the size before initializing all other fields, and we have to pass the buffer to
     // the initialization projection.
     if (trackPartitionSize) {
-      buffer.setLong(0, size)
+      buffer.setInt(0, size.toInt)
     }
     initialProjection(buffer)
     var i = 0

@@ -52,14 +52,14 @@ abstract class WindowFunctionFrame {
    *
    * This should be called after the current row is updated via `write`.
    */
-  def currentLowerBound(): Long
+  def currentLowerBound(): Int
 
   /**
    * The current row index of the upper window bound in the row array (exclusive)
    *
    * This should be called after the current row is updated via `write`.
    */
-  def currentUpperBound(): Long
+  def currentUpperBound(): Int
 }
 
 object WindowFunctionFrame {
@@ -175,9 +175,9 @@ abstract class OffsetWindowFunctionFrameBase(
     }
   }
 
-  override def currentLowerBound(): Long = throw new UnsupportedOperationException()
+  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
 
-  override def currentUpperBound(): Long = throw new UnsupportedOperationException()
+  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
 }
 
 /**
@@ -483,9 +483,9 @@ final class SlidingWindowFunctionFrame(
     }
   }
 
-  override def currentLowerBound(): Long = lowerBound
+  override def currentLowerBound(): Int = lowerBound
 
-  override def currentUpperBound(): Long = upperBound
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -504,8 +504,8 @@ final class UnboundedWindowFunctionFrame(
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
 
-  val lowerBound: Long = 0L
-  var upperBound: Long = 0L
+  val lowerBound: Int = 0
+  var upperBound: Int = 0
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
@@ -519,7 +519,7 @@ final class UnboundedWindowFunctionFrame(
       processor.evaluate(target)
     }
 
-    upperBound = rows.length
+    upperBound = rows.length.toInt
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -528,9 +528,9 @@ final class UnboundedWindowFunctionFrame(
     // Don't need to recalculate here.
   }
 
-  override def currentLowerBound(): Long = lowerBound
+  override def currentLowerBound(): Int = lowerBound
 
-  override def currentUpperBound(): Long = upperBound
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -605,9 +605,9 @@ final class UnboundedPrecedingWindowFunctionFrame(
     }
   }
 
-  override def currentLowerBound(): Long = 0L
+  override def currentLowerBound(): Int = 0
 
-  override def currentUpperBound(): Long = inputIndex
+  override def currentUpperBound(): Int = inputIndex
 }
 
 /**
@@ -675,7 +675,7 @@ final class UnboundedFollowingWindowFunctionFrame(
     }
   }
 
-  override def currentLowerBound(): Long = inputIndex
+  override def currentLowerBound(): Int = inputIndex
 
-  override def currentUpperBound(): Long = input.length
+  override def currentUpperBound(): Int = input.length.toInt
 }
