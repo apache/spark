@@ -59,15 +59,16 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    else:
         |        count = count[0]
         |    count += len(pdf)
-        |    if count == 3:
-        |        state.remove()
-        |        return pd.DataFrame()
-        |    else:
-        |        state.update((count,))
-        |        if is_last_chunk:
-        |            return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |    state.update((count,))
+        |
+        |    ret = pd.DataFrame()
+        |    if is_last_chunk:
+        |        if count >= 3:
+        |            state.remove()
         |        else:
-        |            return pd.DataFrame()
+        |            ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |
+        |    return ret
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -122,7 +123,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |tpe = StructType([
         |    StructField("key", StringType()),
         |    StructField("value", IntegerType()),
-        |    StructField("countAsString", StringType())])
+        |    StructField("valueAsString", StringType())])
         |
         |def func(key, pdf, state, is_last_chunk):
         |    count = state.getOption
@@ -132,7 +133,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |        count = count[0]
         |    count = count + len(pdf)
         |    state.update((count,))
-        |    return pdf.assign(countAsString=str(count))
+        |    return pdf.assign(valueAsString=lambda x: x.value.apply(str))
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -143,7 +144,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         Seq(
           StructField("key", StringType),
           StructField("value", IntegerType),
-          StructField("countAsString", StringType)))
+          StructField("valueAsString", StringType)))
       val stateStructType = StructType(Seq(StructField("count", LongType)))
       val inputDataDS = inputData.toDS().selectExpr("_1 AS key", "_2 AS value")
       val result =
@@ -155,14 +156,14 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             stateStructType,
             "Update",
             "NoTimeout")
-          .select("key", "value", "countAsString")
+          .select("key", "value", "valueAsString")
 
       testStream(result, Update)(
         AddData(inputData, ("a", 1)),
         CheckNewAnswer(("a", 1, "1")),
         assertNumStateRows(total = 1, updated = 1),
         AddData(inputData, ("a", 2), ("a", 3), ("b", 1)),
-        CheckNewAnswer(("a", 2, "3"), ("a", 3, "3"), ("b", 1, "1")),
+        CheckNewAnswer(("a", 2, "2"), ("a", 3, "3"), ("b", 1, "1")),
         assertNumStateRows(total = 2, updated = 2),
         StopStream,
         StartStream(),
@@ -193,13 +194,17 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |        count = 0
         |    else:
         |        count = count[0]
-        |    count += len(pdf)
-        |    if count == 3:
-        |        state.remove()
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
-        |    else:
-        |        state.update((count,))
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |    state.update((count,))
+        |
+        |    ret = pd.DataFrame()
+        |    if is_last_chunk:
+        |        if count >= 3:
+        |            state.remove()
+        |            ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
+        |        else:
+        |            ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |
+        |    return ret
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -258,7 +263,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    StructField("key", StringType()),
         |    StructField("countAsString", StringType())])
         |
-        |def func(key, pdf, state):
+        |def func(key, pdf, state, is_last_chunk):
         |    assert state.getCurrentProcessingTimeMs() >= 0
         |    try:
         |        state.getCurrentWatermarkMs()
@@ -277,8 +282,11 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |            count = count[0]
         |        count += len(pdf)
         |        state.update((count,))
-        |        state.setTimeoutDuration(10000)
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |        if is_last_chunk:
+        |            state.setTimeoutDuration(10000)
+        |            return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |        else:
+        |            return pd.DataFrame()
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -361,7 +369,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           |    StructField("key", StringType()),
           |    StructField("maxEventTimeSec", IntegerType())])
           |
-          |def func(key, pdf, state):
+          |def func(key, pdf, state, is_last_chunk):
           |    assert state.getCurrentProcessingTimeMs() >= 0
           |    assert state.getCurrentWatermarkMs() >= -1
           |
@@ -379,10 +387,14 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           |        pser = pdf.eventTime.apply(
           |                lambda dt: (int(calendar.timegm(dt.utctimetuple()) + dt.microsecond)))
           |        max_event_time_sec = int(max(pser.max(), m))
-          |        timeout_timestamp_sec = max_event_time_sec + timeout_delay_sec
           |        state.update((max_event_time_sec,))
-          |        state.setTimeoutTimestamp(timeout_timestamp_sec * 1000)
-          |        return pd.DataFrame({'key': [key[0]], 'maxEventTimeSec': [max_event_time_sec]})
+          |        if is_last_chunk:
+          |            timeout_timestamp_sec = max_event_time_sec + timeout_delay_sec
+          |            state.setTimeoutTimestamp(timeout_timestamp_sec * 1000)
+          |            return pd.DataFrame({'key': [key[0]],
+          |                                 'maxEventTimeSec': [max_event_time_sec]})
+          |        else:
+          |            return pd.DataFrame()
           |""".stripMargin
       val pythonFunc = TestGroupedMapPandasUDFWithState(
         name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -447,7 +459,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             |    StructField("key", StringType()),
             |    StructField("countAsString", StringType())])
             |
-            |def func(key, pdf, state):
+            |def func(key, pdf, state, is_last_chunk):
             |    if state.hasTimedOut:
             |        state.remove()
             |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
@@ -459,8 +471,11 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             |            count = count[0]
             |        count += len(pdf)
             |        state.update((count,))
-            |        state.setTimeoutDuration(10000)
-            |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+            |        if is_last_chunk:
+            |            state.setTimeoutDuration(10000)
+            |            return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+            |        else:
+            |            return pd.DataFrame()
             |""".stripMargin
         val pythonFunc = TestGroupedMapPandasUDFWithState(
           name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
