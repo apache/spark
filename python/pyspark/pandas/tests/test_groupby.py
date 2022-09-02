@@ -3065,7 +3065,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
                 check_exact=False,
             )
-            # var
+            # sem
             self.assert_eq(
                 pdf.groupby("a").sem(ddof=ddof).sort_index(),
                 psdf.groupby("a").sem(ddof=ddof).sort_index(),

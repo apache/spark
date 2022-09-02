@@ -650,12 +650,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         assert ddof in (0, 1)
 
         # Raise the TypeError when all aggregation columns are of unaccepted data types
-        all_unaccepted = True
-        for _agg_col in self._agg_columns:
-            if isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
-                all_unaccepted = False
-                break
-        if all_unaccepted:
+        any_accepted = any(
+            isinstance(_agg_col.spark.data_type, (NumericType, BooleanType))
+            for _agg_col in self._agg_columns
+        )
+        if not any_accepted:
             raise TypeError(
                 "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
@@ -871,12 +870,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             raise TypeError("ddof must be 0 or 1")
 
         # Raise the TypeError when all aggregation columns are of unaccepted data types
-        all_unaccepted = True
-        for _agg_col in self._agg_columns:
-            if isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
-                all_unaccepted = False
-                break
-        if all_unaccepted:
+        any_accepted = any(
+            isinstance(_agg_col.spark.data_type, (NumericType, BooleanType))
+            for _agg_col in self._agg_columns
+        )
+        if not any_accepted:
             raise TypeError(
                 "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
