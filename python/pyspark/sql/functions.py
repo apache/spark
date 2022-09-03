@@ -4287,7 +4287,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     ----------
     date1 : :class:`~pyspark.sql.Column` or str
         first date column.
-    date2 : :class:`~pyspark.sql.Column` or str or int
+    date2 : :class:`~pyspark.sql.Column` or str
         second date column.
     roundOff : bool, optional
         whether to round (to 8 digits) the final value or not (default: True).
@@ -4325,7 +4325,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         input column of values to convert.
     format: str, optional
-        format to use to convert date values (default: None).
+        format to use to convert date values.
 
     Returns
     -------
@@ -4371,9 +4371,9 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        input column of values to convert.
+        column values to convert.
     format: str, optional
-        format to use to convert timestamp values (default: None).
+        format to use to convert timestamp values.
 
     Returns
     -------
@@ -4561,7 +4561,7 @@ def unix_timestamp(
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
     to Unix time stamp (in seconds), using the default timezone and the default
-    locale, return null if fail.
+    locale, returns null if failed.
 
     if `timestamp` is None, then it returns current timestamp.
 
@@ -4570,7 +4570,7 @@ def unix_timestamp(
     Parameters
     ----------
     timestamp : :class:`~pyspark.sql.Column` or str, optional
-        timestamps of string values (default: None).
+        timestamps of string values.
     format : str, optional
         alternative format to use for converting (default: yyyy-MM-dd HH:mm:ss).
 
