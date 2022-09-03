@@ -361,6 +361,18 @@ object KeyGroupedPartitioning {
       partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
     KeyGroupedPartitioning(expressions, partitionValues.size, Some(partitionValues))
   }
+
+  def supportsExpressions(expressions: Seq[Expression]): Boolean = {
+    def isSupportedTransform(transform: TransformExpression): Boolean = {
+      transform.children.size == 1 && transform.children.head.isInstanceOf[AttributeReference]
+    }
+
+    expressions.forall {
+      case _: AttributeReference => true
+      case t: TransformExpression if isSupportedTransform(t) => true
+      case _ => false
+    }
+  }
 }
 
 /**
