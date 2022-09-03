@@ -87,20 +87,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Remove redundant aggregate with aliases") {
-    for (agg <- aggregates($"b")) {
-      val query = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as "c", agg)
-        .groupBy($"c")($"c")
-        .analyze
-      val expected = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as "c")
-        .analyze
-      val optimized = Optimize.execute(query)
-      comparePlans(optimized, expected)
-    }
-  }
-
   test("Remove redundant aggregate with non-deterministic upper") {
     val query = relation
       .groupBy($"a")($"a")
