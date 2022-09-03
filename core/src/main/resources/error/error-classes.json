@@ -520,11 +520,6 @@
           "NATURAL CROSS JOIN."
         ]
       },
-      "TABLE_OPERATION" : {
-        "message" : [
-          "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog.spark_catalog\"."
-        ]
-      },
       "ORC_TYPE_CAST" : {
         "message" : [
           "Unable to convert <orcType> of Orc to data type <toType>."
@@ -568,6 +563,11 @@
       "SET_TABLE_PROPERTY" : {
         "message" : [
           "<property> is a reserved table property, <msg>."
+        ]
+      },
+      "TABLE_OPERATION" : {
+        "message" : [
+          "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog.spark_catalog\"."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
