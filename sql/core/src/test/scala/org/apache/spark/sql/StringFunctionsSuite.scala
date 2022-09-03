@@ -606,6 +606,36 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+    checkAnswer(
+      df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
+    val df3 = Seq(
+      ("a=1&b=2", "&", "="),
+      ("k#2%v#3", "%", "#")
+    ).toDF("str", "delim1", "delim2")
+
+    checkAnswer(
+      df3.selectExpr("str_to_map(str, delim1, delim2)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+
+    val df4 = Seq(
+      ("a:1&b:2", "&"),
+      ("k:2%v:3", "%")
+    ).toDF("str", "delim1")
+
+    checkAnswer(
+      df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
   }
 
   test("SPARK-36148: check input data types of regexp_replace") {
