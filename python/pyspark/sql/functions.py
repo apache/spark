@@ -4214,7 +4214,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     """
-    Returns the number of days from `start` to `end`. i.e. `end`-`start`=diff
+    Returns the number of days from `start` to `end`.
 
     .. versionadded:: 1.5.0
 
