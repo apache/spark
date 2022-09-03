@@ -274,8 +274,7 @@ private[spark] class DAGScheduler(
   private val shuffleMergeFinalizeNumThreads =
     sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS)
 
-  private val shuffleSendFinalizeRpcThreads =
-    sc.getConf.get(config.PUSH_BASED_SHUFFLE_SEND_FINALIZE_RPC_THREADS)
+  private val shuffleFinalizeRpcThreads = sc.getConf.get(config.PUSH_SHUFFLE_FINALIZE_RPC_THREADS)
 
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
@@ -286,18 +285,17 @@ private[spark] class DAGScheduler(
       None
     }
 
-  // Use multi-threaded scheduled executor. The merge finalization task (per stage) takes up to
-  // PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
+  // When push-based shuffle is enabled, spark driver will submit a finalize task which will send
+  // a finalize rpc to each merger ESS after the shuffle map stage is complete. The merge
+  // finalization task takes up to PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
   private val shuffleMergeFinalizeScheduler =
     ThreadUtils.newDaemonThreadPoolScheduledExecutor("shuffle-merge-finalizer",
       shuffleMergeFinalizeNumThreads)
 
   // Send finalize RPC tasks to merger ESS, one thread per RPC and will be cancelled after
-  // PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT. Please close the opened files in the merger ESS
-  // if finalize RPC is not received due to network issues.
+  // PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
   private val shuffleSendFinalizeRpcExecutor: ExecutorService =
-    ThreadUtils.newDaemonFixedThreadPool(
-      shuffleSendFinalizeRpcThreads, "send-shuffle-merge-finalize-rpc")
+    ThreadUtils.newDaemonFixedThreadPool(shuffleFinalizeRpcThreads, "shuffle-merge-finalize-rpc")
 
   /**
    * Called by the TaskSetManager to report task's starting.
