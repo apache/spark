@@ -97,7 +97,7 @@ Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Output [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,Unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_vehicle_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,Unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
 
 (15) ColumnarToRow [codegen id : 3]
@@ -105,7 +105,7 @@ Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_coun
 
 (16) Filter [codegen id : 3]
 Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
-Condition : (((((isnotnull(hd_vehicle_count#13) AND isnotnull(hd_dep_count#12)) AND ((hd_buy_potential#11 = >10000         ) OR (hd_buy_potential#11 = Unknown        ))) AND (hd_vehicle_count#13 > 0)) AND ((cast(hd_dep_count#12 as double) / cast(hd_vehicle_count#13 as double)) > 1.0)) AND isnotnull(hd_demo_sk#10))
+Condition : ((((isnotnull(hd_vehicle_count#13) AND ((hd_buy_potential#11 = >10000         ) OR (hd_buy_potential#11 = Unknown        ))) AND (hd_vehicle_count#13 > 0)) AND CASE WHEN (hd_vehicle_count#13 > 0) THEN ((cast(hd_dep_count#12 as double) / cast(hd_vehicle_count#13 as double)) > 1.0) END) AND isnotnull(hd_demo_sk#10))
 
 (17) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#10]
