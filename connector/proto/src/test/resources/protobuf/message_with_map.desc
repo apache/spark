@@ -1,67 +1,0 @@
-
-µ
-Bconnector/proto/src/test/resources/protobuf/message_with_map.protoorg.apache.spark.sql.proto"°
-SimpleMessageMap
-key (	Rkey
-value (	Rvaluef
-string_mapdata (2?.org.apache.spark.sql.proto.SimpleMessageMap.StringMapdataEntryRstringMapdatac
-int32_mapdata (2>.org.apache.spark.sql.proto.SimpleMessageMap.Int32MapdataEntryRint32Mapdataf
-uint32_mapdata (2?.org.apache.spark.sql.proto.SimpleMessageMap.Uint32MapdataEntryRuint32Mapdataf
-sint32_mapdata (2?.org.apache.spark.sql.proto.SimpleMessageMap.Sint32MapdataEntryRsint32Mapdatai
-float32_mapdata (2@.org.apache.spark.sql.proto.SimpleMessageMap.Float32MapdataEntryRfloat32Mapdatal
-sfixed32_mapdata (2A.org.apache.spark.sql.proto.SimpleMessageMap.Sfixed32MapdataEntryRsfixed32Mapdatac
-int64_mapdata	 (2>.org.apache.spark.sql.proto.SimpleMessageMap.Int64MapdataEntryRint64Mapdataf
-uint64_mapdata
- (2?.org.apache.spark.sql.proto.SimpleMessageMap.Uint64MapdataEntryRuint64Mapdataf
-sint64_mapdata (2?.org.apache.spark.sql.proto.SimpleMessageMap.Sint64MapdataEntryRsint64Mapdatai
-fixed64_mapdata (2@.org.apache.spark.sql.proto.SimpleMessageMap.Fixed64MapdataEntryRfixed64Mapdatal
-sfixed64_mapdata (2A.org.apache.spark.sql.proto.SimpleMessageMap.Sfixed64MapdataEntryRsfixed64Mapdataf
-double_mapdata (2?.org.apache.spark.sql.proto.SimpleMessageMap.DoubleMapdataEntryRdoubleMapdatac
-float_mapdata (2>.org.apache.spark.sql.proto.SimpleMessageMap.FloatMapdataEntryRfloatMapdata`
-bool_mapdata (2=.org.apache.spark.sql.proto.SimpleMessageMap.BoolMapdataEntryRboolMapdatac
-bytes_mapdata (2>.org.apache.spark.sql.proto.SimpleMessageMap.BytesMapdataEntryRbytesMapdata@
-StringMapdataEntry
-key (	Rkey
-value (	Rvalue:8?
-Int32MapdataEntry
-key (Rkey
-value (Rvalue:8@
-Uint32MapdataEntry
-key (Rkey
-value (Rvalue:8@
-Sint32MapdataEntry
-key (Rkey
-value (Rvalue:8A
-Float32MapdataEntry
-key (Rkey
-value (Rvalue:8B
-Sfixed32MapdataEntry
-key (Rkey
-value (Rvalue:8?
-Int64MapdataEntry
-key (Rkey
-value (Rvalue:8@
-Uint64MapdataEntry
-key (Rkey
-value (Rvalue:8@
-Sint64MapdataEntry
-key (Rkey
-value (Rvalue:8A
-Fixed64MapdataEntry
-key (Rkey
-value (Rvalue:8B
-Sfixed64MapdataEntry
-key (Rkey
-value (Rvalue:8@
-DoubleMapdataEntry
-key (	Rkey
-value (Rvalue:8?
-FloatMapdataEntry
-key (	Rkey
-value (Rvalue:8>
-BoolMapdataEntry
-key (Rkey
-value (Rvalue:8?
-BytesMapdataEntry
-key (	Rkey
-value (Rvalue:8BBSimpleMessageMapProtosbproto3

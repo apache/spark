@@ -73,7 +73,7 @@ private[sql] class ProtoDeserializer(
     }
   } catch {
     case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-      s"Cannot convert Proto type ${rootProtoType.toProto.toString} to SQL type ${rootCatalystType.sql}.", ise)
+      s"Cannot convert Proto type ${rootProtoType.getName} to SQL type ${rootCatalystType.sql}.", ise)
   }
 
   def deserialize(data: Any): Option[Any] = converter(data)

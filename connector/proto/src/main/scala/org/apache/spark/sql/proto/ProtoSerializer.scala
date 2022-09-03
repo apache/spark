@@ -35,10 +35,11 @@ import org.apache.spark.sql.types._
 private[sql] class ProtoSerializer(
                                     rootCatalystType: DataType,
                                     rootProtoType: Descriptor,
-                                    nullable: Boolean) extends Logging {
+                                    nullable: Boolean,
+                                    positionalFieldMatch: Boolean) extends Logging {
 
-  def this(rootCatalystType: DataType, rootProtoType: Descriptor) = {
-    this(rootCatalystType, rootProtoType, false)
+  def this(rootCatalystType: DataType, rootProtoType: Descriptor, nullable: Boolean) = {
+    this(rootCatalystType, rootProtoType, nullable, positionalFieldMatch = false)
   }
 
   def serialize(catalystData: Any): Any = {
@@ -53,7 +54,7 @@ private[sql] class ProtoSerializer(
       }
     } catch {
       case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert SQL type ${rootCatalystType.sql} to Proto type $rootProtoType.", ise)
+        s"Cannot convert SQL type ${rootCatalystType.sql} to Proto type ${rootProtoType.getName}.", ise)
     }
     if (nullable) {
       (data: Any) =>
@@ -206,7 +207,7 @@ private[sql] class ProtoSerializer(
                                   protoPath: Seq[String]): InternalRow => DynamicMessage = {
 
     val protoSchemaHelper = new ProtoUtils.ProtoSchemaHelper(
-      protoStruct, catalystStruct, protoPath, catalystPath, false)
+      protoStruct, catalystStruct, protoPath, catalystPath, positionalFieldMatch)
 
     protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
     protoSchemaHelper.validateNoExtraRequiredProtoFields()

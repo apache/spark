@@ -18,7 +18,6 @@
 
 package org.apache.spark.sql.proto
 
-// import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 
 import org.apache.spark.SparkFunSuite
@@ -29,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericI
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.proto.CatalystTypes.{BytesMsg, Person}
 // import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -41,24 +39,6 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
 
   private def checkResult(data: Literal, descFilePath: String,
                           messageName: String, expected: Any): Unit = {
-
-    /*
-    val ctoP = CatalystDataToProto(data, descFilePath,
-      messageName)
-    // scalastyle:off println
-    println("==========cTop========", ctoP)
-
-    val pToC = ProtoDataToCatalyst(ctoP, descFilePath, messageName, Map.empty)
-
-    // scalastyle:off println
-    println("==========pToC========", pToC)
-
-    val y = prepareExpectedResult(expected)
-
-    // scalastyle:off println
-    println("=====Expected=======", expected, y)
-
-    checkEvaluation(pToC, y) */
 
     checkEvaluation(
       ProtoDataToCatalyst(CatalystDataToProto(data, descFilePath,
@@ -144,17 +124,19 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
 
   test("SPARK-32346: filter push-down to Avro deserializer") {
 
-    val filePath = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
     val sqlSchema = new StructType().add("age", "int").add("name", "string")
 
-    val person = Person.newBuilder()
-      .setName("Maxim")
-      .setAge(39)
+    val descriptor = ProtoUtils.buildDescriptor(testFileDesc, "Person")
+
+    val dynamicMessage = DynamicMessage.newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "Maxim")
+      .setField(descriptor.findFieldByName("age"), 39)
       .build()
 
     val expectedRow = Some(InternalRow(UTF8String.fromString("Maxim"), 39))
 
-    checkDeserialization(filePath, "Person", person, expectedRow)
+    checkDeserialization(testFileDesc, "Person", dynamicMessage, expectedRow)
 
     /*
     checkDeserialization(
@@ -174,14 +156,17 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
 
   test("ProtoDeserializer with binary type") {
 
-    val filePath = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val testFileDesc = testFile("protobuf/catalyst_types.desc").replace(
+      "file:/", "/")
     val bb = java.nio.ByteBuffer.wrap(Array[Byte](97, 48, 53))
 
-    val bytesMessage = BytesMsg.newBuilder()
-      .setBytesType(ByteString.copyFrom(bb))
+    val descriptor = ProtoUtils.buildDescriptor(testFileDesc, "BytesMsg")
+
+    val dynamicMessage = DynamicMessage.newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("bytes_type"), ByteString.copyFrom(bb))
       .build()
 
     val expected = InternalRow(Array[Byte](97, 48, 53))
-    checkDeserialization(filePath, "BytesMsg", bytesMessage, Some(expected))
+    checkDeserialization(testFileDesc, "BytesMsg", dynamicMessage, Some(expected))
   }
 }
