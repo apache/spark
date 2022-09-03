@@ -612,9 +612,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val df3 = Seq(
-      ("a=1&b=2", "&", "=", 0),
-      ("k#2%v#3", "%", "#", 1)
-    ).toDF("str", "delim1", "delim2", "flag")
+      ("a=1&b=2", "&", "="),
+      ("k#2%v#3", "%", "#")
+    ).toDF("str", "delim1", "delim2")
 
     checkAnswer(
       df3.selectExpr("str_to_map(str, delim1, delim2)"),

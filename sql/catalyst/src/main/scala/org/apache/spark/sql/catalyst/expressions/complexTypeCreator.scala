@@ -547,10 +547,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def dataType: DataType = MapType(StringType, StringType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes()
-  }
-
   private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
 
   override def nullSafeEval(
