@@ -17,17 +17,17 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
-
+import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+import com.google.protobuf.DynamicMessage
 import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.proto.ProtoUtils.{ProtoMatchedField, toFieldStr}
-import org.apache.spark.sql.types._
-import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
-import com.google.protobuf.DynamicMessage
+import org.apache.spark.sql.proto.ProtoUtils.{toFieldStr, ProtoMatchedField}
 import org.apache.spark.sql.proto.SchemaConverters.{IncompatibleSchemaException, UnsupportedProtoValueException}
+import org.apache.spark.sql.types._
 
 /**
  * A serializer to serialize data in catalyst format to data in proto format.
@@ -97,7 +97,8 @@ private[sql] class ProtoSerializer(
       case (DoubleType, DOUBLE) =>
         (getter, ordinal) => getter.getDouble(ordinal)
       case (StringType, ENUM) =>
-        val enumSymbols: Set[String] = protoType.getEnumType.getValues.asScala.map(e => e.toString).toSet
+        val enumSymbols: Set[String] = protoType.getEnumType.getValues.asScala.map(
+          e => e.toString).toSet
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
@@ -159,7 +160,8 @@ private[sql] class ProtoSerializer(
         }
 
       case (st: StructType, MESSAGE) =>
-        val structConverter = newStructConverter(st, protoType.getMessageType, catalystPath, protoPath)
+        val structConverter = newStructConverter(
+          st, protoType.getMessageType, catalystPath, protoPath)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
@@ -192,7 +194,8 @@ private[sql] class ProtoSerializer(
 
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
-          s"schema is incompatible (sqlType = ${catalystType}, protoType = ${protoType.getJavaType})")
+          s"schema is incompatible (sqlType = ${catalystType}, " +
+          s"protoType = ${protoType.getJavaType})")
     }
   }
 
@@ -222,7 +225,8 @@ private[sql] class ProtoSerializer(
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          throw new UnsupportedProtoValueException(s"Cannot set ${protoIndices(i).getName} a Null, Proto does not allow Null values")
+          throw new UnsupportedProtoValueException(
+            s"Cannot set ${protoIndices(i).getName} a Null, Proto does not allow Null values")
         } else {
           result.setField(protoIndices(i), fieldConverters(i).apply(row, i))
         }

@@ -230,7 +230,8 @@ private[sql] class ProtoDeserializer(
                                catalystType: StructType,
                                protoPath: Seq[String],
                                catalystPath: Seq[String],
-                               applyFilters: Int => Boolean): (CatalystDataUpdater, DynamicMessage) => Boolean = {
+                               applyFilters: Int => Boolean):
+  (CatalystDataUpdater, DynamicMessage) => Boolean = {
 
     val protoSchemaHelper = new ProtoUtils.ProtoSchemaHelper(
       protoType, catalystType, protoPath, catalystPath, positionalFieldMatch)

@@ -17,11 +17,12 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException}
-
-import java.util.Locale
-import scala.collection.JavaConverters._
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import java.io.{BufferedInputStream, FileInputStream, FileNotFoundException, IOException}
+import java.util.Locale
 import org.apache.hadoop.fs.FileStatus
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -33,7 +34,6 @@ import org.apache.spark.sql.proto.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType}
 import org.apache.spark.util.Utils
 
-import java.io.{BufferedInputStream, FileInputStream, FileNotFoundException, IOException}
 
 private[sql] object ProtoUtils extends Logging {
 
@@ -149,7 +149,8 @@ private[sql] object ProtoUtils extends Logging {
                           positionalFieldMatch: Boolean) {
     if (protoSchema.getName == null) {
       throw new IncompatibleSchemaException(
-        s"Attempting to treat ${protoSchema.getName} as a RECORD, but it was: ${protoSchema.getContainingType}")
+        s"Attempting to treat ${protoSchema.getName} as a RECORD, " +
+          s"but it was: ${protoSchema.getContainingType}")
     }
 
     private[this] val protoFieldArray = protoSchema.getFields.asScala.toArray
@@ -238,9 +239,9 @@ private[sql] object ProtoUtils extends Logging {
 
   def buildDescriptor(protoFilePath: String, messageName: String): Descriptor = {
     val fileDescriptor: Descriptors.FileDescriptor = parseFileDescriptor(protoFilePath)
-    var result: Descriptors.Descriptor  = null;
+    var result: Descriptors.Descriptor = null;
 
-    for(descriptor <- fileDescriptor.getMessageTypes.asScala) {
+    for (descriptor <- fileDescriptor.getMessageTypes.asScala) {
       if (descriptor.getName().equals(messageName)) {
         result = descriptor
       }

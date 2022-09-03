@@ -1,0 +1,25 @@
+
+±
+@connector/proto/src/test/resources/protobuf/catalyst_types.protoorg.apache.spark.sql.proto")
+
+BooleanMsg
+	bool_type (RboolType"+
+
+IntegerMsg
+
+int32_type (R	int32Type",
+	DoubleMsg
+double_type (R
+doubleType")
+FloatMsg
+
+float_type (R	floatType")
+BytesMsg
+
+bytes_type (R	bytesType",
+	StringMsg
+string_type (	R
+stringType".
+Person
+name (	Rname
+age (RageBBCatalystTypesbproto3

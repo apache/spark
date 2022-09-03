@@ -1,0 +1,31 @@
+// protoc --java_out=connector/proto/src/test/resources/protobuf/ connector/proto/src/test/resources/protobuf/catalyst_types.proto
+// protoc --descriptor_set_out=connector/proto/src/test/resources/protobuf/catalyst_types.desc --java_out=connector/proto/src/test/resources/protobuf/org/apache/spark/sql/proto/ connector/proto/src/test/resources/protobuf/catalyst_types.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.proto;
+option java_outer_classname = "CatalystTypes";
+
+message BooleanMsg {
+  bool bool_type = 1;
+}
+message IntegerMsg {
+  int32 int32_type = 1;
+}
+message DoubleMsg {
+  double double_type = 1;
+}
+message FloatMsg {
+  float float_type = 1;
+}
+message BytesMsg {
+  bytes bytes_type = 1;
+}
+message StringMsg {
+  string string_type = 1;
+}
+
+message Person {
+  string name = 1;
+  int32 age = 2;
+}

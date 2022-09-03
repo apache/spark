@@ -1,68 +1,70 @@
+
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.proto
 
-import com.google.protobuf.Descriptors.Descriptor
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+// import com.google.protobuf.{ByteString, DynamicMessage, Message}
+import com.google.protobuf.{ByteString, DynamicMessage, Message}
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, StructFilters}
+// import org.apache.spark.sql.catalyst.OrderedFilters
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.proto.CatalystTypes.{BytesMsg, Person}
+// import org.apache.spark.sql.sources.{EqualTo, Not}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class ProtoCatalystDataConversionSuite extends SparkFunSuite
   with SharedSparkSession
   with ExpressionEvalHelper {
 
-  val SIMPLE_MESSAGE = "protobuf/simple_message.desc"
-  val simpleMessagePath = testFile(SIMPLE_MESSAGE).replace("file:/", "/")
+  private def checkResult(data: Literal, descFilePath: String,
+                          messageName: String, expected: Any): Unit = {
 
-  private def roundTripTest(data: Literal): Unit = {
-    val protoDesc = ProtoUtils.buildDescriptor(simpleMessagePath, "SimpleMessage")
-    checkResult(data, protoDesc, data.eval())
-  }
+    /*
+    val ctoP = CatalystDataToProto(data, descFilePath,
+      messageName)
+    // scalastyle:off println
+    println("==========cTop========", ctoP)
 
-  private def checkResult(data: Literal, protoDesc: Descriptor, expected: Any): Unit = {
+    val pToC = ProtoDataToCatalyst(ctoP, descFilePath, messageName, Map.empty)
+
+    // scalastyle:off println
+    println("==========pToC========", pToC)
+
+    val y = prepareExpectedResult(expected)
+
+    // scalastyle:off println
+    println("=====Expected=======", expected, y)
+
+    checkEvaluation(pToC, y) */
+
     checkEvaluation(
-      ProtoDataToCatalyst(CatalystDataToProto(data, simpleMessagePath, "SimpleMessage"), simpleMessagePath, "SimpleMessage", Map.empty),
+      ProtoDataToCatalyst(CatalystDataToProto(data, descFilePath,
+        messageName), descFilePath, messageName, Map.empty),
       prepareExpectedResult(expected))
   }
-
-  protected def checkUnsupportedRead(data: Literal, protoDesc: Descriptor): Unit = {
-    val binary = CatalystDataToProto(data, simpleMessagePath, "SimpleMessage")
-    intercept[Exception] {
-      ProtoDataToCatalyst(binary, simpleMessagePath, "SimpleMessage", Map.empty).eval()
-    }
-
-    val expected = {
-      val protoSchema = ProtoUtils.buildDescriptor(simpleMessagePath, "SimpleMessage")
-      SchemaConverters.toSqlType(protoSchema).dataType match {
-        case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
-        case _ => null
-      }
-    }
-
-    checkEvaluation(ProtoDataToCatalyst(binary, simpleMessagePath, "SimpleMessage", Map.empty),
-      expected)
-  }
-
-  private val testingTypes = Seq(
-    BooleanType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType,
-    DecimalType(8, 0), // 32 bits decimal without fraction
-    DecimalType(8, 4), // 32 bits decimal
-    DecimalType(16, 0), // 64 bits decimal without fraction
-    DecimalType(16, 11), // 64 bits decimal
-    DecimalType(38, 0),
-    DecimalType(38, 38),
-    StringType,
-    BinaryType)
 
   protected def prepareExpectedResult(expected: Any): Any = expected match {
     // Spark byte and short both map to avro int
@@ -79,39 +81,107 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     case other => other
   }
 
+  private val testingTypes = Seq(
+    StructType(StructField("bool_type", BooleanType, false) :: Nil),
+    StructType(StructField("int32_type", IntegerType, false) :: Nil),
+    StructType(StructField("double_type", DoubleType, false) :: Nil),
+    StructType(StructField("float_type", FloatType, false) :: Nil),
+    StructType(StructField("bytes_type", BinaryType, false) :: Nil),
+    StructType(StructField("string_type", StringType, false) :: Nil),
+    StructType(StructField("int32_type", ByteType, false) :: Nil),
+    StructType(StructField("int32_type", ShortType, false) :: Nil),
+  )
+
+  private val catalystTypesToProtoMessages: Map[DataType, String] = Map(
+    BooleanType -> "BooleanMsg",
+    IntegerType -> "IntegerMsg",
+    DoubleType -> "DoubleMsg",
+    FloatType -> "FloatMsg",
+    BinaryType -> "BytesMsg",
+    StringType -> "StringMsg",
+    ByteType -> "IntegerMsg",
+    ShortType -> "IntegerMsg"
+  )
+
   testingTypes.foreach { dt =>
     val seed = scala.util.Random.nextLong()
+    val filePath = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
     test(s"single $dt with seed $seed") {
       val rand = new scala.util.Random(seed)
       val data = RandomDataGenerator.forType(dt, rand = rand).get.apply()
       val converter = CatalystTypeConverters.createToCatalystConverter(dt)
       val input = Literal.create(converter(data), dt)
-      roundTripTest(input)
+      checkResult(input, filePath, catalystTypesToProtoMessages(dt.fields(0).dataType),
+        input.eval())
     }
   }
 
-  for (_ <- 1 to 5) {
-    val seed = scala.util.Random.nextLong()
-    val rand = new scala.util.Random(seed)
-    val schema = RandomDataGenerator.randomSchema(rand, 5, testingTypes)
-    test(s"flat schema ${schema.catalogString} with seed $seed") {
-      val data = RandomDataGenerator.randomRow(rand, schema)
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      val input = Literal.create(converter(data), schema)
-      roundTripTest(input)
+  private def checkDeserialization(
+                                    descFilePath: String,
+                                    messageName: String,
+                                    data: Message,
+                                    expected: Option[Any],
+                                    filters: StructFilters = new NoopFilters): Unit = {
+
+    val descriptor = ProtoUtils.buildDescriptor(descFilePath, messageName)
+    val dataType = SchemaConverters.toSqlType(descriptor).dataType
+
+    val deserializer = new ProtoDeserializer(
+      descriptor,
+      dataType,
+      false,
+      RebaseSpec(SQLConf.LegacyBehaviorPolicy.CORRECTED),
+      filters)
+
+    val dynMsg = DynamicMessage.parseFrom(descriptor, data.toByteArray)
+    val deserialized = deserializer.deserialize(dynMsg)
+    expected match {
+      case None => assert(deserialized == None)
+      case Some(d) =>
+        assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
     }
   }
 
-  for (_ <- 1 to 5) {
-    val seed = scala.util.Random.nextLong()
-    val rand = new scala.util.Random(seed)
-    val schema = RandomDataGenerator.randomNestedSchema(rand, 10, testingTypes)
-    test(s"nested schema ${schema.catalogString} with seed $seed") {
-      val data = RandomDataGenerator.randomRow(rand, schema)
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      val input = Literal.create(converter(data), schema)
-      roundTripTest(input)
-    }
+  test("SPARK-32346: filter push-down to Avro deserializer") {
+
+    val filePath = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val sqlSchema = new StructType().add("age", "int").add("name", "string")
+
+    val person = Person.newBuilder()
+      .setName("Maxim")
+      .setAge(39)
+      .build()
+
+    val expectedRow = Some(InternalRow(UTF8String.fromString("Maxim"), 39))
+
+    checkDeserialization(filePath, "Person", person, expectedRow)
+
+    /*
+    checkDeserialization(
+      filePath,
+      "Person",
+      person,
+      expectedRow,
+      new OrderedFilters(Seq(EqualTo("age", 39)), sqlSchema))
+
+    checkDeserialization(
+      filePath,
+      "Person",
+      person,
+      None,
+      new OrderedFilters(Seq(Not(EqualTo("name", "Maxim"))), sqlSchema))*/
   }
 
+  test("ProtoDeserializer with binary type") {
+
+    val filePath = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
+    val bb = java.nio.ByteBuffer.wrap(Array[Byte](97, 48, 53))
+
+    val bytesMessage = BytesMsg.newBuilder()
+      .setBytesType(ByteString.copyFrom(bb))
+      .build()
+
+    val expected = InternalRow(Array[Byte](97, 48, 53))
+    checkDeserialization(filePath, "BytesMsg", bytesMessage, Some(expected))
+  }
 }

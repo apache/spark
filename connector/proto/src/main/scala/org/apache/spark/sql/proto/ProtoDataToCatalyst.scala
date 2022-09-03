@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Struc
 
 import scala.util.control.NonFatal
 
-private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: String, messageName: String,
+private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: String,
+                                              messageName: String,
                                               options: Map[String, String])
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -52,7 +53,8 @@ private[proto] case class ProtoDataToCatalyst(child: Expression, descFilePath: S
 
   @transient private lazy val expectedSchema = protoOptions.schema.getOrElse(descriptor)
 
-  @transient private lazy val deserializer = new ProtoDeserializer(expectedSchema, dataType, protoOptions.datetimeRebaseModeInRead)
+  @transient private lazy val deserializer = new ProtoDeserializer(expectedSchema, dataType,
+    protoOptions.datetimeRebaseModeInRead)
 
   @transient private var result: Any = _
 

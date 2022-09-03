@@ -17,6 +17,7 @@
 package org.apache.spark.sql.proto
 
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.types._
 
