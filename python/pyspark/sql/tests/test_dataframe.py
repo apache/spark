@@ -96,6 +96,18 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
+
+    def test_with_columns_renamed(self):
+        df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
+
+        # rename both columns
+        renamed_df1 = df.withColumnsRenamed({"name":"naam", "age": "leeftijd"})
+        self.assertEqual(renamed_df1.columns, ["naam", "leeftijd"])
+
+        # rename one columns with one missing name
+        renamed_df2 = df.withColumnsRenamed({"name":"naam", "address": "adres"})
+        self.assertEqual(renamed_df2.columns, ["naam", "age"])
+
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
