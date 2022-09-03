@@ -30,7 +30,7 @@ private[proto] case class CatalystDataToProto(
 
   @transient private lazy val protoType = ProtoUtils.buildDescriptor(descFilePath, messageName)
 
-  @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType)
+  @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType, child.nullable)
 
   override def nullSafeEval(input: Any): Any = {
     val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
