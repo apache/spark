@@ -273,9 +273,9 @@ private[spark] class TaskSetManager(
       }
     }
 
-    if (tasks(index).preferredLocations == Nil) {
+//    if (tasks(index).preferredLocations == Nil) {
       pendingTaskSetToAddTo.noPrefs += index
-    }
+//    }
 
     pendingTaskSetToAddTo.all += index
   }
