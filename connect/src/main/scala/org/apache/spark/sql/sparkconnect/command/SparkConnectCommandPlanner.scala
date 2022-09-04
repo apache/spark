@@ -20,7 +20,7 @@ package org.apache.spark.sql.sparkconnect.command
 import com.google.common.collect.{Lists, Maps}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.{proto => proto}
 import org.apache.spark.sql.SparkSession

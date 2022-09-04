@@ -19,7 +19,7 @@ package org.apache.spark.sql.sparkconnect.planner
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, plans}

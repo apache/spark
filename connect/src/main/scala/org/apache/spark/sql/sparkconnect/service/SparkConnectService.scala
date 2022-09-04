@@ -30,7 +30,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{

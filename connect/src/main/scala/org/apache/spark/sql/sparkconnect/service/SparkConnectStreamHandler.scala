@@ -21,7 +21,7 @@ import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
