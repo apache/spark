@@ -16,21 +16,21 @@
  */
 package org.apache.spark.sql.proto
 
-import com.google.protobuf.Descriptors.Descriptor
-import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 import com.google.protobuf.{ByteString, DynamicMessage}
-import org.apache.spark.sql.proto.ProtoUtils.toFieldStr
+import com.google.protobuf.Descriptors._
+import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
-import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.proto.ProtoUtils.ProtoMatchedField
+import org.apache.spark.sql.proto.ProtoUtils.toFieldStr
 import org.apache.spark.sql.proto.SchemaConverters.IncompatibleSchemaException
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DoubleType, FloatType, IntegerType, LongType, NullType, ShortType, StringType, StructType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
-import com.google.protobuf.Descriptors._
 
 private[sql] class ProtoDeserializer(
                                       rootProtoType: Descriptor,
@@ -73,14 +73,14 @@ private[sql] class ProtoDeserializer(
     }
   } catch {
     case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-      s"Cannot convert Proto type ${rootProtoType.getName} to SQL type ${rootCatalystType.sql}.", ise)
+      s"Cannot convert Proto type ${rootProtoType.getName} " +
+        s"to SQL type ${rootCatalystType.sql}.", ise)
   }
 
   def deserialize(data: Any): Option[Any] = converter(data)
 
   private def newArrayWriter(
                               protoField: FieldDescriptor,
-                              catalystType: DataType,
                               protoPath: Seq[String],
                               catalystPath: Seq[String],
                               elementType: DataType,
@@ -96,9 +96,9 @@ private[sql] class ProtoDeserializer(
       val elementUpdater = new ArrayDataUpdater(result)
 
       var i = 0
-      val iter = collection.iterator()
-      while (iter.hasNext) {
-        val element = iter.next()
+      val iterator = collection.iterator()
+      while (iterator.hasNext) {
+        val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
             throw new RuntimeException(
@@ -126,8 +126,8 @@ private[sql] class ProtoDeserializer(
     val errorPrefix = s"Cannot convert Proto ${toFieldStr(protoPath)} to " +
       s"SQL ${toFieldStr(catalystPath)} because "
     val incompatibleMsg = errorPrefix +
-      s"schema is incompatible (protoType = ${protoType} ${protoType.toProto.getLabel} ${protoType.getJavaType} " +
-      s"${protoType.getType}, sqlType = ${catalystType.sql})"
+      s"schema is incompatible (protoType = ${protoType} ${protoType.toProto.getLabel} " +
+      s"${protoType.getJavaType} " + s"${protoType.getType}, sqlType = ${catalystType.sql})"
 
     (protoType.getJavaType, catalystType) match {
 
@@ -139,14 +139,14 @@ private[sql] class ProtoDeserializer(
         updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
 
       case (BOOLEAN, ArrayType(BooleanType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, BooleanType, containsNull)
 
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
       case (INT, ArrayType(IntegerType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, IntegerType, containsNull)
 
       case (INT, DateType) => (updater, ordinal, value) =>
@@ -156,21 +156,21 @@ private[sql] class ProtoDeserializer(
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case (LONG, ArrayType(LongType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, LongType, containsNull)
 
       case (FLOAT, FloatType) => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[Float])
 
       case (FLOAT, ArrayType(FloatType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, FloatType, containsNull)
 
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])
 
       case (DOUBLE, ArrayType(DoubleType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, DoubleType, containsNull)
 
       case (STRING, StringType) => (updater, ordinal, value) =>
@@ -180,7 +180,7 @@ private[sql] class ProtoDeserializer(
         updater.set(ordinal, str)
 
       case (STRING, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, StringType, containsNull)
 
       case (BYTE_STRING, BinaryType) => (updater, ordinal, value) =>
@@ -191,7 +191,7 @@ private[sql] class ProtoDeserializer(
         updater.set(ordinal, byte_array)
 
       case (BYTE_STRING, ArrayType(BinaryType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, BinaryType, containsNull)
 
       case (MESSAGE, st: StructType) =>
@@ -203,14 +203,14 @@ private[sql] class ProtoDeserializer(
           updater.set(ordinal, row)
 
       case (MESSAGE, ArrayType(st: StructType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, st, containsNull)
 
       case (ENUM, StringType) => (updater, ordinal, value) =>
         updater.set(ordinal, UTF8String.fromString(value.toString))
 
       case (ENUM, ArrayType(StringType, containsNull)) =>
-        newArrayWriter(protoType, catalystType, protoPath,
+        newArrayWriter(protoType, protoPath,
           catalystPath, StringType, containsNull)
 
       // TBD: Do we need this here ?
