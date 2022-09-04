@@ -110,17 +110,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         metastore_dir = os.path.join(metastore_dir, str(uuid.uuid4()))
     os.mkdir(metastore_dir)
 
-    # Load the spark version from the pom file.
-    import xml.etree.ElementTree as ET
-    tree = ET.parse(SPARK_HOME + "/pom.xml")
-    mvn_version = tree.find("./{http://maven.apache.org/POM/4.0.0}version")
-    if mvn_version is None:
-        raise RuntimeError("Could not find Maven Artifact version version in pom.xml")
-
-    # Build the Spark Connect path]
-    sc_file_name = "2.12-" + mvn_version.text + ".jar"
-    spark_connect_path = os.path.join(SPARK_HOME, "connect", "target", "spark-connect_" + sc_file_name)
-
     # Also override the JVM's temp directory by setting driver and executor options.
     java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
     java_options = java_options + " -Dio.netty.tryReflectionSetAccessible=true -Xss4M"
@@ -130,8 +119,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
         # Adding Spark Connect JAR and Config
         "--conf", "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin",
-        # We manaully add the Spark Connect build jar file here.
-        # "--jars", spark_connect_path,
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)

@@ -102,16 +102,6 @@
             <artifactId>failureaccess</artifactId>
             <version>1.0.1</version>
         </dependency>
-        <!--dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java-util</artifactId>
-            <version>${protobuf.version}</version>
-        </dependency-->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
@@ -138,7 +128,6 @@
             <version>${tomcat.annotations.api.version}</version>
             <scope>provided</scope>
         </dependency>
-        <!-- TODO(grundprinzip) fix the scala pb version -->
         <dependency>
             <groupId>com.thesamet.scalapb</groupId>
             <artifactId>scalapb-runtime-grpc_${scala.binary.version}</artifactId>

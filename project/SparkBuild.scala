@@ -39,8 +39,6 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
-import coursier.ShadingPlugin
-import coursier.ShadingPlugin.autoImport._
 import sbtprotoc.ProtocPlugin.autoImport._
 
 object BuildCommons {
@@ -490,8 +488,10 @@ object SparkBuild extends PomBuild {
 
     sparkSql := {
       (Compile / runMain).toTask(" org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver").value
-    }
+    },
+
   ))(assembly)
+
 
   enable(Seq(sparkShell := (LocalProject("assembly") / sparkShell).value))(spark)
 
@@ -609,7 +609,11 @@ object Core {
   )
 }
 
+
 object SparkConnect {
+
+  private val shadePrefix = "org.sparkproject.connect"
+  val shadeJar = taskKey[Unit]("Shade the Jars")
 
   lazy val settings = Seq(
     // Setting version
@@ -617,10 +621,13 @@ object SparkConnect {
 
     // Crap
     libraryDependencies ++= Seq(
-      // Neded for the overall
       "io.grpc"          % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
-      "io.grpc"          % "grpc-all"             % BuildCommons.gprcVersion,
-      "javax.annotation" % "javax.annotation-api" % "1.3.2",
+      "org.scala-lang" % "scala-library" % "2.12.16" % "provided",
+      "com.google.guava" % "guava"                % "31.0.1-jre",
+      "com.google.guava" % "failureaccess"        % "1.0.1"
+    ),
+
+    dependencyOverrides ++= Seq(
       "com.google.guava" % "guava"                % "31.0.1-jre",
       "com.google.guava" % "failureaccess"        % "1.0.1"
     ),
@@ -630,15 +637,19 @@ object SparkConnect {
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
     ),
 
+    (assembly / logLevel) := Level.Info,
 
-    shadedModules := Set("io.grpc" % "grpc-all"),
-    shadedModules += "com.goole.guava" % "guava",
-    shadedModules += "com.goole.guava" % "failureaccess",
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
+      ShadeRule.rename("com.google.common.**"-> "org.sparkproject.connect.guava.@1").inAll,
+    ),
 
-    shadingRules := Seq(ShadingRule.moveUnder("io.grpc", "org.sparkproject.shaded.grpc")),
-    shadingRules += ShadingRule.moveUnder("com.google.common", "org.sparkproject.shaded.guava"),
-    shadingRules += ShadingRule.moveUnder("org.eclipse.jetty", "org.sparkproject.shaded.jetty"),
-    validNamespaces := Set("com.google.common")
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    },
   )
 }
 
@@ -802,6 +813,7 @@ object OldDeps {
   }
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
+    PB.protocVersion := "3.21.1",
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
@@ -1168,14 +1180,24 @@ object CopyDependencies {
         throw new IOException("Failed to create jars directory.")
       }
 
+      // For the SparkConnect build, we manually call the assembly target to
+      // produce the shaded Jar which happens automatically in the case of Maven.
+      // Later, when the dependencies are copied, we manually copy the shaded Jar only.
+      val fid = (LocalProject("connect")/assembly).value
+
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
+        // Do not copy the Spark Connect JAR as it is unshaded in the SBT build.
         .foreach { jar =>
           val destJar = new File(dest, jar.getName())
           if (destJar.isFile()) {
             destJar.delete()
           }
-          Files.copy(jar.toPath(), destJar.toPath())
+          if (jar.getName.contains("spark-connect")) {
+            Files.copy(fid.toPath, destJar.toPath)
+          } else {
+            Files.copy(jar.toPath(), destJar.toPath())
+          }
         }
     },
     (Compile / packageBin / crossTarget) := destPath.value,

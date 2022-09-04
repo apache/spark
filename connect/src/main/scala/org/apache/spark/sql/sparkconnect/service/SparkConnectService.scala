@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
+import io.grpc.Server
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
@@ -31,11 +32,15 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AnalyzeResponse, Request, Response, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{
+  AnalyzeResponse,
+  Request,
+  Response,
+  SparkConnectServiceGrpc
+}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.ExtendedMode
 import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
-
 
 /**
  * The SparkConnectService Implementation.
@@ -99,6 +104,8 @@ object SparkConnectService {
   // different or complex type easily.
   type SessionCacheKey = String;
 
+  var server: Server = _
+
   private val userSessionMapping =
     cacheBuilder(100, 3600).build[SessionCacheKey, SessionHolder]()
 
@@ -135,21 +142,28 @@ object SparkConnectService {
   def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
     val port = 15002
-    val server = NettyServerBuilder
+    val sb = NettyServerBuilder
       .forPort(port)
       .addService(new SparkConnectService(debugMode))
 
     // If debug mode is configured, load the ProtoReflection service so that tools like
     // grpcurl can introspect the API for debugging.
     if (debugMode) {
-      server.addService(ProtoReflectionService.newInstance())
+      sb.addService(ProtoReflectionService.newInstance())
     }
-    server.build.start
+    server = sb.build
+    server.start()
   }
 
   // Starts the service
   def start(): Unit = {
     startGRPCService()
+  }
+
+  def stop(): Unit = {
+    if (server != null) {
+      server.shutdownNow()
+    }
   }
 }
 
@@ -177,7 +191,7 @@ class SparkConnectPlugin extends SparkPlugin {
     }
 
     override def shutdown(): Unit = {
-      super.shutdown()
+      SparkConnectService.stop()
     }
   }
 
