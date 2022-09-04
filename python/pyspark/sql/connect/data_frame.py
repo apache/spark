@@ -133,7 +133,7 @@ class DataFrame(object):
         """Returns the list of columns of the current data frame."""
         if self._plan is None:
             return []
-        if not "columns" in self._cache and self._plan is not None:
+        if "columns" not in self._cache and self._plan is not None:
             pdd = self.limit(0).collect()
             # Translate to standard pytho array
             self._cache["columns"] = pdd.columns.values
@@ -210,7 +210,7 @@ class DataFrame(object):
 
     def _get_alias(self):
         p = self._plan
-        while not p is None:
+        while p is not None:
             if isinstance(p, plan.Project) and p.alias:
                 return p.alias
             p = p._child

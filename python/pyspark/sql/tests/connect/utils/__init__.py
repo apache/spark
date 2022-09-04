@@ -14,4 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.tests.connect.utils.spark_connect_test_utils import PlanOnlyTestFixture
+
+from pyspark.sql.tests.connect.utils.spark_connect_test_utils import (  # noqa: F401
+    PlanOnlyTestFixture,  # noqa: F401
+)  # noqa: F401

@@ -28,7 +28,9 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
     generation but do not call Spark."""
 
     def test_simple_project(self):
-        read_table = lambda x: DataFrame.withPlan(Read(x), self.connect)
+        def read_table(x):
+            return DataFrame.withPlan(Read(x), self.connect)
+
         self.connect.set_hook("readTable", read_table)
 
         plan = self.connect.readTable(self.tbl_name)._plan.collect(self.connect)
@@ -46,9 +48,12 @@ class SparkConnectTestsPlanOnly(PlanOnlyTestFixture):
         expr = u("ThisCol", "ThatCol", "OtherCol")
         self.assertTrue(isinstance(expr, UserDefinedFunction))
         u_plan = expr.to_plan(self.connect)
+        assert u_plan is not None
 
     def test_all_the_plans(self):
-        read_table = lambda x: DataFrame.withPlan(Read(x), self.connect)
+        def read_table(x):
+            return DataFrame.withPlan(Read(x), self.connect)
+
         self.connect.set_hook("readTable", read_table)
 
         df = self.connect.readTable(self.tbl_name)

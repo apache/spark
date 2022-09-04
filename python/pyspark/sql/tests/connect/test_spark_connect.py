@@ -14,18 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any
 import uuid
 import unittest
 import tempfile
-import os
-import shutil
 
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.connect.client import RemoteSparkSession
-from pyspark.sql.connect.function_builder import udf, UserDefinedFunction
+from pyspark.sql.connect.function_builder import udf
 from pyspark.testing.utils import ReusedPySparkTestCase
-
-import py4j
 
 
 class SparkConnectSQLTestCase(ReusedPySparkTestCase):
@@ -33,7 +30,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
     test cases."""
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls: Any) -> None:
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
@@ -46,7 +43,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         cls.spark_connect_test_data()
 
     @classmethod
-    def spark_connect_test_data(cls):
+    def spark_connect_test_data(cls: Any) -> None:
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(port=15002)
@@ -57,22 +54,23 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
 
 
 class SparkConnectTests(SparkConnectSQLTestCase):
-    def test_simple_read(self):
+    def test_simple_read(self) -> None:
         """Tests that we can access the Spark Connect GRPC service locally."""
         df = self.connect.readTable(self.tbl_name)
         data = df.limit(10).collect()
         # Check that the limit is applied
         assert len(data.index) == 10
 
-    def test_simple_udf(self):
-        def conv_udf(x):
+    def test_simple_udf(self) -> None:
+        def conv_udf(x) -> str:
             return "Martin"
 
         u = udf(conv_udf)
         df = self.connect.readTable(self.tbl_name)
         result = df.select(u(df.id)).collect()
+        assert result is not None
 
-    def test_simple_explain_string(self):
+    def test_simple_explain_string(self) -> None:
         df = self.connect.readTable(self.tbl_name).limit(10)
         result = df.explain()
         assert len(result) > 0

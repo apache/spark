@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.data_frame import DataFrame
+from pyspark.sql.connect.data_frame import DataFrame  # noqa: F401

@@ -114,9 +114,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     additional_config = []
     if test_name.startswith("pyspark.sql.tests.connect"):
         # Adding Spark Connect JAR and Config
-        additional_config += ["--conf",
-                              "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin"]
-
+        additional_config += [
+            "--conf",
+            "spark.plugins=org.apache.spark.sql.sparkconnect.service.SparkConnectPlugin"
+        ]
 
     # Also override the JVM's temp directory by setting driver and executor options.
     java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
@@ -125,11 +126,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
-        ] + additional_config + [
-        "pyspark-shell"
     ]
-    env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
+    spark_args += additional_config
+    spark_args += ["pyspark-shell"]
 
+    env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     # Delete is always set to False since the cleanup will be either done by removing the

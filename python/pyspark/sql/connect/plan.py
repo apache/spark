@@ -15,11 +15,7 @@
 # limitations under the License.
 #
 
-import base64
-from calendar import c
 from typing import (
-    AnyStr,
-    Dict,
     List,
     Optional,
     Sequence,
@@ -165,7 +161,7 @@ class Project(LogicalPlan):
             for c in self._raw_columns
         ]  # [self.unresolved_attr(*x) for x in self.columns]
         common = proto.RelationCommon()
-        if not self.alias is None:
+        if self.alias is not None:
             common.alias = self.alias
 
         plan = proto.Relation()
@@ -348,7 +344,10 @@ class Aggregate(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return f"{self._i(indent)}<Sort columns={self.grouping_cols} measures={self.measures}>\n{c_buf}"
+        return (
+            f"{self._i(indent)}<Sort columns={self.grouping_cols}"
+            f"measures={self.measures}>\n{c_buf}"
+        )
 
     def _repr_html_(self):
         return f"""
@@ -388,7 +387,10 @@ class Join(LogicalPlan):
         i = self._i(indent)
         o = self._i(indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
-        return f"""{i}<Join on={self.on} how={self.how}>\n{o}left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"""
+        return (
+            f"{i}<Join on={self.on} how={self.how}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
 
     def _repr_html_(self):
         return f"""
@@ -420,7 +422,10 @@ class UnionAll(LogicalPlan):
         i = self._i(indent)
         o = self._i(indent + LogicalPlan.INDENT)
         n = indent + LogicalPlan.INDENT * 2
-        return f"""{i}UnionAll\n{o}child1=\n{self._child.print(n)}\n{o}child2=\n{self.other.print(n)}"""
+        return (
+            f"{i}UnionAll\n{o}child1=\n{self._child.print(n)}"
+            f"\n{o}child2=\n{self.other.print(n)}"
+        )
 
     def _repr_html_(self) -> str:
         assert self._child is not None

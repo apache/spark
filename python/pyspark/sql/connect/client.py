@@ -124,7 +124,7 @@ class RemoteSparkSession(object):
         req.user_context.user_id = self._user_id
         req.plan.command.create_function.CopyFrom(fun)
 
-        result = self._execute_and_fetch(req)
+        self._execute_and_fetch(req)
         return name
 
     def _build_metrics(self, metrics: "pb2.Response.Metrics") -> typing.List[PlanMetrics]:

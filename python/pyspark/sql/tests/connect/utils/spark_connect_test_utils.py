@@ -14,26 +14,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import Any, Dict
 import functools
 import unittest
 import uuid
 
 
 class MockRemoteSession:
-    def __init__(self):
-        self.hooks = {}
+    def __init__(self) -> None:
+        self.hooks: Dict[str, Any] = {}
 
-    def set_hook(self, name, hook):
+    def set_hook(self, name: str, hook: Any) -> None:
         self.hooks[name] = hook
 
-    def __getattr__(self, item):
-        if not item in self.hooks:
+    def __getattr__(self, item: str) -> Any:
+        if item not in self.hooks:
             raise LookupError(f"{item} is not defined as a method hook in MockRemoteSession")
         return functools.partial(self.hooks[item])
 
 
 class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
-    def setUpClass(cls) -> None:
+    def setUpClass(cls: Any) -> None:
         cls.connect = MockRemoteSession()
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
