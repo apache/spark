@@ -129,7 +129,6 @@ function mypy_examples_test {
     MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
       --config-file python/mypy.ini \
       --exclude "mllib/*" \
-      --exclude "sql/connect/proto/*" \
       examples/src/main/python/) 2>&1)
 
     MYPY_STATUS=$?

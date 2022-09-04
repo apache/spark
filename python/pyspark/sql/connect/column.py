@@ -25,6 +25,7 @@ ColumnOrString = Union[str, "ColumnRef"]
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import RemoteSparkSession
+    import pyspark.sql.connect.proto as proto
 
 
 class Expression(object):
@@ -35,7 +36,7 @@ class Expression(object):
     def __init__(self) -> None:  # type: ignore[name-defined]
         pass
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":  # type: ignore
         ...
 
     def __str__(self) -> str:
@@ -52,7 +53,7 @@ class LiteralExpression(Expression):
         super().__init__()
         self._value = value
 
-    def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
+    def to_plan(self, session: "RemoteSparkSession") -> "proto.Expression":
         """Converts the literal expression to the literal in proto.
 
         TODO This method always assumes the largest type and can thus
