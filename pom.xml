@@ -132,7 +132,8 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.7.6</orc.version>
+    <orc.version>1.8.0</orc.version>
+    <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.48.v20220622</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -2524,6 +2525,7 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
+        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -2548,6 +2550,7 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-mapreduce</artifactId>
         <version>${orc.version}</version>
+        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
