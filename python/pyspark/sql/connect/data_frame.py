@@ -50,9 +50,7 @@ class GroupingFrame(object):
 
     def __init__(self, df: "DataFrame", *grouping_cols: Union[ColumnRef, str]) -> None:
         self._df = df
-        self._grouping_cols = [
-            x if isinstance(x, ColumnRef) else df[x] for x in grouping_cols
-        ]
+        self._grouping_cols = [x if isinstance(x, ColumnRef) else df[x] for x in grouping_cols]
 
     def agg(self, exprs: MeasuresType = None) -> "DataFrame":
 
@@ -74,12 +72,8 @@ class GroupingFrame(object):
         )
         return res
 
-    def _map_cols_to_dict(
-        self, fun: str, cols: List[Union[ColumnRef, str]]
-    ) -> Dict[str, str]:
-        return {
-            x if isinstance(x, str) else cast(ColumnRef, x).name(): fun for x in cols
-        }
+    def _map_cols_to_dict(self, fun: str, cols: List[Union[ColumnRef, str]]) -> Dict[str, str]:
+        return {x if isinstance(x, str) else cast(ColumnRef, x).name(): fun for x in cols}
 
     def min(self, *cols: Union[ColumnRef, str]) -> "DataFrame":
         expr = self._map_cols_to_dict("min", list(cols))
@@ -119,17 +113,13 @@ class DataFrame(object):
         return new_frame
 
     def select(self, *cols: ColumnRef) -> "DataFrame":
-        return DataFrame.withPlan(
-            plan.Project(self._plan, *cols), session=self._session
-        )
+        return DataFrame.withPlan(plan.Project(self._plan, *cols), session=self._session)
 
     def agg(self, exprs: Dict[str, str]) -> "DataFrame":
         return self.groupBy().agg(exprs)
 
     def alias(self, alias):
-        return DataFrame.withPlan(
-            plan.Project(self._plan).withAlias(alias), session=self._session
-        )
+        return DataFrame.withPlan(plan.Project(self._plan).withAlias(alias), session=self._session)
 
     def approxQuantile(self, col, probabilities, relativeError):
         ...
@@ -173,9 +163,7 @@ class DataFrame(object):
     def drop(self, *cols: ColumnOrString):
         # TODO Needs analyze to know which columns to drop
         all_cols = self.columns()
-        dropped = set(
-            [c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols]
-        )
+        dropped = set([c.name() if isinstance(c, ColumnRef) else self[c].name() for c in cols])
         filter(lambda x: x in dropped, all_cols)
 
     def filter(self, condition: Expression) -> "DataFrame":
@@ -200,17 +188,13 @@ class DataFrame(object):
         )
 
     def limit(self, n):
-        return DataFrame.withPlan(
-            plan.Limit(child=self._plan, limit=n), session=self._session
-        )
+        return DataFrame.withPlan(plan.Limit(child=self._plan, limit=n), session=self._session)
 
     def sort(self, *cols: ColumnOrName):
         """Sort by a specific column"""
         return DataFrame.withPlan(plan.Sort(self._plan, *cols), session=self._session)
 
-    def show(
-        self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]
-    ):
+    def show(self, n: int, truncate: Optional[Union[bool, int]], vertical: Optional[bool]):
         ...
 
     def union(self, other) -> "DataFrame":
@@ -219,9 +203,7 @@ class DataFrame(object):
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
-        return DataFrame.withPlan(
-            plan.UnionAll(self._plan, other._plan), session=self._session
-        )
+        return DataFrame.withPlan(plan.UnionAll(self._plan, other._plan), session=self._session)
 
     def where(self, condition):
         return self.filter(condition)

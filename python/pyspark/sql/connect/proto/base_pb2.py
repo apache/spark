@@ -29,7 +29,9 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "spark.connect.base_pb2", gl
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z)github.com/databricks/spark-connect/proto"
+    DESCRIPTOR._serialized_options = (
+        b"\n\036org.apache.spark.connect.protoP\001Z)github.com/databricks/spark-connect/proto"
+    )
     _RESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._options = None
     _RESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_options = b"8\001"
     _PLAN._serialized_start = 104

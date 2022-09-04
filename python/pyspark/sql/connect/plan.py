@@ -140,9 +140,7 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(
-        self, child: Optional["LogicalPlan"], *columns: ExpressionOrString
-    ) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], *columns: ExpressionOrString) -> None:
         super().__init__(child)
         self._raw_columns = list(columns)
         self.alias = None
@@ -152,9 +150,7 @@ class Project(LogicalPlan):
         """Ensures that all input arguments are instances of Expression."""
         for c in self._raw_columns:
             if not isinstance(c, Expression):
-                raise InputValidationError(
-                    f"Only Expressions can be used for projections: '{c}'."
-                )
+                raise InputValidationError(f"Only Expressions can be used for projections: '{c}'.")
 
     def withAlias(self, alias) -> LogicalPlan:
         self.alias = alias
@@ -223,9 +219,7 @@ class Filter(LogicalPlan):
 
 
 class Limit(LogicalPlan):
-    def __init__(
-        self, child: Optional["LogicalPlan"], limit: int, offset: int = 0
-    ) -> None:
+    def __init__(self, child: Optional["LogicalPlan"], limit: int, offset: int = 0) -> None:
         super().__init__(child)
         self.limit = limit
         self.offset = offset
@@ -239,9 +233,7 @@ class Limit(LogicalPlan):
 
     def print(self, indent=0) -> str:
         c_buf = self._child.print(indent + LogicalPlan.INDENT) if self._child else ""
-        return (
-            f"{self._i(indent)}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
-        )
+        return f"{self._i(indent)}<Limit limit={self.limit} offset={self.offset}>\n{c_buf}"
 
     def _repr_html_(self):
         return f"""
@@ -296,9 +288,7 @@ class Sort(LogicalPlan):
         assert self._child is not None
         plan = proto.Relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
-        plan.sort.sort_fields.extend(
-            [self.col_to_sort_field(x, session) for x in self.columns]
-        )
+        plan.sort.sort_fields.extend([self.col_to_sort_field(x, session) for x in self.columns])
         return plan
 
     def print(self, indent=0) -> str:

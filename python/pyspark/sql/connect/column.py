@@ -172,9 +172,7 @@ class ScalarFunctionExpression(Expression):
     def to_plan(self, session: "RemoteSparkSession") -> proto.Expression:
         fun = proto.Expression()
         fun.unresolved_function.parts.append(self._op)
-        fun.unresolved_function.arguments.extend(
-            [x.to_plan(session) for x in self._args]
-        )
+        fun.unresolved_function.arguments.extend([x.to_plan(session) for x in self._args])
         return fun
 
     def __str__(self) -> str:

@@ -17,13 +17,13 @@ DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
-_builder.BuildTopDescriptorsAndMessages(
-    DESCRIPTOR, "spark.connect.types_pb2", globals()
-)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "spark.connect.types_pb2", globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z)github.com/databricks/spark-connect/proto"
+    DESCRIPTOR._serialized_options = (
+        b"\n\036org.apache.spark.connect.protoP\001Z)github.com/databricks/spark-connect/proto"
+    )
     _TYPE._serialized_start = 45
     _TYPE._serialized_end = 4887
     _TYPE_BOOLEAN._serialized_start = 1366

@@ -28,9 +28,7 @@ class MockRemoteSession:
 
     def __getattr__(self, item):
         if not item in self.hooks:
-            raise LookupError(
-                f"{item} is not defined as a method hook in MockRemoteSession"
-            )
+            raise LookupError(f"{item} is not defined as a method hook in MockRemoteSession")
         return functools.partial(self.hooks[item])
 
 

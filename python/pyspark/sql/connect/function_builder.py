@@ -43,10 +43,7 @@ def _build(name: str, *args: ExpressionOrString) -> ScalarFunctionExpression:
     -------
     :class:`ScalarFunctionExpression`
     """
-    cols = [
-        x if isinstance(x, Expression) else ColumnRef.from_qualified_name(x)
-        for x in args
-    ]
+    cols = [x if isinstance(x, Expression) else ColumnRef.from_qualified_name(x) for x in args]
     return ScalarFunctionExpression(name, *cols)
 
 

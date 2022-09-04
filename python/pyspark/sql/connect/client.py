@@ -61,9 +61,7 @@ class MetricValue:
 
 
 class PlanMetrics:
-    def __init__(
-        self, name: str, id: str, parent: str, metrics: typing.List[MetricValue]
-    ):
+    def __init__(self, name: str, id: str, parent: str, metrics: typing.List[MetricValue]):
         self._name = name
         self._id = id
         self._parent_id = parent
@@ -129,18 +127,13 @@ class RemoteSparkSession(object):
         result = self._execute_and_fetch(req)
         return name
 
-    def _build_metrics(
-        self, metrics: "pb2.Response.Metrics"
-    ) -> typing.List[PlanMetrics]:
+    def _build_metrics(self, metrics: "pb2.Response.Metrics") -> typing.List[PlanMetrics]:
         return [
             PlanMetrics(
                 x.name,
                 x.plan_id,
                 x.parent,
-                [
-                    MetricValue(k, v.value, v.metric_type)
-                    for k, v in x.execution_metrics.items()
-                ],
+                [MetricValue(k, v.value, v.metric_type) for k, v in x.execution_metrics.items()],
             )
             for x in metrics.metrics
         ]

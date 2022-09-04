@@ -50,9 +50,7 @@ class SparkConnectSQLTestCase(ReusedPySparkTestCase):
         # Setup Remote Spark Session
         cls.tbl_name = f"tbl{uuid.uuid4()}".replace("-", "")
         cls.connect = RemoteSparkSession(port=15002)
-        df = cls.spark.createDataFrame(
-            [(x, f"{x}") for x in range(100)], ["id", "name"]
-        )
+        df = cls.spark.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
         # Since we might create multiple Spark sessions, we need to creata global temporary view
         # that is specifically maintained in the "global_temp" schema.
         df.write.saveAsTable(cls.tbl_name)
