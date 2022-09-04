@@ -22,16 +22,14 @@ import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -112,7 +110,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       rddSchema: StructType,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      dialect: JdbcDialect): String = {
+      dialect: JdbcDialect,
+      mode:SaveMode): String = {
     val columns = if (tableSchema.isEmpty) {
       rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
     } else {
@@ -129,7 +128,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }.mkString(",")
     }
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
-    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    mode match {
+      case SaveMode.ReplaceInto =>
+        s"REPLACE INTO $table ($columns) VALUES ($placeholders)"
+      case _ =>
+        s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    }
   }
 
   /**
@@ -874,7 +878,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JdbcOptionsInWrite): Unit = {
+      options: JdbcOptionsInWrite,
+      mode:SaveMode): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -882,7 +887,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
-    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
+    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect, mode)
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
         n, JDBCOptions.JDBC_NUM_PARTITIONS)
