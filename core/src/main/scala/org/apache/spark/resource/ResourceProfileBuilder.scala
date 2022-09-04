@@ -40,12 +40,9 @@ class ResourceProfileBuilder() {
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
   // Executor resource requests specified by users, mapped from resource name to the request.
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
-  // To create a TaskResourceProfile or a normal ResourceProfile.
-  private var _isTaskResourceProfile: Boolean = false
 
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
-  def isTaskResourceProfile: Boolean = _isTaskResourceProfile
 
   /**
    * (Java-specific) gets a Java Map of resources to TaskResourceRequest
@@ -79,15 +76,6 @@ class ResourceProfileBuilder() {
     this
   }
 
-  /**
-   * To create a [[TaskResourceProfile]]
-   * @return This ResourceProfileBuilder
-   */
-  def taskOnly(): this.type = {
-    _isTaskResourceProfile = true
-    this
-  }
-
   def clearExecutorResourceRequests(): this.type = {
     _executorResources.clear()
     this
@@ -105,7 +93,7 @@ class ResourceProfileBuilder() {
   }
 
   def build(): ResourceProfile = {
-    if (isTaskResourceProfile) {
+    if (_executorResources.isEmpty) {
       new TaskResourceProfile(taskResources)
     } else {
       new ResourceProfile(executorResources, taskResources)

@@ -94,6 +94,15 @@ class ResourceProfile(
     executorResources.get(ResourceProfile.MEMORY).map(_.amount)
   }
 
+  private[spark] def getCustomTaskResources(): Map[String, TaskResourceRequest] = {
+    taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS))
+  }
+
+  protected[spark] def getCustomExecutorResources(): Map[String, ExecutorResourceRequest] = {
+    executorResources.
+      filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
+  }
+
   /*
    * This function takes into account fractional amounts for the task resource requirement.
    * Spark only supports fractional amounts < 1 to basically allow for multiple tasks
@@ -182,8 +191,8 @@ class ResourceProfile(
     val numPartsPerResourceMap = new mutable.HashMap[String, Int]
     numPartsPerResourceMap(ResourceProfile.CORES) = 1
     val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
-    taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
-    val execResourceToCheck = ResourceProfile.getCustomExecutorResources(this)
+    taskResourcesToCheck ++= this.getCustomTaskResources()
+    val execResourceToCheck = this.getCustomExecutorResources()
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsPerResourceMap(rName) = 1
@@ -255,19 +264,35 @@ class ResourceProfile(
 }
 
 /**
- * Resource profile which only contains task resources, used for stage level task schedule when
- * dynamic allocation is disabled, tasks will be scheduled to executors with default resource
+ * Resource profile which only contains task resources, can be used for stage level task schedule
+ * when dynamic allocation is disabled, tasks will be scheduled to executors with default resource
  * profile based on task resources described by this task resource profile.
+ * And when dynamic allocation is enabled, will require new executors for this profile base on
+ * default build-in executor resources and assign tasks by resource profile id.
  *
  * @param taskResources Resource requests for tasks. Mapped from the resource
  *                      name (e.g., cores, memory, CPU) to its specific request.
  */
 @Evolving
 @Since("3.4.0")
-class TaskResourceProfile(override val taskResources: Map[String, TaskResourceRequest])
-  extends ResourceProfile(
-    ResourceProfile.getOrCreateDefaultProfile(SparkEnv.get.conf).executorResources,
-    taskResources) {
+class TaskResourceProfile (
+    override val taskResources: Map[String, TaskResourceRequest])
+  extends ResourceProfile(Map.empty, taskResources) {
+
+  override protected[spark] def getCustomExecutorResources():
+      Map[String, ExecutorResourceRequest] = {
+    if (SparkEnv.get == null) {
+      throw new IllegalStateException("SparkEnv should not be empty.")
+    }
+    val sparkConf = SparkEnv.get.conf
+
+    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
+      ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+        .getCustomExecutorResources()
+    } else {
+      super.getCustomExecutorResources()
+    }
+  }
 }
 
 object ResourceProfile extends Logging {
@@ -408,17 +433,6 @@ object ResourceProfile extends Logging {
       defaultProfile = None
       defaultProfileExecutorResources = None
     }
-  }
-
-  private[spark] def getCustomTaskResources(
-      rp: ResourceProfile): Map[String, TaskResourceRequest] = {
-    rp.taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS)).toMap
-  }
-
-  private[spark] def getCustomExecutorResources(
-      rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
-    rp.executorResources.
-      filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k)).toMap
   }
 
   /*

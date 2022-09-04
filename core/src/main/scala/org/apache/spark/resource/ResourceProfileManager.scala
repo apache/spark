@@ -59,14 +59,15 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
   /**
-   * If we use anything except the default profile, it's only supported on YARN and Kubernetes
-   * with dynamic allocation enabled. Throw an exception if not supported.
+   * If we use anything except the default profile, it's supported on YARN, Kubernetes and
+   * Standalone with dynamic allocation enabled, and task resource profile with dynamic allocation
+   * disabled on Standalone. Throw an exception if not supported.
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
-    if (rp.isInstanceOf[TaskResourceProfile]) {
-      if ((notRunningUnitTests || testExceptionThrown) && (!isStandalone || dynamicEnabled)) {
+    if (rp.isInstanceOf[TaskResourceProfile] && !dynamicEnabled) {
+      if ((notRunningUnitTests || testExceptionThrown) && !isStandalone) {
         throw new SparkException("TaskResourceProfiles are only supported for Standalone " +
-          "cluster with dynamic allocation disabled.")
+          "cluster for now when dynamic allocation is disabled.")
       }
     } else {
       val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -103,7 +104,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    *
    * Here are the rules:
    * 1. Tasks with [[TaskResourceProfile]] can be scheduled to executors with
-   *    default resource profile.
+   *    default resource profile when dynamic allocation is disabled.
    * 2. Other tasks can be scheduled to executors where resource profile exactly matches.
    */
   private[spark] def canBeScheduled(taskRpId: Int, executorRpId: Int): Boolean = {
@@ -112,7 +113,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       "Tasks and executors must have valid resource profile id")
     val taskRp = resourceProfileFromId(taskRpId)
 
-    taskRpId == executorRpId || (taskRp.isInstanceOf[TaskResourceProfile] &&
+    taskRpId == executorRpId || (!dynamicEnabled && taskRp.isInstanceOf[TaskResourceProfile] &&
       executorRpId == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 

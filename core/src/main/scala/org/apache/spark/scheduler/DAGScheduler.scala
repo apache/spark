@@ -573,10 +573,6 @@ private[spark] class DAGScheduler(
   private[scheduler] def mergeResourceProfiles(
       r1: ResourceProfile,
       r2: ResourceProfile): ResourceProfile = {
-    // Resource profiles to merge must have the same class type.
-    assert(r1.getClass == r2.getClass,
-      "Resource profiles to merge must have the same class type, " +
-        "but got ${r1.getClass} and ${r2.getClass}")
     val mergedExecKeys = r1.executorResources ++ r2.executorResources
     val mergedExecReq = mergedExecKeys.map { case (k, v) =>
         val larger = r1.executorResources.get(k).map( x =>
@@ -590,7 +586,7 @@ private[spark] class DAGScheduler(
       k -> larger
     }
 
-    if (r1.isInstanceOf[TaskResourceProfile]) {
+    if (mergedExecReq.isEmpty) {
       new TaskResourceProfile(mergedTaskReq)
     } else {
       new ResourceProfile(mergedExecReq, mergedTaskReq)

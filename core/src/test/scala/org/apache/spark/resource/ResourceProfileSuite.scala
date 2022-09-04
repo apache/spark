@@ -196,6 +196,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   test("tasks and limit resource for task resource profile") {
     val sparkConf = new SparkConf().setMaster("spark://testing")
       .set(EXECUTOR_CORES, 2)
+      .set("spark.dynamicAllocation.enabled", "false")
       .set("spark.executor.resource.gpu.amount", "2")
       .set("spark.executor.resource.gpu.discoveryScript", "myscript")
 
@@ -203,7 +204,6 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       val rpBuilder1 = new ResourceProfileBuilder()
       val rp1 = rpBuilder1
         .require(new TaskResourceRequests().resource("gpu", 1))
-        .taskOnly()
         .build()
       assert(rp1.isInstanceOf[TaskResourceProfile])
       assert(rp1.limitingResource(sparkConf) == ResourceProfile.CPUS)
@@ -213,7 +213,6 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       val rpBuilder2 = new ResourceProfileBuilder()
       val rp2 = rpBuilder2
         .require(new TaskResourceRequests().resource("gpu", 2))
-        .taskOnly()
         .build()
       assert(rp1.isInstanceOf[TaskResourceProfile])
       assert(rp2.limitingResource(sparkConf) == "gpu")
@@ -289,21 +288,19 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   }
 
   test("test TaskResourceProfiles equal") {
-    withMockSparkEnv(new SparkConf()) {
-      val rprofBuilder = new ResourceProfileBuilder()
-      val taskReq = new TaskResourceRequests().resource("gpu", 1)
-      rprofBuilder.require(taskReq)
-      val rprof = rprofBuilder.build
+    val rprofBuilder = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    rprofBuilder.require(taskReq)
+    val rprof = rprofBuilder.build()
 
-      val taskReq1 = new TaskResourceRequests().resource("gpu", 1)
-      val rprof1 = new TaskResourceProfile(taskReq1.requests)
-      assert(!rprof.resourcesEqual(rprof1),
-        "resource profiles having different types should not equal")
+    val taskReq1 = new TaskResourceRequests().resource("gpu", 1)
+    val rprof1 = new ResourceProfile(Map.empty, taskReq1.requests)
+    assert(!rprof.resourcesEqual(rprof1),
+      "resource profiles having different types should not equal")
 
-      val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
-      val rprof2 = new TaskResourceProfile(taskReq2.requests)
-      assert(rprof1.resourcesEqual(rprof2), "task resource profile resourcesEqual not working")
-    }
+    val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
+    val rprof2 = new TaskResourceProfile(taskReq2.requests)
+    assert(rprof.resourcesEqual(rprof2), "task resource profile resourcesEqual not working")
   }
 
   test("Test ExecutorResourceRequests memory helpers") {
@@ -363,7 +360,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     // Update this if new resource type added
     assert(ResourceProfile.allSupportedExecutorResources.size === 5,
       "Executor resources should have 5 supported resources")
-    assert(ResourceProfile.getCustomExecutorResources(rprof.build).size === 1,
+    assert(rprof.build().getCustomExecutorResources().size === 1,
       "Executor resources should have 1 custom resource")
   }
 
@@ -376,7 +373,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       .memoryOverhead("2048").pysparkMemory("1024").offHeapMemory("3072")
     rprof.require(taskReq).require(eReq)
 
-    assert(ResourceProfile.getCustomTaskResources(rprof.build).size === 1,
+    assert(rprof.build().getCustomTaskResources().size === 1,
       "Task resources should have 1 custom resource")
   }
 
