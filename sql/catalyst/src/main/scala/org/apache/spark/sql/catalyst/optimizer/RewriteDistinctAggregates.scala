@@ -213,10 +213,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
   }
 
-  def rewrite(aRaw: Aggregate): Aggregate = {
+  def rewrite(aOrig: Aggregate): Aggregate = {
     // make children of distinct aggregations the same if they are different
-    // only because of superficial differences.
-    val a = getSanitizedAggregate(aRaw)
+    // only because of superficial reasons, e.g.:
+    //   "1 + col1" vs "col1 + 1", both become "1 + col1"
+    // or
+    //   "col1" vs "Col1", both become "col1"
+    val a = reduceDistinctAggregateGroups(aOrig)
 
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
@@ -247,6 +250,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
+
+      def patchAggregateFunctionChildren(
+          af: AggregateFunction)(
+          attrs: Expression => Option[Expression]): AggregateFunction = {
+        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+        af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
+      }
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
@@ -409,14 +419,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }}
   }
 
-  private def patchAggregateFunctionChildren(
-      af: AggregateFunction)(
-      attrs: Expression => Option[Expression]): AggregateFunction = {
-    val newChildren = af.children.map(c => attrs(c).getOrElse(c))
-    af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
-  }
-
-  private def getSanitizedAggregate(a: Aggregate): Aggregate = {
+  private def reduceDistinctAggregateGroups(a: Aggregate): Aggregate = {
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
 
@@ -435,6 +438,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     val funcChildrenLookup = funcChildren.map { e =>
       (e, funcChildren.find(fc => e.semanticEquals(fc)).getOrElse(e))
     }.toMap
+
+    val funcChildrenPatched = funcChildren.map { e =>
+      funcChildrenLookup.getOrElse(e, e)
+    }
+
+    if (funcChildren.distinct.size == funcChildrenPatched.distinct.size) {
+      return a;
+    }
 
     val patchedAggExpressions = a.aggregateExpressions.map { e =>
       e.transformDown {
