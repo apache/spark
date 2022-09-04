@@ -718,7 +718,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
-  "sqlState" : "0A000"
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "SELECT TRANSFORM(DISTINCT b, a, c)\n  USING 'cat' AS (a, b, c)\nFROM script_trans\nWHERE a <= 4"
+  } ]
 }
 
 
@@ -734,7 +741,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "TRANSFORM_DISTINCT_ALL",
-  "sqlState" : "0A000"
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT TRANSFORM(ALL b, a, c)\n  USING 'cat' AS (a, b, c)\nFROM script_trans\nWHERE a <= 4"
+  } ]
 }
 
 
