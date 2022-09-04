@@ -28,13 +28,30 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       errorClass: String,
       errorSubClass: Option[String] = None,
       sqlState: String,
-      parameters: Map[String, String] = Map.empty): Unit = {
+      parameters: Map[String, String] = Map.empty,
+      context: QueryContext): Unit = {
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
       errorClass = errorClass,
       errorSubClass = errorSubClass,
       sqlState = Some(sqlState),
-      parameters = parameters)
+      parameters = parameters,
+      queryContext = Array(context))
+  }
+
+  def validateParsingError(
+      sqlText: String,
+      errorClass: String,
+      errorSubClass: Option[String],
+      sqlState: String,
+      parameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      errorClass = errorClass,
+      errorSubClass = errorSubClass,
+      sqlState = Some(sqlState),
+      parameters = parameters,
+      queryContext = Array.empty)
   }
 
   case class ExpectedContext(

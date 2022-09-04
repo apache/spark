@@ -322,7 +322,8 @@ abstract class SparkFunSuite
       assert(expectedParameters === parameters)
     }
     val actualQueryContext = exception.getQueryContext()
-    assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
+    assert(actualQueryContext.length === queryContext.length,
+      s"Invalid length of the query context: ${actualQueryContext.mkString("\n")}")
     actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
       assert(actual.objectType() === expected.objectType(), "Invalid objectType of a query context")
       assert(actual.objectName() === expected.objectName(), "Invalid objectName of a query context")
