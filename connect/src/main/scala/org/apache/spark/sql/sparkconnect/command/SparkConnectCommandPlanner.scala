@@ -20,12 +20,14 @@ package org.apache.spark.sql.sparkconnect.command
 import com.google.common.collect.{Lists, Maps}
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.{proto => proto}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
+@Experimental
 case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   def process(): Unit = {

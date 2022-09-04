@@ -30,6 +30,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{
@@ -49,6 +50,7 @@ import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
  *
  * @param debug delegates debug behavior to the handlers.
  */
+@Experimental
 class SparkConnectService(debug: Boolean)
     extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
   override def executePlan(request: Request, responseObserver: StreamObserver[Response]): Unit =
@@ -90,6 +92,7 @@ class SparkConnectService(debug: Boolean)
  * @param userId
  * @param session
  */
+@Experimental
 case class SessionHolder(userId: String, session: SparkSession) {}
 
 /**
@@ -98,6 +101,7 @@ case class SessionHolder(userId: String, session: SparkSession) {}
  * Used to start the overall SparkConnect service and provides global state to manage the different
  * SparkSession from different users connecting to the cluster.
  */
+@Experimental
 object SparkConnectService {
 
   // Type alias for the SessionCacheKey. Right now this is a String but allows us to switch to a
@@ -174,6 +178,7 @@ object SparkConnectService {
  * it as a Driver Plugin. To enable Spark Connect, simply make sure that the appropriate JAR is
  * available in the CLASSPATH and the driver plugin is configured to load this class.
  */
+@Experimental
 class SparkConnectPlugin extends SparkPlugin {
 
   /**

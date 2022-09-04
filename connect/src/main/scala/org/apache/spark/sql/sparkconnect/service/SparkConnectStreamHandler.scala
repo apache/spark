@@ -21,6 +21,7 @@ import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Request, Response}
 import org.apache.spark.internal.Logging
@@ -36,6 +37,7 @@ import org.apache.spark.sql.sparkconnect.command.SparkConnectCommandPlanner
 import org.apache.spark.sql.sparkconnect.planner.SparkConnectPlanner
 import org.apache.spark.sql.util.ArrowUtils
 
+@Experimental
 class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) extends Logging {
 
   def handle(v: Request): Unit = {
