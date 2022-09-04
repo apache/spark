@@ -42,12 +42,13 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       )
 
       // We might have introduces non-deterministic grouping expression
-      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
-        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
-      } else {
-        newAggregate
-      }
-
+      val removeNoDeterministic =
+        if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
+          PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
+        } else {
+          newAggregate
+        }
+      PullOutGroupingExpressions.applyLocally(removeNoDeterministic)
     case agg @ Aggregate(groupingExps, _, child)
         if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
