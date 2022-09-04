@@ -89,7 +89,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
       common: Option[proto.RelationCommon]): LogicalPlan = {
     val baseRelation = rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala)
+        val child = UnresolvedRelation(rel.getNamedTable.getPartsList.asScala.toSeq)
         if (common.nonEmpty && common.get.getAlias.nonEmpty) {
           SubqueryAlias(identifier = common.get.getAlias, child = child)
         } else {
@@ -115,7 +115,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     } else {
       rel.getExpressionsList.asScala.map(transformExpression).map(UnresolvedAlias(_))
     }
-    val project = logical.Project(projectList = projection, child = baseRel)
+    val project = logical.Project(projectList = projection.toSeq, child = baseRel)
     if (common.nonEmpty && common.get.getAlias.nonEmpty) {
       logical.SubqueryAlias(identifier = common.get.getAlias, child = project)
     } else {
@@ -124,7 +124,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
   }
 
   private def transformUnresolvedExpression(exp: proto.Expression): UnresolvedAttribute = {
-    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala)
+    UnresolvedAttribute(exp.getUnresolvedAttribute.getPartsList.asScala.toSeq)
   }
 
   private def transformExpression(exp: proto.Expression): Expression = {
@@ -191,7 +191,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
         expressions.EqualTo(
           transformExpression(fun.getArguments(0)),
           transformExpression(fun.getArguments(1)))
-      case _ => lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression))
+      case _ => lookupFunction(funName, fun.getArgumentsList.asScala.map(transformExpression).toSeq)
     }
   }
 
@@ -223,7 +223,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     logical.Sort(
       child = transformRelation(rel.getInput),
       global = true,
-      order = rel.getSortFieldsList.asScala.map(transformSortOrderExpression))
+      order = rel.getSortFieldsList.asScala.map(transformSortOrderExpression).toSeq)
   }
 
   private def transformSortOrderExpression(so: proto.Sort.SortField): expressions.SortOrder = {
@@ -255,8 +255,9 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
     logical.Aggregate(
       child = transformRelation(rel.getInput),
-      groupingExpressions = ge,
-      aggregateExpressions = rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge)
+      groupingExpressions = ge.toSeq,
+      aggregateExpressions = (
+        rel.getMeasuresList.asScala.map(transformAggregateExpression) ++ ge).toSeq)
   }
 
   private def transformAggregateExpression(
@@ -265,7 +266,7 @@ case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
     UnresolvedAlias(
       UnresolvedFunction(
         name = fun,
-        arguments = exp.getFunction.getArgumentsList.asScala.map(transformExpression),
+        arguments = exp.getFunction.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = false))
   }
 
