@@ -263,14 +263,14 @@ class Sort(LogicalPlan):
             sf = proto.Sort.SortField()
             sf.expression.CopyFrom(so.ref.to_plan(session))
             sf.direction = (
-                proto.Sort.SortDirection.SORT_ASCENDING
+                proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
                 if so.ascending
-                else proto.Sort.SortDirection.SORT_DESCENDING
+                else proto.Sort.SortDirection.SORT_DIRECTION_DESCENDING
             )
             sf.nulls = (
-                proto.Sort.SortNulls.NULLS_FIRST
+                proto.Sort.SortNulls.SORT_NULLS_FIRST
                 if not so.nullsLast
-                else proto.Sort.SortNulls.NULLS_LAST
+                else proto.Sort.SortNulls.SORT_NULLS_LAST
             )
             return sf
         else:
@@ -280,8 +280,8 @@ class Sort(LogicalPlan):
                 sf.expression.CopyFrom(cast(ColumnRef, col).to_plan(session))
             else:
                 sf.expression.CopyFrom(self.unresolved_attr(cast(str, col)))
-            sf.direction = proto.Sort.SortDirection.SORT_ASCENDING
-            sf.nulls = proto.Sort.SortNulls.NULLS_LAST
+            sf.direction = proto.Sort.SortDirection.SORT_DIRECTION_ASCENDING
+            sf.nulls = proto.Sort.SortNulls.SORT_NULLS_LAST
             return sf
 
     def plan(self, session: "RemoteSparkSession") -> proto.Relation:

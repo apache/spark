@@ -472,6 +472,20 @@ pyspark_sql = Module(
     ],
 )
 
+pyspark_sql = Module(
+    name="pyspark-sql-connect",
+    dependencies=[pyspark_core, hive, avro],
+    source_file_regexes=["python/pyspark/sql/connect"],
+    python_test_goals=[
+        # doctests
+        # No doctests yet.
+        # unittests
+        "pyspark.sql.tests.connect.test_column_expressions",
+        "pyspark.sql.tests.connect.test_plan_only",
+        "pyspark.sql.tests.connect.test_select_ops",
+        "pyspark.sql.tests.connect.test_spark_connect",
+    ],
+)
 
 pyspark_resource = Module(
     name="pyspark-resource",
