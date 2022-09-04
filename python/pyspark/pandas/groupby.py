@@ -650,12 +650,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         assert ddof in (0, 1)
 
         # Raise the TypeError when all aggregation columns are of unaccepted data types
-        all_unaccepted = True
-        for _agg_col in self._agg_columns:
-            if isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
-                all_unaccepted = False
-                break
-        if all_unaccepted:
+        any_accepted = any(
+            isinstance(_agg_col.spark.data_type, (NumericType, BooleanType))
+            for _agg_col in self._agg_columns
+        )
+        if not any_accepted:
             raise TypeError(
                 "Unaccepted data types of aggregation columns; numeric or bool expected."
             )
@@ -826,6 +825,75 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         return self._prepare_return(DataFrame(internal))
+
+    def sem(self, ddof: int = 1) -> FrameLike:
+        """
+        Compute standard error of the mean of groups, excluding missing values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        ddof : int, default 1
+            Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
+            where N represents the number of elements.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
+        ...                    "C": [3, None, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").sem()
+                  B         C
+        A
+        1  0.333333  0.333333
+        2       NaN       NaN
+
+        >>> df.groupby("D").sem(ddof=1)
+             A    B    C
+        D
+        a  0.0  0.0  0.5
+        b  0.5  0.0  NaN
+
+        >>> df.B.groupby(df.A).sem()
+        A
+        1    0.333333
+        2         NaN
+        Name: B, dtype: float64
+
+        See Also
+        --------
+        pyspark.pandas.Series.sem
+        pyspark.pandas.DataFrame.sem
+        """
+        if ddof not in [0, 1]:
+            raise TypeError("ddof must be 0 or 1")
+
+        # Raise the TypeError when all aggregation columns are of unaccepted data types
+        any_accepted = any(
+            isinstance(_agg_col.spark.data_type, (NumericType, BooleanType))
+            for _agg_col in self._agg_columns
+        )
+        if not any_accepted:
+            raise TypeError(
+                "Unaccepted data types of aggregation columns; numeric or bool expected."
+            )
+
+        if ddof == 0:
+
+            def sem(col: Column) -> Column:
+                return F.stddev_pop(col) / F.sqrt(F.count(col))
+
+        else:
+
+            def sem(col: Column) -> Column:
+                return F.stddev_samp(col) / F.sqrt(F.count(col))
+
+        return self._reduce_for_stat_function(
+            sem,
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+        )
 
     def all(self, skipna: bool = True) -> FrameLike:
         """

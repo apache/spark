@@ -1321,9 +1321,19 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.groupby("A")[["C"]].std()
 
+        with self.assertRaisesRegex(
+            TypeError, "Unaccepted data types of aggregation columns; numeric or bool expected."
+        ):
+            psdf.groupby("A")[["C"]].sem()
+
         self.assert_eq(
             psdf.groupby("A").std().sort_index(),
             pdf.groupby("A").std().sort_index(),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.groupby("A").sem().sort_index(),
+            pdf.groupby("A").sem().sort_index(),
             check_exact=False,
         )
 
@@ -3053,6 +3063,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 pdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
                 psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
+                check_exact=False,
+            )
+            # sem
+            self.assert_eq(
+                pdf.groupby("a").sem(ddof=ddof).sort_index(),
+                psdf.groupby("a").sem(ddof=ddof).sort_index(),
+                check_exact=False,
+            )
+            self.assert_eq(
+                pdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
+                psdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
                 check_exact=False,
             )
 

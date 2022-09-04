@@ -2189,7 +2189,7 @@ class Frame(object, metaclass=ABCMeta):
                 return F.stddev_samp(spark_column)
 
         def sem(psser: "Series") -> Column:
-            return std(psser) / pow(Frame._count_expr(psser), 0.5)
+            return std(psser) / F.sqrt(Frame._count_expr(psser))
 
         return self._reduce_for_stat_function(
             sem,
