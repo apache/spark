@@ -1,4 +1,3 @@
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,13 +21,13 @@ import com.google.protobuf.{ByteString, DynamicMessage, Message}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, StructFilters}
-// import org.apache.spark.sql.catalyst.OrderedFilters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters,
+  OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf
-// import org.apache.spark.sql.sources.{EqualTo, Not}
+import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -122,36 +121,34 @@ class ProtoCatalystDataConversionSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-32346: filter push-down to Avro deserializer") {
+  test("filter push-down to Proto deserializer") {
 
     val testFileDesc = testFile("protobuf/catalyst_types.desc").replace("file:/", "/")
-    val sqlSchema = new StructType().add("age", "int").add("name", "string")
+    val sqlSchema = new StructType()
+      .add("name", "string")
+      .add("age", "int")
 
     val descriptor = ProtoUtils.buildDescriptor(testFileDesc, "Person")
-
     val dynamicMessage = DynamicMessage.newBuilder(descriptor)
       .setField(descriptor.findFieldByName("name"), "Maxim")
       .setField(descriptor.findFieldByName("age"), 39)
       .build()
 
     val expectedRow = Some(InternalRow(UTF8String.fromString("Maxim"), 39))
-
     checkDeserialization(testFileDesc, "Person", dynamicMessage, expectedRow)
-
-    /*
     checkDeserialization(
-      filePath,
+      testFileDesc,
       "Person",
-      person,
+      dynamicMessage,
       expectedRow,
       new OrderedFilters(Seq(EqualTo("age", 39)), sqlSchema))
 
     checkDeserialization(
-      filePath,
+      testFileDesc,
       "Person",
-      person,
+      dynamicMessage,
       None,
-      new OrderedFilters(Seq(Not(EqualTo("name", "Maxim"))), sqlSchema))*/
+      new OrderedFilters(Seq(Not(EqualTo("name", "Maxim"))), sqlSchema))
   }
 
   test("ProtoDeserializer with binary type") {
