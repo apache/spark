@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, RoundingMode}
+import java.math.{BigDecimal => JavaBigDecimal, BigInteger}
 
 import scala.util.Try
 
@@ -38,31 +38,53 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note, for values between -1.0 and 1.0, precision digits are only counted after dot.
  */
 @Unstable
-final class Decimal extends Ordered[Decimal] with Serializable {
+final class Decimal(
+    decimal128Enabled: Boolean, initEnabled: Boolean) extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
-  private var decimalVal: BigDecimal = null
-  private var longVal: Long = 0L
-  private var _precision: Int = 1
-  private var _scale: Int = 0
+  private var jdkDecimalOperation: JDKDecimalOperation = null
+  private var decimal128Operation: Decimal128Operation = null
 
-  def precision: Int = _precision
-  def scale: Int = _scale
+  def this(decimal128Enabled: Boolean) = this(decimal128Enabled, true)
+
+  def this() = this(SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "Int128")
+
+  if (initEnabled) initDecimalOperation(decimal128Enabled)
+
+  def initDecimalOperation(flag: Boolean): Unit = if (flag) {
+    decimal128Operation = new Decimal128Operation()
+  } else {
+    jdkDecimalOperation = new JDKDecimalOperation()
+  }
+
+  def decimalOperation: DecimalOperation[_] = if (decimal128Enabled) {
+    decimal128Operation
+  } else {
+    jdkDecimalOperation
+  }
+
+  def precision: Int = if (decimal128Enabled) {
+    decimal128Operation.precision
+  } else {
+    jdkDecimalOperation.precision
+  }
+
+  def scale: Int = if (decimal128Enabled) {
+    decimal128Operation.scale
+  } else {
+    jdkDecimalOperation.scale
+  }
 
   /**
    * Set this Decimal to the given Long. Will have precision 20 and scale 0.
    */
   def set(longVal: Long): Decimal = {
-    if (longVal <= -POW_10(MAX_LONG_DIGITS) || longVal >= POW_10(MAX_LONG_DIGITS)) {
-      // We can't represent this compactly as a long without risking overflow
-      this.decimalVal = BigDecimal(longVal)
-      this.longVal = 0L
+    if (decimal128Enabled) {
+      decimal128Operation.set(longVal)
     } else {
-      this.decimalVal = null
-      this.longVal = longVal
+      jdkDecimalOperation.set(longVal)
     }
-    this._precision = 20
-    this._scale = 0
+
     this
   }
 
@@ -70,10 +92,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given Int. Will have precision 10 and scale 0.
    */
   def set(intVal: Int): Decimal = {
-    this.decimalVal = null
-    this.longVal = intVal
-    this._precision = 10
-    this._scale = 0
+    if (decimal128Enabled) {
+      decimal128Operation.set(intVal)
+    } else {
+      jdkDecimalOperation.set(intVal)
+    }
+
     this
   }
 
@@ -93,23 +117,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def setOrNull(unscaled: Long, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    if (unscaled <= -POW_10(MAX_LONG_DIGITS) || unscaled >= POW_10(MAX_LONG_DIGITS)) {
-      // We can't represent this compactly as a long without risking overflow
-      if (precision < 19) {
-        return null  // Requested precision is too low to represent this value
-      }
-      this.decimalVal = BigDecimal(unscaled, scale)
-      this.longVal = 0L
+    val result = if (decimal128Enabled) {
+      decimal128Operation.setOrNull(unscaled, precision, scale)
     } else {
-      val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
-      if (unscaled <= -p || unscaled >= p) {
-        return null  // Requested precision is too low to represent this value
-      }
-      this.decimalVal = null
-      this.longVal = unscaled
+      jdkDecimalOperation.setOrNull(unscaled, precision, scale)
     }
-    this._precision = precision
-    this._scale = scale
+    if (result == null) {
+      return null
+    }
+
     this
   }
 
@@ -118,14 +134,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
-    if (decimalVal.precision > precision) {
-      throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
-        decimalVal.precision, precision)
+    if (decimal128Enabled) {
+      decimal128Operation.set(decimal, precision, scale)
+    } else {
+      jdkDecimalOperation.set(decimal, precision, scale)
     }
-    this.longVal = 0L
-    this._precision = precision
-    this._scale = scale
+
     this
   }
 
@@ -133,24 +147,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigDecimal value, inheriting its precision and scale.
    */
   def set(decimal: BigDecimal): Decimal = {
-    this.decimalVal = decimal
-    this.longVal = 0L
-    if (decimal.precision < decimal.scale) {
-      // For Decimal, we expect the precision is equal to or large than the scale, however,
-      // in BigDecimal, the digit count starts from the leftmost nonzero digit of the exact
-      // result. For example, the precision of 0.01 equals to 1 based on the definition, but
-      // the scale is 2. The expected precision should be 2.
-      this._precision = decimal.scale
-      this._scale = decimal.scale
-    } else if (decimal.scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
-      this._precision = decimal.precision - decimal.scale
-      this._scale = 0
-      // set scale to 0 to correct unscaled value
-      this.decimalVal = decimal.setScale(0)
+    if (decimal128Enabled) {
+      decimal128Operation.set(decimal)
     } else {
-      this._precision = decimal.precision
-      this._scale = decimal.scale
+      jdkDecimalOperation.set(decimal)
     }
+
     this
   }
 
@@ -161,93 +163,76 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
    */
   def set(bigintval: BigInteger): Decimal = {
-    try {
-      this.decimalVal = null
-      this.longVal = bigintval.longValueExact()
-      this._precision = DecimalType.MAX_PRECISION
-      this._scale = 0
-      this
-    } catch {
-      case _: ArithmeticException =>
-        set(BigDecimal(bigintval))
+    if (decimal128Enabled) {
+      decimal128Operation.set(bigintval)
+    } else {
+      jdkDecimalOperation.set(bigintval)
     }
+
+    this
   }
 
   /**
    * Set this Decimal to the given Decimal value.
    */
   def set(decimal: Decimal): Decimal = {
-    this.decimalVal = decimal.decimalVal
-    this.longVal = decimal.longVal
-    this._precision = decimal._precision
-    this._scale = decimal._scale
+    if (decimal128Enabled) {
+      decimal128Operation.set(decimal.decimal128Operation)
+    } else {
+      jdkDecimalOperation.set(decimal.jdkDecimalOperation)
+    }
+
     this
   }
 
-  def toBigDecimal: BigDecimal = {
-    if (decimalVal.ne(null)) {
-      decimalVal
-    } else {
-      BigDecimal(longVal, _scale)
-    }
+  def toBigDecimal: BigDecimal = if (decimal128Enabled) {
+    decimal128Operation.toBigDecimal
+  } else {
+    jdkDecimalOperation.toBigDecimal
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = {
-    if (decimalVal.ne(null)) {
-      decimalVal.underlying()
-    } else {
-      java.math.BigDecimal.valueOf(longVal, _scale)
-    }
+  def toJavaBigDecimal: java.math.BigDecimal = if (decimal128Enabled) {
+    decimal128Operation.toJavaBigDecimal
+  } else {
+    jdkDecimalOperation.toJavaBigDecimal
   }
 
-  def toScalaBigInt: BigInt = {
-    if (decimalVal.ne(null)) {
-      decimalVal.toBigInt
-    } else {
-      BigInt(actualLongVal)
-    }
+  def toScalaBigInt: BigInt = if (decimal128Enabled) {
+    decimal128Operation.toScalaBigInt
+  } else {
+    jdkDecimalOperation.toScalaBigInt
   }
 
-  def toJavaBigInteger: java.math.BigInteger = {
-    if (decimalVal.ne(null)) {
-      decimalVal.underlying().toBigInteger()
-    } else {
-      java.math.BigInteger.valueOf(actualLongVal)
-    }
+  def toJavaBigInteger: java.math.BigInteger = if (decimal128Enabled) {
+    decimal128Operation.toJavaBigInteger
+  } else {
+    jdkDecimalOperation.toJavaBigInteger
   }
 
-  def toUnscaledLong: Long = {
-    if (decimalVal.ne(null)) {
-      decimalVal.underlying().unscaledValue().longValueExact()
-    } else {
-      longVal
-    }
+  def toUnscaledLong: Long = if (decimal128Enabled) {
+    decimal128Operation.toUnscaledLong
+  } else {
+    jdkDecimalOperation.toUnscaledLong
   }
 
   override def toString: String = toBigDecimal.toString()
 
   def toPlainString: String = toJavaBigDecimal.toPlainString
 
-  def toDebugString: String = {
-    if (decimalVal.ne(null)) {
-      s"Decimal(expanded, $decimalVal, $precision, $scale)"
-    } else {
-      s"Decimal(compact, $longVal, $precision, $scale)"
-    }
+  def toDebugString: String = if (decimal128Enabled) {
+    decimal128Operation.toDebugString
+  } else {
+    jdkDecimalOperation.toDebugString
   }
 
   def toDouble: Double = toBigDecimal.doubleValue
 
   def toFloat: Float = toBigDecimal.floatValue
 
-  private def actualLongVal: Long = longVal / POW_10(_scale)
-
-  def toLong: Long = {
-    if (decimalVal.eq(null)) {
-      actualLongVal
-    } else {
-      decimalVal.longValue
-    }
+  def toLong: Long = if (decimal128Enabled) {
+    decimal128Operation.toLong
+  } else {
+    jdkDecimalOperation.toLong
   }
 
   def toInt: Int = toLong.toInt
@@ -260,63 +245,46 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return the Byte value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Byte type.
    */
-  private[sql] def roundToByte(): Byte =
-    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
+  private[sql] def roundToByte(): Byte = if (decimal128Enabled) {
+    decimal128Operation.roundToNumeric[Byte](
+      ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
+  } else {
+    jdkDecimalOperation.roundToNumeric[Byte](
+      ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
+  }
 
   /**
    * @return the Short value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Short type.
    */
-  private[sql] def roundToShort(): Short =
-    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
+  private[sql] def roundToShort(): Short = if (decimal128Enabled) {
+    decimal128Operation.roundToNumeric[Short](
+      ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
+  } else {
+    jdkDecimalOperation.roundToNumeric[Short](
+      ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
+  }
 
   /**
    * @return the Int value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Int type.
    */
-  private[sql] def roundToInt(): Int =
-    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
-
-  private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
-      (f1: Long => T) (f2: Double => T): T = {
-    if (decimalVal.eq(null)) {
-      val numericVal = f1(actualLongVal)
-      if (actualLongVal == numericVal) {
-        numericVal
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
-      }
-    } else {
-      val doubleVal = decimalVal.toDouble
-      if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
-        f2(doubleVal)
-      } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
-      }
-    }
+  private[sql] def roundToInt(): Int = if (decimal128Enabled) {
+    decimal128Operation.roundToNumeric[Int](
+      IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
+  } else {
+    jdkDecimalOperation.roundToNumeric[Int](
+      IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
   }
 
   /**
    * @return the Long value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Long type.
    */
-  private[sql] def roundToLong(): Long = {
-    if (decimalVal.eq(null)) {
-      actualLongVal
-    } else {
-      try {
-        // We cannot store Long.MAX_VALUE as a Double without losing precision.
-        // Here we simply convert the decimal to `BigInteger` and use the method
-        // `longValueExact` to make sure the range check is accurate.
-        decimalVal.bigDecimal.toBigInteger.longValueExact()
-      } catch {
-        case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(
-            this, DecimalType(this.precision, this.scale), LongType)
-      }
-    }
+  private[sql] def roundToLong(): Long = if (decimal128Enabled) {
+    decimal128Operation.roundToLong()
+  } else {
+    jdkDecimalOperation.roundToLong()
   }
 
   /**
@@ -361,90 +329,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private[sql] def changePrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
-    // fast path for UnsafeProjection
-    if (precision == this.precision && scale == this.scale) {
-      return true
-    }
-    DecimalType.checkNegativeScale(scale)
-    var lv = longVal
-    var dv = decimalVal
-    // First, update our lv if we can, or transfer over to using a BigDecimal
-    if (dv.eq(null)) {
-      if (scale < _scale) {
-        // Easier case: we just need to divide our scale down
-        val diff = _scale - scale
-        val pow10diff = POW_10(diff)
-        // % and / always round to 0
-        val droppedDigits = lv % pow10diff
-        lv /= pow10diff
-        roundMode match {
-          case ROUND_FLOOR =>
-            if (droppedDigits < 0) {
-              lv += -1L
-            }
-          case ROUND_CEILING =>
-            if (droppedDigits > 0) {
-              lv += 1L
-            }
-          case ROUND_HALF_UP =>
-            if (math.abs(droppedDigits) * 2 >= pow10diff) {
-              lv += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case ROUND_HALF_EVEN =>
-            val doubled = math.abs(droppedDigits) * 2
-            if (doubled > pow10diff || doubled == pow10diff && lv % 2 != 0) {
-              lv += (if (droppedDigits < 0) -1L else 1L)
-            }
-          case _ =>
-            throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
-        }
-      } else if (scale > _scale) {
-        // We might be able to multiply lv by a power of 10 and not overflow, but if not,
-        // switch to using a BigDecimal
-        val diff = scale - _scale
-        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
-        if (diff <= MAX_LONG_DIGITS && lv > -p && lv < p) {
-          // Multiplying lv by POW_10(diff) will still keep it below MAX_LONG_DIGITS
-          lv *= POW_10(diff)
-        } else {
-          // Give up on using Longs; switch to BigDecimal, which we'll modify below
-          dv = BigDecimal(lv, _scale)
-        }
-      }
-      // In both cases, we will check whether our precision is okay below
-    }
-
-    if (dv.ne(null)) {
-      // We get here if either we started with a BigDecimal, or we switched to one because we would
-      // have overflowed our Long; in either case we must rescale dv to the new scale.
-      dv = dv.setScale(scale, roundMode)
-      if (dv.precision > precision) {
-        return false
-      }
-    } else {
-      // We're still using Longs, but we should check whether we match the new precision
-      val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
-      if (lv <= -p || lv >= p) {
-        // Note that we shouldn't have been able to fix this by switching to BigDecimal
-        return false
-      }
-    }
-    decimalVal = dv
-    longVal = lv
-    _precision = precision
-    _scale = scale
-    true
+      roundMode: BigDecimal.RoundingMode.Value): Boolean = if (decimal128Enabled) {
+    decimal128Operation.changePrecision(precision, scale, roundMode)
+  } else {
+    jdkDecimalOperation.changePrecision(precision, scale, roundMode)
   }
 
   override def clone(): Decimal = new Decimal().set(this)
 
-  override def compare(other: Decimal): Int = {
-    if (decimalVal.eq(null) && other.decimalVal.eq(null) && _scale == other._scale) {
-      if (longVal < other.longVal) -1 else if (longVal == other.longVal) 0 else 1
-    } else {
-      toBigDecimal.compare(other.toBigDecimal)
-    }
+  override def compare(other: Decimal): Int = if (decimal128Enabled) {
+    decimal128Operation.compare(other.decimal128Operation)
+  } else {
+    jdkDecimalOperation.compare(other.jdkDecimalOperation)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -456,7 +352,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def hashCode(): Int = toBigDecimal.hashCode()
 
-  def isZero: Boolean = if (decimalVal.ne(null)) decimalVal.signum == 0 else longVal == 0
+  def isZero: Boolean = if (decimal128Enabled) {
+    decimal128Operation.isZero
+  } else {
+    jdkDecimalOperation.isZero
+  }
 
   // We should follow DecimalPrecision promote if use longVal for add and subtract:
   // Operation    Result Precision                        Result Scale
@@ -464,45 +364,89 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   // e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   // e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   def + (that: Decimal): Decimal = {
-    if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
+    val decimal = new Decimal(decimal128Enabled, false)
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.add(that.decimal128Operation)
     } else {
-      Decimal(toJavaBigDecimal.add(that.toJavaBigDecimal))
+      decimal.jdkDecimalOperation = jdkDecimalOperation.add(that.jdkDecimalOperation)
     }
+
+    decimal
   }
 
   def - (that: Decimal): Decimal = {
-    if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.subtract(that.decimal128Operation)
     } else {
-      Decimal(toJavaBigDecimal.subtract(that.toJavaBigDecimal))
+      decimal.jdkDecimalOperation = jdkDecimalOperation.subtract(that.jdkDecimalOperation)
     }
+
+    decimal
   }
 
   // TypeCoercion will take care of the precision, scale of result
-  def * (that: Decimal): Decimal =
-    Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
+  def * (that: Decimal): Decimal = {
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.multiply(that.decimal128Operation)
+    } else {
+      decimal.jdkDecimalOperation = jdkDecimalOperation.multiply(that.jdkDecimalOperation)
+    }
 
-  def / (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal,
-      DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
+    decimal
+  }
 
-  def % (that: Decimal): Decimal =
-    if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
+  def / (that: Decimal): Decimal = if (that.isZero) {
+    null
+  } else {
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.divide(that.decimal128Operation)
+    } else {
+      decimal.jdkDecimalOperation = jdkDecimalOperation.divide(that.jdkDecimalOperation)
+    }
 
-  def quot(that: Decimal): Decimal =
-    if (that.isZero) null
-    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
+    decimal
+  }
+
+  def % (that: Decimal): Decimal = if (that.isZero) {
+    null
+  } else {
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.remainder(that.decimal128Operation)
+    } else {
+      decimal.jdkDecimalOperation = jdkDecimalOperation.remainder(that.jdkDecimalOperation)
+    }
+
+    decimal
+  }
+
+  def quot(that: Decimal): Decimal = if (that.isZero) {
+    null
+  } else {
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.quot(that.decimal128Operation)
+    } else {
+      decimal.jdkDecimalOperation = jdkDecimalOperation.quot(that.jdkDecimalOperation)
+    }
+
+    decimal
+  }
 
   def remainder(that: Decimal): Decimal = this % that
 
   def unary_- : Decimal = {
-    if (decimalVal.ne(null)) {
-      Decimal(-decimalVal, precision, scale)
+    val decimal = new Decimal
+    if (decimal128Enabled) {
+      decimal.decimal128Operation = decimal128Operation.negative
     } else {
-      Decimal(-longVal, precision, scale)
+      decimal.jdkDecimalOperation = jdkDecimalOperation.negative
     }
+
+    decimal
   }
 
   def abs: Decimal = if (this < Decimal.ZERO) this.unary_- else this
@@ -532,8 +476,6 @@ object Decimal {
   val MAX_LONG_DIGITS = 18
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
-
-  private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION, RoundingMode.HALF_UP)
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
@@ -626,9 +568,7 @@ object Decimal {
   def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
     val dec = new Decimal()
-    dec.longVal = unscaled
-    dec._precision = precision
-    dec._scale = scale
+    dec.set(unscaled, precision, scale)
     dec
   }
 
