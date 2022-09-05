@@ -5889,10 +5889,19 @@ def inline(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.functions import inline
     >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
     >>> df.select(inline(df.structlist)).show()
     +---+---+
@@ -5985,10 +5994,19 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to explode.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        generator expression with the inline exploded result.
+
     Examples
     --------
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.functions import inline_outer
     >>> df = spark.createDataFrame([
     ...     Row(id=1, structlist=[Row(a=1, b=2), Row(a=3, b=4)]),
     ...     Row(id=2, structlist=[])
