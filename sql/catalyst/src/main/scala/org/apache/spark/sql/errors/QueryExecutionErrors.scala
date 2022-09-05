@@ -1068,17 +1068,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       e)
   }
 
-  def failToFormatDateTimeInNewFormatterError(
-      resultCandidate: String, e: Throwable): Throwable = {
-    new SparkUpgradeException(
-      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-      errorSubClass = Some("PARSE_DATETIME_BY_NEW_PARSER"),
-      messageParameters = Array(
-        toSQLValue(resultCandidate, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
-      e)
-  }
-
   def failToRecognizePatternAfterUpgradeError(pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",

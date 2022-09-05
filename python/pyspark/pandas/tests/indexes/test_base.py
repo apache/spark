@@ -1977,6 +1977,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
         with self.assertRaisesRegex(ValueError, "Index data must be 1-dimensional"):
             psmidx.intersection(ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))
+        # other = list of tuple
+        with self.assertRaisesRegex(ValueError, "Names should be list-like for a MultiIndex"):
+            psidx.intersection([(1, 2), (3, 4)])
 
     def test_item(self):
         pidx = pd.Index([10])

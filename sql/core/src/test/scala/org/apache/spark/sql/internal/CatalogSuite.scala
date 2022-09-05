@@ -865,12 +865,14 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("SPARK-39506: test setCurrentCatalog, currentCatalog and listCatalogs") {
+    assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet ==
+      Set(CatalogManager.SESSION_CATALOG_NAME))
     spark.catalog.setCurrentCatalog("testcat")
     assert(spark.catalog.currentCatalog().equals("testcat"))
     spark.catalog.setCurrentCatalog("spark_catalog")
     assert(spark.catalog.currentCatalog().equals("spark_catalog"))
-    assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet
-      == Set("spark_catalog", "testcat"))
+    assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet ==
+      Set("testcat", CatalogManager.SESSION_CATALOG_NAME))
   }
 
   test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
