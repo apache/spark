@@ -177,7 +177,7 @@ private[spark] class BasicExecutorFeatureStep(
             .withContainerPort(port)
             .build()
         }
-    } else Nil
+    } else Seq.empty
 
     if (!isDefaultProfile) {
       if (pod.container != null && pod.container.getResources() != null) {
@@ -201,7 +201,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withValue(Utils.getCurrentUserName())
         .endEnv()
       .addAllToEnv(executorEnv.asJava)
-      .withPorts(requiredPorts.asJava)
+      .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {

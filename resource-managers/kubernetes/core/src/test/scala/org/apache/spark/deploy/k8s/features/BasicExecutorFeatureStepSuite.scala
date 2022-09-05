@@ -16,12 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
-
 import com.google.common.net.InternetDomainName
-import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
@@ -510,6 +506,19 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(mem === s"${expected}Mi")
   }
 
+  test("SPARK-39546: executor pod template should support port definitions") {
+    val baseDriverPod = SparkPod.initialPod()
+    val ports = new ContainerPortBuilder()
+      .withName("port-from-template")
+      .withContainerPort(1000)
+      .build()
+    baseDriverPod.container.setPorts(JavaConverters.seqAsJavaListConverter(Seq(ports)).asJava)
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    // port-from-template should exist after step1
+    assert(podConfigured1.container.getPorts.contains(ports))
+  }
 
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
