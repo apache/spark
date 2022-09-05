@@ -1357,6 +1357,33 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
 
+    def test_quantile(self):
+        df = pd.DataFrame(
+            [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
+        )
+        psdf = ps.from_pandas(df)
+        # accept float and int between 0 and 1
+        for i in [0, 0.1, 0.5, 1]:
+            self.assert_eq(
+                df.groupby("key").quantile(q=i, interpolation="lower"),
+                psdf.groupby("key").quantile(q=i),
+            )
+        # raise ValueError when q not in [0, 1]
+        with self.assertRaises(ValueError):
+            psdf.groupby("key").quantile(q=1.1)
+        with self.assertRaises(ValueError):
+            psdf.groupby("key").quantile(q=-0.1)
+        with self.assertRaises(ValueError):
+            psdf.groupby("key").quantile(q=2)
+        # raise TypeError when q type mismatch
+        with self.assertRaises(TypeError):
+            psdf.groupby("key").quantile(q="0.1")
+        # raise NotImplementedError when q is list like type
+        with self.assertRaises(NotImplementedError):
+            psdf.groupby("key").quantile(q=(0.1, 0.5))
+        with self.assertRaises(NotImplementedError):
+            psdf.groupby("key").quantile(q=[0.1, 0.5])
+
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
