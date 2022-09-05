@@ -907,9 +907,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         n : int
             A single nth value for the row
 
+        Returns
+        -------
+        Series or DataFrame
+
         Examples
         --------
-
         >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5]}, columns=['A', 'B'])
         >>> g = df.groupby('A')
@@ -934,6 +937,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if not isinstance(n, int):
+            raise TypeError("Unsupported type %s" % type(n).__name__)
+
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
@@ -944,7 +950,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if len(psdf._internal.column_labels) > 0:
             window1 = Window.partitionBy(*groupkey_names).orderBy(NATURAL_ORDER_COLUMN_NAME)
-            tmp_row_number_col = "__tmp_row_number_col__"
+            tmp_row_number_col = verify_temp_column_name(sdf, "__tmp_row_number_col__")
             if n >= 0:
                 sdf = (
                     psdf._internal.spark_frame.withColumn(
@@ -957,7 +963,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 window2 = Window.partitionBy(*groupkey_names).rowsBetween(
                     Window.unboundedPreceding, Window.unboundedFollowing
                 )
-                tmp_group_size_col = "__tmp_group_size_col__"
+                tmp_group_size_col = verify_temp_column_name(sdf, "__tmp_group_size_col__")
                 sdf = (
                     psdf._internal.spark_frame.withColumn(
                         tmp_group_size_col, F.count(F.lit(0)).over(window2)
