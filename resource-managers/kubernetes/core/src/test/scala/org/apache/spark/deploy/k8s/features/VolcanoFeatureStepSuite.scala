@@ -66,4 +66,24 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(podGroup.getSpec.getPriorityClassName == "driver-priority")
     assert(podGroup.getSpec.getQueue == "driver-queue")
   }
+
+  test("SPARK-38455: Support driver podgroup parameter") {
+    val sparkConf = new SparkConf()
+      .set(VolcanoFeatureStep.POD_GROUP_SPEC_QUEUE, "driver-queue")
+      .set(VolcanoFeatureStep.POD_GROUP_SPEC_MIN_RESOURCE_CPU, "2")
+      .set(VolcanoFeatureStep.POD_GROUP_SPEC_MIN_RESOURCE_MEMORY, "2048Mi")
+      .set(VolcanoFeatureStep.POD_GROUP_SPEC_MIN_MEMBER, "2")
+      .set(VolcanoFeatureStep.POD_GROUP_SPEC_PRIORITY_CLASS_NAME, "driver-priority")
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    step.configurePod(SparkPod.initialPod())
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getQueue == "driver-queue")
+    assert(podGroup.getSpec.getMinMember == 2)
+    assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
+    assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
+    assert(podGroup.getSpec.getMinResources.get("memory").getFormat == "Mi")
+    assert(podGroup.getSpec.getPriorityClassName == "driver-priority")
+  }
 }

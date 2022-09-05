@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.volcano.client.DefaultVolcanoClient
 import io.fabric8.volcano.scheduling.v1beta1.{PodGroup, PodGroupSpec}
@@ -24,6 +26,7 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, Kubern
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
   with KubernetesExecutorCustomFeatureConfigStep {
+
   import VolcanoFeatureStep._
 
   private var kubernetesConf: KubernetesConf = _
@@ -51,6 +54,31 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
     var spec = pg.getSpec
     if (spec == null) spec = new PodGroupSpec
+    val queue = kubernetesConf.getOption(POD_GROUP_SPEC_QUEUE)
+    if (queue.isDefined) {
+      spec.setQueue(queue.get)
+    }
+    val minResourceCPU = kubernetesConf.getOption(POD_GROUP_SPEC_MIN_RESOURCE_CPU)
+    val minResourceMemory = kubernetesConf.getOption(POD_GROUP_SPEC_MIN_RESOURCE_MEMORY)
+
+    if (minResourceCPU.isDefined || minResourceMemory.isDefined) {
+      val minResources = new util.HashMap[String, Quantity]
+      if (minResourceCPU.isDefined) {
+        minResources.put("cpu", new Quantity(minResourceCPU.get))
+      }
+      if (minResourceMemory.isDefined) {
+        minResources.put("memory", new Quantity(minResourceMemory.get))
+      }
+      spec.setMinResources(minResources)
+    }
+    val minMember = kubernetesConf.getOption(POD_GROUP_SPEC_MIN_MEMBER)
+    if (minMember.isDefined) {
+      spec.setMinMember(minMember.get.toInt)
+    }
+    val priorityClassName = kubernetesConf.getOption(POD_GROUP_SPEC_PRIORITY_CLASS_NAME)
+    if (priorityClassName.isDefined) {
+      spec.setPriorityClassName(priorityClassName.get)
+    }
     pg.setSpec(spec)
 
     Seq(pg)
@@ -69,4 +97,12 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 private[spark] object VolcanoFeatureStep {
   val POD_GROUP_ANNOTATION = "scheduling.k8s.io/group-name"
   val POD_GROUP_TEMPLATE_FILE_KEY = "spark.kubernetes.scheduler.volcano.podGroupTemplateFile"
+  val POD_GROUP_SPEC_QUEUE = "spark.kubernetes.scheduler.volcano.podGroup.spec.queue"
+  val POD_GROUP_SPEC_MIN_RESOURCE_CPU =
+    "spark.kubernetes.scheduler.volcano.podGroup.spec.minResources.cpu"
+  val POD_GROUP_SPEC_MIN_RESOURCE_MEMORY =
+    "spark.kubernetes.scheduler.volcano.podGroup.spec.minResources.memory"
+  val POD_GROUP_SPEC_MIN_MEMBER = "spark.kubernetes.scheduler.volcano.podGroup.spec.minMember"
+  val POD_GROUP_SPEC_PRIORITY_CLASS_NAME =
+    "spark.kubernetes.scheduler.volcano.podGroup.spec.PriorityClassName"
 }
