@@ -523,6 +523,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val podConfigured1 = step1.configurePod(baseDriverPod)
     // port-from-template should exist after step1
     assert(podConfigured1.container.getPorts.contains(ports))
+
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
