@@ -40,6 +40,76 @@ NULL
 
 
 -- !query
+SELECT try_add(1, (2147483647 + 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 33,
+    "fragment" : "2147483647 + 1"
+  } ]
+}
+
+
+-- !query
+SELECT try_add(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 45,
+    "fragment" : "9223372036854775807L + 1L"
+  } ]
+}
+
+
+-- !query
+SELECT try_add(1, 1.0 / 0.0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "1.0 / 0.0"
+  } ]
+}
+
+
+-- !query
 SELECT try_add(date'2021-01-01', 1)
 -- !query schema
 struct<try_add(DATE '2021-01-01', 1):date>
@@ -185,6 +255,76 @@ NULL
 
 
 -- !query
+SELECT try_divide(1, (2147483647 + 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 36,
+    "fragment" : "2147483647 + 1"
+  } ]
+}
+
+
+-- !query
+SELECT try_divide(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 48,
+    "fragment" : "9223372036854775807L + 1L"
+  } ]
+}
+
+
+-- !query
+SELECT try_divide(1, 1.0 / 0.0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 30,
+    "fragment" : "1.0 / 0.0"
+  } ]
+}
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query schema
 struct<try_divide(INTERVAL '2' YEAR, 2):interval year to month>
@@ -273,6 +413,76 @@ NULL
 
 
 -- !query
+SELECT try_subtract(1, (2147483647 + 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 38,
+    "fragment" : "2147483647 + 1"
+  } ]
+}
+
+
+-- !query
+SELECT try_subtract(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 50,
+    "fragment" : "9223372036854775807L + 1L"
+  } ]
+}
+
+
+-- !query
+SELECT try_subtract(1, 1.0 / 0.0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 32,
+    "fragment" : "1.0 / 0.0"
+  } ]
+}
+
+
+-- !query
 SELECT try_subtract(interval 2 year, interval 3 year)
 -- !query schema
 struct<try_subtract(INTERVAL '2' YEAR, INTERVAL '3' YEAR):interval year>
@@ -342,6 +552,76 @@ SELECT try_multiply(-9223372036854775808L, -2)
 struct<try_multiply(-9223372036854775808, -2):bigint>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_multiply(1, (2147483647 + 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "integer overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 38,
+    "fragment" : "2147483647 + 1"
+  } ]
+}
+
+
+-- !query
+SELECT try_multiply(1L, (9223372036854775807L + 1L))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "message" : "long overflow",
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "spark.sql.ansi.enabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 50,
+    "fragment" : "9223372036854775807L + 1L"
+  } ]
+}
+
+
+-- !query
+SELECT try_multiply(1, 1.0 / 0.0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 32,
+    "fragment" : "1.0 / 0.0"
+  } ]
+}
 
 
 -- !query

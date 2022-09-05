@@ -29,7 +29,8 @@ class SparkException(
     cause: Throwable,
     errorClass: Option[String],
     errorSubClass: Option[String],
-    messageParameters: Array[String])
+    messageParameters: Array[String],
+    context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause) with SparkThrowable {
 
    def this(
@@ -49,6 +50,20 @@ class SparkException(
 
   def this(message: String) =
     this(message = message, cause = null)
+
+  def this(
+      errorClass: String,
+      messageParameters: Array[String],
+      cause: Throwable,
+      context: Array[QueryContext],
+      summary: String) =
+    this(
+      message = SparkThrowableHelper.getMessage(errorClass, null, messageParameters, summary),
+      cause = cause,
+      errorClass = Some(errorClass),
+      errorSubClass = None,
+      messageParameters = messageParameters,
+      context)
 
   def this(errorClass: String, messageParameters: Array[String], cause: Throwable) =
     this(
@@ -73,6 +88,7 @@ class SparkException(
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass.orNull
   override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
 }
 
 object SparkException {
@@ -287,14 +303,18 @@ private[spark] class SparkNoSuchMethodException(
 private[spark] class SparkIllegalArgumentException(
     errorClass: String,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
+    messageParameters: Array[String],
+    context: Array[QueryContext] = Array.empty,
+    summary: String = "")
   extends IllegalArgumentException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, summary))
     with SparkThrowable {
 
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
+  override def getErrorSubClass: String = errorSubClass.orNull
+  override def getQueryContext: Array[QueryContext] = context
+}
 
 /**
  * Index out of bounds exception thrown from Spark with an error class.

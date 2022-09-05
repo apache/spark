@@ -53,6 +53,10 @@ from pyspark.sql.functions import (
     slice,
     least,
     regexp_replace,
+    atan2,
+    hypot,
+    pow,
+    pmod,
 )
 from pyspark.sql import functions
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -962,6 +966,33 @@ class FunctionsTests(ReusedSQLTestCase):
         actual = self.spark.range(1).select(lit(td)).first()[0]
         self.assertEqual(actual, td)
 
+    def test_lit_list(self):
+        # SPARK-40271: added list type supporting
+        test_list = [1, 2, 3]
+        expected = [1, 2, 3]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, expected)
+
+        test_list = [[1, 2, 3], [3, 4]]
+        expected = [[1, 2, 3], [3, 4]]
+        actual = self.spark.range(1).select(lit(test_list)).first()[0]
+        self.assertEqual(actual, expected)
+
+        with self.sql_conf({"spark.sql.ansi.enabled": False}):
+            test_list = ["a", 1, None, 1.0]
+            expected = ["a", "1", None, "1.0"]
+            actual = self.spark.range(1).select(lit(test_list)).first()[0]
+            self.assertEqual(actual, expected)
+
+            test_list = [["a", 1, None, 1.0], [1, None, "b"]]
+            expected = [["a", "1", None, "1.0"], ["1", None, "b"]]
+            actual = self.spark.range(1).select(lit(test_list)).first()[0]
+            self.assertEqual(actual, expected)
+
+        df = self.spark.range(10)
+        with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
+            lit([df.id, df.id])
+
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(
@@ -1002,6 +1033,12 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual([Row(b=True), Row(b=False)], res)
             res = df.select(array_position(df.data, dtype(1)).alias("c")).collect()
             self.assertEqual([Row(c=1), Row(c=0)], res)
+
+    def test_binary_math_function(self):
+        funcs, expected = zip(*[(atan2, 0.13664), (hypot, 8.07527), (pow, 2.14359), (pmod, 1.1)])
+        df = self.spark.range(1).select(*(func(1.1, 8) for func in funcs))
+        for a, e in zip(df.first(), expected):
+            self.assertAlmostEqual(a, e, 5)
 
 
 if __name__ == "__main__":

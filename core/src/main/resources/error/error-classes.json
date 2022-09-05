@@ -17,6 +17,12 @@
     ],
     "sqlState" : "22005"
   },
+  "CANNOT_DECODE_URL" : {
+    "message" : [
+      "Cannot decode url : <url>."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_INFER_DATE" : {
     "message" : [
       "Cannot infer date in schema inference when LegacyTimeParserPolicy is \"LEGACY\". Legacy Date formatter does not support strict date format matching which is required to avoid inferring timestamps and other non-date entries to date."
@@ -62,6 +68,11 @@
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
+    ]
+  },
+  "CONVERSION_INVALID_INPUT" : {
+    "message" : [
+      "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
   "DATETIME_OVERFLOW" : {
@@ -129,6 +140,18 @@
     "message" : [
       "Grouping sets size cannot be greater than <maxSize>"
     ]
+  },
+  "GROUP_BY_POS_OUT_OF_RANGE" : {
+    "message" : [
+      "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
+    ],
+    "sqlState" : "42000"
+  },
+  "GROUP_BY_POS_REFERS_AGG_EXPR" : {
+    "message" : [
+      "GROUP BY <index> refers to an expression <aggExpr> that contains an aggregate function. Aggregate functions are not allowed in GROUP BY."
+    ],
+    "sqlState" : "42000"
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
@@ -294,7 +317,7 @@
   },
   "MULTI_VALUE_SUBQUERY_ERROR" : {
     "message" : [
-      "more than one row returned by a subquery used as an expression: <plan>"
+      "More than one row returned by a subquery used as an expression."
     ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {

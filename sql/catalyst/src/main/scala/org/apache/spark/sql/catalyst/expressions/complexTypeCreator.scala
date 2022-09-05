@@ -547,14 +547,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def dataType: DataType = MapType(StringType, StringType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName's delimiters must be foldable.")
-    } else {
-      super.checkInputDataTypes()
-    }
-  }
-
   private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
 
   override def nullSafeEval(
