@@ -30,6 +30,9 @@ import org.apache.spark.sql.types.StringType
 @Experimental
 case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
+  lazy val pythonVersion =
+    sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
   def process(): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.CREATE_FUNCTION =>
@@ -45,8 +48,8 @@ case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Comm
       cf.getSerializedFunction.toByteArray,
       Maps.newHashMap(),
       Lists.newArrayList(),
-      "python3",
-      "3.9",
+      pythonVersion,
+      "3.9", // TODO This needs to be an actual version.
       Lists.newArrayList(),
       null)
 
@@ -58,7 +61,6 @@ case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Comm
       udfDeterministic = false)
 
     session.udf.registerPython(cf.getPartsList.asScala.head, udf)
-
   }
 
 }
