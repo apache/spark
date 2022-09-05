@@ -45,7 +45,7 @@ RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'pandas<=1.4.3' scipy coverage matplotlib grpcio protobuf
+RUN pypy3 -m pip install numpy 'pandas<=1.4.3' scipy coverage matplotlib
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
