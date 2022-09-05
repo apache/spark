@@ -129,12 +129,6 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.thesamet.scalapb</groupId>
-            <artifactId>scalapb-runtime-grpc_${scala.binary.version}</artifactId>
-            <version>0.11.11</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
             <groupId>org.scalacheck</groupId>
             <artifactId>scalacheck_${scala.binary.version}</artifactId>
             <scope>test</scope>
