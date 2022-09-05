@@ -46,7 +46,7 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy
@@ -1447,6 +1447,26 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     return None
 
 
+def _from_numpy_type_to_java_type(nt: "np.dtype", gateway: JavaGateway) -> Optional[JavaClass]:
+    """Convert NumPy type to Py4J Java type."""
+    if nt in [np.dtype("int8"), np.dtype("int16")]:
+        # Mapping int8 to gateway.jvm.byte causes
+        #   TypeError: 'bytes' object does not support item assignment
+        return gateway.jvm.short
+    elif nt == np.dtype("int32"):
+        return gateway.jvm.int
+    elif nt == np.dtype("int64"):
+        return gateway.jvm.long
+    elif nt == np.dtype("float32"):
+        return gateway.jvm.float
+    elif nt == np.dtype("float64"):
+        return gateway.jvm.double
+    elif nt == np.dtype("bool"):
+        return gateway.jvm.boolean
+
+    return None
+
+
 def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
@@ -2278,21 +2298,11 @@ class NumpyArrayConverter:
         gateway = SparkContext._gateway
         assert gateway is not None
         plist = obj.tolist()
-        tpe_np_to_java = {
-            np.dtype("int64"): gateway.jvm.long,
-            np.dtype("int32"): gateway.jvm.int,
-            np.dtype("int16"): gateway.jvm.short,
-            # Mapping to gateway.jvm.byte causes
-            #   TypeError: 'bytes' object does not support item assignment
-            np.dtype("int8"): gateway.jvm.short,
-            np.dtype("float32"): gateway.jvm.float,
-            np.dtype("float64"): gateway.jvm.double,
-            np.dtype("bool"): gateway.jvm.boolean,
-        }
+
         if len(obj) > 0 and isinstance(plist[0], str):
             jtpe = gateway.jvm.String
         else:
-            jtpe = tpe_np_to_java.get(obj.dtype)
+            jtpe = _from_numpy_type_to_java_type(obj.dtype, gateway)
             if jtpe is None:
                 raise TypeError("The type of array scalar is not supported")
         jarr = gateway.new_array(jtpe, len(obj))
