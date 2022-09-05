@@ -210,16 +210,18 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
-    def wrapped(key_series, value_series, state, is_last_chunk):
+    def wrapped(key_series, value_series_gen, state):
         import pandas as pd
 
         key = tuple(s[0] for s in key_series)
+
         if state.hasTimedOut:
             # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
-            result = f(key, pd.DataFrame(columns=pd.concat(value_series, axis=1).columns),
-                       state, is_last_chunk)
+            values = [pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns), ]
         else:
-            result = f(key, pd.concat(value_series, axis=1), state, is_last_chunk)
+            values = (pd.concat(x, axis=1) for x in value_series_gen)
+
+        result = f(key, values, state)
 
         if not isinstance(result, pd.DataFrame):
             raise TypeError(
@@ -237,9 +239,9 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
             )
 
-        return (result, state, is_last_chunk, )
+        return (result, state, )
 
-    return lambda k, v, s, l: [(wrapped(k, v, s, l), to_arrow_type(return_type))]
+    return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
 
 
 def wrap_grouped_agg_pandas_udf(f, return_type):
@@ -570,11 +572,21 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
-            keys = [a[0][o] for o in parsed_offsets[0][0]]
-            vals = [a[0][o] for o in parsed_offsets[0][1]]
+            from itertools import tee
+
             state = a[1]
-            is_last_chunk = a[2]
-            return f(keys, vals, state, is_last_chunk)
+            data_gen = (x[0] for x in a[0])
+
+            # We know there should be at least one item in the iterator/generator.
+            # We want to peek the first element to construct the key, hence applying
+            # tee to construct the key while we retain another iterator/generator
+            # for values.
+            keys_gen, values_gen = tee(data_gen)
+            keys_elem = next(keys_gen)
+            keys = [keys_elem[o] for o in parsed_offsets[0][0]]
+            vals = ([x[o] for o in parsed_offsets[0][1]] for x in values_gen)
+
+            return f(keys, vals, state)
 
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
