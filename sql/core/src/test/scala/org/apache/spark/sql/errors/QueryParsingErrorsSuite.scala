@@ -48,7 +48,11 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("UNSUPPORTED_FEATURE: Unsupported LATERAL join type") {
-    Seq("RIGHT OUTER", "FULL OUTER", "LEFT SEMI", "LEFT ANTI").foreach { joinType =>
+    Seq(
+      "RIGHT OUTER" -> (17, 74),
+      "FULL OUTER" -> (17, 73),
+      "LEFT SEMI" -> (17, 72),
+      "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
       validateParsingError(
         sqlText = s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
         errorClass = "UNSUPPORTED_FEATURE",
@@ -56,30 +60,27 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         sqlState = "0A000",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
-          fragment = "RIGHT OUTER JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
-          start = 17,
-          stop = 74))
+          fragment = s"$joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
+          start = start,
+          stop = stop))
     }
   }
 
   test("INVALID_SQL_SYNTAX: LATERAL can only be used with subquery") {
     Seq(
-      "SELECT * FROM t1, LATERAL t2" -> 26,
-      "SELECT * FROM t1 JOIN LATERAL t2" -> 30,
-      "SELECT * FROM t1, LATERAL (t2 JOIN t3)" -> 26,
-      "SELECT * FROM t1, LATERAL (LATERAL t2)" -> 26,
-      "SELECT * FROM t1, LATERAL VALUES (0, 1)" -> 26,
-      "SELECT * FROM t1, LATERAL RANGE(0, 1)" -> 26
-    ).foreach { case (sqlText, _) =>
+      ", LATERAL t2" -> ("FROM t1, LATERAL t2", 9, 27),
+      " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
+      ", LATERAL (t2 JOIN t3)" -> ("FROM t1, LATERAL (t2 JOIN t3)", 9, 37),
+      ", LATERAL (LATERAL t2)" -> ("FROM t1, LATERAL (LATERAL t2)", 9, 37),
+      ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38),
+      ", LATERAL RANGE(0, 1)" -> ("FROM t1, LATERAL RANGE(0, 1)", 9, 36)
+    ).foreach { case (sqlText, (fragment, start, stop)) =>
       validateParsingError(
-        sqlText = sqlText,
+        sqlText = s"SELECT * FROM t1$sqlText",
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
         parameters = Map("inputString" -> "LATERAL can only be used with subquery."),
-        context = ExpectedContext(
-          fragment = "FROM t1, LATERAL t2",
-          start = 9,
-          stop = 27))
+        context = ExpectedContext(fragment, start, stop))
     }
   }
 
@@ -342,29 +343,17 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      context = ExpectedContext(
-        fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-        start = 17,
-        stop = 59))
+      sqlState = "42000")
 
     validateParsingError(
       sqlText = "   ",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      context = ExpectedContext(
-        fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-        start = 17,
-        stop = 59))
+      sqlState = "42000")
 
     validateParsingError(
       sqlText = " \n",
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000",
-      context = ExpectedContext(
-        fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-        start = 17,
-        stop = 59))
+      sqlState = "42000")
   }
 
   test("PARSE_SYNTAX_ERROR: no viable input") {
@@ -389,11 +378,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "select *\nfrom r as q t",
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42000",
-      parameters = Map("error" -> "'t'", "hint" -> ": extra input 't'"),
-      context = ExpectedContext(
-        fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-        start = 17,
-        stop = 59))
+      parameters = Map("error" -> "'t'", "hint" -> ": extra input 't'"))
   }
 
   test("PARSE_SYNTAX_ERROR: mismatched input") {
@@ -408,11 +393,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "select *\nfrom r\norder by q\nfrom t",
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42000",
-      parameters = Map("error" -> "'from'", "hint" -> ""),
-      context = ExpectedContext(
-        fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-        start = 17,
-        stop = 59))
+      parameters = Map("error" -> "'from'", "hint" -> ""))
   }
 
   test("PARSE_SYNTAX_ERROR: jargon token substitute to user-facing language") {

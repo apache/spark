@@ -54,6 +54,33 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
       queryContext = Array.empty)
   }
 
+  def validateParsingError(
+      sqlText: String,
+      errorClass: String,
+      sqlState: String,
+      parameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      errorClass = errorClass,
+      errorSubClass = None,
+      sqlState = Some(sqlState),
+      parameters = parameters,
+      queryContext = Array.empty)
+  }
+
+  def validateParsingError(
+      sqlText: String,
+      errorClass: String,
+      sqlState: String): Unit = {
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      errorClass = errorClass,
+      errorSubClass = None,
+      sqlState = Some(sqlState),
+      parameters = Map.empty,
+      queryContext = Array.empty)
+  }
+
   case class ExpectedContext(
       objectType: String,
       objectName: String,
