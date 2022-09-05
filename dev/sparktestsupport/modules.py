@@ -485,6 +485,10 @@ pyspark_sql = Module(
         "pyspark.sql.tests.connect.test_select_ops",
         "pyspark.sql.tests.connect.test_spark_connect",
     ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
 )
 
 pyspark_resource = Module(
