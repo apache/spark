@@ -978,15 +978,16 @@ class FunctionsTests(ReusedSQLTestCase):
         actual = self.spark.range(1).select(lit(test_list)).first()[0]
         self.assertEqual(actual, expected)
 
-        test_list = ["a", 1, None, 1.0]
-        expected = ["a", "1", None, "1.0"]
-        actual = self.spark.range(1).select(lit(test_list)).first()[0]
-        self.assertEqual(actual, expected)
+        with self.sql_conf({"spark.sql.ansi.enabled": False}):
+            test_list = ["a", 1, None, 1.0]
+            expected = ["a", "1", None, "1.0"]
+            actual = self.spark.range(1).select(lit(test_list)).first()[0]
+            self.assertEqual(actual, expected)
 
-        test_list = [["a", 1, None, 1.0], [1, None, "b"]]
-        expected = [["a", "1", None, "1.0"], ["1", None, "b"]]
-        actual = self.spark.range(1).select(lit(test_list)).first()[0]
-        self.assertEqual(actual, expected)
+            test_list = [["a", 1, None, 1.0], [1, None, "b"]]
+            expected = [["a", "1", None, "1.0"], ["1", None, "b"]]
+            actual = self.spark.range(1).select(lit(test_list)).first()[0]
+            self.assertEqual(actual, expected)
 
         df = self.spark.range(10)
         with self.assertRaisesRegex(ValueError, "lit does not allow a column in a list"):
