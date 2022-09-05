@@ -337,7 +337,6 @@ def main():
                             priority = 0
                         else:
                             priority = 100
-                        print(test_goal)
                         task_queue.put((priority, (python_exec, test_goal)))
         else:
             for test_goal in testnames_to_test:
