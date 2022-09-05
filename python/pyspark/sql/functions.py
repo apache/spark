@@ -3838,6 +3838,18 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     -----
     Whenever possible, use specialized functions like `year`.
 
+    Parameters
+    ----------
+    date : :class:`~pyspark.sql.Column` or str
+        input column of values to format.
+    format: str
+        format to use to represent datetime values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string value representing formatted datetime.
+
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
@@ -3849,9 +3861,19 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
 
 def year(col: "ColumnOrName") -> Column:
     """
-    Extract the year of a given date as integer.
+    Extract the year of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        year part of the date/timestamp as integer.
 
     Examples
     --------
@@ -3864,9 +3886,19 @@ def year(col: "ColumnOrName") -> Column:
 
 def quarter(col: "ColumnOrName") -> Column:
     """
-    Extract the quarter of a given date as integer.
+    Extract the quarter of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        quarter of the date/timestamp as integer.
 
     Examples
     --------
@@ -3879,9 +3911,19 @@ def quarter(col: "ColumnOrName") -> Column:
 
 def month(col: "ColumnOrName") -> Column:
     """
-    Extract the month of a given date as integer.
+    Extract the month of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        month part of the date/timestamp as integer.
 
     Examples
     --------
@@ -3894,10 +3936,20 @@ def month(col: "ColumnOrName") -> Column:
 
 def dayofweek(col: "ColumnOrName") -> Column:
     """
-    Extract the day of the week of a given date as integer.
+    Extract the day of the week of a given date/timestamp as integer.
     Ranges from 1 for a Sunday through to 7 for a Saturday
 
     .. versionadded:: 2.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        day of the week for given date/timestamp as integer.
 
     Examples
     --------
@@ -3910,9 +3962,19 @@ def dayofweek(col: "ColumnOrName") -> Column:
 
 def dayofmonth(col: "ColumnOrName") -> Column:
     """
-    Extract the day of the month of a given date as integer.
+    Extract the day of the month of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        day of the month for given date/timestamp as integer.
 
     Examples
     --------
@@ -3925,9 +3987,19 @@ def dayofmonth(col: "ColumnOrName") -> Column:
 
 def dayofyear(col: "ColumnOrName") -> Column:
     """
-    Extract the day of the year of a given date as integer.
+    Extract the day of the year of a given date/timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        day of the year for given date/timestamp as integer.
 
     Examples
     --------
@@ -3940,9 +4012,19 @@ def dayofyear(col: "ColumnOrName") -> Column:
 
 def hour(col: "ColumnOrName") -> Column:
     """
-    Extract the hours of a given date as integer.
+    Extract the hours of a given timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        hour part of the timestamp as integer.
 
     Examples
     --------
@@ -3956,9 +4038,19 @@ def hour(col: "ColumnOrName") -> Column:
 
 def minute(col: "ColumnOrName") -> Column:
     """
-    Extract the minutes of a given date as integer.
+    Extract the minutes of a given timestamp as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        minutes part of the timestamp as integer.
 
     Examples
     --------
@@ -3975,6 +4067,16 @@ def second(col: "ColumnOrName") -> Column:
     Extract the seconds of a given date as integer.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        `seconds` part of the timestamp as integer.
 
     Examples
     --------
@@ -3993,6 +4095,16 @@ def weekofyear(col: "ColumnOrName") -> Column:
     as defined by ISO 8601
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        `week` of the year for given date as integer.
 
     Examples
     --------
@@ -4018,6 +4130,11 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     day : :class:`~pyspark.sql.Column` or str
         The day to build the date
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a date built from given parts.
+
     Examples
     --------
     >>> df = spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
@@ -4029,9 +4146,23 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
 
 def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
-    Returns the date that is `days` days after `start`
+    Returns the date that is `days` days after `start`. If `days` is a negative value
+    then these amount of days will be deducted from `start`.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    start : :class:`~pyspark.sql.Column` or str
+        date column to work on.
+    days : :class:`~pyspark.sql.Column` or str or int
+        how many days after the given date to calculate.
+        Accepts negative value as well to calculate backwards in time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a date after/before given number of days.
 
     Examples
     --------
@@ -4040,6 +4171,8 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     [Row(next_date=datetime.date(2015, 4, 9))]
     >>> df.select(date_add(df.dt, df.add.cast('integer')).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 10))]
+    >>> df.select(date_add('dt', -1).alias('prev_date')).collect()
+    [Row(prev_date=datetime.date(2015, 4, 7))]
     """
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_add", start, days)
@@ -4047,9 +4180,23 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
-    Returns the date that is `days` days before `start`
+    Returns the date that is `days` days before `start`. If `days` is a negative value
+    then these amount of days will be added to `start`.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    start : :class:`~pyspark.sql.Column` or str
+        date column to work on.
+    days : :class:`~pyspark.sql.Column` or str or int
+        how many days before the given date to calculate.
+        Accepts negative value as well to calculate forward in time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a date before/after given number of days.
 
     Examples
     --------
@@ -4058,6 +4205,8 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     [Row(prev_date=datetime.date(2015, 4, 7))]
     >>> df.select(date_sub(df.dt, df.sub.cast('integer')).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 6))]
+    >>> df.select(date_sub('dt', -1).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 9))]
     """
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_sub", start, days)
@@ -4068,6 +4217,18 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     Returns the number of days from `start` to `end`.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    end : :class:`~pyspark.sql.Column` or str
+        to date column to work on.
+    start : :class:`~pyspark.sql.Column` or str
+        from date column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        difference in days between two dates.
 
     Examples
     --------
@@ -4080,9 +4241,23 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
 
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
     """
-    Returns the date that is `months` months after `start`
+    Returns the date that is `months` months after `start`. If `months` is a negative value
+    then these amount of months will be deducted from the `start`.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    start : :class:`~pyspark.sql.Column` or str
+        date column to work on.
+    months : :class:`~pyspark.sql.Column` or str or int
+        how many months after the given date to calculate.
+        Accepts negative value as well to calculate backwards.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a date after/before given number of months.
 
     Examples
     --------
@@ -4091,6 +4266,8 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     [Row(next_month=datetime.date(2015, 5, 8))]
     >>> df.select(add_months(df.dt, df.add.cast('integer')).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 6, 8))]
+    >>> df.select(add_months('dt', -2).alias('prev_month')).collect()
+    [Row(prev_month=datetime.date(2015, 2, 8))]
     """
     months = lit(months) if isinstance(months, int) else months
     return _invoke_function_over_columns("add_months", start, months)
@@ -4105,6 +4282,20 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    date1 : :class:`~pyspark.sql.Column` or str
+        first date column.
+    date2 : :class:`~pyspark.sql.Column` or str
+        second date column.
+    roundOff : bool, optional
+        whether to round (to 8 digits) the final value or not (default: True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        number of months between two dates.
 
     Examples
     --------
@@ -4128,6 +4319,18 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     .. versionadded:: 2.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column of values to convert.
+    format: str, optional
+        format to use to convert date values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        date value as :class:`pyspark.sql.types.DateType` type.
 
     Examples
     --------
@@ -4165,6 +4368,18 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     .. versionadded:: 2.2.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column values to convert.
+    format: str, optional
+        format to use to convert timestamp values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        timestamp value as :class:`pyspark.sql.types.TimestampType` type.
+
     Examples
     --------
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
@@ -4190,10 +4405,16 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     Parameters
     ----------
     date : :class:`~pyspark.sql.Column` or str
+        input column of values to truncate.
     format : str
         'year', 'yyyy', 'yy' to truncate by year,
         or 'month', 'mon', 'mm' to truncate by month
         Other options are: 'week', 'quarter'
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        truncated date.
 
     Examples
     --------
@@ -4221,6 +4442,12 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
         Other options are:
         'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
     timestamp : :class:`~pyspark.sql.Column` or str
+        input column of values to truncate.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        truncated timestamp.
 
     Examples
     --------
@@ -4235,12 +4462,23 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
 
 def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     """
-    Returns the first date which is later than the value of the date column.
-
-    Day of the week parameter is case insensitive, and accepts:
-        "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+    Returns the first date which is later than the value of the date column
+    based on second `week day` argument.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    date : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    dayOfWeek : str
+        day of the week, case-insensitive, accepts:
+            "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column of computed results.
 
     Examples
     --------
@@ -4256,6 +4494,16 @@ def last_day(date: "ColumnOrName") -> Column:
     Returns the last day of the month which the given date belongs to.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    date : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        last day of the month.
 
     Examples
     --------
@@ -4273,6 +4521,18 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     format.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    timestamp : :class:`~pyspark.sql.Column` or str
+        column of unix time values.
+    format : str, optional
+        format to use to convert to (default: yyyy-MM-dd HH:mm:ss)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        formatted timestamp as string.
 
     Examples
     --------
@@ -4301,11 +4561,23 @@ def unix_timestamp(
     """
     Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
     to Unix time stamp (in seconds), using the default timezone and the default
-    locale, return null if fail.
+    locale, returns null if failed.
 
     if `timestamp` is None, then it returns current timestamp.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    timestamp : :class:`~pyspark.sql.Column` or str, optional
+        timestamps of string values.
+    format : str, optional
+        alternative format to use for converting (default: yyyy-MM-dd HH:mm:ss).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        unix time as long integer.
 
     Examples
     --------
@@ -4352,6 +4624,11 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
         .. versionchanged:: 2.4
            `tz` can take a :class:`~pyspark.sql.Column` containing timezone ID strings.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        timestamp value represented in given timezone.
+
     Examples
     --------
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
@@ -4397,6 +4674,11 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
         .. versionchanged:: 2.4.0
            `tz` can take a :class:`~pyspark.sql.Column` containing timezone ID strings.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        timestamp value represented in UTC timezone.
+
     Examples
     --------
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
@@ -4416,6 +4698,16 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     to a timestamp.
 
     .. versionadded:: 3.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        unix time values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        converted timestamp value.
 
     Examples
     --------
