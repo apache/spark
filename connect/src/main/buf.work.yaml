@@ -15,9 +15,5 @@
 # limitations under the License.
 #
 version: v1
-breaking:
-  use:
-    - FILE
-lint:
-  use:
-    - DEFAULT
+directories:
+  - protobuf
