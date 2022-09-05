@@ -18,68 +18,9 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait QueryErrorsSuiteBase extends SharedSparkSession {
-
-  def validateParsingError(
-      sqlText: String,
-      errorClass: String,
-      errorSubClass: Option[String] = None,
-      sqlState: String,
-      parameters: Map[String, String] = Map.empty,
-      context: QueryContext): Unit = {
-    checkError(
-      exception = intercept[ParseException](sql(sqlText)),
-      errorClass = errorClass,
-      errorSubClass = errorSubClass,
-      sqlState = Some(sqlState),
-      parameters = parameters,
-      queryContext = Array(context))
-  }
-
-  def validateParsingError(
-      sqlText: String,
-      errorClass: String,
-      errorSubClass: Option[String],
-      sqlState: String,
-      parameters: Map[String, String]): Unit = {
-    checkError(
-      exception = intercept[ParseException](sql(sqlText)),
-      errorClass = errorClass,
-      errorSubClass = errorSubClass,
-      sqlState = Some(sqlState),
-      parameters = parameters,
-      queryContext = Array.empty)
-  }
-
-  def validateParsingError(
-      sqlText: String,
-      errorClass: String,
-      sqlState: String,
-      parameters: Map[String, String]): Unit = {
-    checkError(
-      exception = intercept[ParseException](sql(sqlText)),
-      errorClass = errorClass,
-      errorSubClass = None,
-      sqlState = Some(sqlState),
-      parameters = parameters,
-      queryContext = Array.empty)
-  }
-
-  def validateParsingError(
-      sqlText: String,
-      errorClass: String,
-      sqlState: String): Unit = {
-    checkError(
-      exception = intercept[ParseException](sql(sqlText)),
-      errorClass = errorClass,
-      errorSubClass = None,
-      sqlState = Some(sqlState),
-      parameters = Map.empty,
-      queryContext = Array.empty)
-  }
 
   case class ExpectedContext(
       objectType: String,

@@ -17,17 +17,23 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.parser.ParseException
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
 class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](sql(sqlText).collect())
+  }
+
   test("UNSUPPORTED_FEATURE: LATERAL join with NATURAL join not supported") {
-    validateParsingError(
-      sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
+    checkError(
+      exception = parseException("SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)"),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("LATERAL_NATURAL_JOIN"),
+      errorSubClass = "LATERAL_NATURAL_JOIN",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
@@ -36,10 +42,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("UNSUPPORTED_FEATURE: LATERAL join with USING join not supported") {
-    validateParsingError(
-      sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
+    checkError(
+      exception = parseException("SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)"),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("LATERAL_JOIN_USING"),
+      errorSubClass = "LATERAL_JOIN_USING",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
@@ -53,10 +59,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       "FULL OUTER" -> (17, 73),
       "LEFT SEMI" -> (17, 72),
       "LEFT ANTI" -> (17, 72)).foreach { case (joinType, (start, stop)) =>
-      validateParsingError(
-        sqlText = s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
+      checkError(
+        exception = parseException(s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"),
         errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = Some("LATERAL_JOIN_OF_TYPE"),
+        errorSubClass = "LATERAL_JOIN_OF_TYPE",
         sqlState = "0A000",
         parameters = Map("joinType" -> joinType),
         context = ExpectedContext(
@@ -75,8 +81,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       ", LATERAL VALUES (0, 1)" -> ("FROM t1, LATERAL VALUES (0, 1)", 9, 38),
       ", LATERAL RANGE(0, 1)" -> ("FROM t1, LATERAL RANGE(0, 1)", 9, 36)
     ).foreach { case (sqlText, (fragment, start, stop)) =>
-      validateParsingError(
-        sqlText = s"SELECT * FROM t1$sqlText",
+      checkError(
+        exception = parseException(s"SELECT * FROM t1$sqlText"),
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
         parameters = Map("inputString" -> "LATERAL can only be used with subquery."),
@@ -85,10 +91,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("UNSUPPORTED_FEATURE: NATURAL CROSS JOIN is not supported") {
-    validateParsingError(
-      sqlText = "SELECT * FROM a NATURAL CROSS JOIN b",
+    checkError(
+      exception = parseException("SELECT * FROM a NATURAL CROSS JOIN b"),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("NATURAL_CROSS_JOIN"),
+      errorSubClass = "NATURAL_CROSS_JOIN",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = "NATURAL CROSS JOIN b",
@@ -97,8 +103,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: redefine window") {
-    validateParsingError(
-      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2",
+    checkError(
+      exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "The definition of window `win` is repetitive."),
@@ -109,8 +115,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: invalid window reference") {
-    validateParsingError(
-      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win",
+    checkError(
+      exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Window reference `win` is not a window specification."),
@@ -121,8 +127,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: window reference cannot be resolved") {
-    validateParsingError(
-      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win2",
+    checkError(
+      exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win2"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Cannot resolve window reference `win2`."),
@@ -134,10 +140,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("UNSUPPORTED_FEATURE: TRANSFORM does not support DISTINCT/ALL") {
     val sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t"
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("TRANSFORM_DISTINCT_ALL"),
+      errorSubClass = "TRANSFORM_DISTINCT_ALL",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,
@@ -148,10 +154,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   test("UNSUPPORTED_FEATURE: In-memory mode does not support TRANSFORM with serde") {
     val sqlText = "SELECT TRANSFORM(a) ROW FORMAT SERDE " +
       "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t"
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("TRANSFORM_NON_HIVE"),
+      errorSubClass = "TRANSFORM_NON_HIVE",
       sqlState = "0A000",
       context = ExpectedContext(
         fragment = sqlText,
@@ -160,8 +166,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: Too many arguments for transform") {
-    validateParsingError(
-      sqlText = "CREATE TABLE table(col int) PARTITIONED BY (years(col,col))",
+    checkError(
+      exception = parseException("CREATE TABLE table(col int) PARTITIONED BY (years(col,col))"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Too many arguments for transform `years`"),
@@ -172,8 +178,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: Invalid table value function name") {
-    validateParsingError(
-      sqlText = "SELECT * FROM db.func()",
+    checkError(
+      exception = parseException("SELECT * FROM db.func()"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "table valued function cannot specify database name "),
@@ -182,8 +188,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         start = 14,
         stop = 22))
 
-    validateParsingError(
-      sqlText = "SELECT * FROM ns.db.func()",
+    checkError(
+      exception = parseException("SELECT * FROM ns.db.func()"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "table valued function cannot specify database name "),
@@ -195,8 +201,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("INVALID_SQL_SYNTAX: Invalid scope in show functions") {
     val sqlText = "SHOW sys FUNCTIONS"
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "SHOW `sys` FUNCTIONS not supported"),
@@ -208,8 +214,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
     val sqlText1 = "SHOW FUNCTIONS IN db f1"
-    validateParsingError(
-      sqlText = sqlText1,
+    checkError(
+      exception = parseException(sqlText1),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
@@ -219,8 +225,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         start = 0,
         stop = 22))
     val sqlText2 = "SHOW FUNCTIONS IN db LIKE f1"
-    validateParsingError(
-      sqlText = sqlText2,
+    checkError(
+      exception = parseException(sqlText2),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
@@ -237,8 +243,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
         |JAR '/path/to/jar2'""".stripMargin
 
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
@@ -255,8 +261,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
         |JAR '/path/to/jar2'""".stripMargin
 
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
@@ -273,8 +279,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
         |JAR '/path/to/jar2'""".stripMargin
 
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Unsupported function name `ns`.`db`.`func`"),
@@ -290,8 +296,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
         |JAR '/path/to/jar2'""".stripMargin
 
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
@@ -303,21 +309,22 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
-    validateParsingError(
-      sqlText = "DROP TEMPORARY FUNCTION db.func",
+    val sqlText = "DROP TEMPORARY FUNCTION db.func"
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" ->
         "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`"),
       context = ExpectedContext(
-        fragment = "DROP TEMPORARY FUNCTION db.func",
+        fragment = sqlText,
         start = 0,
         stop = 30))
   }
 
   test("DUPLICATE_KEY: Found duplicate partition keys") {
-    validateParsingError(
-      sqlText = "INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'",
+    checkError(
+      exception = parseException("INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'"),
       errorClass = "DUPLICATE_KEY",
       sqlState = "23000",
       parameters = Map("keyColumn" -> "`p1`"),
@@ -328,8 +335,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("DUPLICATE_KEY: in table properties") {
-    validateParsingError(
-      sqlText = "ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')",
+    checkError(
+      exception = parseException("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')"),
       errorClass = "DUPLICATE_KEY",
       sqlState = "23000",
       parameters = Map("keyColumn" -> "`key1`"),
@@ -340,57 +347,53 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("PARSE_EMPTY_STATEMENT: empty input") {
-    validateParsingError(
-      sqlText = "",
+    checkError(
+      exception = parseException(""),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000")
+      sqlState = Some("42000"))
 
-    validateParsingError(
-      sqlText = "   ",
+    checkError(
+      exception = parseException("   "),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000")
+      sqlState = Some("42000"))
 
-    validateParsingError(
-      sqlText = " \n",
+    checkError(
+      exception = parseException(" \n"),
       errorClass = "PARSE_EMPTY_STATEMENT",
-      sqlState = "42000")
+      sqlState = Some("42000"))
   }
 
   test("PARSE_SYNTAX_ERROR: no viable input") {
-    val sqlText = "select ((r + 1) "
-    validateParsingError(
-      sqlText = sqlText,
+    checkError(
+      exception = parseException("select ((r + 1) "),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
   test("PARSE_SYNTAX_ERROR: extraneous input") {
-    validateParsingError(
-      sqlText = "select 1 1",
+    checkError(
+      exception = parseException("select 1 1"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "'1'", "hint" -> ": extra input '1'"))
 
-    validateParsingError(
-      sqlText = "select *\nfrom r as q t",
+    checkError(
+      exception = parseException("select *\nfrom r as q t"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42000",
       parameters = Map("error" -> "'t'", "hint" -> ": extra input 't'"))
   }
 
   test("PARSE_SYNTAX_ERROR: mismatched input") {
-    validateParsingError(
-      sqlText = "select * from r order by q from t",
+    checkError(
+      exception = parseException("select * from r order by q from t"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "'from'", "hint" -> ""))
 
-    validateParsingError(
-      sqlText = "select *\nfrom r\norder by q\nfrom t",
+    checkError(
+      exception = parseException("select *\nfrom r\norder by q\nfrom t"),
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42000",
       parameters = Map("error" -> "'from'", "hint" -> ""))
@@ -398,48 +401,43 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("PARSE_SYNTAX_ERROR: jargon token substitute to user-facing language") {
     // '<EOF>' -> end of input
-    validateParsingError(
-      sqlText = "select count(*",
+    checkError(
+      exception = parseException("select count(*"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "end of input", "hint" -> ""))
 
-    validateParsingError(
-      sqlText = "select 1 as a from",
+    checkError(
+      exception = parseException("select 1 as a from"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
   test("PARSE_SYNTAX_ERROR - SPARK-21136: " +
     "misleading error message due to problematic antlr grammar") {
-    validateParsingError(
-      sqlText = "select * from a left join_ b on a.id = b.id",
+    checkError(
+      exception = parseException("select * from a left join_ b on a.id = b.id"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "'join_'", "hint" -> ": missing 'JOIN'"))
 
-    validateParsingError(
-      sqlText = "select * from test where test.t is like 'test'",
+    checkError(
+      exception = parseException("select * from test where test.t is like 'test'"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "'is'", "hint" -> ""))
 
-    validateParsingError(
-      sqlText = "SELECT * FROM test WHERE x NOT NULL",
+    checkError(
+      exception = parseException("SELECT * FROM test WHERE x NOT NULL"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      errorSubClass = None,
       sqlState = "42000",
       parameters = Map("error" -> "'NOT'", "hint" -> ""))
   }
 
   test("INVALID_SQL_SYNTAX: show table partition key must set value") {
-    validateParsingError(
-      sqlText = "SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)",
+    checkError(
+      exception = parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Partition key `grade` must set value (can't be empty)."),
@@ -450,9 +448,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("INVALID_SQL_SYNTAX: expected a column reference for transform bucket") {
-    validateParsingError(
-      sqlText =
-        "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))",
+    checkError(
+      exception = parseException("CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "Expected a column reference for transform `bucket`: 66"),
@@ -463,79 +460,80 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
-    validateParsingError(
-      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
+    val sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age"
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
+      errorSubClass = "DESC_TABLE_COLUMN_PARTITION",
       sqlState = "0A000",
       context = ExpectedContext(
-        fragment = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age",
+        fragment = sqlText,
         start = 0,
         stop = 68))
   }
 
   test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
-    validateParsingError(
-      sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)",
+    val sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)"
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       parameters = Map("inputString" -> "PARTITION specification is incomplete: `grade`"),
       context = ExpectedContext(
-        fragment = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)",
+        fragment = sqlText,
         start = 0,
         stop = 49))
   }
 
   test("UNSUPPORTED_FEATURE: cannot set reserved namespace property") {
-    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
-    validateParsingError(
-      sqlText = sql,
+    val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("SET_NAMESPACE_PROPERTY"),
+      errorSubClass = "SET_NAMESPACE_PROPERTY",
       sqlState = "0A000",
       parameters = Map(
         "property" -> "location",
         "msg" -> "please use the LOCATION clause to specify it"),
       context = ExpectedContext(
-        fragment = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')",
+        fragment = sqlText,
         start = 0,
         stop = 80))
   }
 
   test("UNSUPPORTED_FEATURE: cannot set reserved table property") {
-    val sql = "CREATE TABLE student (id INT, name STRING, age INT) " +
+    val sqlText = "CREATE TABLE student (id INT, name STRING, age INT) " +
       "USING PARQUET TBLPROPERTIES ('provider'='parquet')"
-    validateParsingError(
-      sqlText = sql,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("SET_TABLE_PROPERTY"),
+      errorSubClass = "SET_TABLE_PROPERTY",
       sqlState = "0A000",
       parameters = Map(
         "property" -> "provider",
         "msg" -> "please use the USING clause to specify it"),
       context = ExpectedContext(
-        fragment = "CREATE TABLE student (id INT, name STRING, age INT) USING PARQUET TBLPROPERTIES ('provider'='parquet')",
+        fragment = sqlText,
         start = 0,
         stop = 101))
   }
 
   test("INVALID_PROPERTY_KEY: invalid property key for set quoted configuration") {
-    val sql = "set =`value`"
-    validateParsingError(
-      sqlText = sql,
+    val sqlText = "set =`value`"
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "INVALID_PROPERTY_KEY",
       sqlState = null,
       parameters = Map("key" -> "\"\"", "value" -> "\"value\""),
       context = ExpectedContext(
-        fragment = "set =`value`",
+        fragment = sqlText,
         start = 0,
         stop = 11))
   }
 
   test("INVALID_PROPERTY_VALUE: invalid property value for set quoted configuration") {
-    val sql = "set `key`=1;2;;"
-    validateParsingError(
-      sqlText = sql,
+    checkError(
+      exception = parseException("set `key`=1;2;;"),
       errorClass = "INVALID_PROPERTY_VALUE",
       sqlState = null,
       parameters = Map("value" -> "\"1;2;;\"", "key" -> "\"key\""),
@@ -546,15 +544,15 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   }
 
   test("UNSUPPORTED_FEATURE: cannot set Properties and DbProperties at the same time") {
-    val sql = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
+    val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') " +
       "WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')"
-    validateParsingError(
-      sqlText = sql,
+    checkError(
+      exception = parseException(sqlText),
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("SET_PROPERTIES_AND_DBPROPERTIES"),
+      errorSubClass = "SET_PROPERTIES_AND_DBPROPERTIES",
       sqlState = "0A000",
       context = ExpectedContext(
-        fragment = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c') WITH DBPROPERTIES('a'='a', 'b'='b', 'c'='c')",
+        fragment = sqlText,
         start = 0,
         stop = 124))
   }
