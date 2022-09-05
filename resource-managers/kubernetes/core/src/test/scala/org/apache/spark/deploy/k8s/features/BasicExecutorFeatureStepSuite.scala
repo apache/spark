@@ -16,8 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.collection.JavaConverters
+import scala.collection.JavaConverters._
+
 import com.google.common.net.InternetDomainName
+import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._

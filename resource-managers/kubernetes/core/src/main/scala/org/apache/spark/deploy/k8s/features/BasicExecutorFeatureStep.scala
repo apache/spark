@@ -177,7 +177,7 @@ private[spark] class BasicExecutorFeatureStep(
             .withContainerPort(port)
             .build()
         }
-    } else Seq.empty
+    } else Nil
 
     if (!isDefaultProfile) {
       if (pod.container != null && pod.container.getResources() != null) {
