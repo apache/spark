@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -25,7 +25,8 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -140,7 +141,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
-    case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
+    case ByteType | ShortType | IntegerType | LongType |
+         _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
     case StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
@@ -166,6 +168,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
     case _: TimestampType if value.isInstanceOf[Instant] =>
       toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
+    case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
+      localDateTimeToMicros(value.asInstanceOf[LocalDateTime])
+    case _: YearMonthIntervalType =>
+      IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
+    case _: DayTimeIntervalType =>
+      IntervalUtils.durationToMicros(value.asInstanceOf[Duration])
     case _ => value
   }
 

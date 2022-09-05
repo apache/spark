@@ -12,14 +12,19 @@ def _parse_args():
     zinc_port_var = "ZINC_PORT"
     zinc_port_option = "--zinc-port"
     parser = argparse.ArgumentParser()
-    parser.add_argument(zinc_port_option,
-                        type=int,
-                        default=int(os.environ.get(zinc_port_var, "0")),
-                        help="Specify zinc port")
+    parser.add_argument(
+        zinc_port_option,
+        type=int,
+        default=int(os.environ.get(zinc_port_var, "0")),
+        help="Specify zinc port",
+    )
     args = parser.parse_args()
     if not args.zinc_port:
-        parser.error("Specify either environment variable {0} or option {1}".format(
-            zinc_port_var, zinc_port_option))
+        parser.error(
+            "Specify either environment variable {0} or option {1}".format(
+                zinc_port_var, zinc_port_option
+            )
+        )
     return args
 
 
@@ -36,9 +41,11 @@ def _yield_processes_listening_on_port(port):
     innocuous_errors = re.compile(
         r"^\s*Output information may be incomplete.\s*$"
         r"|^lsof: WARNING: can't stat\(\) (?:tracefs|nsfs|overlay|tmpfs|aufs|zfs) file system .*$"
-        r"|^\s*$")
-    lsof_process = subprocess.Popen(["lsof", "-P"], stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, universal_newlines=True)
+        r"|^\s*$"
+    )
+    lsof_process = subprocess.Popen(
+        ["lsof", "-P"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+    )
     stdout, stderr = lsof_process.communicate()
     if lsof_process.returncode != 0:
         raise OSError("Can't run lsof -P, stderr:\n{}".format(stderr))

@@ -62,9 +62,6 @@ case class First(child: Expression, ignoreNulls: Boolean)
 
   override def nullable: Boolean = true
 
-  // First is not a deterministic function.
-  override lazy val deterministic: Boolean = false
-
   // Return data type.
   override def dataType: DataType = child.dataType
 

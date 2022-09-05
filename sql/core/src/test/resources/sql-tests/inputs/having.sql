@@ -11,6 +11,9 @@ SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2;
 -- having condition contains grouping column
 SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2;
 
+-- invalid having condition contains grouping column
+SELECT count(k) FROM hav GROUP BY v HAVING v = array(1);
+
 -- SPARK-11032: resolve having correctly
 SELECT MIN(t.v) FROM (SELECT * FROM hav WHERE v > 0) t HAVING(COUNT(1) > 0);
 

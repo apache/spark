@@ -94,7 +94,11 @@ private[v1] class SqlResource extends BaseAppResource {
 
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
-    val nodes = if (details) printableMetrics(graph.allNodes, exec.metricValues) else Seq.empty
+    val nodes = if (details) {
+      printableMetrics(graph.allNodes, Option(exec.metricValues).getOrElse(Map.empty))
+    } else {
+      Seq.empty
+    }
     val edges = if (details) graph.edges else Seq.empty
 
     new ExecutionData(

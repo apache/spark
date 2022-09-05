@@ -111,17 +111,19 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNamespaceAndTable("ns", "table") { t =>
-      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
+    withCurrentCatalogAndNamespace {
+      withNamespaceAndTable("ns", "table") { t =>
+        sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
-      sql(s"USE $catalog")
-      // No table is matched since the current namespace is not ["ns"]
-      assert(defaultNamespace != Seq("ns"))
-      runShowTablesSql("SHOW TABLES", Seq())
+        sql(s"USE $catalog")
+        // No table is matched since the current namespace is not ["ns"]
+        assert(defaultNamespace != Seq("ns"))
+        runShowTablesSql("SHOW TABLES", Seq())
 
-      // Update the current namespace to match "ns.tbl".
-      sql(s"USE $catalog.ns")
-      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+        // Update the current namespace to match "ns.tbl".
+        sql(s"USE $catalog.ns")
+        runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+      }
     }
   }
 }

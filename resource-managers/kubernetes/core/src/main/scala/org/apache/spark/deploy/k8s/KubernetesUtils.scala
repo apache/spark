@@ -23,7 +23,7 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -320,7 +320,7 @@ object KubernetesUtils extends Logging {
             fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
             val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
             log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
-            uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
+            uploadFileToHadoopCompatibleFS(new Path(fileUri), new Path(targetUri), fs)
             targetUri
           } catch {
             case e: Exception =>
@@ -344,7 +344,7 @@ object KubernetesUtils extends Logging {
       delSrc : Boolean = false,
       overwrite: Boolean = true): Unit = {
     try {
-      fs.copyFromLocalFile(false, true, src, dest)
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
     } catch {
       case e: IOException =>
         throw new SparkException(s"Error uploading file ${src.getName}", e)
@@ -380,5 +380,38 @@ object KubernetesUtils extends Logging {
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
     }
+  }
+
+  /**
+   * This function builds the EnvVar objects for each key-value env with non-null value.
+   * If value is an empty string, define a key-only environment variable.
+   */
+  @Since("3.4.0")
+  def buildEnvVars(env: Seq[(String, String)]): Seq[EnvVar] = {
+    env.filterNot(_._2 == null)
+      .map { case (k, v) =>
+        new EnvVarBuilder()
+          .withName(k)
+          .withValue(v)
+          .build()
+      }
+  }
+
+  /**
+   * This function builds the EnvVar objects for each field ref env
+   * with non-null apiVersion and fieldPath.
+   */
+  @Since("3.4.0")
+  def buildEnvVarsWithFieldRef(env: Seq[(String, String, String)]): Seq[EnvVar] = {
+    env.filterNot(_._2 == null)
+      .filterNot(_._3 == null)
+      .map { case (key, apiVersion, fieldPath) =>
+        new EnvVarBuilder()
+          .withName(key)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef(apiVersion, fieldPath)
+            .build())
+          .build()
+      }
   }
 }

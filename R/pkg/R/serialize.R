@@ -58,7 +58,12 @@ writeObject <- function(con, object, writeType = TRUE) {
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists
   if (type %in% c("integer", "character", "logical", "double", "numeric")) {
-    if (is.na(object)) {
+    if (is.na(object[[1]])) {
+      # Uses the first element for now to keep the behavior same as R before
+      # 4.2.0. This is wrong because we should differenciate c(NA) from a
+      # single NA as the former means array(null) and the latter means null
+      # in Spark SQL. However, it requires non-trivial comparison to distinguish
+      # both in R. We should ideally fix this.
       object <- NULL
       type <- "NULL"
     }
@@ -226,7 +231,7 @@ writeSerializeInArrow <- function(conn, df) {
     # There looks no way to send each batch in streaming format via socket
     # connection. See ARROW-4512.
     # So, it writes the whole Arrow streaming-formatted binary at once for now.
-    writeRaw(conn, arrow::write_arrow(df, raw()))
+    writeRaw(conn, arrow::write_to_raw(df))
   } else {
     stop("'arrow' package should be installed.")
   }

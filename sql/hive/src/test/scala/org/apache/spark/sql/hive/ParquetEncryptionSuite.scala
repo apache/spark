@@ -64,6 +64,33 @@ class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-37117: Can't read files in Parquet encryption external key material mode") {
+    withTempDir { dir =>
+      withSQLConf(
+        "parquet.crypto.factory.class" ->
+          "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory",
+        "parquet.encryption.kms.client.class" ->
+          "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS",
+        "parquet.encryption.key.material.store.internally" ->
+          "false",
+        "parquet.encryption.key.list" ->
+          s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}") {
+
+        val inputDF = Seq((1, 22, 333)).toDF("a", "b", "c")
+        val parquetDir = new File(dir, "parquet").getCanonicalPath
+        inputDF.write
+          .option("parquet.encryption.column.keys", "key1: a, b; key2: c")
+          .option("parquet.encryption.footer.key", "footerKey")
+          .parquet(parquetDir)
+
+        val parquetDF = spark.read.parquet(parquetDir)
+        assert(parquetDF.inputFiles.nonEmpty)
+        val readDataset = parquetDF.select("a", "b", "c")
+        checkAnswer(readDataset, inputDF)
+      }
+    }
+  }
+
   /**
    * Verify that the directory contains an encrypted parquet in
    * encrypted footer mode by means of checking for all the parquet part files

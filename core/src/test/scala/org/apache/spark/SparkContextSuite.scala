@@ -31,12 +31,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.apache.logging.log4j.{Level, LogManager}
 import org.json4s.{DefaultFormats, Extraction}
-import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.TestUtils._
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
@@ -612,15 +613,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("log level case-insensitive and reset log level") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    val originalLevel = LogManager.getRootLogger().getLevel
     try {
       sc.setLogLevel("debug")
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.DEBUG)
+      assert(LogManager.getRootLogger().getLevel === Level.DEBUG)
       sc.setLogLevel("INfo")
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.INFO)
+      assert(LogManager.getRootLogger().getLevel === Level.INFO)
     } finally {
       sc.setLogLevel(originalLevel.toString)
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+      assert(LogManager.getRootLogger().getLevel === originalLevel)
       sc.stop()
     }
   }
@@ -1072,20 +1073,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
 
-      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "Added dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "Added dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      }
 
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
-      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
-      val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
-        .head.getRenderedMessage
-      dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "The dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        val existMsg = logAppender.loggingEvents.filter(_.getMessage.getFormattedMessage.contains(
+          "The dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+          .head.getMessage.getFormattedMessage
+        dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+      }
     }
   }
 
@@ -1130,9 +1135,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-      assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
-          "`invalidParam1=foo&invalidParam2=boo`.")))
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
+            "`invalidParam1=foo&invalidParam2=boo`.")))
+      }
     }
   }
 
@@ -1250,12 +1257,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
-    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     resetSparkContext()
     val c2 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "false")
     sc = new SparkContext(c2)
-    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     resetSparkContext()
     val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
@@ -1270,7 +1277,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       "spark.sql.sources.commitProtocolClass" ->
         "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
     ).foreach { case (k, v) =>
-      assertEquals(v, sc.getConf.get(k))
+      assert(v == sc.getConf.get(k))
     }
 
     // Respect a user configuration
@@ -1287,9 +1294,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       "spark.sql.sources.commitProtocolClass" -> null
     ).foreach { case (k, v) =>
       if (v == null) {
-        assertFalse(sc.getConf.contains(k))
+        assert(!sc.getConf.contains(k))
       } else {
-        assertEquals(v, sc.getConf.get(k))
+        assert(v == sc.getConf.get(k))
       }
     }
   }
@@ -1337,6 +1344,61 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(env.blockManager.blockStoreClient.getAppAttemptId.equals("1"))
   }
 
+  test("SPARK-34659: check invalid UI_REVERSE_PROXY_URL") {
+    val reverseProxyUrl = "http://proxyhost:8080/path/proxy/spark"
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster("pushbasedshuffleclustermanager")
+    conf.set(UI_REVERSE_PROXY, true)
+    conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
+    val msg = intercept[java.lang.IllegalArgumentException] {
+      new SparkContext(conf)
+    }.getMessage
+    assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
+  }
+
+  test("SPARK-39957: ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
+    // This test is used to prove that driver will receive executorExitCode before onDisconnected
+    // removes the executor. If the executor is removed by onDisconnected, the executor loss will be
+    // considered as a task failure. Spark will throw a SparkException because TASK_MAX_FAILURES is
+    // 1. On the other hand, driver removes executor with exitCode HEARTBEAT_FAILURE, the loss
+    // should be counted as network failure, and thus the job should not throw SparkException.
+
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1)
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code-heartbeat", conf)
+    val result = sc.parallelize(1 to 10, 1).map { x =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.taskAttemptId() == 0) {
+        System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+      } else {
+        x
+      }
+    }.count()
+    assert(result == 10L)
+    sc.stop()
+  }
+
+  test("SPARK-39957: ExitCode HEARTBEAT_FAILURE will be counted as task failure when" +
+    "EXECUTOR_REMOVE_DELAY is disabled") {
+    // If the executor is removed by onDisconnected, the executor loss will be considered as a task
+    // failure. Spark will throw a SparkException because TASK_MAX_FAILURES is 1.
+
+    val conf = new SparkConf().set(TASK_MAX_FAILURES, 1).set(EXECUTOR_REMOVE_DELAY.key, "0s")
+    val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code-heartbeat", conf)
+    eventually(timeout(30.seconds), interval(1.seconds)) {
+      val e = intercept[SparkException] {
+        sc.parallelize(1 to 10, 1).map { x =>
+          val context = org.apache.spark.TaskContext.get()
+          if (context.taskAttemptId() == 0) {
+            System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+          } else {
+            x
+          }
+        }.count()
+      }
+      assert(e.getMessage.contains("Remote RPC client disassociated"))
+    }
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {

@@ -467,7 +467,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // with dummy input, resolve the plan by the analyzer, and replace the dummy input
     // with a literal for tests.
     val unresolvedDeser = UnresolvedDeserializer(encoderFor[Map[Int, String]].deserializer)
-    val dummyInputPlan = LocalRelation('value.map(MapType(IntegerType, StringType)))
+    val dummyInputPlan = LocalRelation(Symbol("value").map(MapType(IntegerType, StringType)))
     val plan = Project(Alias(unresolvedDeser, "none")() :: Nil, dummyInputPlan)
 
     val analyzedPlan = SimpleAnalyzer.execute(plan)
@@ -498,13 +498,17 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>
       val validateType = ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), dt)
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        dt,
+        lenient = false)
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
     checkExceptionInExpression[RuntimeException](
       ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), DoubleType),
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        DoubleType,
+        lenient = false),
       InternalRow.fromSeq(Seq(Row(1))),
       "java.lang.Integer is not a valid external type for schema of double")
   }

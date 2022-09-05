@@ -69,7 +69,7 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof ExecutorShuffleInfo) {
+    if (other instanceof ExecutorShuffleInfo) {
       ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
       return Arrays.equals(localDirs, o.localDirs)
         && subDirsPerLocalDir == o.subDirsPerLocalDir

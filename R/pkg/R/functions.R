@@ -41,6 +41,8 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -256,24 +258,33 @@ NULL
 #'          into accumulator (the first argument).
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
+#' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
+#'          which is used to compare the elemnts of the array.
+#'          The comparator will take two
+#'          arguments representing two elements of the array. It returns a negative integer,
+#'          0, or a positive integer as the first element is less than, equal to,
+#'          or greater than the second element.
+#'          If the comparator function returns null, the function will fail and raise an error.
 #' @param ... additional argument(s).
 #'          \itemize{
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
 #'              You can find the JSON-specific options for reading/writing JSON files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'              You can find the CSV-specific options for reading/writing CSV files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -288,6 +299,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
+#' head(select(tmp, array_sort(tmp$v1, function(x, y) coalesce(cast(y - x, "integer"), lit(0L)))))
 #' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' head(select(tmp, array_transform("v1", function(x) x * 10)))
 #' head(select(tmp, array_exists("v1", function(x) x > 120)))
@@ -1467,6 +1479,30 @@ setMethod("ltrim",
           })
 
 #' @details
+#' \code{make_date}: Create date from year, month and day fields.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              x@jc, y@jc, z@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1476,6 +1512,29 @@ setMethod("max",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1528,6 +1587,29 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -3182,7 +3264,8 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
 #'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
 #'                   from_unix = from_unixtime(unix_timestamp(df$time)),
-#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'),
+#'                   timestamp_from_unix = timestamp_seconds(unix_timestamp(df$time)))
 #' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
@@ -3744,6 +3827,7 @@ setMethod("row_number",
 #'        Column, for example \code{unresolved_named_lambda_var("a", "b", "c")}
 #'        yields unresolved \code{a.b.c}
 #' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
+#' @keywords internal
 unresolved_named_lambda_var <- function(...) {
   jc <- newJObject(
     "org.apache.spark.sql.Column",
@@ -3767,6 +3851,7 @@ unresolved_named_lambda_var <- function(...) {
 #' @param fun R \code{function} (unary, binary or ternary)
 #'        that transforms \code{Columns} into a \code{Column}
 #' @return JVM \code{LambdaFunction} object
+#' @keywords internal
 create_lambda <- function(fun) {
   as_jexpr <- function(x) callJMethod(x@jc, "expr")
 
@@ -3815,6 +3900,7 @@ create_lambda <- function(fun) {
 #' @param cols list of character or Column objects
 #' @param funs list of named list(fun = ..., expected_narg = ...)
 #' @return a \code{Column} representing name applied to cols with funs
+#' @keywords internal
 invoke_higher_order_function <- function(name, cols, funs) {
   as_jexpr <- function(x) {
     if (class(x) == "character") {
@@ -4063,9 +4149,16 @@ setMethod("array_repeat",
 #' @note array_sort since 2.4.0
 setMethod("array_sort",
           signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
-            column(jc)
+          function(x, comparator = NULL) {
+            if (is.null(comparator)) {
+               column(callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc))
+            } else {
+              invoke_higher_order_function(
+                "ArraySort",
+                cols = list(x),
+                funs = list(comparator)
+              )
+            }
           })
 
 #' @details
@@ -4777,7 +4870,8 @@ setMethod("current_timestamp",
           })
 
 #' @details
-#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#' \code{timestamp_seconds}: Converts the number of seconds from the Unix epoch
+#' (1970-01-01T00:00:00Z) to a timestamp.
 #'
 #' @rdname column_datetime_functions
 #' @aliases timestamp_seconds timestamp_seconds,Column-method

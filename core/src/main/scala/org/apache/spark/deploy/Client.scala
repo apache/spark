@@ -24,7 +24,8 @@ import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
@@ -190,13 +191,15 @@ private class ClientEndpoint(
                 logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
                   s"continue monitoring driver status.")
               }
-            }
-        }
-      } else {
+          }
+      }
+    } else if (exception.exists(e => Utils.responseFromBackup(e.getMessage))) {
+      logDebug(s"The status response is reported from a backup spark instance. So, ignored.")
+    } else {
         logError(s"ERROR: Cluster master did not recognize $submittedDriverID")
         System.exit(-1)
-      }
     }
+  }
   override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
@@ -280,7 +283,7 @@ private[spark] class ClientApp extends SparkApplication {
     if (!conf.contains(RPC_ASK_TIMEOUT)) {
       conf.set(RPC_ASK_TIMEOUT, "10s")
     }
-    Logger.getRootLogger.setLevel(driverArgs.logLevel)
+    LogManager.getRootLogger.asInstanceOf[Logger].setLevel(driverArgs.logLevel)
 
     val rpcEnv =
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))

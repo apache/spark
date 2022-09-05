@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, Tuple, TYPE_CHECKING, cast
+from typing import List, Tuple, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ from pyspark.pandas._typing import Label
 from pyspark.pandas.utils import column_labels_level
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 CORRELATION_OUTPUT_COLUMN = "__correlation_output__"
@@ -54,7 +54,7 @@ def corr(psdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     assert method in ("pearson", "spearman")
     ndf, column_labels = to_numeric_df(psdf)
     corr = Correlation.corr(ndf, CORRELATION_OUTPUT_COLUMN, method)
-    pcorr = cast(pd.DataFrame, corr.toPandas())
+    pcorr = corr.toPandas()
     arr = pcorr.iloc[0, 0].toArray()
     if column_labels_level(column_labels) > 1:
         idx = pd.MultiIndex.from_tuples(column_labels)
@@ -78,7 +78,7 @@ def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Lab
     """
     # TODO, it should be more robust.
     accepted_types = {
-        np.dtype(dt)  # type: ignore[misc]
+        np.dtype(dt)
         for dt in [np.int8, np.int16, np.int32, np.int64, np.float32, np.float64, np.bool_]
     }
     numeric_column_labels = [

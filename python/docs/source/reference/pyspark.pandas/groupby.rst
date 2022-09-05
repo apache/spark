@@ -64,14 +64,17 @@ Computations / Descriptive Stats
    GroupBy.cummin
    GroupBy.cumprod
    GroupBy.cumsum
+   GroupBy.ewm
    GroupBy.filter
    GroupBy.first
    GroupBy.last
+   GroupBy.mad
    GroupBy.max
    GroupBy.mean
    GroupBy.median
    GroupBy.min
    GroupBy.rank
+   GroupBy.sem
    GroupBy.std
    GroupBy.sum
    GroupBy.var

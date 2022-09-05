@@ -57,16 +57,18 @@ public final class ColumnarArray extends ArrayData {
       return UnsafeArrayData.fromPrimitiveArray(toByteArray());
     } else if (dt instanceof ShortType) {
       return UnsafeArrayData.fromPrimitiveArray(toShortArray());
-    } else if (dt instanceof IntegerType || dt instanceof DateType) {
+    } else if (dt instanceof IntegerType || dt instanceof DateType
+            || dt instanceof YearMonthIntervalType) {
       return UnsafeArrayData.fromPrimitiveArray(toIntArray());
-    } else if (dt instanceof LongType || dt instanceof TimestampType) {
+    } else if (dt instanceof LongType || dt instanceof TimestampType
+            || dt instanceof DayTimeIntervalType) {
       return UnsafeArrayData.fromPrimitiveArray(toLongArray());
     } else if (dt instanceof FloatType) {
       return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
     } else if (dt instanceof DoubleType) {
       return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
     } else {
-      return new GenericArrayData(toObjectArray(dt));
+      return new GenericArrayData(toObjectArray(dt)).copy(); // ensure the elements are copied.
     }
   }
 

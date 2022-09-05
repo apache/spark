@@ -25,13 +25,12 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
 
-class VectorsSuite extends SparkFunSuite with Logging {
+class VectorsSuite extends SparkFunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
   val n = 4

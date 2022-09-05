@@ -23,6 +23,7 @@ Window
 
 Rolling objects are returned by ``.rolling`` calls: :func:`pandas_on_spark.DataFrame.rolling`, :func:`pandas_on_spark.Series.rolling`, etc.
 Expanding objects are returned by ``.expanding`` calls: :func:`pandas_on_spark.DataFrame.expanding`, :func:`pandas_on_spark.Series.expanding`, etc.
+ExponentialMoving objects are returned by ``.ewm`` calls: :func:`pandas_on_spark.DataFrame.ewm`, :func:`pandas_on_spark.Series.ewm`, etc.
 
 Standard moving window functions
 --------------------------------
@@ -47,3 +48,11 @@ Standard expanding window functions
    Expanding.min
    Expanding.max
    Expanding.mean
+
+Exponential moving window functions
+-----------------------------------
+
+.. autosummary::
+   :toctree: api/
+
+   ExponentialMoving.mean

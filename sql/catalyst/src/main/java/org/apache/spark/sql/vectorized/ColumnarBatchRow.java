@@ -25,6 +25,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * This class wraps an array of {@link ColumnVector} and provides a row view.
+ *
+ * @since 3.3.0
  */
 @DeveloperApi
 public final class ColumnarBatchRow extends InternalRow {
@@ -52,9 +54,9 @@ public final class ColumnarBatchRow extends InternalRow {
           row.setByte(i, getByte(i));
         } else if (dt instanceof ShortType) {
           row.setShort(i, getShort(i));
-        } else if (dt instanceof IntegerType) {
+        } else if (dt instanceof IntegerType || dt instanceof YearMonthIntervalType) {
           row.setInt(i, getInt(i));
-        } else if (dt instanceof LongType) {
+        } else if (dt instanceof LongType || dt instanceof DayTimeIntervalType) {
           row.setLong(i, getLong(i));
         } else if (dt instanceof FloatType) {
           row.setFloat(i, getFloat(i));
@@ -71,6 +73,12 @@ public final class ColumnarBatchRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof StructType) {
+          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
+        } else if (dt instanceof ArrayType) {
+          row.update(i, getArray(i).copy());
+        } else if (dt instanceof MapType) {
+          row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -151,9 +159,9 @@ public final class ColumnarBatchRow extends InternalRow {
       return getByte(ordinal);
     } else if (dataType instanceof ShortType) {
       return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
+    } else if (dataType instanceof IntegerType || dataType instanceof YearMonthIntervalType) {
       return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
+    } else if (dataType instanceof LongType || dataType instanceof DayTimeIntervalType) {
       return getLong(ordinal);
     } else if (dataType instanceof FloatType) {
       return getFloat(ordinal);

@@ -789,8 +789,8 @@ private[spark] object RandomForest extends Logging with Serializable {
     val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
     val rightImpurity = rightImpurityCalculator.calculate()
 
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
+    val leftWeight = leftCount / totalCount
+    val rightWeight = rightCount / totalCount
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 

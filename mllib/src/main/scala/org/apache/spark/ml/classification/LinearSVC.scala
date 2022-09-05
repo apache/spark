@@ -34,6 +34,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -180,8 +181,12 @@ class LinearSVC @Since("2.2.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
-    val instances = extractInstances(dataset)
-      .setName("training instances")
+    val instances = dataset.select(
+      checkClassificationLabels($(labelCol), Some(2)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
 
     val (summarizer, labelSummarizer) = Summarizer
       .getClassificationSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))

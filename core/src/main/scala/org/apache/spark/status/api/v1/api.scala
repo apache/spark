@@ -89,6 +89,13 @@ class ExecutorStageSummary private[spark](
     val peakMemoryMetrics: Option[ExecutorMetrics],
     val isExcludedForStage: Boolean)
 
+class SpeculationStageSummary private[spark](
+   val numTasks: Int,
+   val numActiveTasks: Int,
+   val numCompletedTasks: Int,
+   val numFailedTasks: Int,
+   val numKilledTasks: Int)
+
 class ExecutorSummary private[spark](
     val id: String,
     val hostPort: String,
@@ -288,6 +295,7 @@ class StageData private[spark](
     val accumulatorUpdates: Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
+    val speculationSummary: Option[SpeculationStageSummary],
     val killedTasksSummary: Map[String, Int],
     val resourceProfileId: Int,
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
@@ -300,6 +308,7 @@ class TaskData private[spark](
     val taskId: Long,
     val index: Int,
     val attempt: Int,
+    val partitionId: Int,
     val launchTime: Date,
     val resultFetchStart: Option[Date],
     @JsonDeserialize(contentAs = classOf[JLong])
@@ -450,6 +459,7 @@ class ApplicationEnvironmentInfo private[spark] (
     val sparkProperties: Seq[(String, String)],
     val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
+    val metricsProperties: Seq[(String, String)],
     val classpathEntries: Seq[(String, String)],
     val resourceProfiles: Seq[ResourceProfileInfo])
 

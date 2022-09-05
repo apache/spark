@@ -25,9 +25,20 @@ migration to the DataFrame-based APIs under the `pyspark.ml` package.
 
 import numpy
 
-ver = [int(x) for x in numpy.version.version.split('.')[:2]]
+ver = [int(x) for x in numpy.version.version.split(".")[:2]]
 if ver < [1, 4]:
     raise RuntimeError("MLlib requires NumPy 1.4+")
 
-__all__ = ['classification', 'clustering', 'feature', 'fpm', 'linalg', 'random',
-           'recommendation', 'regression', 'stat', 'tree', 'util']
+__all__ = [
+    "classification",
+    "clustering",
+    "feature",
+    "fpm",
+    "linalg",
+    "random",
+    "recommendation",
+    "regression",
+    "stat",
+    "tree",
+    "util",
+]

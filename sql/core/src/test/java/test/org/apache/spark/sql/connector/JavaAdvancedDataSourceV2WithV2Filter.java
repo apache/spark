@@ -17,20 +17,22 @@
 
 package test.org.apache.spark.sql.connector;
 
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.connector.TestingV2Source;
-import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.expressions.filter.Filter;
-import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.connector.expressions.filter.GreaterThan;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.connector.TestingV2Source;
+import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.LiteralValue;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.connector.read.*;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
 
@@ -48,7 +50,7 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
     SupportsPushDownV2Filters, SupportsPushDownRequiredColumns {
 
     private StructType requiredSchema = TestingV2Source.schema();
-    private Filter[] filters = new Filter[0];
+    private Predicate[] predicates = new Predicate[0];
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
@@ -61,32 +63,38 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
     }
 
     @Override
-    public Filter[] pushFilters(Filter[] filters) {
-      Filter[] supported = Arrays.stream(filters).filter(f -> {
-        if (f instanceof GreaterThan) {
-          GreaterThan gt = (GreaterThan) f;
-          return gt.column().describe().equals("i") && gt.value().value() instanceof Integer;
+    public Predicate[] pushPredicates(Predicate[] predicates) {
+      Predicate[] supported = Arrays.stream(predicates).filter(f -> {
+        if (f.name().equals(">")) {
+          assert(f.children()[0] instanceof FieldReference);
+          FieldReference column = (FieldReference) f.children()[0];
+          assert(f.children()[1] instanceof LiteralValue);
+          Literal value = (Literal) f.children()[1];
+          return column.describe().equals("i") && value.value() instanceof Integer;
         } else {
           return false;
         }
-      }).toArray(Filter[]::new);
+      }).toArray(Predicate[]::new);
 
-      Filter[] unsupported = Arrays.stream(filters).filter(f -> {
-        if (f instanceof GreaterThan) {
-          GreaterThan gt = (GreaterThan) f;
-          return !gt.column().describe().equals("i") || !(gt.value().value() instanceof Integer);
+      Predicate[] unsupported = Arrays.stream(predicates).filter(f -> {
+        if (f.name().equals(">")) {
+          assert(f.children()[0] instanceof FieldReference);
+          FieldReference column = (FieldReference) f.children()[0];
+          assert(f.children()[1] instanceof LiteralValue);
+          Literal value = (LiteralValue) f.children()[1];
+          return !column.describe().equals("i") || !(value.value() instanceof Integer);
         } else {
           return true;
         }
-      }).toArray(Filter[]::new);
+      }).toArray(Predicate[]::new);
 
-      this.filters = supported;
+      this.predicates = supported;
       return unsupported;
     }
 
     @Override
-    public Filter[] pushedFilters() {
-      return filters;
+    public Predicate[] pushedPredicates() {
+      return predicates;
     }
 
     @Override
@@ -96,18 +104,18 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
 
     @Override
     public Batch toBatch() {
-      return new AdvancedBatchWithV2Filter(requiredSchema, filters);
+      return new AdvancedBatchWithV2Filter(requiredSchema, predicates);
     }
   }
 
   public static class AdvancedBatchWithV2Filter implements Batch {
     // Exposed for testing.
     public StructType requiredSchema;
-    public Filter[] filters;
+    public Predicate[] predicates;
 
-    AdvancedBatchWithV2Filter(StructType requiredSchema, Filter[] filters) {
+    AdvancedBatchWithV2Filter(StructType requiredSchema, Predicate[] predicates) {
       this.requiredSchema = requiredSchema;
-      this.filters = filters;
+      this.predicates = predicates;
     }
 
     @Override
@@ -115,11 +123,14 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
       List<InputPartition> res = new ArrayList<>();
 
       Integer lowerBound = null;
-      for (Filter filter : filters) {
-        if (filter instanceof GreaterThan) {
-          GreaterThan f = (GreaterThan) filter;
-          if ("i".equals(f.column().describe()) && f.value().value() instanceof Integer) {
-            lowerBound = (Integer) f.value().value();
+      for (Predicate predicate : predicates) {
+        if (predicate.name().equals(">")) {
+          assert(predicate.children()[0] instanceof FieldReference);
+          FieldReference column = (FieldReference) predicate.children()[0];
+          assert(predicate.children()[1] instanceof LiteralValue);
+          Literal value = (Literal) predicate.children()[1];
+          if ("i".equals(column.describe()) && value.value() instanceof Integer) {
+            lowerBound = (Integer) value.value();
             break;
           }
         }

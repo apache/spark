@@ -20,9 +20,9 @@ import warnings
 from pyspark.pandas._typing import T
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.series import Series
 
 
 class CachedAccessor(Generic[T]):
@@ -109,7 +109,7 @@ def _register_accessor(
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Note: This function is not meant to be used directly - instead, use register_dataframe_accessor,
     register_series_accessor, or register_index_accessor.
@@ -169,7 +169,7 @@ def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -250,7 +250,7 @@ def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -322,7 +322,7 @@ def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------

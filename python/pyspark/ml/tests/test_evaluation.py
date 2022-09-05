@@ -26,7 +26,6 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class EvaluatorTests(SparkSessionTestCase):
-
     def test_evaluate_invalid_type(self):
         evaluator = RegressionEvaluator(metricName="r2")
         df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])
@@ -49,13 +48,21 @@ class EvaluatorTests(SparkSessionTestCase):
         self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
 
     def test_clustering_evaluator_with_cosine_distance(self):
-        featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
-                                    [([1.0, 1.0], 1.0), ([10.0, 10.0], 1.0), ([1.0, 0.5], 2.0),
-                                     ([10.0, 4.4], 2.0), ([-1.0, 1.0], 3.0), ([-100.0, 90.0], 3.0)])
+        featureAndPredictions = map(
+            lambda x: (Vectors.dense(x[0]), x[1]),
+            [
+                ([1.0, 1.0], 1.0),
+                ([10.0, 10.0], 1.0),
+                ([1.0, 0.5], 2.0),
+                ([10.0, 4.4], 2.0),
+                ([-1.0, 1.0], 3.0),
+                ([-100.0, 90.0], 3.0),
+            ],
+        )
         dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
         evaluator = ClusteringEvaluator(predictionCol="prediction", distanceMeasure="cosine")
         self.assertEqual(evaluator.getDistanceMeasure(), "cosine")
-        self.assertTrue(np.isclose(evaluator.evaluate(dataset),  0.992671213, atol=1e-5))
+        self.assertTrue(np.isclose(evaluator.evaluate(dataset), 0.992671213, atol=1e-5))
 
 
 if __name__ == "__main__":
@@ -63,7 +70,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

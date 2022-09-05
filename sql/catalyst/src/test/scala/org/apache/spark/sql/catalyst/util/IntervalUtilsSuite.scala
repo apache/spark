@@ -307,7 +307,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     interval = new CalendarInterval(123, 456, 789)
     assert(divide(interval, 0) === null)
     val e2 = intercept[ArithmeticException](divideExact(interval, 0))
-    assert(e2.getMessage.contains("divide by zero"))
+    assert(e2.getMessage.contains("Division by zero"))
   }
 
   test("from day-time string") {

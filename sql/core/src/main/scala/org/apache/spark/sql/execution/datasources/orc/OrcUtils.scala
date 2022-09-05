@@ -25,17 +25,23 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.hadoop.hive.serde2.io.DateWritable
+import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -49,6 +55,8 @@ object OrcUtils extends Logging {
     "ZSTD" -> ".zstd",
     "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
+
+  val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
@@ -85,7 +93,7 @@ object OrcUtils extends Logging {
     }
   }
 
-  private def toCatalystSchema(schema: TypeDescription): StructType = {
+  def toCatalystSchema(schema: TypeDescription): StructType = {
     import TypeDescription.Category
 
     def toCatalystType(orcType: TypeDescription): DataType = {
@@ -93,7 +101,13 @@ object OrcUtils extends Logging {
         case Category.STRUCT => toStructType(orcType)
         case Category.LIST => toArrayType(orcType)
         case Category.MAP => toMapType(orcType)
-        case _ => CatalystSqlParser.parseDataType(orcType.toString)
+        case _ =>
+          val catalystTypeAttrValue = orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME)
+          if (catalystTypeAttrValue != null) {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          } else {
+            CatalystSqlParser.parseDataType(orcType.toString)
+          }
       }
     }
 
@@ -128,25 +142,12 @@ object OrcUtils extends Logging {
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
+    files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         toCatalystSchema(schema)
-    }
-  }
-
-  def readCatalystSchema(
-      file: Path,
-      conf: Configuration,
-      ignoreCorruptFiles: Boolean): Option[StructType] = {
-    readSchema(file, conf, ignoreCorruptFiles) match {
-      case Some(schema) => Some(toCatalystSchema(schema))
-
-      case None =>
-        // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
-        None
     }
   }
 
@@ -182,9 +183,21 @@ object OrcUtils extends Logging {
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
-      reader: Reader,
+      orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
-    val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
+      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+        case (TimestampType, TimestampNTZType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
+        case (TimestampNTZType, TimestampType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
+        case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
+        case _ =>
+      }
+    }
+
+    checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
+    val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
@@ -198,7 +211,9 @@ object OrcUtils extends Logging {
         // the physical schema doesn't match the data schema).
         // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
-          s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
+          s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
+          s"has fewer ${orcFieldNames.length - dataSchema.length} fields than " +
+          s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
           "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
@@ -231,7 +246,6 @@ object OrcUtils extends Logging {
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                  reader.close()
                   throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
                     requiredFieldName, matchedOrcFieldsString)
                 } else {
@@ -255,17 +269,75 @@ object OrcUtils extends Logging {
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
-  def orcTypeDescriptionString(dt: DataType): String = dt match {
+  def getOrcSchemaString(dt: DataType): String = dt match {
     case s: StructType =>
       val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+        s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case a: ArrayType =>
-      s"array<${orcTypeDescriptionString(a.elementType)}>"
+      s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
-      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+      s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
+    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
+  }
+
+  def orcTypeDescription(dt: DataType): TypeDescription = {
+    def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
+      dt match {
+        case y: YearMonthIntervalType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.INT)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
+          Some(typeDesc)
+        case d: DayTimeIntervalType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          Some(typeDesc)
+        case n: TimestampNTZType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
+          Some(typeDesc)
+        case t: TimestampType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
+          Some(typeDesc)
+        case _ => None
+      }
+    }
+
+    dt match {
+      case s: StructType =>
+        val result = new TypeDescription(TypeDescription.Category.STRUCT)
+        s.fields.foreach { f =>
+          getInnerTypeDecription(f.dataType) match {
+            case Some(t) => result.addField(f.name, t)
+            case None => result.addField(f.name, orcTypeDescription(f.dataType))
+          }
+        }
+        result
+      case a: ArrayType =>
+        val result = new TypeDescription(TypeDescription.Category.LIST)
+        getInnerTypeDecription(a.elementType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(a.elementType))
+        }
+        result
+      case m: MapType =>
+        val result = new TypeDescription(TypeDescription.Category.MAP)
+        getInnerTypeDecription(m.keyType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.keyType))
+        }
+        getInnerTypeDecription(m.valueType) match {
+          case Some(t) => result.addChild(t)
+          case None => result.addChild(orcTypeDescription(m.valueType))
+        }
+        result
+      case other =>
+        TypeDescription.fromString(other.catalogString)
+    }
   }
 
   /**
@@ -287,9 +359,9 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.orcTypeDescriptionString(resultSchema)
+      OrcUtils.getOrcSchemaString(resultSchema)
     } else {
-      OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
+      OrcUtils.getOrcSchemaString(StructType(dataSchema.fields ++ partitionSchema.fields))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
@@ -315,6 +387,132 @@ object OrcUtils extends Logging {
         supportColumnarReads(keyType, nestedColumnEnabled) &&
           supportColumnarReads(valueType, nestedColumnEnabled)
       case _ => false
+    }
+  }
+
+  /**
+   * When the partial aggregates (Max/Min/Count) are pushed down to ORC, we don't need to read data
+   * from ORC and aggregate at Spark layer. Instead we want to get the partial aggregates
+   * (Max/Min/Count) result using the statistics information from ORC file footer, and then
+   * construct an InternalRow from these aggregate results.
+   *
+   * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
+   *
+   * @return Aggregate results in the format of InternalRow
+   */
+  def createAggInternalRowFromFooter(
+      reader: Reader,
+      filePath: String,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      aggregation: Aggregation,
+      aggSchema: StructType,
+      partitionValues: InternalRow): InternalRow = {
+    var columnsStatistics: OrcColumnStatistics = null
+    try {
+      columnsStatistics = OrcFooterReader.readStatistics(reader)
+    } catch { case e: Exception =>
+      throw new SparkException(
+        s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
+        s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
+    }
+
+    // Get column statistics with column name.
+    def getColumnStatistics(columnName: String): ColumnStatistics = {
+      val columnIndex = dataSchema.fieldNames.indexOf(columnName)
+      columnsStatistics.get(columnIndex).getStatistics
+    }
+
+    // Get Min/Max statistics and store as ORC `WritableComparable` format.
+    // Return null if number of non-null values is zero.
+    def getMinMaxFromColumnStatistics(
+        statistics: ColumnStatistics,
+        dataType: DataType,
+        isMax: Boolean): WritableComparable[_] = {
+      if (statistics.getNumberOfValues == 0) {
+        return null
+      }
+
+      statistics match {
+        case s: BooleanColumnStatistics =>
+          val value = if (isMax) s.getTrueCount > 0 else !(s.getFalseCount > 0)
+          new BooleanWritable(value)
+        case s: IntegerColumnStatistics =>
+          val value = if (isMax) s.getMaximum else s.getMinimum
+          dataType match {
+            case ByteType => new ByteWritable(value.toByte)
+            case ShortType => new ShortWritable(value.toShort)
+            case IntegerType => new IntWritable(value.toInt)
+            case LongType => new LongWritable(value)
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+              "for IntegerColumnStatistics")
+          }
+        case s: DoubleColumnStatistics =>
+          val value = if (isMax) s.getMaximum else s.getMinimum
+          dataType match {
+            case FloatType => new FloatWritable(value.toFloat)
+            case DoubleType => new DoubleWritable(value)
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+                "for DoubleColumnStatistics")
+          }
+        case s: DateColumnStatistics =>
+          new DateWritable(
+            if (isMax) s.getMaximumDayOfEpoch.toInt else s.getMinimumDayOfEpoch.toInt)
+        case _ => throw new IllegalArgumentException(
+          s"getMinMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
+            s"$statistics as the ORC column statistics")
+      }
+    }
+
+    // if there are group by columns, we will build result row first,
+    // and then append group by columns values (partition columns values) to the result row.
+    val schemaWithoutGroupBy =
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
+
+    val aggORCValues: Seq[WritableComparable[_]] =
+      aggregation.aggregateExpressions.zipWithIndex.map {
+        case (max: Max, index) if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(max.column).get
+          val statistics = getColumnStatistics(columnName)
+          val dataType = schemaWithoutGroupBy(index).dataType
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
+        case (min: Min, index) if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(min.column).get
+          val statistics = getColumnStatistics(columnName)
+          val dataType = schemaWithoutGroupBy.apply(index).dataType
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
+        case (count: Count, _) if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(count.column).get
+          val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
+          // NOTE: Count(columnName) doesn't include null values.
+          // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values
+          // for ColumnStatistics of individual column. In addition to this, ORC also stores number
+          // of all values (null and non-null) separately.
+          val nonNullRowsCount = if (isPartitionColumn) {
+            columnsStatistics.getStatistics.getNumberOfValues
+          } else {
+            getColumnStatistics(columnName).getNumberOfValues
+          }
+          new LongWritable(nonNullRowsCount)
+        case (_: CountStar, _) =>
+          // Count(*) includes both null and non-null values.
+          new LongWritable(columnsStatistics.getStatistics.getNumberOfValues)
+        case (x, _) =>
+          throw new IllegalArgumentException(
+            s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
+      }
+
+    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
+      (0 until schemaWithoutGroupBy.length).toArray)
+    val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
+    if (aggregation.groupByExpressions.nonEmpty) {
+      val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
+        partitionSchema, aggregation, partitionValues)
+      new JoinedRow(reOrderedPartitionValues, resultRow)
+    } else {
+      resultRow
     }
   }
 }

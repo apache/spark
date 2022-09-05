@@ -131,6 +131,12 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
+  test("LinearSVC validate input dataset") {
+    testInvalidClassificationLabels(new LinearSVC().fit(_), Some(2))
+    testInvalidWeights(new LinearSVC().setWeightCol("weight").fit(_))
+    testInvalidVectors(new LinearSVC().fit(_))
+  }
+
   test("LinearSVC threshold acts on rawPrediction") {
     val lsvc =
       new LinearSVCModel(uid = "myLSVCM", coefficients = Vectors.dense(1.0), intercept = 0.0)

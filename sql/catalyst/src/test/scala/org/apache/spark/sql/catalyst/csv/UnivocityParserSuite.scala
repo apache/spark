@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.time.{ZoneOffset}
 import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -354,8 +355,43 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), options))
 
-    val optionsWithPattern = new CSVOptions(
-      Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
-    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
+    def optionsWithPattern(enableFallback: Boolean): CSVOptions = new CSVOptions(
+      Map(
+        "timestampFormat" -> "invalid",
+        "dateFormat" -> "invalid",
+        "enableDateTimeParsingFallback" -> s"$enableFallback"),
+      false,
+      "UTC")
+
+    // With fallback enabled, we are still able to parse dates and timestamps.
+    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(true)))
+
+    // With legacy parser disabled, parsing results in error.
+    val err = intercept[IllegalArgumentException] {
+      check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
+    }
+    assert(err.getMessage.contains("Illegal pattern character: n"))
+  }
+
+  test("SPARK-39469: dates should be parsed correctly in timestamp column when prefersDate=true") {
+    def checkDate(dataType: DataType): Unit = {
+      val timestampsOptions =
+        new CSVOptions(Map("prefersDate" -> "true", "timestampFormat" -> "dd/MM/yyyy HH:mm",
+          "timestampNTZFormat" -> "dd-MM-yyyy HH:mm", "dateFormat" -> "dd_MM_yyyy"),
+          false, DateTimeUtils.getZoneId("-08:00").toString)
+      // Use CSVOption ZoneId="-08:00" (PST) to test that Dates in TimestampNTZ column are always
+      // converted to their equivalent UTC timestamp
+      val dateString = "08_09_2001"
+      val expected = dataType match {
+        case TimestampType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.of("-08:00"))
+        case TimestampNTZType => date(2001, 9, 8, 0, 0, 0, 0, ZoneOffset.UTC)
+        case DateType => days(2001, 9, 8)
+      }
+      val parser = new UnivocityParser(new StructType(), timestampsOptions)
+      assert(parser.makeConverter("d", dataType).apply(dateString) == expected)
+    }
+    checkDate(TimestampType)
+    checkDate(TimestampNTZType)
+    checkDate(DateType)
   }
 }

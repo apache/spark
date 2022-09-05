@@ -35,6 +35,7 @@ import org.apache.spark.ui._
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("job") {
 
+  private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)
   private val MAX_TIMELINE_STAGES = parent.conf.get(UI_TIMELINE_STAGES_MAXIMUM)
   private val MAX_TIMELINE_EXECUTORS = parent.conf.get(UI_TIMELINE_EXECUTORS_MAXIMUM)
 
@@ -153,6 +154,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       stages: Seq[v1.StageData],
       executors: Seq[v1.ExecutorSummary],
       appStartTime: Long): Seq[Node] = {
+
+    if (!TIMELINE_ENABLED) return Seq.empty[Node]
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
     val executorsJsonAsStrSeq = makeExecutorEvent(executors)
@@ -288,6 +291,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           accumulatorUpdates = Nil,
           tasks = None,
           executorSummary = None,
+          speculationSummary = None,
           killedTasksSummary = Map(),
           ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
           peakExecutorMetrics = None,

@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.resource.ResourceProfile
@@ -43,7 +43,26 @@ private[spark] class KubernetesExecutorBuilder {
 
     val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
       .map { className =>
-        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+        val feature = Utils.classForName[Any](className).newInstance()
+        val initializedFeature = feature match {
+          // Since 3.3, allow user to implement feature with KubernetesExecutorConf
+          case e: KubernetesExecutorCustomFeatureConfigStep =>
+            e.init(conf)
+            Some(e)
+          // raise SparkException with wrong type feature step
+          case _: KubernetesDriverCustomFeatureConfigStep =>
+            None
+          // Since 3.2, allow user to implement feature without config
+          case f: KubernetesFeatureConfigStep =>
+            Some(f)
+          case _ => None
+        }
+        initializedFeature.getOrElse {
+          throw new SparkException(s"Failed to initialize feature step: $className, " +
+            s"please make sure your executor side feature steps are implemented by " +
+            s"`${classOf[KubernetesExecutorCustomFeatureConfigStep].getSimpleName}` or " +
+            s"`${classOf[KubernetesFeatureConfigStep].getSimpleName}`.")
+        }
       }
 
     val features = Seq(

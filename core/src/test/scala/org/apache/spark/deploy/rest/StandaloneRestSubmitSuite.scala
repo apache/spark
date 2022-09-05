@@ -26,7 +26,6 @@ import scala.collection.mutable
 
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
@@ -38,7 +37,7 @@ import org.apache.spark.util.Utils
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.
  */
-class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
+class StandaloneRestSubmitSuite extends SparkFunSuite {
   private var rpcEnv: Option[RpcEnv] = None
   private var server: Option[RestSubmissionServer] = None
 

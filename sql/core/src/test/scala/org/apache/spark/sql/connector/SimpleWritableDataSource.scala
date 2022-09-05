@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util
 
 import scala.collection.JavaConverters._
 
@@ -138,8 +137,8 @@ class SimpleWritableDataSource extends TestingV2Source {
       new MyWriteBuilder(path, info)
     }
 
-    override def capabilities(): util.Set[TableCapability] =
-      util.EnumSet.of(BATCH_READ, BATCH_WRITE, TRUNCATE)
+    override def capabilities(): java.util.Set[TableCapability] =
+      java.util.EnumSet.of(BATCH_READ, BATCH_WRITE, TRUNCATE)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {

@@ -18,23 +18,24 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import org.apache.parquet.io.ParquetDecodingException
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
-import org.apache.spark.sql.internal.SQLConf
 
-class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
+class FilePartitionReader[T](
+    readers: Iterator[PartitionedFileReader[T]],
+    options: FileSourceOptions)
   extends PartitionReader[T] with Logging {
   private var currentReader: PartitionedFileReader[T] = null
 
-  private val sqlConf = SQLConf.get
-  private def ignoreMissingFiles = sqlConf.ignoreMissingFiles
-  private def ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
+  private def ignoreMissingFiles = options.ignoreMissingFiles
+  private def ignoreCorruptFiles = options.ignoreCorruptFiles
 
   override def next(): Boolean = {
     if (currentReader == null) {
@@ -66,17 +67,16 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
       case e: SchemaColumnConvertNotSupportedException =>
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case e: ParquetDecodingException =>
-        if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-          throw e.getCause
-        } else if (e.getMessage.contains("Can not read value at")) {
-          throw QueryExecutionErrors.cannotReadParquetFilesError(e)
-        }
-        throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
+      case sue: SparkUpgradeException => throw sue
+      case NonFatal(e) =>
+        e.getCause match {
+          case sue: SparkUpgradeException => throw sue
+          case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentReader.file.filePath)
+        }
     }
     if (hasNext) {
       true

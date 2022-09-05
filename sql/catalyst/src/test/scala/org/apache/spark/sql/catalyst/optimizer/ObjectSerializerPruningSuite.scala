@@ -73,10 +73,10 @@ class ObjectSerializerPruningSuite extends PlanTest {
   }
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
-    val testRelation = LocalRelation('_1.int, '_2.int)
+    val testRelation = LocalRelation($"_1".int, $"_2".int)
     val serializerObject = CatalystSerde.serialize[(Int, Int)](
       CatalystSerde.deserialize[(Int, Int)](testRelation))
-    val query = serializerObject.select('_1)
+    val query = serializerObject.select($"_1")
     val optimized = Optimize.execute(query.analyze)
     val expected = serializerObject.copy(serializer = Seq(serializerObject.serializer.head)).analyze
     comparePlans(optimized, expected)
@@ -84,7 +84,8 @@ class ObjectSerializerPruningSuite extends PlanTest {
 
   test("Prune nested serializers") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val testRelation = LocalRelation('_1.struct(StructType.fromDDL("_1 int, _2 string")), '_2.int)
+      val testRelation = LocalRelation(
+        $"_1".struct(StructType.fromDDL("_1 int, _2 string")), $"_2".int)
       val serializerObject = CatalystSerde.serialize[((Int, String), Int)](
         CatalystSerde.deserialize[((Int, String), Int)](testRelation))
       val query = serializerObject.select($"_1._1")
@@ -111,7 +112,7 @@ class ObjectSerializerPruningSuite extends PlanTest {
 
   test("SPARK-32652: Prune nested serializers: RowEncoder") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val testRelation = LocalRelation('i.struct(StructType.fromDDL("a int, b string")), 'j.int)
+      val testRelation = LocalRelation($"i".struct(StructType.fromDDL("a int, b string")), $"j".int)
       val rowEncoder = RowEncoder(new StructType()
         .add("i", new StructType().add("a", "int").add("b", "string"))
         .add("j", "int"))

@@ -41,7 +41,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 
 <div data-lang="python"  markdown="1">
 
-The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
 
 {% include_example init_session python/sql/basic.py %}
 </div>
@@ -104,7 +104,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/api/pyspark.sql.DataFrame.html) and [R](api/R/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html) and [R](api/R/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 

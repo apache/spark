@@ -44,10 +44,8 @@ Data Definition Statements are used to create or modify the structure of databas
 
 Data Manipulation Statements are used to add, change, or delete data. Spark SQL supports the following Data Manipulation Statements:
 
- * [INSERT INTO](sql-ref-syntax-dml-insert-into.html)
- * [INSERT OVERWRITE](sql-ref-syntax-dml-insert-overwrite-table.html)
+ * [INSERT TABLE](sql-ref-syntax-dml-insert-table.html)
  * [INSERT OVERWRITE DIRECTORY](sql-ref-syntax-dml-insert-overwrite-directory.html)
- * [INSERT OVERWRITE DIRECTORY with Hive format](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
  * [LOAD](sql-ref-syntax-dml-load.html)
 
 ### Data Retrieval Statements
@@ -78,10 +76,12 @@ ability to generate logical and physical plan for a given query using
    * [TABLESAMPLE](sql-ref-syntax-qry-select-sampling.html)
    * [Table-valued Function](sql-ref-syntax-qry-select-tvf.html)
    * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+   * [Aggregate Function](sql-ref-syntax-qry-select-aggregate.html)
    * [Window Function](sql-ref-syntax-qry-select-window.html)
    * [CASE Clause](sql-ref-syntax-qry-select-case.html)
    * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
    * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
+   * [LATERAL SUBQUERY](sql-ref-syntax-qry-select-lateral-subquery.html)
    * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 

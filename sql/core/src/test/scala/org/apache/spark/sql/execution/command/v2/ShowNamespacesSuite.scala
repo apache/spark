@@ -53,20 +53,4 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
     }.getMessage
     assert(errMsg.contains("does not support namespaces"))
   }
-
-  test("case sensitivity") {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
-          sql(s"CREATE NAMESPACE $catalog.AAA")
-          sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(
-            s"SHOW NAMESPACES IN $catalog",
-            Seq("AAA", "bbb") ++ builtinTopNamespaces)
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("AAA"))
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("AAA"))
-        }
-      }
-    }
-  }
 }

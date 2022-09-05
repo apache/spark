@@ -21,6 +21,8 @@ import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.text.similarity.LevenshteinDistance
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -42,7 +44,7 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
-    val in = pattern.toIterator
+    val in = pattern.iterator
     val out = new StringBuilder()
 
     def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(pattern, message)
@@ -70,6 +72,12 @@ object StringUtils extends Logging {
 
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+
+  private[spark] def orderStringsBySimilarity(
+      baseString: String,
+      testStrings: Seq[String]): Seq[String] = {
+    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+  }
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)

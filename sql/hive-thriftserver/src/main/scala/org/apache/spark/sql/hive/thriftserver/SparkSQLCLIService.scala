@@ -138,7 +138,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
         serviceStartCount += 1
       }
       // Emulating `AbstractService.start`
-      val startTime = new java.lang.Long(System.currentTimeMillis())
+      val startTime = java.lang.Long.valueOf(System.currentTimeMillis())
       setAncestorField(this, 3, "startTime", startTime)
       invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
       invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
@@ -147,7 +147,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
       case NonFatal(e) =>
       logError(s"Error starting services $getName", e)
       invoke(classOf[CompositeService], this, "stop",
-        classOf[Int] -> new Integer(serviceStartCount))
+        classOf[Int] -> Integer.valueOf(serviceStartCount))
       throw HiveThriftServerErrors.failedToStartServiceError(getName, e)
     }
   }

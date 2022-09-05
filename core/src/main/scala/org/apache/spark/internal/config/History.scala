@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -39,6 +40,16 @@ private[spark] object History {
     .version("1.4.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("10s")
+
+  val UPDATE_BATCHSIZE = ConfigBuilder("spark.history.fs.update.batchSize")
+    .doc("Specifies the batch size for updating new eventlog files. " +
+      "This controls each scan process to be completed within a reasonable time, and such " +
+      "prevent the initial scan from running too long and blocking new eventlog files to " +
+      "be scanned in time in large environments.")
+    .version("3.4.0")
+    .intConf
+    .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
+    .createWithDefault(Int.MaxValue)
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
@@ -211,4 +222,16 @@ private[spark] object History {
     .version("3.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("2g")
+
+  object HybridStoreDiskBackend extends Enumeration {
+    val LEVELDB, ROCKSDB = Value
+  }
+
+  val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
+    .doc("Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.")
+    .version("3.3.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(HybridStoreDiskBackend.values.map(_.toString))
+    .createWithDefault(HybridStoreDiskBackend.LEVELDB.toString)
 }

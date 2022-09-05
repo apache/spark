@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.{Duration, Period}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -38,7 +38,7 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -119,17 +119,125 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
+  test("SPARK-36182: TimestampNTZ") {
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
+      val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
+        .map(ts => Tuple1(LocalDateTime.parse(ts)))
+      withAllParquetReaders {
+        checkParquetFile(data)
+      }
+    }
+  }
+
+  test("Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 timestamp_ltz_millis_depr(TIMESTAMP_MILLIS);
+        |  required int64 timestamp_ltz_micros_depr(TIMESTAMP_MICROS);
+        |  required int64 timestamp_ltz_millis(TIMESTAMP(MILLIS,true));
+        |  required int64 timestamp_ltz_micros(TIMESTAMP(MICROS,true));
+        |  required int64 timestamp_ntz_millis(TIMESTAMP(MILLIS,false));
+        |  required int64 timestamp_ntz_micros(TIMESTAMP(MICROS,false));
+        |}
+      """.stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/timestamps.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          for (group <- Seq(0, 2, 4)) {
+            record.add(group, 1000L) // millis
+            record.add(group + 1, 1000000L) // micros
+          }
+          writer.write(record)
+        }
+        writer.close
+
+        for (timestampNTZEnabled <- Seq(true, false)) {
+          withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> s"$timestampNTZEnabled") {
+            val timestampNTZType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
+
+            withAllParquetReaders {
+              val df = spark.read.parquet(tablePath.toString)
+              assertResult(df.schema) {
+                StructType(
+                  StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
+                  StructField("timestamp_ntz_millis", timestampNTZType, nullable = true) ::
+                  StructField("timestamp_ntz_micros", timestampNTZType, nullable = true) ::
+                  Nil
+                )
+              }
+
+              val ltz_value = new java.sql.Timestamp(1000L)
+              val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
+
+              val exp = if (timestampNTZEnabled) {
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
+                }.toDF()
+              } else {
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ltz_value, ltz_value)
+                }.toDF()
+              }
+
+              checkAnswer(df, exp)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("Write TimestampNTZ type") {
+    // Writes should fail if timestamp_ntz support is disabled.
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
+        val err = intercept[Exception] {
+          data.write.parquet(dir.getCanonicalPath)
+        }.getCause
+        assert(err.getMessage.contains("Unsupported data type timestamp_ntz"))
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
+        data.write.parquet(dir.getCanonicalPath)
+        assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
+          StructType(
+            StructField("col", TimestampNTZType, nullable = true) ::
+            Nil
+          )
+        }
+      }
+    }
+  }
+
   testStandardAndLegacyModes("fixed-length decimals") {
     def makeDecimalRDD(decimal: DecimalType): DataFrame = {
       spark
         .range(1000)
         // Parquet doesn't allow column names with spaces, have to add an alias here.
         // Minus 500 here so that negative decimals are also tested.
-        .select((('id - 500) / 100.0) cast decimal as 'dec)
+        .select((($"id" - 500) / 100.0) cast decimal as Symbol("dec"))
         .coalesce(1)
     }
 
-    val combinations = Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))
+    var combinations = Seq((5, 2), (1, 0), (18, 10), (18, 17), (19, 0), (38, 37))
+    // If ANSI mode is on, the combination (1, 1) will cause a runtime error. Otherwise, the
+    // decimal RDD contains all null values and should be able to read back from Parquet.
+    if (!SQLConf.get.ansiEnabled) {
+      combinations = combinations++ Seq((1, 1))
+    }
     for ((precision, scale) <- combinations) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
@@ -288,6 +396,369 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows.head === Row(Seq.fill(3)(null): _*))
+    }
+  }
+
+  test("vectorized reader: array") {
+    val data = Seq(
+      Tuple1(null),
+      Tuple1(Seq()),
+      Tuple1(Seq("a", "b", "c")),
+      Tuple1(Seq(null))
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df.sort("_1"),
+          Row(null) :: Row(Seq()) :: Row(Seq(null)) :: Row(Seq("a", "b", "c")) :: Nil
+        )
+      }
+    }
+  }
+
+  test("vectorized reader: missing array") {
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1(null),
+          Tuple1(Seq()),
+          Tuple1(Seq("a", "b", "c")),
+          Tuple1(Seq(null))
+        )
+
+        val readSchema = new StructType().add("_2", new ArrayType(
+          new StructType().add("a", LongType, nullable = true),
+          containsNull = true)
+        )
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(null) :: Row(null) :: Row(null) :: Nil
+          )
+        }
+      }
+    }
+  }
+
+  test("vectorized reader: array of array") {
+    val data = Seq(
+      Tuple1(Seq(Seq(0, 1), Seq(2, 3))),
+      Tuple1(Seq(Seq(4, 5), Seq(6, 7)))
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df.sort("_1"),
+          Row(Seq(Seq(0, 1), Seq(2, 3))) :: Row(Seq(Seq(4, 5), Seq(6, 7))) :: Nil
+        )
+      }
+    }
+  }
+
+  test("vectorized reader: struct of array") {
+    val data = Seq(
+      Tuple1(Tuple2("a", null)),
+      Tuple1(null),
+      Tuple1(Tuple2(null, null)),
+      Tuple1(Tuple2(null, Seq("b", "c"))),
+      Tuple1(Tuple2("d", Seq("e", "f"))),
+      Tuple1(null)
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df,
+          Row(Row("a", null)) :: Row(null) :: Row(Row(null, null)) ::
+              Row(Row(null, Seq("b", "c"))) :: Row(Row("d", Seq("e", "f"))) :: Row(null) :: Nil
+        )
+      }
+    }
+  }
+
+  test("vectorized reader: array of struct") {
+    val data = Seq(
+      Tuple1(null),
+      Tuple1(Seq()),
+      Tuple1(Seq(Tuple2("a", null), Tuple2(null, "b"))),
+      Tuple1(Seq(null)),
+      Tuple1(Seq(Tuple2(null, null), Tuple2("c", null), null)),
+      Tuple1(Seq())
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df,
+          Row(null) ::
+              Row(Seq()) ::
+              Row(Seq(Row("a", null), Row(null, "b"))) ::
+              Row(Seq(null)) ::
+              Row(Seq(Row(null, null), Row("c", null), null)) ::
+              Row(Seq()) ::
+              Nil)
+      }
+    }
+  }
+
+
+  test("vectorized reader: array of nested struct") {
+    val data = Seq(
+      Tuple1(Tuple2("a", null)),
+      Tuple1(Tuple2("b", Seq(Tuple2("c", "d")))),
+      Tuple1(null),
+      Tuple1(Tuple2("e", Seq(Tuple2("f", null), Tuple2(null, "g")))),
+      Tuple1(Tuple2(null, null)),
+      Tuple1(Tuple2(null, Seq(null))),
+      Tuple1(Tuple2(null, Seq(Tuple2(null, null), Tuple2("h", null), null))),
+      Tuple1(Tuple2("i", Seq())),
+      Tuple1(null)
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df,
+          Row(Row("a", null)) ::
+              Row(Row("b", Seq(Row("c", "d")))) ::
+              Row(null) ::
+              Row(Row("e", Seq(Row("f", null), Row(null, "g")))) ::
+              Row(Row(null, null)) ::
+              Row(Row(null, Seq(null))) ::
+              Row(Row(null, Seq(Row(null, null), Row("h", null), null))) ::
+              Row(Row("i", Seq())) ::
+              Row(null) ::
+              Nil)
+      }
+    }
+  }
+
+  test("vectorized reader: required array with required elements") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path, expected: Seq[Seq[String]]): Unit = {
+        val schemaStr =
+          """message spark_schema {
+            |  required group _1 (LIST) {
+            |    repeated group list {
+            |      required binary element (UTF8);
+            |    }
+            |  }
+            |}
+             """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        val factory = new SimpleGroupFactory(schema)
+        expected.foreach { values =>
+          val group = factory.newGroup()
+          val list = group.addGroup(0)
+          values.foreach { value =>
+            list.addGroup(0).append("element", value)
+          }
+          writer.write(group)
+        }
+        writer.close()
+      }
+
+      // write the following into the Parquet file:
+      //   0: [ "a", "b" ]
+      //   1: [ ]
+      //   2: [ "c", "d" ]
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val expected = Seq(Seq("a", "b"), Seq(), Seq("c", "d"))
+        makeRawParquetFile(path, expected)
+        readParquetFile(path.toString) { df => checkAnswer(df, expected.map(Row(_))) }
+      }
+    }
+  }
+
+  test("vectorized reader: optional array with required elements") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path, expected: Seq[Seq[String]]): Unit = {
+        val schemaStr =
+          """message spark_schema {
+            |  optional group _1 (LIST) {
+            |    repeated group list {
+            |      required binary element (UTF8);
+            |    }
+            |  }
+            |}
+             """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        val factory = new SimpleGroupFactory(schema)
+        expected.foreach { values =>
+          val group = factory.newGroup()
+          if (values != null) {
+            val list = group.addGroup(0)
+            values.foreach { value =>
+              list.addGroup(0).append("element", value)
+            }
+          }
+          writer.write(group)
+        }
+        writer.close()
+      }
+
+      // write the following into the Parquet file:
+      //   0: [ "a", "b" ]
+      //   1: null
+      //   2: [ "c", "d" ]
+      //   3: [ ]
+      //   4: [ "e", "f" ]
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val expected = Seq(Seq("a", "b"), null, Seq("c", "d"), Seq(), Seq("e", "f"))
+        makeRawParquetFile(path, expected)
+        readParquetFile(path.toString) { df => checkAnswer(df, expected.map(Row(_))) }
+      }
+    }
+  }
+
+  test("vectorized reader: required array with optional elements") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path, expected: Seq[Seq[String]]): Unit = {
+        val schemaStr =
+          """message spark_schema {
+            |  required group _1 (LIST) {
+            |    repeated group list {
+            |      optional binary element (UTF8);
+            |    }
+            |  }
+            |}
+             """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        val factory = new SimpleGroupFactory(schema)
+        expected.foreach { values =>
+          val group = factory.newGroup()
+          if (values != null) {
+            val list = group.addGroup(0)
+            values.foreach { value =>
+              val group = list.addGroup(0)
+              if (value != null) group.append("element", value)
+            }
+          }
+          writer.write(group)
+        }
+        writer.close()
+      }
+
+      // write the following into the Parquet file:
+      //   0: [ "a", null ]
+      //   3: [ ]
+      //   4: [ null, "b" ]
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val expected = Seq(Seq("a", null), Seq(), Seq(null, "b"))
+        makeRawParquetFile(path, expected)
+        readParquetFile(path.toString) { df => checkAnswer(df, expected.map(Row(_))) }
+      }
+    }
+  }
+
+  test("vectorized reader: required array with legacy format") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path, expected: Seq[Seq[String]]): Unit = {
+        val schemaStr =
+          """message spark_schema {
+            |  repeated binary element (UTF8);
+            |}
+             """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        val factory = new SimpleGroupFactory(schema)
+        expected.foreach { values =>
+          val group = factory.newGroup()
+          values.foreach(group.append("element", _))
+          writer.write(group)
+        }
+        writer.close()
+      }
+
+      // write the following into the Parquet file:
+      //   0: [ "a", "b" ]
+      //   3: [ ]
+      //   4: [ "c", "d" ]
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        val expected = Seq(Seq("a", "b"), Seq(), Seq("c", "d"))
+        makeRawParquetFile(path, expected)
+        readParquetFile(path.toString) { df => checkAnswer(df, expected.map(Row(_))) }
+      }
+    }
+  }
+
+  test("vectorized reader: struct") {
+    val data = Seq(
+      Tuple1(null),
+      Tuple1((1, "a")),
+      Tuple1((2, null)),
+      Tuple1((3, "b")),
+      Tuple1(null)
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df.sort("_1"),
+          Row(null) :: Row(null) :: Row(Row(1, "a")) :: Row(Row(2, null)) :: Row(Row(3, "b")) :: Nil
+        )
+      }
+    }
+  }
+
+  test("vectorized reader: missing all struct fields") {
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
+        )
+
+        val readSchema = new StructType().add("_1",
+          new StructType()
+              .add("_3", IntegerType, nullable = true)
+              .add("_4", LongType, nullable = true),
+          nullable = true)
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(null) :: Row(null) :: Nil
+          )
+        }
+      }
+    }
+  }
+
+  test("vectorized reader: missing some struct fields") {
+    Seq(true, false).foreach { offheapEnabled =>
+      withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+        val data = Seq(
+          Tuple1((1, "a")),
+          Tuple1((2, null)),
+          Tuple1(null)
+        )
+
+        val readSchema = new StructType().add("_1",
+          new StructType()
+              .add("_1", IntegerType, nullable = true)
+              .add("_3", LongType, nullable = true),
+          nullable = true)
+
+        withParquetFile(data) { file =>
+          checkAnswer(spark.read.schema(readSchema).parquet(file),
+            Row(null) :: Row(Row(1, null)) :: Row(Row(2, null)) :: Nil
+          )
+        }
+      }
     }
   }
 
@@ -710,7 +1181,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val errorMessage = intercept[Throwable] {
       spark.read.parquet("hdfs://nonexistent")
     }.toString
-    assert(errorMessage.contains("UnknownHostException"))
+    assert(errorMessage.contains("UnknownHostException") ||
+        errorMessage.contains("is not a valid DFS filename"))
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
@@ -735,7 +1207,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       withTempPath { dir =>
         val m2 = intercept[SparkException] {
-          val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+          val df = spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b"))
+            .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }.getCause.getMessage
         assert(m2.contains("Intentional exception for testing purposes"))
@@ -801,7 +1274,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i32.parquet"),
-        spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+        spark.range(1 << 4).select($"id" % 10 cast DecimalType(5, 2) as Symbol("i32_dec")))
     }
   }
 
@@ -810,7 +1283,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i64.parquet"),
-        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+        spark.range(1 << 4).select($"id" % 10 cast DecimalType(10, 2) as Symbol("i64_dec")))
     }
   }
 
@@ -819,7 +1292,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
-        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+        spark.range(1 << 4)
+          .select($"id" % 10 cast DecimalType(10, 2) as Symbol("fixed_len_dec")))
     }
   }
 
@@ -830,6 +1304,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         // and dictionary encodings.
         readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
         (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
+    }
+  }
+
+  test("SPARK-40128 read DELTA_LENGTH_BYTE_ARRAY encoded strings") {
+    withAllParquetReaders {
+      checkAnswer(
+        // "fruit" column in this file is encoded using DELTA_LENGTH_BYTE_ARRAY.
+        // The file comes from https://github.com/apache/parquet-testing
+        readResourceParquetFile("test-data/delta_length_byte_array.parquet"),
+        (0 to 999).map(i => Row("apple_banana_mango" + Integer.toString(i * i))))
     }
   }
 
@@ -866,7 +1350,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
+      val file = TestUtils.listDirectory(dir).head;
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
@@ -970,7 +1454,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val vectorizedReader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+        val file = TestUtils.listDirectory(dir).head
 
         try {
           vectorizedReader.initialize(file, null)
@@ -1058,29 +1542,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
-      }
-    }
-  }
-
-  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
-    Seq(false, true).foreach { offHeapEnabled =>
-      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
-        Seq(
-          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
-        ).foreach { case (it, f) =>
-          val data = (1 to 10).map(i => Row(i, f(i)))
-          val schema = StructType(Array(StructField("d", IntegerType, false),
-            StructField("i", it, false)))
-          withTempPath { file =>
-            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-            df.write.parquet(file.getCanonicalPath)
-            withAllParquetReaders {
-              val df2 = spark.read.parquet(file.getCanonicalPath)
-              checkAnswer(df2, df.collect().toSeq)
-            }
-          }
-        }
       }
     }
   }

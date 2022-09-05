@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
@@ -342,6 +343,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
    */
@@ -370,6 +374,9 @@ class RelationalGroupedDataset protected[sql](
    *     .agg(sum($"earnings"))
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
@@ -394,6 +401,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings");
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
@@ -410,6 +420,9 @@ class RelationalGroupedDataset protected[sql](
    *   // Or without specifying column values (less efficient)
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
    *
    * @param pivotColumn he column to pivot.
    * @since 2.4.0
@@ -443,6 +456,9 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
    * }}}
    *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
+   *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 2.4.0
@@ -452,7 +468,13 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.GroupByType =>
         val valueExprs = values.map(_ match {
           case c: Column => c.expr
-          case v => Literal.apply(v)
+          case v =>
+            try {
+              Literal.apply(v)
+            } catch {
+              case _: SparkRuntimeException =>
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr.dataType)
+            }
         })
         new RelationalGroupedDataset(
           df,
@@ -469,6 +491,9 @@ class RelationalGroupedDataset protected[sql](
    * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
    * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
    * the `String` type.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot` for the reverse operation,
+   *      except for the aggregation.
    *
    * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.

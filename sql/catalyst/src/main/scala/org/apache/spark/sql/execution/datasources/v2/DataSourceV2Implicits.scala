@@ -22,7 +22,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -47,9 +48,9 @@ object DataSourceV2Implicits {
       }
     }
 
-    def asDeletable: SupportsDelete = {
+    def asDeletable: SupportsDeleteV2 = {
       table match {
-        case support: SupportsDelete =>
+        case support: SupportsDeleteV2 =>
           support
         case _ =>
           throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
@@ -79,6 +80,15 @@ object DataSourceV2Implicits {
           support
         case _ =>
           throw QueryCompilationErrors.tableDoesNotSupportAtomicPartitionManagementError(table)
+      }
+    }
+
+    def asRowLevelOperationTable: RowLevelOperationTable = {
+      table match {
+        case rowLevelOperationTable: RowLevelOperationTable =>
+          rowLevelOperationTable
+        case _ =>
+          throw QueryCompilationErrors.tableIsNotRowLevelOperationTableError(table)
       }
     }
 

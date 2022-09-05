@@ -5,13 +5,16 @@ and message parameters rather than an arbitrary error message.
 
 ## Usage
 
-1. Check if an appropriate error class already exists in `error-class.json`.
-   If true, skip to step 3. Otherwise, continue to step 2.
-2. Add a new class to `error-class.json`; keep in mind the invariants below.
-3. Check if the exception type already extends `SparkThrowable`.
-   If true, skip to step 5. Otherwise, continue to step 4.
-4. Mix `SparkThrowable` into the exception.
-5. Throw the exception with the error class and message parameters.
+1. Check if the error is an internal error.
+   Internal errors are bugs in the code that we do not expect users to encounter; this does not include unsupported operations.
+   If true, use the error class `INTERNAL_ERROR` and skip to step 4.
+2. Check if an appropriate error class already exists in `error-class.json`.
+   If true, use the error class and skip to step 4.
+3. Add a new class to `error-class.json`; keep in mind the invariants below.
+4. Check if the exception type already extends `SparkThrowable`.
+   If true, skip to step 6.
+5. Mix `SparkThrowable` into the exception.
+6. Throw the exception with the error class and message parameters.
 
 ### Before
 
@@ -37,8 +40,6 @@ Throw with arbitrary error message:
         with SparkThrowable {
         
       def getErrorClass: String = errorClass
-      def getMessageParameters: Array[String] = messageParameters
-      def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
     }
 
 Throw with error class and message parameters:

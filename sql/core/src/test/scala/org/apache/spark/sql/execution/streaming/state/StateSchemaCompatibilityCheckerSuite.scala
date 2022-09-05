@@ -63,6 +63,8 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
   private val valueSchema65535Bytes = new StructType()
     .add(StructField("v" * (65535 - 87), IntegerType, nullable = true))
 
+  // Checks on adding/removing (nested) field.
+
   test("adding field to key should fail") {
     val fieldAddedKeySchema = keySchema.add(StructField("newKey", IntegerType))
     verifyException(keySchema, valueSchema, fieldAddedKeySchema, valueSchema)
@@ -107,6 +109,8 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifyException(keySchema, valueSchema, keySchema, newValueSchema)
   }
 
+  // Checks on changing type of (nested) field.
+
   test("changing the type of field in key should fail") {
     val typeChangedKeySchema = StructType(keySchema.map(_.copy(dataType = TimestampType)))
     verifyException(keySchema, valueSchema, typeChangedKeySchema, valueSchema)
@@ -129,27 +133,58 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifyException(keySchema, valueSchema, keySchema, newValueSchema)
   }
 
-  test("changing the nullability of nullable to non-nullable in key should fail") {
+  // Checks on changing nullability of (nested) field.
+  // Note that these tests have different format of the test name compared to others, since it was
+  // misleading to understand the assignment as the opposite way.
+
+  test("storing non-nullable column into nullable column in key should be allowed") {
     val nonNullChangedKeySchema = StructType(keySchema.map(_.copy(nullable = false)))
-    verifyException(keySchema, valueSchema, nonNullChangedKeySchema, valueSchema)
+    verifySuccess(keySchema, valueSchema, nonNullChangedKeySchema, valueSchema)
   }
 
-  test("changing the nullability of nullable to non-nullable in value should fail") {
+  test("storing non-nullable column into nullable column in value schema should be allowed") {
     val nonNullChangedValueSchema = StructType(valueSchema.map(_.copy(nullable = false)))
-    verifyException(keySchema, valueSchema, keySchema, nonNullChangedValueSchema)
+    verifySuccess(keySchema, valueSchema, keySchema, nonNullChangedValueSchema)
   }
 
-  test("changing the nullability of nullable to nonnullable in nested field in key should fail") {
+  test("storing non-nullable into nullable in nested field in key should be allowed") {
     val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
     val newKeySchema = applyNewSchemaToNestedFieldInKey(typeChangedNestedSchema)
-    verifyException(keySchema, valueSchema, newKeySchema, valueSchema)
+    verifySuccess(keySchema, valueSchema, newKeySchema, valueSchema)
   }
 
-  test("changing the nullability of nullable to nonnullable in nested field in value should fail") {
+  test("storing non-nullable into nullable in nested field in value should be allowed") {
     val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
     val newValueSchema = applyNewSchemaToNestedFieldInValue(typeChangedNestedSchema)
-    verifyException(keySchema, valueSchema, keySchema, newValueSchema)
+    verifySuccess(keySchema, valueSchema, keySchema, newValueSchema)
   }
+
+  test("storing nullable column into non-nullable column in key should fail") {
+    val nonNullChangedKeySchema = StructType(keySchema.map(_.copy(nullable = false)))
+    verifyException(nonNullChangedKeySchema, valueSchema, keySchema, valueSchema)
+  }
+
+  test("storing nullable column into non-nullable column in value schema should fail") {
+    val nonNullChangedValueSchema = StructType(valueSchema.map(_.copy(nullable = false)))
+    verifyException(keySchema, nonNullChangedValueSchema, keySchema, valueSchema)
+  }
+
+  test("storing nullable column into non-nullable column in nested field in key should fail") {
+    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
+    val newKeySchema = applyNewSchemaToNestedFieldInKey(typeChangedNestedSchema)
+    verifyException(newKeySchema, valueSchema, keySchema, valueSchema)
+  }
+
+  test("storing nullable column into non-nullable column in nested field in value should fail") {
+    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
+    val newValueSchema = applyNewSchemaToNestedFieldInValue(typeChangedNestedSchema)
+    verifyException(keySchema, newValueSchema, keySchema, valueSchema)
+  }
+
+  // Checks on changing name of (nested) field.
+  // Changing the name is allowed since it may be possible Spark can make relevant changes from
+  // operators/functions by chance. This opens a risk that end users swap two fields having same
+  // data type, but there is no way to address both.
 
   test("changing the name of field in key should be allowed") {
     val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
@@ -196,6 +231,16 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
   }
 
+  test("SPARK-39650: ignore value schema on compatibility check") {
+    val typeChangedValueSchema = StructType(valueSchema.map(_.copy(dataType = TimestampType)))
+    verifySuccess(keySchema, valueSchema, keySchema, typeChangedValueSchema,
+      ignoreValueSchema = true)
+
+    val typeChangedKeySchema = StructType(keySchema.map(_.copy(dataType = TimestampType)))
+    verifyException(keySchema, valueSchema, typeChangedKeySchema, valueSchema,
+      ignoreValueSchema = true)
+  }
+
   private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {
     applyNewSchemaToNestedField(keySchema, newNestedSchema, "key3")
   }
@@ -222,44 +267,57 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       dir: String,
       queryId: UUID,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean): Unit = {
     // in fact, Spark doesn't support online state schema change, so need to check
     // schema only once for each running of JVM
     val providerId = StateStoreProviderId(
       StateStoreId(dir, opId, partitionId), queryId)
 
     new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-      .check(newKeySchema, newValueSchema)
+      .check(newKeySchema, newValueSchema, ignoreValueSchema = ignoreValueSchema)
   }
 
   private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
     val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema)
+    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
 
     val e = intercept[StateSchemaNotCompatible] {
-      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema)
+      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
+        ignoreValueSchema = ignoreValueSchema)
     }
 
-    e.getMessage.contains("Provided schema doesn't match to the schema for existing state!")
-    e.getMessage.contains(newKeySchema.json)
-    e.getMessage.contains(newValueSchema.json)
-    e.getMessage.contains(oldKeySchema.json)
-    e.getMessage.contains(oldValueSchema.json)
+    assert(e.getMessage.contains("Provided schema doesn't match to the schema for existing state!"))
+    assert(e.getMessage.contains(newKeySchema.toString()))
+    assert(e.getMessage.contains(oldKeySchema.toString()))
+
+    if (ignoreValueSchema) {
+      assert(!e.getMessage.contains(newValueSchema.toString()))
+      assert(!e.getMessage.contains(oldValueSchema.toString()))
+    } else {
+      assert(e.getMessage.contains(newValueSchema.toString()))
+      assert(e.getMessage.contains(oldValueSchema.toString()))
+    }
   }
 
   private def verifySuccess(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
     val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema)
-    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema)
+    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
+    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
+      ignoreValueSchema = ignoreValueSchema)
   }
 }

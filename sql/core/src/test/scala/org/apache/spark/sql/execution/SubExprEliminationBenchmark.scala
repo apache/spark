@@ -31,9 +31,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
  *        <spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/SubExprEliminationBenchmark-results.txt".
  * }}}
  */
@@ -49,7 +49,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val cols = (0 until numCols).map { idx =>
-        from_json('value, schema).getField(s"col$idx")
+        from_json($"value", schema).getField(s"col$idx")
       }
 
       Seq(
@@ -88,7 +88,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val predicate = (0 until numCols).map { idx =>
-        (from_json('value, schema).getField(s"col$idx") >= Literal(100000)).expr
+        (from_json($"value", schema).getField(s"col$idx") >= Literal(100000)).expr
       }.asInstanceOf[Seq[Expression]].reduce(Or)
 
       Seq(

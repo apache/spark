@@ -24,9 +24,9 @@ from functools import reduce
 from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import BooleanType, LongType
+from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
@@ -53,12 +53,12 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.generic import Frame
+    from pyspark.pandas.series import Series
 
 
-class IndexerLike(object):
+class IndexerLike:
     def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
@@ -172,7 +172,7 @@ class AtIndexer(IndexerLike):
         if len(pdf) < 1:
             raise KeyError(name_like_string(row_sel))
 
-        values = cast(pd.DataFrame, pdf).iloc[:, 0].values
+        values = pdf.iloc[:, 0].values
         return (
             values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]
         )
@@ -535,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
+                    [col._jc.toString() for col in data_spark_columns]
                 )
             )
 
@@ -551,6 +551,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         )
         psdf = DataFrame(internal)
 
+        psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
             psdf_or_psser = first_series(psdf)
             if series_name is not None and series_name != psdf_or_psser.name:
@@ -559,7 +560,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             psdf_or_psser = psdf
 
         if remaining_index is not None and remaining_index == 0:
-            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
+            pdf_or_pser = psdf_or_psser.head(2)._to_pandas()
             length = len(pdf_or_pser)
             if length == 0:
                 raise KeyError(name_like_string(key))
@@ -618,7 +619,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     psser._psdf[
                         self._psdf_or_psser._psdf._internal.column_labels
                     ]._internal.resolved_copy,
-                    requires_same_anchor=False,
+                    check_same_anchor=False,
                 )
                 return
 
@@ -652,7 +653,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_spark_column(
                 self._psdf_or_psser._column_label, scol  # TODO: dtype?
             )
-            self._psdf_or_psser._psdf._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._psdf._update_internal_frame(internal, check_same_anchor=False)
         else:
             assert self._is_df
 
@@ -704,12 +705,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
                 self._psdf_or_psser._update_internal_frame(
                     psdf[list(self._psdf_or_psser.columns)]._internal.resolved_copy,
-                    requires_same_anchor=False,
+                    check_same_anchor=False,
                 )
                 return
 
             cond, limit, remaining_index = self._select_rows(rows_sel)
-            missing_keys = []  # type: Optional[List[Name]]
+            missing_keys: List[Name] = []
             _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
@@ -771,7 +772,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             internal = self._internal.with_new_columns(
                 new_data_spark_columns, column_labels=column_labels, data_fields=new_fields
             )
-            self._psdf_or_psser._update_internal_frame(internal, requires_same_anchor=False)
+            self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
 
 
 class LocIndexer(LocIndexerLike):
@@ -1033,7 +1034,7 @@ class LocIndexer(LocIndexerLike):
             stop = [row[1] for row in start_and_stop if row[0] == stop]
             stop = stop[-1] if len(stop) > 0 else None
 
-            conds = []  # type: List[Column]
+            conds: List[Column] = []
             if start is not None:
                 conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= SF.lit(start).cast(LongType()))
             if stop is not None:
@@ -1076,8 +1077,12 @@ class LocIndexer(LocIndexerLike):
 
             return reduce(lambda x, y: x & y, conds), None, None
         else:
+            from pyspark.sql.types import StructType
+
             index = self._psdf_or_psser.index
-            index_data_type = [f.dataType for f in index.to_series().spark.data_type]
+            index_data_type = [  # type: ignore[assignment]
+                f.dataType for f in cast(StructType, index.to_series().spark.data_type)
+            ]
 
             start = rows_sel.start
             if start is not None:
@@ -1109,7 +1114,11 @@ class LocIndexer(LocIndexerLike):
             if start is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, start, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], start),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1119,7 +1128,11 @@ class LocIndexer(LocIndexerLike):
             if stop is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, stop, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], stop),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1200,6 +1213,7 @@ class LocIndexer(LocIndexerLike):
             return self._get_from_multiindex_column((str(key),), missing_keys, labels, recursed + 1)
         else:
             returns_series = all(lbl is None or len(lbl) == 0 for _, lbl in labels)
+            series_name: Optional[Name]
             if returns_series:
                 label_set = set(label for label, _ in labels)
                 assert len(label_set) == 1
@@ -1208,7 +1222,7 @@ class LocIndexer(LocIndexerLike):
                 data_spark_columns = [self._internal.spark_column_for(label)]
                 data_fields = [self._internal.field_for(label)]
                 if label is None:
-                    series_name = None  # type: Name
+                    series_name = None
                 else:
                     if recursed > 0:
                         label = label[:-recursed]
@@ -1246,9 +1260,7 @@ class LocIndexer(LocIndexerLike):
         bool,
         Optional[Name],
     ]:
-        column_labels = [
-            (self._internal.spark_frame.select(cols_sel).columns[0],)
-        ]  # type: List[Label]
+        column_labels: List[Label] = [(self._internal.spark_frame.select(cols_sel).columns[0],)]
         data_spark_columns = [cols_sel]
         return column_labels, data_spark_columns, None, True, None
 
@@ -1783,7 +1795,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        if is_list_like(value) and not isinstance(value, Column):
+        if not isinstance(value, Column) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):
                 raise ValueError("setting an array element with a sequence.")
@@ -1805,7 +1817,7 @@ class iLocIndexer(LocIndexerLike):
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
         self._psdf._update_internal_frame(
-            self._psdf._internal.resolved_copy, requires_same_anchor=False
+            self._psdf._internal.resolved_copy, check_same_anchor=False
         )
 
         # Clean up implicitly cached properties to be able to reuse the indexer.

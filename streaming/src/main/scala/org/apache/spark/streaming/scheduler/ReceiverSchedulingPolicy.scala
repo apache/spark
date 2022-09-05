@@ -92,7 +92,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.
-    for (i <- 0 until receivers.length) {
+    for (i <- receivers.indices) {
       // Note: preferredLocation is host but executors are host_executorId
       receivers(i).preferredLocation.foreach { host =>
         hostToExecutors.get(host) match {

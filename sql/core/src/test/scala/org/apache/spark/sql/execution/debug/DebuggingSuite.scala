@@ -111,9 +111,9 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
     }
 
     val output = captured.toString()
-    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false)"
-    assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
+    assert(output.replaceAll("\\[plan_id=\\d+\\]", "[plan_id=x]").contains(
+      s"""== BroadcastExchange $hashedModeString, [plan_id=x] ==
          |Tuples output: 0
          | id LongType: {}
          |== WholeStageCodegen (1) ==
@@ -125,21 +125,25 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {
-    val df = spark.range(5)
-    df.persist()
+    withTempPath { workDir =>
+      val workDirPath = workDir.getAbsolutePath
+      val input = spark.range(5).toDF("id")
+      input.write.parquet(workDirPath)
+      val df = spark.read.parquet(workDirPath)
 
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      df.debug()
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.debug()
+      }
+
+      val output = captured.toString()
+        .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
+      assert(output.contains(
+        """== FileScan parquet [id#xL] ==
+          |Tuples output: 0
+          | id LongType: {}
+          |""".stripMargin))
     }
-    df.unpersist()
-
-    val output = captured.toString().replaceAll("#\\d+", "#x")
-    assert(output.contains(
-      """== InMemoryTableScan [id#xL] ==
-        |Tuples output: 0
-        | id LongType: {}
-        |""".stripMargin))
   }
 }
 

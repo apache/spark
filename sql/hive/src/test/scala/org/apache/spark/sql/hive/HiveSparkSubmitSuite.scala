@@ -33,6 +33,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -63,6 +64,7 @@ class HiveSparkSubmitSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    System.gc()
   }
 
   test("temporary Hive UDF: define a UDF and use it") {
@@ -73,7 +75,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", TemporaryHiveUDFTest.getClass.getName.stripSuffix("$"),
       "--name", "TemporaryHiveUDFTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -90,7 +93,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", PermanentHiveUDFTest1.getClass.getName.stripSuffix("$"),
       "--name", "PermanentHiveUDFTest1",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -107,7 +111,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", PermanentHiveUDFTest2.getClass.getName.stripSuffix("$"),
       "--name", "PermanentHiveUDFTest2",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -126,7 +131,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSubmitClassLoaderTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -141,7 +147,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.sql.hive.metastore.version=0.12",
@@ -179,7 +186,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -192,7 +200,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -205,7 +214,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_14244.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -218,7 +228,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
       "--name", "SetSparkWarehouseLocationTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -255,7 +266,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
       "--name", "SetHiveWarehouseLocationTest",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", s"spark.sql.test.expectedWarehouseDir=$hiveWarehouseLocation",
@@ -313,7 +325,8 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--class", SPARK_18360.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18360",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
@@ -327,7 +340,8 @@ class HiveSparkSubmitSuite
     val argsForCreateTable = Seq(
       "--class", SPARK_18989_CREATE_TABLE.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18947",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--jars", HiveTestJars.getHiveContribJar().getCanonicalPath,
@@ -337,7 +351,8 @@ class HiveSparkSubmitSuite
     val argsForShowTables = Seq(
       "--class", SPARK_18989_DESC_TABLE.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-18947",
-      "--master", "local-cluster[2,1,1024]",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
@@ -358,7 +373,8 @@ class HiveSparkSubmitSuite
       val args = Seq(
         "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
         "--name", "SPARK-34772",
-        "--master", "local-cluster[2,1,1024]",
+        "--master", "local-cluster[2,1,512]",
+        "--conf", s"${EXECUTOR_MEMORY.key}=512m",
         "--conf", s"${LEGACY_TIME_PARSER_POLICY.key}=LEGACY",
         "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
@@ -371,7 +387,7 @@ class HiveSparkSubmitSuite
 
 object SetMetastoreURLTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true)
     val builder = SparkSession.builder()
@@ -409,7 +425,7 @@ object SetMetastoreURLTest extends Logging {
 
 object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true).set(UI_ENABLED, false)
     val providedExpectedWarehouseLocation =
@@ -489,7 +505,7 @@ object SetWarehouseLocationTest extends Logging {
 // can load the jar defined with the function.
 object TemporaryHiveUDFTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -527,7 +543,7 @@ object TemporaryHiveUDFTest extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest1 extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -565,7 +581,7 @@ object PermanentHiveUDFTest1 extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest2 extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -600,7 +616,7 @@ object PermanentHiveUDFTest2 extends Logging {
 // We test if we can load user jars in both driver and executors when HiveContext is used.
 object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
     conf.set(UI_ENABLED, false)
@@ -670,7 +686,7 @@ object SparkSubmitClassLoaderTest extends Logging {
 // We test if we can correctly set spark sql configurations when HiveContext is used.
 object SparkSQLConfTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     // We override the SparkConf to add spark.sql.hive.metastore.version and
     // spark.sql.hive.metastore.jars to the beginning of the conf entry array.
     // So, if metadataHive get initialized after we set spark.sql.hive.metastore.version but
@@ -711,7 +727,7 @@ object SPARK_9757 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
@@ -760,7 +776,7 @@ object SPARK_11009 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
@@ -791,7 +807,7 @@ object SPARK_14244 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()

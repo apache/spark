@@ -1,5 +1,6 @@
 {
   "devDependencies": {
-    "eslint": "^7.25.0"
+    "eslint": "^7.25.0",
+    "ansi-regex": "^5.0.1"
   }
 }

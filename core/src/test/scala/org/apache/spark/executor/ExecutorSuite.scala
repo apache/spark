@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
@@ -321,13 +321,7 @@ class ExecutorSuite extends SparkFunSuite
       nonZeroAccumulator.add(1)
       metrics.registerAccumulator(nonZeroAccumulator)
 
-      val executorClass = classOf[Executor]
-      val tasksMap = {
-        val field =
-          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
-        field.setAccessible(true)
-        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
-      }
+      val tasksMap = executor.runningTasks
       val mockTaskRunner = mock[executor.TaskRunner]
       val mockTask = mock[Task[Any]]
       when(mockTask.metrics).thenReturn(metrics)
@@ -520,6 +514,59 @@ class ExecutorSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-40235: updateDependencies is interruptible when waiting on lock") {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    withExecutor("id", "localhost", env) { executor =>
+      val startLatch = new CountDownLatch(1)
+      val endLatch = new CountDownLatch(1)
+
+      // Start a thread to simulate a task that begins executing updateDependencies()
+      // and takes a long time to finish because file download is slow:
+      val slowLibraryDownloadThread = new Thread(() => {
+        executor.updateDependencies(
+          Map.empty,
+          Map.empty,
+          Map.empty,
+          Some(startLatch),
+          Some(endLatch))
+      })
+      slowLibraryDownloadThread.start()
+
+      // Wait for that thread to acquire the lock:
+      startLatch.await()
+
+      // Start a second thread to simulate a task that blocks on the other task's
+      // dependency update:
+      val blockedLibraryDownloadThread = new Thread(() => {
+        executor.updateDependencies(
+          Map.empty,
+          Map.empty,
+          Map.empty)
+      })
+      blockedLibraryDownloadThread.start()
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        val threadState = blockedLibraryDownloadThread.getState
+        assert(Set(Thread.State.BLOCKED, Thread.State.WAITING).contains(threadState))
+      }
+
+      // Interrupt the blocked thread:
+      blockedLibraryDownloadThread.interrupt()
+
+      // The thread should exit:
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        assert(blockedLibraryDownloadThread.getState == Thread.State.TERMINATED)
+      }
+
+      // Allow the first thread to finish and exit:
+      endLatch.countDown()
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        assert(slowLibraryDownloadThread.getState == Thread.State.TERMINATED)
+      }
+    }
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
@@ -549,6 +596,7 @@ class ExecutorSuite extends SparkFunSuite
       stageAttemptId = 0,
       taskBinary = taskBinary,
       partition = rdd.partitions(0),
+      numPartitions = 1,
       locs = Seq(),
       outputId = 0,
       localProperties = new Properties(),

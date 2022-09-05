@@ -35,6 +35,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -210,14 +211,23 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         s"then cached during training. Be careful of double caching!")
     }
 
-    val instances = dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType),
-      col($(censorCol)).cast(DoubleType))
-      .rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
-        require(censor == 1.0 || censor == 0.0, "censor must be 1.0 or 0.0")
-        // AFT does not support instance weighting,
-        // here use Instance.weight to store censor for convenience
-        Instance(label, censor, features)
-      }.setName("training instances")
+    val validatedCensorCol = {
+      val casted = col($(censorCol)).cast(DoubleType)
+      when(casted.isNull || casted.isNaN, raise_error(lit("Censors MUST NOT be Null or NaN")))
+        .when(casted =!= 0 && casted =!= 1,
+          raise_error(concat(lit("Censors MUST be in {0, 1}, but got "), casted)))
+        .otherwise(casted)
+    }
+
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      validatedCensorCol,
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, c: Double, v: Vector) =>
+      // AFT does not support instance weighting,
+      // here use Instance.weight to store censor for convenience
+      Instance(l, c, v)
+    }.setName("training instances")
 
     val summarizer = instances.treeAggregate(
       Summarizer.createSummarizerBuffer("mean", "std", "count"))(

@@ -26,22 +26,27 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
-
     def test_getAllNestedStages(self):
         def _check_uid_set_equal(stages, expected_stages):
             uids = set(map(lambda x: x.uid, stages))
             expected_uids = set(map(lambda x: x.uid, expected_stages))
             self.assertEqual(uids, expected_uids)
 
-        df1 = self.spark.createDataFrame([
-            (Vectors.dense([1., 2.]), 1.0),
-            (Vectors.dense([-1., -2.]), 0.0),
-        ], ['features', 'label'])
-        df2 = self.spark.createDataFrame([
-            (1., 2., 1.0),
-            (1., 2., 0.0),
-        ], ['a', 'b', 'label'])
-        vs = VectorAssembler(inputCols=['a', 'b'], outputCol='features')
+        df1 = self.spark.createDataFrame(
+            [
+                (Vectors.dense([1.0, 2.0]), 1.0),
+                (Vectors.dense([-1.0, -2.0]), 0.0),
+            ],
+            ["features", "label"],
+        )
+        df2 = self.spark.createDataFrame(
+            [
+                (1.0, 2.0, 1.0),
+                (1.0, 2.0, 0.0),
+            ],
+            ["a", "b", "label"],
+        )
+        vs = VectorAssembler(inputCols=["a", "b"], outputCol="features")
         lr = LogisticRegression()
         pipeline = Pipeline(stages=[vs, lr])
         pipelineModel = pipeline.fit(df2)
@@ -52,24 +57,19 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
         nested_pipeline = Pipeline(stages=[ova_pipeline])
 
         _check_uid_set_equal(
-            MetaAlgorithmReadWrite.getAllNestedStages(pipeline),
-            [pipeline, vs, lr]
+            MetaAlgorithmReadWrite.getAllNestedStages(pipeline), [pipeline, vs, lr]
         )
         _check_uid_set_equal(
             MetaAlgorithmReadWrite.getAllNestedStages(pipelineModel),
-            [pipelineModel] + pipelineModel.stages
+            [pipelineModel] + pipelineModel.stages,
         )
+        _check_uid_set_equal(MetaAlgorithmReadWrite.getAllNestedStages(ova), [ova, lr])
         _check_uid_set_equal(
-            MetaAlgorithmReadWrite.getAllNestedStages(ova),
-            [ova, lr]
-        )
-        _check_uid_set_equal(
-            MetaAlgorithmReadWrite.getAllNestedStages(ovaModel),
-            [ovaModel, lr] + ovaModel.models
+            MetaAlgorithmReadWrite.getAllNestedStages(ovaModel), [ovaModel, lr] + ovaModel.models
         )
         _check_uid_set_equal(
             MetaAlgorithmReadWrite.getAllNestedStages(nested_pipeline),
-            [nested_pipeline, ova_pipeline, vs, ova, lr]
+            [nested_pipeline, ova_pipeline, vs, ova, lr],
         )
 
 
@@ -78,7 +78,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

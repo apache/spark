@@ -67,14 +67,12 @@ SELECT '7' AS `None`,
   CASE WHEN rand() < udf(0) THEN 1
   END AS `NULL on no matches`;
 
--- [SPARK-33008] Spark SQL throws an exception
 -- Constant-expression folding shouldn't evaluate unreachable subexpressions
 SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END;
 
--- However we do not currently suppress folding of potentially
--- reachable subexpressions
-SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl;
+-- SPARK-39122: Python UDF does not follow the conditional expression evaluation order
+-- SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl;
 
 -- Test for cases involving untyped literals in test expression
 SELECT CASE 'a' WHEN 'a' THEN udf(1) ELSE udf(2) END;

@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
 import java.util.ConcurrentModificationException
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.util.collection.unsafe.sort.{UnsafeSorterIterator, UnsafeSorterSpillReader}
 
 class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSparkContext {
   private val random = new java.util.Random()
@@ -155,6 +158,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       assert(!iterator1.hasNext)
       intercept[ConcurrentModificationException](iterator1.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator1)
     }
   }
 
@@ -178,6 +182,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       assert(!iterator1.hasNext)
       intercept[ConcurrentModificationException](iterator1.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator1)
     }
   }
 
@@ -265,6 +270,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       populateRows(array, 1)
       assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator)
 
       // Clearing the array should also invalidate any old iterators
       iterator = array.generateIterator()
@@ -274,6 +280,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       array.clear()
       assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator)
     }
   }
 
@@ -292,6 +299,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       populateRows(array, 1)
       assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator)
 
       // Clearing the array should also invalidate any old iterators
       iterator = array.generateIterator()
@@ -301,6 +309,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       array.clear()
       assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator)
     }
   }
 
@@ -319,6 +328,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       // Clearing an empty array should also invalidate any old iterators
       assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
+      checkIteratorClosedWhenThrowConcurrentModificationException(iterator)
     }
   }
 
@@ -370,6 +380,33 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       populateRows(array, spillThreshold * 2, expectedValues)
       validateData(array, expectedValues)
       assert(getNumBytesSpilled > bytesSpilled)
+    }
+  }
+
+  private def checkIteratorClosedWhenThrowConcurrentModificationException(
+      iterator: Iterator[UnsafeRow]): Unit = {
+    def getFieldValue(obj: Any, fieldName: String): Any = {
+      val field = obj.getClass.getDeclaredField(fieldName)
+      field.setAccessible(true)
+      field.get(obj)
+    }
+    def checkUnsafeSorterSpillReaderClosed(
+        unsafeSorterIterator: UnsafeSorterIterator): Unit = unsafeSorterIterator match {
+      case reader: UnsafeSorterSpillReader =>
+        // If UnsafeSorterSpillReader is not closed, `in` and `din` are not null
+        assert(getFieldValue(reader, "in") == null)
+        assert(getFieldValue(reader, "din") == null)
+      case _ => // do noting
+    }
+    // Only check `SpillableArrayIterator` because `InMemoryBufferIterator` not open the file handle
+    if (iterator.getClass.getSimpleName.equals("SpillableArrayIterator")) {
+      val chainedIterator = getFieldValue(iterator, "iterator")
+      val current = getFieldValue(chainedIterator, "current")
+      assert(current.isInstanceOf[UnsafeSorterIterator])
+      checkUnsafeSorterSpillReaderClosed(current.asInstanceOf[UnsafeSorterIterator])
+      val iterators = getFieldValue(chainedIterator, "iterators")
+      iterators.asInstanceOf[util.Queue[UnsafeSorterIterator]].asScala
+        .foreach(checkUnsafeSorterSpillReaderClosed)
     }
   }
 }

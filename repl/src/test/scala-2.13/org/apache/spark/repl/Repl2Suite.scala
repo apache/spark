@@ -18,17 +18,10 @@
 package org.apache.spark.repl
 
 import java.io._
-import java.nio.file.Files
-
-import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class Repl2Suite extends SparkFunSuite with BeforeAndAfterAll {
+class Repl2Suite extends SparkFunSuite {
   test("propagation of local properties") {
     // A mock ILoop that doesn't install the SIGINT handler.
     class ILoop(out: PrintWriter) extends SparkILoop(null, out)

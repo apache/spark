@@ -24,28 +24,42 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsPollingSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for polling K8s executor pods by ExternalClusterManagers.
+ * @since 3.1.3
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     pollingExecutor: ScheduledExecutorService) extends Logging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+  private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)
 
   private var pollingFuture: Future[_] = _
 
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
-    require(pollingFuture == null, "Cannot start polling more than once.")
-    logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
-    pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    if (pollingEnabled) {
+      require(pollingFuture == null, "Cannot start polling more than once.")
+      logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+      pollingFuture = pollingExecutor.scheduleWithFixedDelay(
+        new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    }
   }
 
+  @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)

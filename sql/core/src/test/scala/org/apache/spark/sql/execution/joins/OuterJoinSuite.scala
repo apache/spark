@@ -304,4 +304,25 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       (null, null, 7, 7.0)
     )
   )
+
+  testOuterJoin(
+    "full outer join with unique keys",
+    uniqueLeft,
+    uniqueRight,
+    FullOuter,
+    uniqueCondition,
+    Seq(
+      (null, null, null, null),
+      (null, null, null, null),
+      (1, 2.0, null, null),
+      (2, 1.0, 2, 3.0),
+      (3, 3.0, null, null),
+      (5, 1.0, 5, 3.0),
+      (6, 6.0, null, null),
+      (null, null, 0, 0.0),
+      (null, null, 3, 2.0),
+      (null, null, 4, 1.0),
+      (null, null, 7, 7.0)
+    )
+  )
 }

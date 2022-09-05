@@ -103,7 +103,7 @@ class SortShuffleWriterSuite
       mapId = 2,
       context,
       shuffleExecutorComponents)
-    writer.write(records.toIterator)
+    writer.write(records.iterator)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
     val writeMetrics = context.taskMetrics().shuffleWriteMetrics
@@ -160,7 +160,7 @@ class SortShuffleWriterSuite
         context,
         new LocalDiskShuffleExecutorComponents(
           conf, shuffleBlockResolver._blockManager, shuffleBlockResolver))
-      writer.write(records.toIterator)
+      writer.write(records.iterator)
       val sorterMethod = PrivateMethod[ExternalSorter[_, _, _]](Symbol("sorter"))
       val sorter = writer.invokePrivate(sorterMethod())
       val expectSpillSize = if (doSpill) records.size else 0

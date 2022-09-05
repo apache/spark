@@ -35,12 +35,29 @@ public interface RequiresDistributionAndOrdering extends Write {
    * Spark will distribute incoming records across partitions to satisfy the required distribution
    * before passing the records to the data source table on write.
    * <p>
+   * Batch and micro-batch writes can request a particular data distribution.
+   * If a distribution is requested in the micro-batch context, incoming records in each micro batch
+   * will satisfy the required distribution (but not across micro batches). The continuous execution
+   * mode continuously processes streaming data and does not support distribution requirements.
+   * <p>
    * Implementations may return {@link UnspecifiedDistribution} if they don't require any specific
    * distribution of data on write.
    *
    * @return the required distribution
    */
   Distribution requiredDistribution();
+
+  /**
+   * Returns if the distribution required by this write is strictly required or best effort only.
+   * <p>
+   * If true, Spark will strictly distribute incoming records across partitions to satisfy
+   * the required distribution before passing the records to the data source table on write.
+   * Otherwise, Spark may apply certain optimizations to speed up the query but break
+   * the distribution requirement.
+   *
+   * @return true if the distribution required by this write is strictly required; false otherwise.
+   */
+  default boolean distributionStrictlyRequired() { return true; }
 
   /**
    * Returns the number of partitions required by this write.
@@ -60,6 +77,11 @@ public interface RequiresDistributionAndOrdering extends Write {
    * <p>
    * Spark will order incoming records within partitions to satisfy the required ordering
    * before passing those records to the data source table on write.
+   * <p>
+   * Batch and micro-batch writes can request a particular data ordering.
+   * If an ordering is requested in the micro-batch context, incoming records in each micro batch
+   * will satisfy the required ordering (but not across micro batches). The continuous execution
+   * mode continuously processes streaming data and does not support ordering requirements.
    * <p>
    * Implementations may return an empty array if they don't require any specific ordering of data
    * on write.

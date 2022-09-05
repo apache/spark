@@ -18,13 +18,12 @@
 import functools
 import shutil
 import tempfile
-import unittest
 import warnings
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
@@ -32,9 +31,8 @@ from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.sqlutils import SQLTestUtils
-
+from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 tabulate_requirement_message = None
 try:
@@ -46,7 +44,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # type: ignore # noqa: F401
+    import matplotlib  # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -54,25 +52,18 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # type: ignore # noqa: F401
+    import plotly  # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
 
-class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
+class PandasOnSparkTestCase(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        cls.spark = default_session()
+        super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
-
-    @classmethod
-    def tearDownClass(cls):
-        # We don't stop Spark session to reuse across all tests.
-        # The Spark session will be started and stopped at PyTest session level.
-        # Please see pyspark/pandas/conftest.py.
-        pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
@@ -84,9 +75,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
 
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes]) \
+                    check_exact = (
+                        check_exact
+                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
                         and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
+                    )
 
                 assert_frame_equal(
                     left,
@@ -94,7 +87,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     check_index_type=("equiv" if len(left.index) > 0 else False),
                     check_column_type=("equiv" if len(left.columns) > 0 else False),
                     check_exact=check_exact,
-                    **kwargs
+                    **kwargs,
                 )
             except AssertionError as e:
                 msg = (
@@ -111,15 +104,17 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     kwargs = dict()
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and is_numeric_dtype(left.dtype) \
+                    check_exact = (
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
                         and is_numeric_dtype(right.dtype)
+                    )
                 assert_series_equal(
                     left,
                     right,
                     check_index_type=("equiv" if len(left.index) > 0 else False),
                     check_exact=check_exact,
-                    **kwargs
+                    **kwargs,
                 )
             except AssertionError as e:
                 msg = (
@@ -132,9 +127,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             try:
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and is_numeric_dtype(left.dtype) \
+                    check_exact = (
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
                         and is_numeric_dtype(right.dtype)
+                    )
                 assert_index_equal(left, right, check_exact=check_exact)
             except AssertionError as e:
                 msg = (
@@ -241,7 +238,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             return obj
 
 
-class TestUtils(object):
+class TestUtils:
     @contextmanager
     def temp_dir(self):
         tmp = tempfile.mkdtemp()
@@ -253,7 +250,7 @@ class TestUtils(object):
     @contextmanager
     def temp_file(self):
         with self.temp_dir() as tmp:
-            yield tempfile.mktemp(dir=tmp)
+            yield tempfile.mkstemp(dir=tmp)[1]
 
 
 class ComparisonTestBase(PandasOnSparkTestCase):

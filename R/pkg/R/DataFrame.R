@@ -608,7 +608,7 @@ setMethod("cache",
 #'
 #' Persist this SparkDataFrame with the specified storage level. For details of the
 #' supported storage levels, refer to
-#' \url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
+#' \url{https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x the SparkDataFrame to persist.
 #' @param newLevel storage level chosen for the persistence. See available options in
@@ -890,10 +890,9 @@ setMethod("toJSON",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the JSON-specific options for writing JSON files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @rdname write.json
 #' @name write.json
@@ -925,10 +924,9 @@ setMethod("write.json",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the ORC-specific options for writing ORC files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @aliases write.orc,SparkDataFrame,character-method
 #' @rdname write.orc
@@ -960,10 +958,9 @@ setMethod("write.orc",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the Parquet-specific options for writing Parquet files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
-#'            }{Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
 #' @name write.parquet
@@ -996,10 +993,9 @@ setMethod("write.parquet",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the text-specific options for writing text files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @aliases write.text,SparkDataFrame,character-method
 #' @rdname write.text
@@ -3581,41 +3577,56 @@ setMethod("str",
 #' This is a no-op if schema doesn't contain column name(s).
 #'
 #' @param x a SparkDataFrame.
-#' @param col a character vector of column names or a Column.
-#' @param ... further arguments to be passed to or from other methods.
-#' @return A SparkDataFrame.
+#' @param col a list of columns or single Column or name.
+#' @param ... additional column(s) if only one column is specified in \code{col}.
+#'            If more than one column is assigned in \code{col}, \code{...}
+#'            should be left empty.
+#' @return A new SparkDataFrame with selected columns.
 #'
 #' @family SparkDataFrame functions
 #' @rdname drop
 #' @name drop
-#' @aliases drop,SparkDataFrame-method
+#' @aliases drop,SparkDataFrame,characterOrColumn-method
 #' @examples
-#'\dontrun{
+#' \dontrun{
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' drop(df, "col1")
 #' drop(df, c("col1", "col2"))
 #' drop(df, df$col1)
+#' drop(df, "col1", "col2")
+#' drop(df, df$name, df$age)
 #' }
-#' @note drop since 2.0.0
+#' @note drop(SparkDataFrame, characterOrColumn, ...) since 3.4.0
 setMethod("drop",
-          signature(x = "SparkDataFrame"),
-          function(x, col) {
-            stopifnot(class(col) == "character" || class(col) == "Column")
-
-            if (class(col) == "Column") {
-              sdf <- callJMethod(x@sdf, "drop", col@jc)
+          signature(x = "SparkDataFrame", col = "characterOrColumn"),
+          function(x, col, ...) {
+            if (class(col) == "character" && length(col) > 1) {
+              if (length(list(...)) > 0) {
+                stop("To drop multiple columns, use a character vector or ... for character/Column")
+              }
+              cols <- as.list(col)
             } else {
-              sdf <- callJMethod(x@sdf, "drop", as.list(col))
+              cols <- list(col, ...)
             }
+
+            cols <- lapply(cols, function(c) {
+              if (class(c) == "Column") {
+                c@jc
+              } else {
+                col(c)@jc
+              }
+            })
+
+            sdf <- callJMethod(x@sdf, "drop", cols[[1]], cols[-1])
             dataFrame(sdf)
           })
 
 # Expose base::drop
 #' @name drop
 #' @rdname drop
-#' @aliases drop,ANY-method
+#' @aliases drop,ANY,ANY-method
 setMethod("drop",
           signature(x = "ANY"),
           function(x) {
@@ -3912,8 +3923,7 @@ setMethod("isStreaming",
 #' @aliases write.stream,SparkDataFrame-method
 #' @rdname write.stream
 #' @name write.stream
-#' @examples
-#'\dontrun{
+#' @examples \dontrun{
 #' sparkR.session()
 #' df <- read.stream("socket", host = "localhost", port = 9999)
 #' isStreaming(df)
@@ -3922,7 +3932,7 @@ setMethod("isStreaming",
 #' # console
 #' q <- write.stream(wordCounts, "console", outputMode = "complete")
 #' # text stream
-#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp"
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp",
 #'                   partitionBy = c("year", "month"), trigger.processingTime = "30 seconds")
 #' # memory stream
 #' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")

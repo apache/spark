@@ -20,14 +20,17 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A test suite for Hive view related functionality.
  */
+@SlowHiveTest
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   import testImplicits._
 
@@ -81,7 +84,8 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
             }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
+            assert(e.contains("Not allowed to create a permanent view " +
+              s"`$SESSION_CATALOG_NAME`.`default`.`view1` by " +
               s"referencing a temporary function `$tempFunctionName`"))
           }
         }
@@ -178,5 +182,44 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         }
       }
     }
+  }
+
+  test("hive partitioned view is not supported") {
+    withTable("test") {
+      withView("v1") {
+        sql(
+          s"""
+             |CREATE TABLE test (c1 INT, c2 STRING)
+             |PARTITIONED BY (
+             |  p1 BIGINT COMMENT 'bla',
+             |  p2 STRING )
+           """.stripMargin)
+
+        createRawHiveTable(
+          s"""
+             |CREATE VIEW v1
+             |PARTITIONED ON (p1, p2)
+             |AS SELECT * from test
+           """.stripMargin
+        )
+
+        val cause = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE v1")
+        }
+
+        assert(cause.getMessage.contains(" - partitioned view"))
+
+        val causeForSpark = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE v1 AS SERDE")
+        }
+
+        assert(causeForSpark.getMessage.contains(" - partitioned view"))
+      }
+    }
+  }
+
+  private def createRawHiveTable(ddl: String): Unit = {
+    hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+      .client.runSqlHive(ddl)
   }
 }

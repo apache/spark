@@ -17,25 +17,124 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
 import java.util.Collections
 
-import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaLongAdd, JavaStrLen}
-import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddMismatchMagic, JavaLongAddStaticMagic}
+import test.org.apache.spark.sql.connector.catalog.functions._
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
+import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
+import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+object IntAverage extends AggregateFunction[(Int, Int), Int] {
+  override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
+  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def resultType(): DataType = IntegerType
+
+  override def newAggregationState(): (Int, Int) = (0, 0)
+
+  override def update(state: (Int, Int), input: InternalRow): (Int, Int) = {
+    if (input.isNullAt(0)) {
+      state
+    } else {
+      val i = input.getInt(0)
+      state match {
+        case (_, 0) =>
+          (i, 1)
+        case (total, count) =>
+          (total + i, count + 1)
+      }
+    }
+  }
+
+  override def merge(leftState: (Int, Int), rightState: (Int, Int)): (Int, Int) = {
+    (leftState._1 + rightState._1, leftState._2 + rightState._2)
+  }
+
+  override def produceResult(state: (Int, Int)): Int = state._1 / state._2
+}
+
+object LongAverage extends AggregateFunction[(Long, Long), Long] {
+  override def name(): String = "iavg"
+  override def canonicalName(): String = "h2.iavg"
+  override def inputTypes(): Array[DataType] = Array(LongType)
+  override def resultType(): DataType = LongType
+
+  override def newAggregationState(): (Long, Long) = (0L, 0L)
+
+  override def update(state: (Long, Long), input: InternalRow): (Long, Long) = {
+    if (input.isNullAt(0)) {
+      state
+    } else {
+      val l = input.getLong(0)
+      state match {
+        case (_, 0L) =>
+          (l, 1)
+        case (total, count) =>
+          (total + l, count + 1L)
+      }
+    }
+  }
+
+  override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
+    (leftState._1 + rightState._1, leftState._2 + rightState._2)
+  }
+
+  override def produceResult(state: (Long, Long)): Long = state._1 / state._2
+}
+
+object IntegralAverage extends UnboundFunction {
+  override def name(): String = "iavg"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length > 1) {
+      throw new UnsupportedOperationException("Too many arguments")
+    }
+
+    inputType.fields(0).dataType match {
+      case _: IntegerType => IntAverage
+      case _: LongType => LongAverage
+      case dataType =>
+        throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
+    }
+  }
+
+  override def description(): String =
+    """iavg: produces an average using integer division, ignoring nulls
+      |  iavg(int) -> int
+      |  iavg(bigint) -> bigint""".stripMargin
+}
+
+case class StrLen(impl: BoundFunction) extends UnboundFunction {
+  override def name(): String = "strlen"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length != 1) {
+      throw new UnsupportedOperationException("Expect exactly one argument");
+    }
+    inputType.fields(0).dataType match {
+      case StringType => impl
+      case _ =>
+        throw new UnsupportedOperationException("Expect StringType")
+    }
+  }
+
+  override def description(): String =
+    "strlen: returns the length of the input string  strlen(string) -> int"
+}
+
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
-  private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
+  private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
   private def addFunction(ident: Identifier, fn: UnboundFunction): Unit = {
     catalog("testcat").asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
@@ -51,8 +150,62 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
       assert(intercept[AnalysisException](
         sql("SELECT testcat.strlen('abc')").collect()
-      ).getMessage.contains("is not a FunctionCatalog"))
+      ).getMessage.contains("Catalog testcat does not support functions"))
     }
+  }
+
+  test("DESCRIBE FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support functions"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("DROP FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("DROP FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support DROP FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DROP FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("CREATE FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
+    }
+    assert(e.message.contains("Catalog testcat does not support CREATE FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("REFRESH FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support REFRESH FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("built-in with non-function catalog should still work") {
@@ -365,21 +518,28 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  private case class StrLen(impl: BoundFunction) extends UnboundFunction {
-    override def description(): String =
-      """strlen: returns the length of the input string
-        |  strlen(string) -> int""".stripMargin
-    override def name(): String = "strlen"
+  test("SPARK-37957: pass deterministic flag when creating V2 function expression") {
+    def checkDeterministic(df: DataFrame): Unit = {
+      val result = df.queryExecution.executedPlan.find(_.isInstanceOf[ProjectExec])
+      assert(result.isDefined, s"Expect to find ProjectExec")
+      assert(!result.get.asInstanceOf[ProjectExec].projectList.exists(_.deterministic),
+        "Expect expressions in projectList to be non-deterministic")
+    }
 
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length != 1) {
-        throw new UnsupportedOperationException("Expect exactly one argument");
-      }
-      inputType.fields(0).dataType match {
-        case StringType => impl
-        case _ =>
-          throw new UnsupportedOperationException("Expect StringType")
-      }
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic,
+        new JavaRandomAddStaticMagic).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
+      checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
+    }
+
+    // A function call is non-deterministic if one of its arguments is non-deterministic
+    Seq(new JavaLongAddDefault(true), new JavaLongAddMagic(true),
+        new JavaLongAddStaticMagic(true)).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(fn))
+      addFunction(Identifier.of(Array("ns"), "rand_add"),
+        new JavaRandomAdd(new JavaRandomAddDefault))
+      checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
     }
   }
 
@@ -446,84 +606,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def inputTypes(): Array[DataType] = Array(StringType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "bad_bound_func"
-  }
-
-  object IntegralAverage extends UnboundFunction {
-    override def name(): String = "iavg"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length > 1) {
-        throw new UnsupportedOperationException("Too many arguments")
-      }
-
-      inputType.fields(0).dataType match {
-        case _: IntegerType => IntAverage
-        case _: LongType => LongAverage
-        case dataType =>
-          throw new UnsupportedOperationException(s"Unsupported non-integral type: $dataType")
-      }
-    }
-
-    override def description(): String =
-      """iavg: produces an average using integer division, ignoring nulls
-        |  iavg(int) -> int
-        |  iavg(bigint) -> bigint""".stripMargin
-  }
-
-  object IntAverage extends AggregateFunction[(Int, Int), Int] {
-    override def name(): String = "iavg"
-    override def inputTypes(): Array[DataType] = Array(IntegerType)
-    override def resultType(): DataType = IntegerType
-
-    override def newAggregationState(): (Int, Int) = (0, 0)
-
-    override def update(state: (Int, Int), input: InternalRow): (Int, Int) = {
-      if (input.isNullAt(0)) {
-        state
-      } else {
-        val i = input.getInt(0)
-        state match {
-          case (_, 0) =>
-            (i, 1)
-          case (total, count) =>
-            (total + i, count + 1)
-        }
-      }
-    }
-
-    override def merge(leftState: (Int, Int), rightState: (Int, Int)): (Int, Int) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Int, Int)): Int = state._1 / state._2
-  }
-
-  object LongAverage extends AggregateFunction[(Long, Long), Long] {
-    override def name(): String = "iavg"
-    override def inputTypes(): Array[DataType] = Array(LongType)
-    override def resultType(): DataType = LongType
-
-    override def newAggregationState(): (Long, Long) = (0L, 0L)
-
-    override def update(state: (Long, Long), input: InternalRow): (Long, Long) = {
-      if (input.isNullAt(0)) {
-        state
-      } else {
-        val l = input.getLong(0)
-        state match {
-          case (_, 0L) =>
-            (l, 1)
-          case (total, count) =>
-            (total + l, count + 1L)
-        }
-      }
-    }
-
-    override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Long, Long)): Long = state._1 / state._2
   }
 
   object UnboundDecimalAverage extends UnboundFunction {

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -125,6 +126,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
           fields.asInstanceOf[Array[AnyRef]], otherFields.asInstanceOf[Array[AnyRef]])
       case _ => false
     }
+  }
+
+  override def toString(): String = {
+    s"${getClass.getSimpleName}${fields.map(_.toString).mkString("(", ",", ")")}"
   }
 
   private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
@@ -321,6 +326,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
+    @scala.annotation.tailrec
     def findField(
         struct: StructType,
         searchPath: Seq[String],
@@ -329,7 +335,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       val searchName = searchPath.head
       val found = struct.fields.filter(f => resolver(searchName, f.name))
       if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousFieldNameError(fieldNames, found.length, context)
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
       } else if (found.isEmpty) {
         None
       } else {
@@ -506,6 +512,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   @transient
   private[sql] lazy val interpretedOrdering =
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+
+  /**
+   * These define and cache existence default values for the struct fields for efficiency purposes.
+   */
+  private[sql] lazy val existenceDefaultValues: Array[Any] = getExistenceDefaultValues(this)
+  private[sql] lazy val existenceDefaultsBitmask: Array[Boolean] = getExistenceDefaultsBitmask(this)
+  private[sql] lazy val hasExistenceDefaultValues = existenceDefaultValues.exists(_ != null)
 }
 
 /**
@@ -637,14 +650,8 @@ object StructType extends AbstractDataType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
-        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(leftPrecision, leftScale)
-        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-            leftPrecision, rightPrecision, leftScale, rightScale)
-        } else if (leftPrecision != rightPrecision) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionError(
-            leftPrecision, rightPrecision)
+        if (leftScale == rightScale) {
+          DecimalType(leftPrecision.max(rightPrecision), leftScale)
         } else {
           throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
             leftScale, rightScale)

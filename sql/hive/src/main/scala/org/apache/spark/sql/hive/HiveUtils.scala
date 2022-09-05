@@ -72,7 +72,7 @@ private[spark] object HiveUtils extends Logging {
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         "<code>0.12.0</code> through <code>2.3.9</code> and " +
-        "<code>3.0.0</code> through <code>3.1.2</code>.")
+        "<code>3.0.0</code> through <code>3.1.3</code>.")
     .version("1.4.0")
     .stringConf
     .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
@@ -157,6 +157,15 @@ private[spark] object HiveUtils extends Logging {
       "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
       "enabled respectively for Parquet and ORC formats")
     .version("3.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val CONVERT_METASTORE_INSERT_DIR = buildConf("spark.sql.hive.convertMetastoreInsertDir")
+    .doc("When set to true,  Spark will try to use built-in data source writer " +
+      "instead of Hive serde in INSERT OVERWRITE DIRECTORY. This flag is effective only if " +
+      "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
+      "enabled respectively for Parquet and ORC formats")
+    .version("3.3.0")
     .booleanConf
     .createWithDefault(true)
 

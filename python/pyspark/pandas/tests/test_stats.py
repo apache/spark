@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
 import pandas as pd
 
@@ -182,7 +180,9 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psdf.min(axis=1), pdf.min(axis=1))
             self.assert_eq(psdf.sum(axis=1), pdf.sum(axis=1))
             self.assert_eq(psdf.product(axis=1), pdf.product(axis=1))
+            self.assert_eq(psdf.kurtosis(axis=0), pdf.kurtosis(axis=0), almost=True)
             self.assert_eq(psdf.kurtosis(axis=1), pdf.kurtosis(axis=1))
+            self.assert_eq(psdf.skew(axis=0), pdf.skew(axis=0), almost=True)
             self.assert_eq(psdf.skew(axis=1), pdf.skew(axis=1))
             self.assert_eq(psdf.mean(axis=1), pdf.mean(axis=1))
             self.assert_eq(psdf.sem(axis=1), pdf.sem(axis=1))
@@ -218,7 +218,17 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.product(axis=1, numeric_only=True).astype(float),
             )
             self.assert_eq(
+                psdf.kurtosis(axis=0, numeric_only=True),
+                pdf.kurtosis(axis=0, numeric_only=True),
+                almost=True,
+            )
+            self.assert_eq(
                 psdf.kurtosis(axis=1, numeric_only=True), pdf.kurtosis(axis=1, numeric_only=True)
+            )
+            self.assert_eq(
+                psdf.skew(axis=0, numeric_only=True),
+                pdf.skew(axis=0, numeric_only=True),
+                almost=True,
             )
             self.assert_eq(
                 psdf.skew(axis=1, numeric_only=True), pdf.skew(axis=1, numeric_only=True)
@@ -231,6 +241,21 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.sem(axis=1, ddof=0, numeric_only=True),
                 pdf.sem(axis=1, ddof=0, numeric_only=True),
             )
+
+    def test_skew_kurt_numerical_stability(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 1, 1, 1, 1],
+                "B": [1.0, np.nan, 4, 2, 5],
+                "C": [-6.0, -7, np.nan, np.nan, 10],
+                "D": [1.2, np.nan, np.nan, 9.8, np.nan],
+                "E": [1, np.nan, np.nan, np.nan, np.nan],
+                "F": [np.nan, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.skew(), pdf.skew(), almost=True)
+        self.assert_eq(psdf.kurt(), pdf.kurt(), almost=True)
 
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
@@ -341,14 +366,8 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assert_eq(psdf.count(numeric_only=True), pdf.count(numeric_only=True))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
-            self.assert_eq(psdf.product(numeric_only=True), pdf.product(numeric_only=True))
-        else:
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
-            self.assert_eq(
-                psdf.product(numeric_only=True), pdf.product(numeric_only=True).astype(int)
-            )
+        self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+        self.assert_eq(psdf.product(numeric_only=True), pdf.product(numeric_only=True))
 
         self.assert_eq(psdf.mean(numeric_only=True), pdf.mean(numeric_only=True))
 
@@ -395,17 +414,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
-            self.assert_eq(
-                psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
-            )
-        else:
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
-            self.assert_eq(
-                psdf[["i", "b"]].sum(numeric_only=False),
-                pdf[["i", "b"]].sum(numeric_only=False).astype(int),
-            )
+        self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+        self.assert_eq(
+            psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
+        )
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.sum(numeric_only=False)

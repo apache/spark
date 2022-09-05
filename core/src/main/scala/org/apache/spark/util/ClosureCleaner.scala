@@ -19,11 +19,12 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
+import java.lang.reflect.{Field, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map, Set, Stack}
 
-import org.apache.commons.lang3.ClassUtils
+import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
@@ -394,8 +395,17 @@ private[spark] object ClosureCleaner extends Logging {
             parent = null, outerThis, capturingClass, accessedFields)
 
           val outerField = func.getClass.getDeclaredField("arg$1")
+          // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+          // the content of `outerField` cannot be set by reflect api directly.
+          // But we can remove the `final` modifier of `outerField` before set value
+          // and reset the modifier after set value.
+          val modifiersField = getFinalModifiersFieldForJava17(outerField)
+          modifiersField
+            .foreach(m => m.setInt(outerField, outerField.getModifiers & ~Modifier.FINAL))
           outerField.setAccessible(true)
           outerField.set(func, clonedOuterThis)
+          modifiersField
+            .foreach(m => m.setInt(outerField, outerField.getModifiers | Modifier.FINAL))
         }
       }
 
@@ -405,6 +415,24 @@ private[spark] object ClosureCleaner extends Logging {
     if (checkSerializable) {
       ensureSerializable(func)
     }
+  }
+
+  /**
+   * This method is used to get the final modifier field when on Java 17.
+   */
+  private def getFinalModifiersFieldForJava17(field: Field): Option[Field] = {
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) &&
+        Modifier.isFinal(field.getModifiers)) {
+      val methodGetDeclaredFields0 = classOf[Class[_]]
+        .getDeclaredMethod("getDeclaredFields0", classOf[Boolean])
+      methodGetDeclaredFields0.setAccessible(true)
+      val fields = methodGetDeclaredFields0.invoke(classOf[Field], false.asInstanceOf[Object])
+        .asInstanceOf[Array[Field]]
+      val modifiersFieldOption = fields.find(field => "modifiers".equals(field.getName))
+      require(modifiersFieldOption.isDefined)
+      modifiersFieldOption.foreach(_.setAccessible(true))
+      modifiersFieldOption
+    } else None
   }
 
   private def ensureSerializable(func: AnyRef): Unit = {

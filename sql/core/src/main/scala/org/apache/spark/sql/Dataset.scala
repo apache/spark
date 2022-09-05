@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -218,7 +217,7 @@ class Dataset[T] private[sql](
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+    if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
       dsIds.add(id)
       plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
@@ -465,6 +464,29 @@ class Dataset[T] private[sql](
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
+   * Returns a new DataFrame where each row is reconciled to match the specified schema. Spark will:
+   * <ul>
+   *   <li>Reorder columns and/or inner fields by name to match the specified schema.</li>
+   *   <li>Project away columns and/or inner fields that are not needed by the specified schema.
+   *   Missing columns and/or inner fields (present in the specified schema but not input DataFrame)
+   *   lead to failures.</li>
+   *   <li>Cast the columns and/or inner fields to match the data types in the specified schema, if
+   *   the types are compatible, e.g., numeric to numeric (error if overflows), but not string to
+   *   int.</li>
+   *   <li>Carry over the metadata from the specified schema, while the columns and/or inner fields
+   *   still keep their own metadata if not overwritten by the specified schema.</li>
+   *   <li>Fail if the nullability is not compatible. For example, the column and/or inner field is
+   *   nullable but the specified schema requires them to be not nullable.</li>
+   * </ul>
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def to(schema: StructType): DataFrame = withPlan {
+    Project.matchSchema(logicalPlan, schema, sparkSession.sessionState.conf)
+  }
+
+  /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
    * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
    * meaningful names. For example:
@@ -684,30 +706,13 @@ class Dataset[T] private[sql](
       }
 
       if (eager) {
-        internalRdd.count()
+        internalRdd.doCheckpoint()
       }
-
-      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-      // joins.
-      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-        partitioning match {
-          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-          case p => p
-        }
-      }
-
-      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
 
       Dataset.ofRows(
         sparkSession,
-        LogicalRDD(
-          logicalPlan.output,
-          internalRdd,
-          outputPartitioning,
-          physicalPlan.outputOrdering,
-          isStreaming
-        )(sparkSession)).as[T]
+        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+      ).as[T]
     }
   }
 
@@ -945,7 +950,21 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another `DataFrame` using the given columns.
+   * (Java-specific) Inner equi-join with another `DataFrame` using the given columns. See the
+   * Scala-specific overload for more details.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
+    join(right, usingColumns.toSeq)
+  }
+
+  /**
+   * (Scala-specific) Inner equi-join with another `DataFrame` using the given columns.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -970,9 +989,53 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Equi-join with another `DataFrame` using the given columns. A cross join with a predicate
+   * Equi-join with another `DataFrame` using the given column. A cross join with a predicate
    * is specified as an inner join. If you would explicitly like to perform a cross join use the
    * `crossJoin` method.
+   *
+   * Different from other join functions, the join column will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumn Name of the column to join on. This column must exist on both sides.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame = {
+    join(right, Seq(usingColumn), joinType)
+  }
+
+  /**
+   * (Java-specific) Equi-join with another `DataFrame` using the given columns. See the
+   * Scala-specific overload for more details.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
+    join(right, usingColumns.toSeq, joinType)
+  }
+
+  /**
+   * (Scala-specific) Equi-join with another `DataFrame` using the given columns. A cross join
+   * with a predicate is specified as an inner join. If you would explicitly like to perform a
+   * cross join use the `crossJoin` method.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -982,7 +1045,7 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
    *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
-   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, `left_anti`.
    *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
@@ -1047,6 +1110,47 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * find the trivially true predicates and automatically resolves them to both sides.
+   */
+  private def resolveSelfJoinCondition(
+      right: Dataset[_],
+      joinExprs: Option[Column],
+      joinType: String): Join = {
+    // Note that in this function, we introduce a hack in the case of self-join to automatically
+    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
+    // Consider this case: df.join(df, df("key") === df("key"))
+    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
+    // cartesian join. However, most likely users expect to perform a self join using "key".
+    // With that assumption, this hack turns the trivially true condition into equality on join
+    // keys that are resolved to both sides.
+
+    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
+    // After the cloning, left and right side will have distinct expression ids.
+    val plan = withPlan(
+      Join(logicalPlan, right.logicalPlan,
+        JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
+      .queryExecution.analyzed.asInstanceOf[Join]
+
+    // If auto self join alias is disabled, return the plan.
+    if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      return plan
+    }
+
+    // If left/right have no output set intersection, return the plan.
+    val lanalyzed = this.queryExecution.analyzed
+    val ranalyzed = right.queryExecution.analyzed
+    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+      return plan
+    }
+
+    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
+    // By the time we get here, since we have already run analysis, all attributes should've been
+    // resolved and become AttributeReference.
+
+    resolveSelfJoinCondition(plan)
+  }
+
+  /**
    * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
@@ -1071,38 +1175,8 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
-    // Note that in this function, we introduce a hack in the case of self-join to automatically
-    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
-    // Consider this case: df.join(df, df("key") === df("key"))
-    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
-    // cartesian join. However, most likely users expect to perform a self join using "key".
-    // With that assumption, this hack turns the trivially true condition into equality on join
-    // keys that are resolved to both sides.
-
-    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
-    // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
-
-    // If auto self join alias is disabled, return the plan.
-    if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
-      return withPlan(plan)
-    }
-
-    // If left/right have no output set intersection, return the plan.
-    val lanalyzed = this.queryExecution.analyzed
-    val ranalyzed = right.queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
-      return withPlan(plan)
-    }
-
-    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
-    // By the time we get here, since we have already run analysis, all attributes should've been
-    // resolved and become AttributeReference.
-
     withPlan {
-      resolveSelfJoinCondition(plan)
+      resolveSelfJoinCondition(right, Some(joinExprs), joinType)
     }
   }
 
@@ -1230,6 +1304,58 @@ class Dataset[T] private[sql](
    */
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
+  }
+
+  // TODO(SPARK-22947): Fix the DataFrame API.
+  private[sql] def joinAsOf(
+      other: Dataset[_],
+      leftAsOf: Column,
+      rightAsOf: Column,
+      usingColumns: Seq[String],
+      joinType: String,
+      tolerance: Column,
+      allowExactMatches: Boolean,
+      direction: String): DataFrame = {
+    val joinExprs = usingColumns.map { column =>
+      EqualTo(resolve(column), other.resolve(column))
+    }.reduceOption(And).map(Column.apply).orNull
+
+    joinAsOf(other, leftAsOf, rightAsOf, joinExprs, joinType,
+      tolerance, allowExactMatches, direction)
+  }
+
+  // TODO(SPARK-22947): Fix the DataFrame API.
+  private[sql] def joinAsOf(
+      other: Dataset[_],
+      leftAsOf: Column,
+      rightAsOf: Column,
+      joinExprs: Column,
+      joinType: String,
+      tolerance: Column,
+      allowExactMatches: Boolean,
+      direction: String): DataFrame = {
+    val joined = resolveSelfJoinCondition(other, Option(joinExprs), joinType)
+    val leftAsOfExpr = leftAsOf.expr.transformUp {
+      case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
+        val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
+        joined.left.output(index)
+    }
+    val rightAsOfExpr = rightAsOf.expr.transformUp {
+      case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
+        val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
+        joined.right.output(index)
+    }
+    withPlan {
+      AsOfJoin(
+        joined.left, joined.right,
+        leftAsOfExpr, rightAsOfExpr,
+        joined.condition,
+        joined.joinType,
+        Option(tolerance).map(_.expr),
+        allowExactMatches,
+        AsOfJoinDirection(direction)
+      )
+    }
   }
 
   /**
@@ -1362,7 +1488,7 @@ class Dataset[T] private[sql](
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
       case a: AttributeReference
-        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
+        if sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
@@ -1439,10 +1565,10 @@ class Dataset[T] private[sql](
       case typedCol: TypedColumn[_, _] =>
         // Checks if a `TypedColumn` has been inserted with
         // specific input type and schema by `withInputType`.
-        val needInputType = typedCol.expr.find {
+        val needInputType = typedCol.expr.exists {
           case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
           case _ => false
-        }.isDefined
+        }
 
         if (!needInputType) {
           typedCol
@@ -1890,6 +2016,153 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed.
+   *
+   * This function is useful to massage a DataFrame into a format where some
+   * columns are identifier columns ("ids"), while all other columns ("values")
+   * are "unpivoted" to the rows, leaving just two non-id columns, named as given
+   * by `variableColumnName` and `valueColumnName`.
+   *
+   * {{{
+   *   val df = Seq((1, 11, 12L), (2, 21, 22L)).toDF("id", "int", "long")
+   *   df.show()
+   *   // output:
+   *   // +---+---+----+
+   *   // | id|int|long|
+   *   // +---+---+----+
+   *   // |  1| 11|  12|
+   *   // |  2| 21|  22|
+   *   // +---+---+----+
+   *
+   *   df.unpivot(Array($"id"), Array($"int", $"long"), "variable", "value").show()
+   *   // output:
+   *   // +---+--------+-----+
+   *   // | id|variable|value|
+   *   // +---+--------+-----+
+   *   // |  1|     int|   11|
+   *   // |  1|    long|   12|
+   *   // |  2|     int|   21|
+   *   // |  2|    long|   22|
+   *   // +---+--------+-----+
+   *   // schema:
+   *   //root
+   *   // |-- id: integer (nullable = false)
+   *   // |-- variable: string (nullable = false)
+   *   // |-- value: long (nullable = true)
+   * }}}
+   *
+   * When no "id" columns are given, the unpivoted DataFrame consists of only the
+   * "variable" and "value" columns.
+   *
+   * All "value" columns must share a least common data type. Unless they are the same data type,
+   * all "value" columns are cast to the nearest common data type. For instance,
+   * types `IntegerType` and `LongType` are cast to `LongType`, while `IntegerType` and `StringType`
+   * do not have a common data type and `unpivot` fails.
+   *
+   * @param ids Id columns
+   * @param values Value columns to unpivot
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def unpivot(
+      ids: Array[Column],
+      values: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame = withPlan {
+    Unpivot(
+      ids.map(_.named),
+      values.map(_.named),
+      variableColumnName,
+      valueColumnName,
+      logicalPlan
+    )
+  }
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * This is equivalent to calling `Dataset#unpivot(Array, Array, String, String)`
+   * where `values` is set to all non-id columns that exist in the DataFrame.
+   *
+   * @param ids Id columns
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def unpivot(
+      ids: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, Array.empty, variableColumnName, valueColumnName)
+
+  /**
+   * Called from Python as Seq[Column] are easier to create via py4j than Array[Column].
+   * We use Array[Column] for unpivot rather than Seq[Column] as those are Java-friendly.
+   */
+  private[sql] def unpivotWithSeq(
+      ids: Seq[Column],
+      values: Seq[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids.toArray, values.toArray, variableColumnName, valueColumnName)
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed. This is an alias for `unpivot`.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * @param ids Id columns
+   * @param values Value columns to unpivot
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def melt(
+      ids: Array[Column],
+      values: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, values, variableColumnName, valueColumnName)
+
+  /**
+   * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set.
+   * This is the reverse to `groupBy(...).pivot(...).agg(...)`, except for the aggregation,
+   * which cannot be reversed. This is an alias for `unpivot`.
+   *
+   * @see `org.apache.spark.sql.Dataset.unpivot(Array, Array, String, String)`
+   *
+   * This is equivalent to calling `Dataset#unpivot(Array, Array, String, String)`
+   * where `values` is set to all non-id columns that exist in the DataFrame.
+   *
+   * @param ids Id columns
+   * @param variableColumnName Name of the variable column
+   * @param valueColumnName Name of the value column
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def melt(
+      ids: Array[Column],
+      variableColumnName: String,
+      valueColumnName: String): DataFrame =
+    unpivot(ids, variableColumnName, valueColumnName)
+
  /**
   * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
   * that returns the same result as the input, with the following guarantees:
@@ -1915,6 +2188,7 @@ class Dataset[T] private[sql](
   * {{{
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
+  *     override def onQueryStarted(event: QueryStartedEvent): Unit = {}
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
   *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
@@ -1926,8 +2200,7 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
-  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
-  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+  *     override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
   *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
   *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
@@ -1937,6 +2210,7 @@ class Dataset[T] private[sql](
   * @group typedrel
   * @since 3.0.0
   */
+  @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
   }
@@ -1977,6 +2251,16 @@ class Dataset[T] private[sql](
    */
   def limit(n: Int): Dataset[T] = withTypedPlan {
     Limit(Literal(n), logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset by skipping the first `n` rows.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def offset(n: Int): Dataset[T] = withTypedPlan {
+    Offset(Literal(n), logicalPlan)
   }
 
   /**
@@ -2052,6 +2336,9 @@ class Dataset[T] private[sql](
    *   // +----+----+----+
    * }}}
    *
+   * Note that this supports nested columns in struct and array types. Nested columns in map types
+   * are not currently supported.
+   *
    * @group typedrel
    * @since 2.3.0
    */
@@ -2092,9 +2379,10 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    * }}}
    *
-   * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with the same name will also be filled with null values and added to the end
-   * of struct. This currently does not support nested columns in array and map types.
+   * Note that this supports nested columns in struct and array types. With `allowMissingColumns`,
+   * missing nested columns of struct columns with the same name will also be filled with null
+   * values and added to the end of struct. Nested columns in map types are not currently
+   * supported.
    *
    * @group typedrel
    * @since 3.1.0
@@ -2411,6 +2699,35 @@ class Dataset[T] private[sql](
   def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
+   * (Scala-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
+   *
+   * `colsMap` is a map of column name and column, the column must only refer to attributes
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.3.0
+   */
+  def withColumns(colsMap: Map[String, Column]): DataFrame = {
+    val (colNames, newCols) = colsMap.toSeq.unzip
+    withColumns(colNames, newCols)
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
+   *
+   * `colsMap` is a map of column name and column, the column must only refer to attribute
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.3.0
+   */
+  def withColumns(colsMap: java.util.Map[String, Column]): DataFrame = withColumns(
+    colsMap.asScala.toMap
+  )
+
+  /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
    */
@@ -2540,7 +2857,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset with a column dropped.
+   * Returns a new Dataset with column dropped.
+   *
+   * This method can only be used to drop top level column.
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
@@ -2549,15 +2868,31 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    drop(col, Seq.empty : _*)
+  }
+
+  /**
+   * Returns a new Dataset with columns dropped.
+   *
+   * This method can only be used to drop top level columns.
+   * This is a no-op if the Dataset doesn't have a columns
+   * with an equivalent expression.
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  @scala.annotation.varargs
+  def drop(col: Column, cols: Column*): DataFrame = {
+    val allColumns = col +: cols
+    val expressions = (for (col <- allColumns) yield col match {
       case Column(u: UnresolvedAttribute) =>
         queryExecution.analyzed.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
-    }
+    })
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      !attr.semanticEquals(expression)
+      expressions.forall(expression => !attr.semanticEquals(expression))
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
@@ -2891,6 +3226,20 @@ class Dataset[T] private[sql](
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
+        func,
+        func.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
+  }
+
+  /**
+   * Applies a function to each partition in Arrow format. The user-defined function
+   * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
+   * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
+   */
+  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      PythonMapInArrow(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
         logicalPlan))
@@ -3508,7 +3857,8 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _), _, _) =>
+      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
+          _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
@@ -3735,12 +4085,15 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions.
+   * user-registered callback functions, and also to convert asserts/NPE to
+   * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      qe.executedPlan.resetMetrics()
-      action(qe.executedPlan)
+      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+        qe.executedPlan.resetMetrics()
+        action(qe.executedPlan)
+      }
     }
   }
 

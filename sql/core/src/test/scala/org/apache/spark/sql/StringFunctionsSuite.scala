@@ -112,9 +112,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
       .toDF("a", "b", "c", "d")
 
-    checkAnswer(
-      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
-      Row(null, "hello", null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+        Row(null, "hello", null))
+    }
 
     // check implicit type cast
     checkAnswer(
@@ -342,51 +344,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
       Row("???hi", "hi???", "h", "h"))
-  }
-
-  test("string parse_url function") {
-
-    def testUrl(url: String, expected: Row): Unit = {
-      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
-        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
-        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
-        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
-        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
-        "parse_url(url, 'QUERY', 'query')"), expected)
-    }
-
-    testUrl(
-      "http://userinfo@spark.apache.org/path?query=1#Ref",
-      Row("spark.apache.org", "/path", "query=1", "Ref",
-        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
-
-    testUrl(
-      "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
-      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
-        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
-        "use%20r:pas%20s", "x%20y"))
-
-    testUrl(
-      "http://user:pass@host",
-      Row("host", "", null, null, "http", "", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/",
-      Row("host", "/", null, null, "http", "/", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/?#",
-      Row("host", "/", "", "", "http", "/?", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/file;param?query;p2",
-      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
-        "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "inva lid://user:pass@host/file;param?query;p2",
-      Row(null, null, null, null, null, null, null, null, null))
-
   }
 
   test("string repeat function") {
@@ -649,6 +606,36 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+    checkAnswer(
+      df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
+    val df3 = Seq(
+      ("a=1&b=2", "&", "="),
+      ("k#2%v#3", "%", "#")
+    ).toDF("str", "delim1", "delim2")
+
+    checkAnswer(
+      df3.selectExpr("str_to_map(str, delim1, delim2)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+
+    val df4 = Seq(
+      ("a:1&b:2", "&"),
+      ("k:2%v:3", "%")
+    ).toDF("str", "delim1")
+
+    checkAnswer(
+      df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
   }
 
   test("SPARK-36148: check input data types of regexp_replace") {

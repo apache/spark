@@ -22,13 +22,13 @@ import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
 
   import BasicTestsSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite.{k8sTestTag, localTestTag}
   import KubernetesSuite.{TIMEOUT, INTERVAL}
 
   test("Run SparkPi with no resources", k8sTestTag) {
@@ -82,12 +82,14 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.driver.label.label2", "label2-value")
       .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
+      .set("spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
       .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
       .set("spark.kubernetes.executor.label.label1", "label1-value")
       .set("spark.kubernetes.executor.label.label2", "label2-value")
       .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
       .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
+      .set("spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id", "{{APP_ID}}")
       .set("spark.executorEnv.ENV1", "VALUE1")
       .set("spark.executorEnv.ENV2", "VALUE2")
 
@@ -116,21 +118,21 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
-  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
+  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag, localTestTag) {
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
-      sparkAppConf
-        .set("spark.files", baseURL.toString + REMOTE_PAGE_RANK_DATA_FILE)
+      sparkAppConf.set("spark.files", baseURL.toString +
+          REMOTE_PAGE_RANK_DATA_FILE.replace(sys.props("spark.test.home"), "").substring(1))
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
   }
 }
 
-private[spark] object BasicTestsSuite {
+private[spark] object BasicTestsSuite extends SparkFunSuite {
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
   val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
   val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
      s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
-  val REMOTE_PAGE_RANK_DATA_FILE = "data/mllib/pagerank_data.txt"
+  val REMOTE_PAGE_RANK_DATA_FILE = getTestResourcePath("pagerank_data.txt")
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
 }

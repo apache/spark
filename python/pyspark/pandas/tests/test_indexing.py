@@ -24,7 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasIndexingError
-from pyspark.testing.pandasutils import ComparisonTestBase, PandasOnSparkTestCase, compare_both
+from pyspark.testing.pandasutils import ComparisonTestBase, compare_both
 
 
 class BasicIndexingTest(ComparisonTestBase):
@@ -153,17 +153,13 @@ class BasicIndexingTest(ComparisonTestBase):
         )
 
 
-class IndexingTest(PandasOnSparkTestCase):
+class IndexingTest(ComparisonTestBase):
     @property
     def pdf(self):
         return pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def pdf2(self):
@@ -1168,12 +1164,6 @@ class IndexingTest(PandasOnSparkTestCase):
         pser.loc["y"] = pser * 10
         psser.loc["y"] = psser * 10
         self.assert_eq(psser, pser)
-
-        if LooseVersion(pd.__version__) < LooseVersion("1.0"):
-            # TODO: seems like a pandas' bug in pandas>=1.0.0?
-            pser.loc[("x", "viper"):"y"] = pser * 20
-            psser.loc[("x", "viper"):"y"] = psser * 20
-            self.assert_eq(psser, pser)
 
     def test_series_iloc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])

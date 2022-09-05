@@ -32,15 +32,14 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, Timesta
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
-class PushFoldableIntoBranchesSuite
-  extends PlanTest with ExpressionEvalHelper with PredicateHelper {
+class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
       BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
   private val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
   private val b = UnresolvedAttribute("b")
   private val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
@@ -136,7 +135,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)),
       EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)),
-      EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)))
+      CaseWhen(Seq((a, EqualTo(b, Literal(1))))))
 
     // Push down non-deterministic expressions.
     val nonDeterministic =
@@ -342,18 +341,43 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal.create(null, IntegerType)))), Literal(2)),
       Literal.create(null, BooleanType))
-    assertEquivalent(
-      EqualTo(CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal("str")))).cast(IntegerType),
-        Literal(2)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal.create(null, BooleanType)))))
+    if (!conf.ansiEnabled) {
+      assertEquivalent(
+        EqualTo(CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal("str")))).cast(IntegerType),
+          Literal(2)),
+        CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal.create(null, BooleanType)))))
+    }
   }
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
-      'a > 10 <=> TrueLiteral)
+      EqualTo(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)), Literal(0)),
+      $"a" > 10 <=> TrueLiteral)
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
-      Not('a > 10 <=> TrueLiteral))
+      EqualTo(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not($"a" > 10 <=> TrueLiteral))
+  }
+
+  test("SPARK-37270: Fix push foldable into CaseWhen branches if elseValue is empty") {
+    assertEquivalent(
+      IsNull(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1))),
+      FalseLiteral)
+    assertEquivalent(
+      IsNull(CaseWhen(Seq(($"a" > 10, Literal(0))))),
+      !($"a" > 10 <=> true))
+
+    assertEquivalent(
+      CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)) <=> Literal(null, IntegerType),
+      FalseLiteral)
+    assertEquivalent(
+      CaseWhen(Seq(($"a" > 10, Literal(0)))) <=> Literal(null, IntegerType),
+      !($"a" > 10 <=> true))
+
+    assertEquivalent(
+      Literal(null, IntegerType) <=> CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)),
+      FalseLiteral)
+    assertEquivalent(
+      Literal(null, IntegerType) <=> CaseWhen(Seq(($"a" > 10, Literal(0)))),
+      !($"a" > 10 <=> true))
   }
 }

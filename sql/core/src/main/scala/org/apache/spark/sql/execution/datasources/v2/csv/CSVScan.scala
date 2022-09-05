@@ -24,7 +24,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
@@ -45,9 +44,11 @@ case class CSVScan(
     dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
+  val columnPruning = sparkSession.sessionState.conf.csvColumnPruning &&
+    !readDataSchema.exists(_.name == sparkSession.sessionState.conf.columnNameOfCorruptRecord)
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
     options.asScala.toMap,
-    columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+    columnPruning = columnPruning,
     sparkSession.sessionState.conf.sessionLocalTimeZone,
     sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
@@ -67,11 +68,10 @@ case class CSVScan(
   override def createReaderFactory(): PartitionReaderFactory = {
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
-
-    if (readDataSchema.length == 1 &&
-      readDataSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
-      throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
-    }
+    // Don't push any filter which refers to the "virtual" column which cannot present in the input.
+    // Such filters will be applied later on the upper layer.
+    val actualFilters =
+      pushedFilters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -81,7 +81,7 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, actualFilters)
   }
 
   override def equals(obj: Any): Boolean = obj match {

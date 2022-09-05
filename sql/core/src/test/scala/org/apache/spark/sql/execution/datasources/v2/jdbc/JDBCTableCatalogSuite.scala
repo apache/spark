@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -35,7 +35,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
-  var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -410,7 +409,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === false)
     }

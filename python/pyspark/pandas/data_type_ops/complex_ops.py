@@ -53,7 +53,7 @@ class ArrayOps(DataTypeOps):
             )
 
         left_type = cast(ArrayType, left.spark.data_type).elementType
-        right_type = cast(ArrayType, right.spark.data_type).elementType
+        right_type = right.spark.data_type.elementType
 
         if left_type != right_type and not (
             isinstance(left_type, NumericType) and isinstance(right_type, NumericType)

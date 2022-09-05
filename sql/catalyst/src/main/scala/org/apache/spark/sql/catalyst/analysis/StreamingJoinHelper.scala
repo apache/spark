@@ -132,8 +132,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       leftExpr.collect { case a: AttributeReference => a } ++
       rightExpr.collect { case a: AttributeReference => a }
     )
-    if (attributesInCondition.filter { attributesToFindStateWatermarkFor.contains(_) }.size > 1 ||
-        attributesInCondition.filter { attributesWithEventWatermark.contains(_) }.size > 1) {
+    if (attributesInCondition.count(attributesToFindStateWatermarkFor.contains) > 1 ||
+        attributesInCondition.count(attributesWithEventWatermark.contains) > 1) {
       // If more than attributes present in condition from one side, then it cannot be solved
       return None
     }
@@ -169,7 +169,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
     val constraintTerm = constraintTerms.head
-    if (constraintTerm.collectFirst { case u: UnaryMinus => u }.isEmpty) {
+    if (!constraintTerm.exists(_.isInstanceOf[UnaryMinus])) {
       // Incorrect condition. We want the constraint term in canonical form to be `-leftTime`
       // so that resolve for it as `-leftTime + watermark + c < 0` ==> `watermark + c < leftTime`.
       // Now, if the original conditions is `rightTime-with-watermark > leftTime` and watermark
@@ -236,8 +236,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case UnaryMinus(child, _) =>
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>
-          collect(child, negate)
-        case PromotePrecision(child) =>
           collect(child, negate)
         case Cast(child, dataType, _, _) =>
           dataType match {

@@ -19,7 +19,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                                     Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
+                                          Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
                                   InputAdapter
                                     BroadcastExchange #3
                                       WholeStageCodegen (1)
@@ -27,7 +27,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                                           Filter [r_reason_desc,r_reason_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.reason [r_reason_sk,r_reason_desc]
+                                                Scan parquet spark_catalog.default.reason [r_reason_sk,r_reason_desc]
                   InputAdapter
                     WholeStageCodegen (5)
                       Sort [ss_item_sk,ss_ticket_number]
@@ -37,4 +37,4 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                               Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                    Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]

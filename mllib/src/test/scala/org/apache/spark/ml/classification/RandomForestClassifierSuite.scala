@@ -80,6 +80,12 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("RandomForestClassifier validate input dataset") {
+    testInvalidClassificationLabels(new RandomForestClassifier().fit(_), None)
+    testInvalidWeights(new RandomForestClassifier().setWeightCol("weight").fit(_))
+    testInvalidVectors(new RandomForestClassifier().fit(_))
+  }
+
   test("Binary classification with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val rf = new RandomForestClassifier()

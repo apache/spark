@@ -126,10 +126,11 @@ private[execution] object HashedRelation {
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
    *
-   * @param allowsNullKey Allow NULL keys in HashedRelation.
-   *                      This is used for full outer join in `ShuffledHashJoinExec` only.
+   * @param allowsNullKey        Allow NULL keys in HashedRelation.
+   *                             This is used for full outer join in `ShuffledHashJoinExec` only.
    * @param ignoresDuplicatedKey Ignore rows with duplicated keys in HashedRelation.
-   *                             This is only used for semi and anti join without join condition.
+   *                             This is only used for semi and anti join without join condition in
+   *                             `ShuffledHashJoinExec` only.
    */
   def apply(
       input: Iterator[InternalRow],
@@ -201,7 +202,7 @@ private[execution] class ValueRowWithKeyIndex {
  * A HashedRelation for UnsafeRow, which is backed BytesToBytesMap.
  *
  * It's serialized in the following format:
- *  [number of keys]
+ *  [number of keys] [number of fields]
  *  [size of key] [size of value] [key bytes] [bytes for value]
  */
 private[joins] class UnsafeHashedRelation(
@@ -356,6 +357,7 @@ private[joins] class UnsafeHashedRelation(
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
+    writeInt(numKeys)
     writeInt(numFields)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
@@ -389,6 +391,7 @@ private[joins] class UnsafeHashedRelation(
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+    numKeys = readInt()
     numFields = readInt()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
@@ -1131,10 +1134,7 @@ case object HashedRelationWithAllNullKeys extends HashedRelation {
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
-case class HashedRelationBroadcastMode(
-    key: Seq[Expression],
-    isNullAware: Boolean = false,
-    ignoresDuplicatedKey: Boolean = false)
+case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolean = false)
   extends BroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
@@ -1146,11 +1146,9 @@ case class HashedRelationBroadcastMode(
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, key, numRows.toInt, isNullAware = isNullAware,
-          ignoresDuplicatedKey = ignoresDuplicatedKey)
+        HashedRelation(rows, key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, key, isNullAware = isNullAware,
-          ignoresDuplicatedKey = ignoresDuplicatedKey)
+        HashedRelation(rows, key, isNullAware = isNullAware)
     }
   }
 

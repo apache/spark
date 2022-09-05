@@ -31,6 +31,7 @@ abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
   with LogicalPlanStats
+  with LogicalPlanDistinctKeys
   with QueryPlanConstraints
   with Logging {
 
@@ -41,7 +42,8 @@ abstract class LogicalPlan
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
-  def isStreaming: Boolean = children.exists(_.isStreaming)
+  def isStreaming: Boolean = _isStreaming
+  private[this] lazy val _isStreaming = children.exists(_.isStreaming)
 
   override def verboseStringWithSuffix(maxFields: Int): String = {
     super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
@@ -182,7 +184,7 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
         allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) =>
+      case a @ Alias(e, _) if e.deterministic =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
@@ -211,11 +213,12 @@ object LogicalPlanIntegrity {
 
   private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
-      e.collectFirst {
+      e.exists {
         // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
         // so, we filter out them in advance.
-        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
-      }.isDefined
+        case s: ScalarSubquery => s.plan.schema.fields.isEmpty
+        case _ => false
+      }
     }
   }
 
@@ -275,4 +278,11 @@ object LogicalPlanIntegrity {
   def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
     checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
   }
+}
+
+/**
+ * A logical plan node that can generate metadata columns
+ */
+trait ExposesMetadataColumns extends LogicalPlan {
+  def withMetadataColumns(): LogicalPlan
 }

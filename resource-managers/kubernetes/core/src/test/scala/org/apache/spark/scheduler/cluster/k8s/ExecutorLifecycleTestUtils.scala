@@ -64,9 +64,11 @@ object ExecutorLifecycleTestUtils {
 
   def pendingExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
+      .editOrNewMetadata()
+        .withCreationTimestamp(Instant.now.toString)
+        .endMetadata()
       .editOrNewStatus()
         .withPhase("pending")
-        .withStartTime(Instant.now.toString)
         .endStatus()
       .build()
   }

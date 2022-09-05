@@ -45,6 +45,11 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("FMClassifier validate input dataset") {
+    testInvalidClassificationLabels(new FMClassifier().fit(_), Some(2))
+    testInvalidVectors(new FMClassifier().fit(_))
+  }
+
   test("FMClassifier: Predictor, Classifier methods") {
     val sqlContext = smallBinaryDataset.sqlContext
     import sqlContext.implicits._

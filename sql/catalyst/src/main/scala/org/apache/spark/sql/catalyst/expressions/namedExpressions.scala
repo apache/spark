@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -101,16 +100,6 @@ trait NamedExpression extends Expression {
 
   /** Returns a copy of this expression with a new `exprId`. */
   def newInstance(): NamedExpression
-
-  protected def typeSuffix =
-    if (resolved) {
-      dataType match {
-        case LongType => "L"
-        case _ => ""
-      }
-    } else {
-      ""
-    }
 }
 
 abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
@@ -170,7 +159,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
+    throw new IllegalStateException("Alias.doGenCode should not be called.")
   }
 
   override def dataType: DataType = child.dataType
@@ -178,11 +167,8 @@ case class Alias(child: Expression, name: String)(
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
       child match {
-        case named: NamedExpression =>
-          val builder = new MetadataBuilder().withMetadata(named.metadata)
-          nonInheritableMetadataKeys.foreach(builder.remove)
-          builder.build()
-
+        case named: NamedExpression => removeNonInheritableMetadata(named.metadata)
+        case structField: GetStructField => removeNonInheritableMetadata(structField.metadata)
         case _ => Metadata.empty
       }
     }
@@ -206,7 +192,7 @@ case class Alias(child: Expression, name: String)(
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
     } else {
-      UnresolvedAttribute(name)
+      UnresolvedAttribute.quoted(name)
     }
   }
 
@@ -215,6 +201,12 @@ case class Alias(child: Expression, name: String)(
     s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
   } else {
     ""
+  }
+
+  private def removeNonInheritableMetadata(metadata: Metadata): Metadata = {
+    val builder = new MetadataBuilder().withMetadata(metadata)
+    nonInheritableMetadataKeys.foreach(builder.remove)
+    builder.build()
   }
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
@@ -303,6 +295,10 @@ case class AttributeReference(
     h
   }
 
+  override lazy val preCanonicalized: Expression = {
+    AttributeReference("none", dataType)(exprId)
+  }
+
   override def newInstance(): AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
 
@@ -348,7 +344,7 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
-  override def withDataType(newType: DataType): Attribute = {
+  override def withDataType(newType: DataType): AttributeReference = {
     AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
   }
 
@@ -437,4 +433,63 @@ object VirtualColumn {
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
+}
+
+/**
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
+ */
+object MetadataAttribute {
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
+      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
+      Some(attr)
+    } else None
+  }
+}
+
+/**
+ * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
+ * and `__file_source_metadata_col` to `true` in AttributeReference's metadata
+ * - apply() will create a file source metadata attribute reference
+ * - unapply() will check if an attribute reference is the file source metadata attribute reference
+ */
+object FileSourceMetadataAttribute {
+
+  val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder()
+        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    attr match {
+      case MetadataAttribute(attr)
+        if attr.metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+          && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
+      case _ => None
+    }
+
+  /**
+   * Cleanup the internal metadata information of an attribute if it is
+   * a [[FileSourceMetadataAttribute]], it will remove both [[METADATA_COL_ATTR_KEY]] and
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]] from the attribute [[Metadata]]
+   */
+  def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute = attr match {
+    case FileSourceMetadataAttribute(attr) => attr.withMetadata(
+      new MetadataBuilder().withMetadata(attr.metadata)
+        .remove(METADATA_COL_ATTR_KEY)
+        .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+        .build()
+    )
+    case attr => attr
+  }
 }

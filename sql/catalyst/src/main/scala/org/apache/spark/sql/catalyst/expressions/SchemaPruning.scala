@@ -33,8 +33,8 @@ object SchemaPruning extends SQLConfHelper {
    *   1. The schema field ordering at original schema is still preserved in pruned schema.
    *   2. The top-level fields are not pruned here.
    */
-  def pruneDataSchema(
-      dataSchema: StructType,
+  def pruneSchema(
+      schema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
     val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
@@ -44,10 +44,10 @@ object SchemaPruning extends SQLConfHelper {
       .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
     val mergedDataSchema =
-      StructType(dataSchema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
+      StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
-    sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
+    sortLeftFieldsByRight(mergedDataSchema, schema).asInstanceOf[StructType]
   }
 
   /**
@@ -152,6 +152,10 @@ object SchemaPruning extends SQLConfHelper {
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
+      case s: SubqueryExpression =>
+        // use subquery references that only include outer attrs and
+        // ignore join conditions as those may include attributes from other tables
+        s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
     }

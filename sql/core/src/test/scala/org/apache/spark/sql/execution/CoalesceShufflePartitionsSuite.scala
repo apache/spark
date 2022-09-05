@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -29,7 +27,7 @@ import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
-class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAll {
+class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
@@ -410,14 +408,14 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       QueryTest.checkAnswer(resultDf, Seq((0), (1), (2), (3)).map(i => Row(i)))
 
+      // Shuffle partition coalescing of the join is performed independent of the non-grouping
+      // aggregate on the other side of the union.
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      // As the pre-shuffle partition number are different, we will skip reducing
-      // the shuffle partition numbers.
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
-        }.isEmpty)
+        }.size == 2)
     }
     withSparkSession(test, 100, None)
   }

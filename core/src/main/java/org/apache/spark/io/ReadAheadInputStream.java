@@ -302,7 +302,7 @@ public class ReadAheadInputStream extends InputStream {
     stateChangeLock.lock();
     // Make sure we have no integer overflow.
     try {
-      return (int) Math.min((long) Integer.MAX_VALUE,
+      return (int) Math.min(Integer.MAX_VALUE,
           (long) activeBuffer.remaining() + readAheadBuffer.remaining());
     } finally {
       stateChangeLock.unlock();

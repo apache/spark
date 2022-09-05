@@ -65,7 +65,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         val inputData = MemoryStream[Int]
 
         val query = inputData.toDS().toDF("value")
-          .select('value)
+          .select($"value")
           .groupBy($"value")
           .agg(count("*"))
           .writeStream
@@ -107,7 +107,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
   testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
     def getFormatVersion(query: StreamingQuery): Int = {
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-        .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+        .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
     }
 
     withSQLConf(
@@ -117,7 +117,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
 
         def startQuery(): StreamingQuery = {
           inputData.toDS().toDF("value")
-            .select('value)
+            .select($"value")
             .groupBy($"value")
             .agg(count("*"))
             .writeStream
@@ -154,7 +154,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
       val inputData = MemoryStream[Int]
       val query = inputData.toDS().toDF("value")
-        .select('value)
+        .select($"value")
         .groupBy($"value")
         .agg(count("*"))
         .writeStream
@@ -166,5 +166,42 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
       assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
-}
 
+  test("SPARK-37224: numRowsTotal = 0 when trackTotalNumberOfRows is turned off") {
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key, "1"),
+        (s"${RocksDBConf.ROCKSDB_CONF_NAME_PREFIX}.trackTotalNumberOfRows" -> "false")) {
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          val progress = query.lastProgress
+          assert(progress.stateOperators.length > 0)
+          eventually(timeout(Span(1, Minute))) {
+            val nextProgress = query.lastProgress
+            assert(nextProgress != null, "progress is not yet available")
+            assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
+            val stateOperatorMetrics = nextProgress.stateOperators(0)
+            assert(stateOperatorMetrics.numRowsTotal === 0)
+          }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+}

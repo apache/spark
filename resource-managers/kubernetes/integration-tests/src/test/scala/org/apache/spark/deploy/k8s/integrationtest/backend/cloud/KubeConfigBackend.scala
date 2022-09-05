@@ -43,8 +43,7 @@ private[spark] class KubeConfigBackend(var context: String)
 
     // If an explicit master URL was specified then override that detected from the
     // K8S config if it is different
-    var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL))
-      .getOrElse(null)
+    var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL)).orNull
     if (StringUtils.isNotBlank(masterUrl)) {
       // Clean up master URL which would have been specified in Spark format into a normal
       // K8S master URL
@@ -60,6 +59,9 @@ private[spark] class KubeConfigBackend(var context: String)
   }
 
   override def cleanUp(): Unit = {
+    if (defaultClient != null) {
+      defaultClient.close()
+    }
     super.cleanUp()
   }
 

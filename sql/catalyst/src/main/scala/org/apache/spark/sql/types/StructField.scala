@@ -21,7 +21,8 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -84,6 +85,61 @@ case class StructField(
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
   }
 
+  /**
+   * Updates the StructField with a new current default value.
+   */
+  def withCurrentDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Clears the StructField of its current default value, if any.
+   */
+  def clearCurrentDefaultValue(): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the current default value of this StructField.
+   */
+  def getCurrentDefaultValue(): Option[String] = {
+    if (metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      Option(metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Updates the StructField with a new existence default value.
+   */
+  def withExistenceDefaultValue(value: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, value)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the existence default value of this StructField.
+   */
+  private[sql] def getExistenceDefaultValue(): Option[String] = {
+    if (metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
+      Option(metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
   private def getDDLComment = getComment()
     .map(escapeSingleQuotedString)
     .map(" COMMENT '" + _ + "'")
@@ -93,7 +149,7 @@ case class StructField(
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  private[sql] def sql = s"${quoteIdentifier(name)}: ${dataType.sql}$getDDLComment"
+  private[sql] def sql = s"${quoteIfNeeded(name)}: ${dataType.sql}$getDDLComment"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -103,6 +159,6 @@ case class StructField(
    */
   def toDDL: String = {
     val nullString = if (nullable) "" else " NOT NULL"
-    s"${quoteIdentifier(name)} ${dataType.sql}${nullString}$getDDLComment"
+    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
   }
 }

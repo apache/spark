@@ -29,6 +29,14 @@ private object DerbyDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
 
+  // See https://db.apache.org/derby/docs/10.15/ref/index.html
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
@@ -47,7 +55,7 @@ private object DerbyDialect extends JdbcDialect {
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
-  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqljrenametablestatement.html
+  // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
   override def renameTable(oldTable: String, newTable: String): String = {
     s"RENAME TABLE $oldTable TO $newTable"
   }
@@ -56,5 +64,9 @@ private object DerbyDialect extends JdbcDialect {
   // https://issues.apache.org/jira/browse/DERBY-7008
   override def getTableCommentQuery(table: String, comment: String): String = {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
+  }
+
+  override def getLimitClause(limit: Integer): String = {
+    ""
   }
 }

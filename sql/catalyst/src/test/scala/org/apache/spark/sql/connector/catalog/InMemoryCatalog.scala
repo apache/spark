@@ -55,4 +55,12 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog {
   def createFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
     functions.put(ident, fn)
   }
+
+  def dropFunction(ident: Identifier): Unit = {
+    functions.remove(ident)
+  }
+
+  def clearFunctions(): Unit = {
+    functions.clear()
+  }
 }

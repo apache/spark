@@ -74,11 +74,11 @@ case class DynamicPruningSubquery(
 
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
-  override lazy val canonicalized: DynamicPruning = {
+  override lazy val preCanonicalized: DynamicPruning = {
     copy(
-      pruningKey = pruningKey.canonicalized,
+      pruningKey = pruningKey.preCanonicalized,
       buildQuery = buildQuery.canonicalized,
-      buildKeys = buildKeys.map(_.canonicalized),
+      buildKeys = buildKeys.map(_.preCanonicalized),
       exprId = ExprId(0))
   }
 

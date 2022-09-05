@@ -42,6 +42,9 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal
 
+  override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
+    plan.deterministic
+
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
@@ -85,11 +88,11 @@ object SubqueryExpression {
    * and false otherwise.
    */
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: ListQuery => true
       case ex: Exists => ex.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 
   /**
@@ -98,20 +101,20 @@ object SubqueryExpression {
    * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveSubquery]]
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case s: SubqueryExpression => s.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 
   /**
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: SubqueryExpression => true
       case _ => false
-    }.isDefined
+    }
   }
 }
 
@@ -121,7 +124,7 @@ object SubExprUtils extends PredicateHelper {
    * returns false otherwise.
    */
   def containsOuter(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[OuterReference]).isDefined
+    e.exists(_.isInstanceOf[OuterReference])
   }
 
   /**
@@ -158,7 +161,7 @@ object SubExprUtils extends PredicateHelper {
    * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.
    */
   def hasOuterReferences(plan: LogicalPlan): Boolean = {
-    plan.find(_.expressions.exists(containsOuter)).isDefined
+    plan.exists(_.expressions.exists(containsOuter))
   }
 
   /**
@@ -260,12 +263,12 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map(_.preCanonicalized),
       ExprId(0),
-      joinCond.map(_.canonicalized))
+      joinCond.map(_.preCanonicalized))
   }
 
   override protected def withNewChildrenInternal(
@@ -279,10 +282,10 @@ case class ScalarSubquery(
 
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case s: ScalarSubquery => s.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 }
 
@@ -302,12 +305,12 @@ case class LateralSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     LateralSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map(_.preCanonicalized),
       ExprId(0),
-      joinCond.map(_.canonicalized))
+      joinCond.map(_.preCanonicalized))
   }
 
   override protected def withNewChildrenInternal(
@@ -347,13 +350,13 @@ case class ListQuery(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     ListQuery(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map(_.preCanonicalized),
       ExprId(0),
-      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]),
-      joinCond.map(_.canonicalized))
+      childOutputs.map(_.preCanonicalized.asInstanceOf[Attribute]),
+      joinCond.map(_.preCanonicalized))
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
@@ -399,12 +402,12 @@ case class Exists(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def toString: String = s"exists#${exprId.id} $conditionString"
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     Exists(
       plan.canonicalized,
-      outerAttrs.map(_.canonicalized),
+      outerAttrs.map(_.preCanonicalized),
       ExprId(0),
-      joinCond.map(_.canonicalized))
+      joinCond.map(_.preCanonicalized))
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =

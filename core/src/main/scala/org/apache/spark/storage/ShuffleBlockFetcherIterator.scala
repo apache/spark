@@ -763,7 +763,7 @@ final class ShuffleBlockFetcherIterator(
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
             } else {
-              numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+              numBlocksInFlightPerAddress(address) -= 1
               shuffleMetrics.incRemoteBytesRead(buf.size)
               if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
                 shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
@@ -798,7 +798,7 @@ final class ShuffleBlockFetcherIterator(
           }
 
           val in = try {
-            var bufIn = buf.createInputStream()
+            val bufIn = buf.createInputStream()
             if (checksumEnabled) {
               val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
               checkedIn = new CheckedInputStream(bufIn, checksum)
@@ -905,8 +905,7 @@ final class ShuffleBlockFetcherIterator(
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
-          numBlocksInFlightPerAddress(address) =
-            numBlocksInFlightPerAddress(address) - request.blocks.size
+          numBlocksInFlightPerAddress(address) -= request.blocks.size
           bytesInFlight -= request.size
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
@@ -924,7 +923,7 @@ final class ShuffleBlockFetcherIterator(
           // 3. Failure to get the push-merged-local directories from the external shuffle service.
           //    In this case, the blockId is ShuffleBlockId.
           if (pushBasedFetchHelper.isRemotePushMergedBlockAddress(address)) {
-            numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+            numBlocksInFlightPerAddress(address) -= 1
             bytesInFlight -= size
           }
           if (isNetworkReqDone) {
@@ -975,7 +974,7 @@ final class ShuffleBlockFetcherIterator(
           // The original meta request is processed so we decrease numBlocksToFetch and
           // numBlocksInFlightPerAddress by 1. We will collect new shuffle chunks request and the
           // count of this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
-          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          numBlocksInFlightPerAddress(address) -= 1
           numBlocksToFetch -= 1
           val blocksToFetch = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps)
@@ -988,7 +987,7 @@ final class ShuffleBlockFetcherIterator(
         case PushMergedRemoteMetaFailedFetchResult(
           shuffleId, shuffleMergeId, reduceId, address) =>
           // The original meta request failed so we decrease numBlocksInFlightPerAddress by 1.
-          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          numBlocksInFlightPerAddress(address) -= 1
           // If we fail to fetch the meta of a push-merged block, we fall back to fetching the
           // original blocks.
           pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
@@ -1036,40 +1035,49 @@ final class ShuffleBlockFetcherIterator(
       address: BlockManagerId,
       blockId: BlockId): String = {
     logInfo("Start corruption diagnosis.")
-    val startTimeNs = System.nanoTime()
-    assert(blockId.isInstanceOf[ShuffleBlockId], s"Expected ShuffleBlockId, but got $blockId")
-    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
-    val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
-    // consume the remaining data to calculate the checksum
-    var cause: Cause = null
-    try {
-      while (checkedIn.read(buffer) != -1) {}
-      val checksum = checkedIn.getChecksum.getValue
-      cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
-        shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
-        checksumAlgorithm)
-    } catch {
-      case e: Exception =>
-        logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
-        cause = Cause.UNKNOWN_ISSUE
+    blockId match {
+      case shuffleBlock: ShuffleBlockId =>
+        val startTimeNs = System.nanoTime()
+        val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
+        // consume the remaining data to calculate the checksum
+        var cause: Cause = null
+        try {
+          while (checkedIn.read(buffer) != -1) {}
+          val checksum = checkedIn.getChecksum.getValue
+          cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
+            shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
+            checksumAlgorithm)
+        } catch {
+          case e: Exception =>
+            logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
+            cause = Cause.UNKNOWN_ISSUE
+        }
+        val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+        val diagnosisResponse = cause match {
+          case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
+            s"Block $blockId is corrupted but corruption diagnosis failed due to " +
+              s"unsupported checksum algorithm: $checksumAlgorithm"
+
+          case Cause.CHECKSUM_VERIFY_PASS =>
+            s"Block $blockId is corrupted but checksum verification passed"
+
+          case Cause.UNKNOWN_ISSUE =>
+            s"Block $blockId is corrupted but the cause is unknown"
+
+          case otherCause =>
+            s"Block $blockId is corrupted due to $otherCause"
+        }
+        logInfo(s"Finished corruption diagnosis in $duration ms. $diagnosisResponse")
+        diagnosisResponse
+      case shuffleBlockChunk: ShuffleBlockChunkId =>
+        // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
+        val diagnosisResponse = s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
+          s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
+        logWarning(diagnosisResponse)
+        diagnosisResponse
+      case unexpected: BlockId =>
+        throw new IllegalArgumentException(s"Unexpected type of BlockId, $unexpected")
     }
-    val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
-    val diagnosisResponse = cause match {
-      case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
-        s"Block $blockId is corrupted but corruption diagnosis failed due to " +
-          s"unsupported checksum algorithm: $checksumAlgorithm"
-
-      case Cause.CHECKSUM_VERIFY_PASS =>
-        s"Block $blockId is corrupted but checksum verification passed"
-
-      case Cause.UNKNOWN_ISSUE =>
-        s"Block $blockId is corrupted but the cause is unknown"
-
-      case otherCause =>
-        s"Block $blockId is corrupted due to $otherCause"
-    }
-    logInfo(s"Finished corruption diagnosis in $duration ms. $diagnosisResponse")
-    diagnosisResponse
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -1158,6 +1166,9 @@ final class ShuffleBlockFetcherIterator(
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
         throw SparkCoreErrors.fetchFailedError(address, shuffleId, mapId, mapIndex, startReduceId,
           msg, e)
+      case ShuffleBlockChunkId(shuffleId, _, reduceId, _) =>
+        throw SparkCoreErrors.fetchFailedError(address, shuffleId,
+          SHUFFLE_PUSH_MAP_ID.toLong, SHUFFLE_PUSH_MAP_ID, reduceId, msg, e)
       case _ => throw SparkCoreErrors.failToGetNonShuffleBlockError(blockId, e)
     }
   }

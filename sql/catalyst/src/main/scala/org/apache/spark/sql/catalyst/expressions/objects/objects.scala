@@ -50,6 +50,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def propagateNull: Boolean
 
+  override def foldable: Boolean = children.forall(_.foldable) && deterministic
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
@@ -240,6 +241,8 @@ object SerializerSupport {
  *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -248,7 +251,8 @@ case class StaticInvoke(
     arguments: Seq[Expression] = Nil,
     inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true,
+    isDeterministic: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -259,6 +263,7 @@ case class StaticInvoke(
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
@@ -340,6 +345,8 @@ case class StaticInvoke(
  *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
  */
 case class Invoke(
     targetObject: Expression,
@@ -348,12 +355,16 @@ case class Invoke(
     arguments: Seq[Expression] = Nil,
     methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable : Boolean = true,
+    isDeterministic: Boolean = true) extends InvokeLike {
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
+
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
   override def inputTypes: Seq[AbstractDataType] =
     if (methodInputTypes.nonEmpty) {
       Seq(targetObject.dataType) ++ methodInputTypes
@@ -505,6 +516,9 @@ case class NewInstance(
 
   override def nullable: Boolean = needNullCheck
 
+  // Non-foldable to prevent the optimizer from replacing NewInstance with a singleton instance
+  // of the specified class.
+  override def foldable: Boolean = false
   override def children: Seq[Expression] = arguments
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NEW_INSTANCE)
@@ -541,8 +555,27 @@ case class NewInstance(
   }
 
   override def eval(input: InternalRow): Any = {
-    val argValues = arguments.map(_.eval(input))
-    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+    var i = 0
+    val len = arguments.length
+    var resultNull = false
+    while (i < len) {
+      val result = arguments(i).eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = result
+      resultNull = resultNull || (result == null && needNullCheckForIndex(i))
+      i += 1
+    }
+    if (needNullCheck && resultNull) {
+      // return null if one of arguments is null
+      null
+    } else {
+      try {
+        constructor(evaluatedArgs)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+      }
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -819,7 +852,7 @@ case class MapObjects private(
 
   private def executeFuncOnCollection(inputCollection: Seq[_]): Iterator[_] = {
     val row = new GenericInternalRow(1)
-    inputCollection.toIterator.map { element =>
+    inputCollection.iterator.map { element =>
       row.update(0, element)
       lambdaFunction.eval(row)
     }
@@ -1866,14 +1899,14 @@ case class GetExternalRowField(
  * Validates the actual data type of input expression at runtime.  If it doesn't match the
  * expectation, throw an exception.
  */
-case class ValidateExternalType(child: Expression, expected: DataType)
+case class ValidateExternalType(child: Expression, expected: DataType, lenient: Boolean)
   extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
 
   override def nullable: Boolean = child.nullable
 
-  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected, lenient)
 
   private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
@@ -1887,6 +1920,14 @@ case class ValidateExternalType(child: Expression, expected: DataType)
       (value: Any) => {
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
+    case _: DateType =>
+      (value: Any) => {
+        value.isInstanceOf[java.sql.Date] || value.isInstanceOf[java.time.LocalDate]
+      }
+    case _: TimestampType =>
+      (value: Any) => {
+        value.isInstanceOf[java.sql.Timestamp] || value.isInstanceOf[java.time.Instant]
+      }
     case _ =>
       val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
       (value: Any) => {
@@ -1894,12 +1935,11 @@ case class ValidateExternalType(child: Expression, expected: DataType)
       }
   }
 
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (checkType(result)) {
-      result
+  override def nullSafeEval(input: Any): Any = {
+    if (checkType(input)) {
+      input
     } else {
-      throw new RuntimeException(s"${result.getClass.getName}$errMsg")
+      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
     }
   }
 
@@ -1909,13 +1949,21 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
-
+    def genCheckTypes(classes: Seq[Class[_]]): String = {
+      classes.map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+    }
     val typeCheck = expected match {
       case _: DecimalType =>
-        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
-          .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+        genCheckTypes(Seq(
+          classOf[java.math.BigDecimal],
+          classOf[scala.math.BigDecimal],
+          classOf[Decimal]))
       case _: ArrayType =>
         s"$obj.getClass().isArray() || $obj instanceof ${classOf[scala.collection.Seq[_]].getName}"
+      case _: DateType =>
+        genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))
+      case _: TimestampType =>
+        genCheckTypes(Seq(classOf[java.sql.Timestamp], classOf[java.time.Instant]))
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }

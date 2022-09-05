@@ -502,7 +502,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   }
 
   // stream-stream inner join doesn't emit late rows, whereas outer joins could
-  Seq((Inner, false), (LeftOuter, true), (RightOuter, true)).map {
+  Seq((Inner, false), (LeftOuter, true), (RightOuter, true)).foreach {
     case (joinType, expectFailure) =>
       assertPassOnGlobalWatermarkLimit(
         s"single $joinType join in Append mode",

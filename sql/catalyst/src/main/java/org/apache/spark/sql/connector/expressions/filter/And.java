@@ -20,20 +20,18 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A filter that evaluates to {@code true} iff both {@code left} and {@code right} evaluate to
+ * A predicate that evaluates to {@code true} iff both {@code left} and {@code right} evaluate to
  * {@code true}.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class And extends BinaryFilter {
+public final class And extends Predicate {
 
-  public And(Filter left, Filter right) {
-    super(left, right);
+  public And(Predicate left, Predicate right) {
+    super("AND", new Predicate[]{left, right});
   }
 
-  @Override
-  public String toString() {
-    return String.format("(%s) AND (%s)", left.describe(), right.describe());
-  }
+  public Predicate left() { return (Predicate) children()[0]; }
+  public Predicate right() { return (Predicate) children()[1]; }
 }

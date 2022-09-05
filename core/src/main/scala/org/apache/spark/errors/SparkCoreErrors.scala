@@ -30,7 +30,7 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
-object SparkCoreErrors {
+private[spark] object SparkCoreErrors {
   def unexpectedPy4JServerError(other: Object): Throwable = {
     new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
   }
@@ -314,5 +314,15 @@ object SparkCoreErrors {
 
   def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
     new SparkException(s"Failed to get block $blockId, which is not a shuffle block", e)
+  }
+
+  def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
+    new SparkException(errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      messageParameters = Array(invalidProtocol), cause = null)
+  }
+
+  def graphiteSinkPropertyMissingError(missingProperty: String): Throwable = {
+    new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Array(missingProperty), cause = null)
   }
 }

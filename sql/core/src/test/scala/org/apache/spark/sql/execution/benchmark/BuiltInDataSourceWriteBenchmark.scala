@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -25,17 +28,17 @@ import org.apache.spark.sql.internal.SQLConf
  *   By default it measures 4 data source format: Parquet, ORC, JSON, CSV.
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/BuiltInDataSourceWriteBenchmark-results.txt".
  *
  *   To measure specified formats, run it with arguments.
  *   1. without sbt:
  *        bin/spark-submit --class <this class> --jars <spark core test jar>,
  *        <spark catalyst test jar> <spark sql test jar> format1 [format2] [...]
- *   2. build/sbt "sql/test:runMain <this class> format1 [format2] [...]"
+ *   2. build/sbt "sql/Test/runMain <this class> format1 [format2] [...]"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
- *        "sql/test:runMain <this class> format1 [format2] [...]"
+ *        "sql/Test/runMain <this class> format1 [format2] [...]"
  *      Results will be written to "benchmarks/BuiltInDataSourceWriteBenchmark-results.txt".
  * }}}
  *
@@ -53,7 +56,16 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
 
     formats.foreach { format =>
       runBenchmark(s"$format writer benchmark") {
-        runDataSourceBenchmark(format)
+        if (format.equals("Parquet")) {
+          ParquetProperties.WriterVersion.values().foreach {
+            writeVersion =>
+              withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
+                runDataSourceBenchmark("Parquet", Some(writeVersion.toString))
+              }
+          }
+        } else {
+          runDataSourceBenchmark(format)
+        }
       }
     }
   }

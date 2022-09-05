@@ -129,7 +129,7 @@ object GraphGenerators extends Logging {
       throw new IllegalArgumentException(
         s"numEdges must be <= $numEdgesUpperBound but was $numEdges")
     }
-    var edges = mutable.Set.empty[Edge[Int]]
+    val edges = mutable.Set.empty[Edge[Int]]
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
         logDebug(edges.size + " edges")

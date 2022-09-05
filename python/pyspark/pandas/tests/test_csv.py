@@ -239,6 +239,13 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             actual = ps.read_csv(fn, comment="#", nrows=2)
             self.assert_eq(expected, actual, almost=True)
 
+    def test_read_csv_with_encoding(self):
+        # SPARK-37181: Read csv supporting latin-1 encoding.
+        with self.csv_file(self.csv_text) as fn:
+            expected = pd.read_csv(fn, encoding="latin-1")
+            actual = ps.read_csv(fn, encoding="latin-1")
+            self.assert_eq(expected, actual, almost=True)
+
     def test_read_csv_with_sep(self):
         with self.csv_file(self.tab_delimited_csv_text) as fn:
             expected = pd.read_csv(fn, sep="\t")

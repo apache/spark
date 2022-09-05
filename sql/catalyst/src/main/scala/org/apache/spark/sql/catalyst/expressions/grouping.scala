@@ -151,10 +151,15 @@ case class GroupingSets(
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
   // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
   // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
-  override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
+  // Note that, we must put `userGivenGroupByExprs` at the beginning, to preserve the order of
+  // grouping columns specified by users. For example, GROUP BY (a, b) GROUPING SETS (b, a), the
+  // final grouping columns should be (a, b).
+  override def children: Seq[Expression] = userGivenGroupByExprs ++ flatGroupingSets
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): GroupingSets =
-    super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
+    copy(
+      userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
+      flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
 }
 
 object GroupingSets {
@@ -217,9 +222,9 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     Examples:
       > SELECT name, _FUNC_(), sum(age), avg(height) FROM VALUES (2, 'Alice', 165), (5, 'Bob', 180) people(age, name, height) GROUP BY cube(name, height);
         Alice	0	2	165.0
-        Bob	0	5	180.0
         Alice	1	2	165.0
         NULL	3	7	172.5
+        Bob	0	5	180.0
         Bob	1	5	180.0
         NULL	2	2	165.0
         NULL	2	5	180.0

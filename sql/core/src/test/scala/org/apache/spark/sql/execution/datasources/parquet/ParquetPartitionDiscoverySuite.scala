@@ -979,7 +979,8 @@ abstract class ParquetPartitionDiscoverySuite
     withTempPath { dir =>
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
         val path = dir.getCanonicalPath
-        val df = spark.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        val df = spark.range(5).select($"id" as Symbol("a"), $"id" as Symbol("b"),
+          $"id" as Symbol("c")).coalesce(1)
         df.write.partitionBy("b", "c").parquet(path)
         checkAnswer(spark.read.parquet(path), df)
       }
@@ -1065,16 +1066,17 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
-  test("SPARK-23436: invalid Dates should be inferred as String in partition inference") {
+  test(
+    "SPARK-23436, SPARK-36861: invalid Dates should be inferred as String in partition inference") {
     withTempPath { path =>
-      val data = Seq(("1", "2018-41", "2018-01-01-04", "test"))
-        .toDF("id", "date_month", "date_hour", "data")
+      val data = Seq(("1", "2018-41", "2018-01-01-04", "2021-01-01T00", "test"))
+        .toDF("id", "date_month", "date_hour", "date_t_hour", "data")
 
-      data.write.partitionBy("date_month", "date_hour").parquet(path.getAbsolutePath)
+      data.write.partitionBy("date_month", "date_hour", "date_t_hour").parquet(path.getAbsolutePath)
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
-        "date_month", "date_hour", "data")
+        "date_month", "date_hour", "date_t_hour", "data")
 
-      assert(input.schema.sameType(input.schema))
+      assert(data.schema.sameType(input.schema))
       checkAnswer(input, data)
     }
   }
@@ -1091,6 +1093,23 @@ abstract class ParquetPartitionDiscoverySuite
       val readback = spark.read.parquet(path)
       assert(readback.schema("part").dataType === StringType)
       checkAnswer(readback, Row(0, "AA") :: Row(1, "-0") :: Nil)
+    }
+  }
+
+  test("SPARK-40212: SparkSQL castPartValue does not properly handle byte, short, float") {
+    withTempDir { dir =>
+      val data = Seq[(Int, Byte, Short, Float)](
+        (1, 2, 3, 4.0f)
+      )
+      data.toDF("a", "b", "c", "d")
+        .write
+        .mode("overwrite")
+        .partitionBy("b", "c", "d")
+        .parquet(dir.getCanonicalPath)
+      val res = spark.read
+        .schema("a INT, b BYTE, c SHORT, d FLOAT")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(Row(1, 2, 3, 4.0f)))
     }
   }
 }
@@ -1255,6 +1274,14 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     val schema = new StructType().add("p_int", "int").add("p_float", "float")
     val path = PartitioningUtils.getPathFragment(spec, schema)
     assert("p_int=10/p_float=1.0" === path)
+  }
+
+  test("SPARK-39417: Null partition value") {
+    // null partition value is replaced by DEFAULT_PARTITION_NAME before hitting getPathFragment.
+    val spec = Map("p_int"-> ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+    val schema = new StructType().add("p_int", "int")
+    val path = PartitioningUtils.getPathFragment(spec, schema)
+    assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
   }
 
   test("read partitioned table - partition key included in Parquet file") {

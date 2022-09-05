@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import com.fasterxml.jackson.core.JsonParseException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -583,6 +584,69 @@ class DataTypeSuite extends SparkFunSuite {
       ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
     true,
     ignoreNullability = true)
+
+  def checkEqualsStructurallyByName(
+      from: DataType,
+      to: DataType,
+      expected: Boolean,
+      caseSensitive: Boolean = false): Unit = {
+    val testName = s"SPARK-36918: equalsStructurallyByName: (from: $from, to: $to, " +
+        s"caseSensitive: $caseSensitive)"
+
+    val resolver = if (caseSensitive) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+
+    test(testName) {
+      assert(DataType.equalsStructurallyByName(from, to, resolver) === expected)
+    }
+  }
+
+  checkEqualsStructurallyByName(
+    ArrayType(
+      ArrayType(IntegerType)),
+    ArrayType(
+      ArrayType(IntegerType)),
+    true)
+
+  // Type doesn't matter
+  checkEqualsStructurallyByName(BooleanType, BooleanType, true)
+  checkEqualsStructurallyByName(BooleanType, IntegerType, true)
+  checkEqualsStructurallyByName(IntegerType, LongType, true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("f1", LongType).add("f2", StringType),
+    true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("f2", LongType).add("f1", StringType),
+    false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f1", LongType).add("f", new StructType().add("f2", BooleanType)),
+    true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f", new StructType().add("f2", BooleanType)).add("f1", LongType),
+    false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("F1", LongType).add("F2", StringType),
+    true,
+    caseSensitive = false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("F1", LongType).add("F2", StringType),
+    false,
+    caseSensitive = true)
 
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
     val keyType: DataType = StructType(Seq(

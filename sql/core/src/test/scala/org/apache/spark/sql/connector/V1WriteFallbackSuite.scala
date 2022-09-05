@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -223,7 +221,7 @@ class V1FallbackTableCatalog extends TestV2SessionCatalogBase[InMemoryTableWithV
       name: String,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): InMemoryTableWithV1Fallback = {
+      properties: java.util.Map[String, String]): InMemoryTableWithV1Fallback = {
     val t = new InMemoryTableWithV1Fallback(name, schema, partitions, properties)
     InMemoryV1Provider.tables.put(name, t)
     tables.put(Identifier.of(Array("default"), name), t)
@@ -321,7 +319,7 @@ class InMemoryTableWithV1Fallback(
     override val name: String,
     override val schema: StructType,
     override val partitioning: Array[Transform],
-    override val properties: util.Map[String, String])
+    override val properties: java.util.Map[String, String])
   extends Table
   with SupportsWrite with SupportsRead {
 
@@ -331,7 +329,7 @@ class InMemoryTableWithV1Fallback(
     }
   }
 
-  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
+  override def capabilities: java.util.Set[TableCapability] = java.util.EnumSet.of(
     TableCapability.BATCH_READ,
     TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,

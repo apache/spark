@@ -45,8 +45,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
     .set("spark.app.id", TEST_SPARK_APP_ID)
-    .set("spark.kubernetes.executor.decommmissionLabel", "soLong")
-    .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelWorld")
+    .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "soLong")
+    .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelWorld")
 
   @Mock
   private var sc: SparkContext = _
@@ -73,7 +73,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var configMapsOperations: CONFIG_MAPS = _
 
   @Mock
-  private var labledConfigMaps: LABELED_CONFIG_MAPS = _
+  private var labeledConfigMaps: LABELED_CONFIG_MAPS = _
 
   @Mock
   private var taskScheduler: TaskSchedulerImpl = _
@@ -131,6 +131,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       pollEvents)
   }
 
+  after {
+    ResourceProfile.clearDefaultProfile()
+  }
+
   test("Start all components") {
     schedulerBackendUnderTest.start()
     verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))
@@ -145,15 +149,15 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     when(configMapsOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
-      .thenReturn(labledConfigMaps)
-    when(labledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
-      .thenReturn(labledConfigMaps)
+      .thenReturn(labeledConfigMaps)
+    when(labeledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labeledConfigMaps)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
     verify(podAllocator).stop(TEST_SPARK_APP_ID)
-    verify(labledConfigMaps).delete()
+    verify(labeledConfigMaps).delete()
     verify(kubernetesClient).close()
   }
 

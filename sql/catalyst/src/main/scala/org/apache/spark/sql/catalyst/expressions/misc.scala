@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.internal.SQLConf
@@ -125,8 +126,8 @@ object RaiseError {
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class AssertTrue(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class AssertTrue(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   override def prettyName: String = "assert_true"
 
@@ -138,11 +139,10 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
     this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): AssertTrue =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 object AssertTrue {
@@ -301,3 +301,135 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   override def prettyName: String = "current_user"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
+
+/**
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      The default mode is GCM.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The binary value to encrypt.
+      * key - The passphrase to use to encrypt the data.
+      * mode - Specifies which block cipher mode should be used to encrypt messages.
+               Valid modes: ECB, GCM.
+      * padding - Specifies how to pad messages whose length is not a multiple of the block size.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_('Spark', '0000111122223333'));
+       83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94
+      > SELECT hex(_FUNC_('Spark SQL', '0000111122223333', 'GCM'));
+       6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210
+      > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
+       3lmwu+Mw0H3fi5NDvcu9lg==
+  """,
+  since = "3.3.0",
+  group = "misc_funcs")
+case class AesEncrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "aesEncrypt",
+    Seq(input, key, mode, padding),
+    inputTypes)
+
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("DEFAULT"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("GCM"))
+
+  override def prettyName: String = "aes_encrypt"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType, StringType)
+
+  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+}
+
+/**
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
+ * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
+ * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
+ * If either argument is NULL or the key length is not one of the permitted values,
+ * the return value is NULL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      The default mode is GCM.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The binary value to decrypt.
+      * key - The passphrase to use to decrypt the data.
+      * mode - Specifies which block cipher mode should be used to decrypt messages.
+               Valid modes: ECB, GCM.
+      * padding - Specifies how to pad messages whose length is not a multiple of the block size.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(unhex('83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94'), '0000111122223333');
+       Spark
+      > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
+       Spark SQL
+      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+       Spark SQL
+  """,
+  since = "3.3.0",
+  group = "misc_funcs")
+case class AesDecrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "aesDecrypt",
+    Seq(input, key, mode, padding),
+    inputTypes)
+
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("DEFAULT"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("GCM"))
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(BinaryType, BinaryType, StringType, StringType)
+  }
+
+  override def prettyName: String = "aes_decrypt"
+
+  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+}
+// scalastyle:on line.size.limit

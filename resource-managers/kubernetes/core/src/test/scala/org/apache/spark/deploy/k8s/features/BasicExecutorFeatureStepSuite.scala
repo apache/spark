@@ -16,10 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import java.io.File
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-
 import scala.collection.JavaConverters._
 
 import com.google.common.net.InternetDomainName
@@ -54,7 +50,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val DRIVER_POD_UID = "driver-uid"
   private val RESOURCE_NAME_PREFIX = "base"
   private val EXECUTOR_IMAGE = "executor-image"
-  private val LABELS = Map("label1key" -> "label1value")
+  private val CUSTOM_EXECUTOR_LABELS = Map("label1key" -> "label1value")
   private var defaultProfile: ResourceProfile = _
   private val TEST_IMAGE_PULL_SECRETS = Seq("my-1secret-1", "my-secret-2")
   private val TEST_IMAGE_PULL_SECRET_OBJECTS =
@@ -93,7 +89,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     KubernetesTestConf.createExecutorConf(
       sparkConf = baseConf,
       driverPod = Some(DRIVER_POD),
-      labels = LABELS,
+      labels = CUSTOM_EXECUTOR_LABELS,
       environment = environment)
   }
 
@@ -149,15 +145,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+    val conf = newExecutorConf()
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
       defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
     assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
-    LABELS.foreach { case (k, v) =>
+
+    // Check custom and preset labels are as expected
+    CUSTOM_EXECUTOR_LABELS.foreach { case (k, v) =>
       assert(executor.pod.getMetadata.getLabels.get(k) === v)
     }
+    assert(executor.pod.getMetadata.getLabels === conf.labels.asJava)
+
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
     // There is exactly 1 container with 1 volume mount and default memory limits.
@@ -194,18 +195,18 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
       assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
-        KUBERNETES_DNSNAME_MAX_LENGTH)
+        KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH)
     }
   }
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     withPodNamePrefix {
-      Seq("_123", "spark_exec", "spark@", "a" * 48).foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a" * 238).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         val e = intercept[IllegalArgumentException](newExecutorConf())
         assert(e.getMessage === s"'$invalid' in spark.kubernetes.executor.podNamePrefix is" +
           s" invalid. must conform https://kubernetes.io/docs/concepts/overview/" +
-          "working-with-objects/names/#dns-label-names and the value length <= 47")
+          "working-with-objects/names/#dns-subdomain-names and the value length <= 237")
       }
     }
   }
@@ -219,7 +220,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
       val hostname = step.configurePod(SparkPod.initialPod()).pod.getSpec().getHostname()
-      assert(hostname.length <= KUBERNETES_DNSNAME_MAX_LENGTH)
+      assert(hostname.length <= KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH)
       assert(InternetDomainName.isValid(hostname))
     }
   }
@@ -278,21 +279,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Auth secret shouldn't propagate if files are loaded.") {
-    val secretDir = Utils.createTempDir("temp-secret")
-    val secretFile = new File(secretDir, "secret-file.txt")
-    Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
-    val conf = baseConf.clone()
-      .set(config.NETWORK_AUTH_ENABLED, true)
-      .set(config.AUTH_SECRET_FILE, secretFile.getAbsolutePath)
-      .set("spark.master", "k8s://127.0.0.1")
-    val secMgr = new SecurityManager(conf)
-    secMgr.initializeAuth()
-    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
-      secMgr, defaultProfile)
+    withSecretFile("some-secret") { secretFile =>
+      val conf = baseConf.clone()
+        .set(config.NETWORK_AUTH_ENABLED, true)
+        .set(config.AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+        .set("spark.master", "k8s://127.0.0.1")
+      val secMgr = new SecurityManager(conf)
+      secMgr.initializeAuth()
+      val step = new BasicExecutorFeatureStep(
+        KubernetesTestConf.createExecutorConf(sparkConf = conf), secMgr, defaultProfile)
 
-    val executor = step.configurePod(SparkPod.initialPod())
-    assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
-      executor.container, SecurityManager.ENV_AUTH_SECRET))
+      val executor = step.configurePod(SparkPod.initialPod())
+      assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
+        executor.container, SecurityManager.ENV_AUTH_SECRET))
+    }
   }
 
   test("SPARK-32661 test executor offheap memory") {
@@ -367,6 +367,27 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
+  test("SPARK-40065 Mount configmap on executors with non-default profile as well") {
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
+    baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
+    val baseDriverPod = SparkPod.initialPod()
+    val rp = new ResourceProfileBuilder().build()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
   test("SPARK-35482: user correct block manager port for executor pods") {
     try {
       val initPod = SparkPod.initialPod()
@@ -435,6 +456,60 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       "execNodeLabelKey" -> "execNodeLabelValue"
     ))
   }
+
+  test(s"SPARK-38194: memory overhead factor precendence") {
+    // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
+    val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
+    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+
+    // main app resource, overhead factor
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MEMORY.key, s"${executorMem.toInt}m")
+
+    // New config should take precedence
+    val expectedFactor = 0.2
+    sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, expectedFactor)
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
+    val pod = step.configurePod(SparkPod.initialPod())
+    val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
+    val expected = (executorMem + executorMem * expectedFactor).toInt
+    assert(mem === s"${expected}Mi")
+  }
+
+  test(s"SPARK-38194: old memory factor settings is applied if new one isn't given") {
+    // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
+    val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
+    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+
+    // main app resource, overhead factor
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MEMORY.key, s"${executorMem.toInt}m")
+
+    // New config should take precedence
+    val expectedFactor = 0.3
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, expectedFactor)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
+    val pod = step.configurePod(SparkPod.initialPod())
+    val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
+    val expected = (executorMem + executorMem * expectedFactor).toInt
+    assert(mem === s"${expected}Mi")
+  }
+
 
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {

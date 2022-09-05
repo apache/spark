@@ -34,18 +34,18 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         PullupCorrelatedPredicates) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.double)
-  val testRelation2 = LocalRelation('c.int, 'd.double)
+  val testRelation = LocalRelation($"a".int, $"b".double)
+  val testRelation2 = LocalRelation($"c".int, $"d".double)
 
   test("PullupCorrelatedPredicates should not produce unresolved plan") {
     val subPlan =
       testRelation2
-        .where('b < 'd)
-        .select('c)
+        .where($"b" < $"d")
+        .select($"c")
     val inSubquery =
       testRelation
-        .where(InSubquery(Seq('a), ListQuery(subPlan)))
-        .select('a).analyze
+        .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
+        .select($"a").analyze
     assert(inSubquery.resolved)
 
     val optimized = Optimize.execute(inSubquery)
@@ -55,12 +55,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates in correlated subquery idempotency check") {
     val subPlan =
       testRelation2
-      .where('b < 'd)
-      .select('c)
+      .where($"b" < $"d")
+      .select($"c")
     val inSubquery =
       testRelation
-      .where(InSubquery(Seq('a), ListQuery(subPlan)))
-      .select('a).analyze
+      .where(InSubquery(Seq($"a"), ListQuery(subPlan)))
+      .select($"a").analyze
     assert(inSubquery.resolved)
 
     val optimized = Optimize.execute(inSubquery)
@@ -71,12 +71,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates exists correlated subquery idempotency check") {
     val subPlan =
       testRelation2
-        .where('b === 'd && 'd === 1)
+        .where($"b" === $"d" && $"d" === 1)
         .select(Literal(1))
     val existsSubquery =
       testRelation
         .where(Exists(subPlan))
-        .select('a).analyze
+        .select($"a").analyze
     assert(existsSubquery.resolved)
 
     val optimized = Optimize.execute(existsSubquery)
@@ -87,12 +87,12 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates scalar correlated subquery idempotency check") {
     val subPlan =
       testRelation2
-        .where('b === 'd && 'd === 1)
-        .select(max('d))
+        .where($"b" === $"d" && $"d" === 1)
+        .select(max($"d"))
     val scalarSubquery =
       testRelation
         .where(ScalarSubquery(subPlan) === 1)
-        .select('a).analyze
+        .select($"a").analyze
 
     val optimized = Optimize.execute(scalarSubquery)
     val doubleOptimized = Optimize.execute(optimized)
@@ -102,26 +102,26 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates lateral join idempotency check") {
     val right =
       testRelation2
-        .where('b === 'd && 'd === 1)
-        .select('c)
+        .where($"b" === $"d" && $"d" === 1)
+        .select($"c")
     val left = testRelation
-    val lateralJoin = LateralJoin(left, LateralSubquery(right), Inner, Some('a === 'c)).analyze
+    val lateralJoin = LateralJoin(left, LateralSubquery(right), Inner, Some($"a" === $"c")).analyze
     val optimized = Optimize.execute(lateralJoin)
     val doubleOptimized = Optimize.execute(optimized)
     comparePlans(optimized, doubleOptimized)
   }
 
   test("PullupCorrelatedPredicates should handle deletes") {
-    val subPlan = testRelation2.where('a === 'c).select('c)
-    val cond = InSubquery(Seq('a), ListQuery(subPlan))
-    val deletePlan = DeleteFromTable(testRelation, Some(cond)).analyze
+    val subPlan = testRelation2.where($"a" === $"c").select($"c")
+    val cond = InSubquery(Seq($"a"), ListQuery(subPlan))
+    val deletePlan = DeleteFromTable(testRelation, cond).analyze
     assert(deletePlan.resolved)
 
     val optimized = Optimize.execute(deletePlan)
     assert(optimized.resolved)
 
     optimized match {
-      case DeleteFromTable(_, Some(s: InSubquery)) =>
+      case DeleteFromTable(_, s: InSubquery) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>
@@ -130,8 +130,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   }
 
   test("PullupCorrelatedPredicates should handle updates") {
-    val subPlan = testRelation2.where('a === 'c).select('c)
-    val cond = InSubquery(Seq('a), ListQuery(subPlan))
+    val subPlan = testRelation2.where($"a" === $"c").select($"c")
+    val cond = InSubquery(Seq($"a"), ListQuery(subPlan))
     val updatePlan = UpdateTable(testRelation, Seq.empty, Some(cond)).analyze
     assert(updatePlan.resolved)
 
@@ -148,16 +148,16 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   }
 
   test("PullupCorrelatedPredicates should handle merge") {
-    val testRelation3 = LocalRelation('e.int, 'f.double)
-    val subPlan = testRelation3.where('a === 'e).select('e)
-    val cond = InSubquery(Seq('a), ListQuery(subPlan))
+    val testRelation3 = LocalRelation($"e".int, $"f".double)
+    val subPlan = testRelation3.where($"a" === $"e").select($"e")
+    val cond = InSubquery(Seq($"a"), ListQuery(subPlan))
 
     val mergePlan = MergeIntoTable(
       testRelation,
       testRelation2,
       cond,
       Seq(DeleteAction(None)),
-      Seq(InsertAction(None, Seq(Assignment('a, 'c), Assignment('b, 'd)))))
+      Seq(InsertAction(None, Seq(Assignment($"a", $"c"), Assignment($"b", $"d")))))
     val analyzedMergePlan = mergePlan.analyze
     assert(analyzedMergePlan.resolved)
 

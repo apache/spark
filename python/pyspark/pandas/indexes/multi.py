@@ -15,18 +15,17 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-from functools import partial
+from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
@@ -39,6 +38,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    validate_index_loc,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -106,31 +106,16 @@ class MultiIndex(Index):
         name=None,
         verify_integrity: bool = True,
     ) -> "MultiIndex":
-        if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-            if levels is None or codes is None:
-                raise TypeError("Must pass both levels and codes")
-
-            pidx = pd.MultiIndex(
-                levels=levels,
-                labels=codes,
-                sortorder=sortorder,
-                names=names,
-                dtype=dtype,
-                copy=copy,
-                name=name,
-                verify_integrity=verify_integrity,
-            )
-        else:
-            pidx = pd.MultiIndex(
-                levels=levels,
-                codes=codes,
-                sortorder=sortorder,
-                names=names,
-                dtype=dtype,
-                copy=copy,
-                name=name,
-                verify_integrity=verify_integrity,
-            )
+        pidx = pd.MultiIndex(
+            levels=levels,
+            codes=codes,
+            sortorder=sortorder,
+            names=names,
+            dtype=dtype,
+            copy=copy,
+            name=name,
+            verify_integrity=verify_integrity,
+        )
         return ps.from_pandas(pidx)
 
     @property
@@ -351,7 +336,7 @@ class MultiIndex(Index):
         """
         if not isinstance(df, DataFrame):
             raise TypeError("Input must be a DataFrame")
-        sdf = df.to_spark()
+        sdf = df._to_spark()
 
         if names is None:
             names = df._internal.column_labels
@@ -374,6 +359,35 @@ class MultiIndex(Index):
     @name.setter
     def name(self, name: Name) -> None:
         raise PandasNotImplementedError(class_name="pd.MultiIndex", property_name="name")
+
+    @property
+    def dtypes(self) -> pd.Series:
+        """Return the dtypes as a Series for the underlying MultiIndex.
+
+        .. versionadded:: 3.3.0
+
+        Returns
+        -------
+        pd.Series
+            The data type of each level.
+
+        Examples
+        --------
+        >>> psmidx = ps.MultiIndex.from_arrays(
+        ...     [[0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]],
+        ...     names=("zero", "one"),
+        ... )
+        >>> psmidx.dtypes
+        zero    int64
+        one     int64
+        dtype: object
+        """
+        return pd.Series(
+            [field.dtype for field in self._internal.index_fields],
+            index=pd.Index(
+                [name if len(name) > 1 else name[0] for name in self._internal.index_names]
+            ),
+        )
 
     def _verify_for_rename(self, name: List[Name]) -> List[Label]:  # type: ignore[override]
         if is_list_like(name):
@@ -668,7 +682,13 @@ class MultiIndex(Index):
         # TODO: We might need to handle internal state change.
         # So far, we don't have any functions to change the internal state of MultiIndex except for
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
-        return super().to_pandas()
+        return cast(pd.MultiIndex, super().to_pandas())
+
+    def _to_pandas(self) -> pd.MultiIndex:
+        """
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
+        """
+        return cast(pd.MultiIndex, super()._to_pandas())
 
     def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
@@ -874,6 +894,70 @@ class MultiIndex(Index):
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "MultiIndex":
+        """
+        Return MultiIndex with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
+
+        Returns
+        -------
+        deduplicated : MultiIndex
+
+        See Also
+        --------
+        Series.drop_duplicates : Equivalent method on Series.
+        DataFrame.drop_duplicates : Equivalent method on DataFrame.
+
+        Examples
+        --------
+        Generate a MultiIndex with duplicate values.
+
+        >>> arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
+        >>> midx = ps.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        >>> midx
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates()
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='first')
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='last')
+        MultiIndex([(3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep=False)
+        MultiIndex([(3, 'black')],
+                   names=['number', 'color'])
+        """
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psdf = self.to_frame().reset_index(drop=True)
+        return ps.MultiIndex.from_frame(psdf.drop_duplicates(keep=keep).sort_index())
+
     def argmax(self) -> None:
         raise TypeError("reduction operation 'argmax' not allowed for this dtype")
 
@@ -997,6 +1081,9 @@ class MultiIndex(Index):
 
         Follows Python list.append semantics for negative values.
 
+        .. versionchanged:: 3.4.0
+           Raise IndexError when loc is out of bounds to follow Pandas 1.4+ behavior
+
         Parameters
         ----------
         loc : int
@@ -1025,27 +1112,13 @@ class MultiIndex(Index):
                     ('c', 'z')],
                    )
         """
-        length = len(self)
-        if loc < 0:
-            loc = loc + length
-            if loc < 0:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(
-                        (loc - length), length
-                    )
-                )
-        else:
-            if loc > length:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(loc, length)
-                )
+        validate_index_loc(self, loc)
+        loc = loc + len(self) if loc < 0 else loc
 
-        index_name = [
-            (name,) for name in self._internal.index_spark_column_names
-        ]  # type: List[Label]
-        sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
-        sdf_middle = Index([item]).to_frame(name=index_name).to_spark()
-        sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
+        index_name: List[Label] = [(name,) for name in self._internal.index_spark_column_names]
+        sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
+        sdf_middle = Index([item]).to_frame(name=index_name)._to_spark()
+        sdf_after = self.to_frame(name=index_name)[loc:]._to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
         internal = InternalFrame(
@@ -1107,7 +1180,7 @@ class MultiIndex(Index):
         elif isinstance(other, DataFrame):
             raise ValueError("Index data must be 1-dimensional")
         elif isinstance(other, MultiIndex):
-            spark_frame_other = other.to_frame().to_spark()
+            spark_frame_other = other.to_frame()._to_spark()
             keep_name = self.names == other.names
         elif isinstance(other, Index):
             # Always returns an empty MultiIndex if `other` is Index.
@@ -1116,13 +1189,13 @@ class MultiIndex(Index):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
             other = MultiIndex.from_tuples(list(other))
-            spark_frame_other = cast(MultiIndex, other).to_frame().to_spark()
+            spark_frame_other = cast(MultiIndex, other).to_frame()._to_spark()
             keep_name = True
 
         index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
-        default_name = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]  # type: List
-        spark_frame_self = self.to_frame(name=default_name).to_spark()
+        default_name: List[Name] = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
+        spark_frame_self = self.to_frame(name=default_name)._to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names
@@ -1131,11 +1204,48 @@ class MultiIndex(Index):
 
         internal = InternalFrame(
             spark_frame=spark_frame_intersected,
-            index_spark_columns=[scol_for(spark_frame_intersected, col) for col in default_name],
+            index_spark_columns=[
+                scol_for(spark_frame_intersected, cast(str, col)) for col in default_name
+            ],
             index_names=index_names,
             index_fields=index_fields,
         )
         return cast(MultiIndex, DataFrame(internal).index)
+
+    def equal_levels(self, other: "MultiIndex") -> bool:
+        """
+        Return True if the levels of both MultiIndex objects are the same
+
+        .. versionadded:: 3.3.0
+
+        Examples
+        --------
+        >>> psmidx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("b", "y"), ("a", "x"), ("c", "z")])
+        >>> psmidx1.equal_levels(psmidx2)
+        True
+
+        >>> psmidx2 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "j")])
+        >>> psmidx1.equal_levels(psmidx2)
+        False
+        """
+        nlevels = self.nlevels
+        if nlevels != other.nlevels:
+            return False
+
+        self_sdf = self._internal.spark_frame
+        other_sdf = other._internal.spark_frame
+        subtract_list = []
+        for nlevel in range(nlevels):
+            self_index_scol = self._internal.index_spark_columns[nlevel]
+            other_index_scol = other._internal.index_spark_columns[nlevel]
+            self_subtract_other = self_sdf.select(self_index_scol).subtract(
+                other_sdf.select(other_index_scol)
+            )
+            subtract_list.append(self_subtract_other)
+
+        unioned_subtracts = reduce(lambda x, y: x.union(y), subtract_list)
+        return len(unioned_subtracts.head(1)) == 0
 
     @property
     def hasnans(self) -> bool:

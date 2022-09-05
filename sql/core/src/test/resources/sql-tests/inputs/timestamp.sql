@@ -62,6 +62,7 @@ select UNIX_MILLIS(timestamp'2020-12-01 14:30:08Z'), UNIX_MILLIS(timestamp'2020-
 select UNIX_MICROS(timestamp'2020-12-01 14:30:08Z'), UNIX_MICROS(timestamp'2020-12-01 14:30:08.999999Z'), UNIX_MICROS(null);
 
 select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd');
+select to_timestamp(1);
 -- variable-length second fraction tests
 select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
 select to_timestamp('2019-10-06 10:11:12.0', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]');
@@ -142,3 +143,15 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
+
+-- Add a number of units to a timestamp or a date
+select timestampadd(MONTH, -1, timestamp'2022-02-14 01:02:03');
+select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03');
+select timestampadd(YEAR, 1, date'2022-02-15');
+select timestampadd(SECOND, -1, date'2022-02-15');
+
+-- Get the difference between timestamps in the specified units
+select timestampdiff(MONTH, timestamp'2022-02-14 01:02:03', timestamp'2022-01-14 01:02:03');
+select timestampdiff(MINUTE, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
+select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15');
+select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');

@@ -352,7 +352,7 @@ SELECT * FROM person WHERE age > 0 OR age IS NULL;
 +--------+----+
 
 -- Person with unknown(`NULL`) ages are skipped from processing.
-SELECT * FROM person GROUP BY age HAVING max(age) > 18;
+SELECT age, count(*) FROM person GROUP BY age HAVING max(age) > 18;
 +---+--------+
 |age|count(1)|
 +---+--------+

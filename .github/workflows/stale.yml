@@ -27,7 +27,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/stale@v1.1.0
+    - uses: actions/stale@c201d45ef4b0ccbd3bb0616f93bae13e73d0a080 # pin@v1.1.0
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         stale-pr-message: >

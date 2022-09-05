@@ -106,7 +106,7 @@ case class CreateTempViewUsing(
       }.logicalPlan
 
     if (global) {
-      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,
@@ -115,7 +115,8 @@ case class CreateTempViewUsing(
         catalog.getRawGlobalTempView,
         originalText = None,
         analyzedPlan,
-        aliasedPlan = analyzedPlan)
+        aliasedPlan = analyzedPlan,
+        referredTempFunctions = Seq.empty)
       catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
     } else {
       val viewDefinition = createTemporaryViewRelation(
@@ -125,7 +126,8 @@ case class CreateTempViewUsing(
         catalog.getRawTempView,
         originalText = None,
         analyzedPlan,
-        aliasedPlan = analyzedPlan)
+        aliasedPlan = analyzedPlan,
+        referredTempFunctions = Seq.empty)
       catalog.createTempView(tableIdent.table, viewDefinition, replace)
     }
 

@@ -24,12 +24,14 @@ import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
 import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doThrow, mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -160,10 +162,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(buffer, times(0)).release()
     val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
     var in = wrappedInputStream.invokePrivate(delegateAccess())
-    if (in.isInstanceOf[CheckedInputStream]) {
-      val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
-      underlyingInputFiled.setAccessible(true)
-      in = underlyingInputFiled.get(in.asInstanceOf[CheckedInputStream]).asInstanceOf[InputStream]
+    in match {
+      case stream: CheckedInputStream =>
+        val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
+        underlyingInputFiled.setAccessible(true)
+        in = underlyingInputFiled.get(stream).asInstanceOf[InputStream]
+      case _ => // do nothing
     }
     verify(in, times(0)).close()
     wrappedInputStream.close()
@@ -197,7 +201,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager.getOrElse(createMockBlockManager()),
       mapOutputTracker,
-      blocksByAddress.toIterator,
+      blocksByAddress.iterator,
       (_, in) => streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in),
       maxBytesInFlight,
       maxReqsInFlight,
@@ -247,7 +251,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .fetchBlocks(any(), any(), any(), any(), any(), any())
       // only diagnose once
       assert(logAppender.loggingEvents.count(
-        _.getRenderedMessage.contains("Start corruption diagnosis")) === 1)
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")) === 1)
     }
   }
 
@@ -283,7 +287,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .fetchBlocks(any(), any(), any(), any(), any(), any())
       // only diagnose once
       assert(logAppender.loggingEvents.exists(
-        _.getRenderedMessage.contains("Start corruption diagnosis")))
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")))
     }
   }
 
@@ -571,7 +575,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       )
     }
     assert(appender.loggingEvents.exists(
-      _.getRenderedMessage.contains(s"2 ($expectedSizeInBytes) remote blocks")),
+      _.getMessage.getFormattedMessage.contains(s"2 ($expectedSizeInBytes) remote blocks")),
       "remote blocks should be merged to 2 blocks and kept the actual size")
   }
 
@@ -1780,6 +1784,34 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
     assert(regularBlocks === Set[ShuffleBlockId](ShuffleBlockId(0, 3, 2), ShuffleBlockId(0, 4, 2),
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)))
+  }
+
+  test("SPARK-38987: failure to fetch corrupted shuffle block chunk should " +
+    "throw a FetchFailedException when early detection is unable to catch corruption") {
+    val blockManager = mock(classOf[BlockManager])
+    val localDirs = Array("local-dir")
+    val localHost = "test-local-host"
+    val localBmId = BlockManagerId("test-client", localHost, 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    initHostLocalDirManager(blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+    // Prepare shuffle block chunks
+    val pushMergedBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, localHost, 1)
+    val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (localBmId, toBlockList(Seq(ShuffleBlockChunkId(0, 0, 2, 0)), 1L, 1)),
+      (pushMergedBmId, toBlockList(
+        Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+
+    val corruptBuffer = createMockManagedBuffer(2)
+    doReturn(Seq({corruptBuffer})).when(blockManager)
+      .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+    val corruptStream = mock(classOf[InputStream])
+    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    doReturn(corruptStream).when(corruptBuffer).createInputStream()
+    // Disable corruption detection in the iterator
+    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
+      blockManager = Some(blockManager), streamWrapperLimitSize = Some(100),
+      detectCorruptUseExtraMemory = false, detectCorrupt = false)
+    intercept[FetchFailedException] { iterator.next() }
   }
 
 }

@@ -78,3 +78,6 @@ class PartitionsAlreadyExistException(message: String) extends AnalysisException
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
+
+class IndexAlreadyExistsException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause)

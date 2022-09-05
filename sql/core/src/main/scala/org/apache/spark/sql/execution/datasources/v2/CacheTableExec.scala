@@ -88,7 +88,8 @@ case class CacheTableAsSelectExec(
     query: LogicalPlan,
     originalText: String,
     override val isLazy: Boolean,
-    override val options: Map[String, String]) extends BaseCacheTableExec {
+    override val options: Map[String, String],
+    referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
@@ -102,7 +103,8 @@ case class CacheTableAsSelectExec(
       allowExisting = false,
       replace = false,
       viewType = LocalTempView,
-      isAnalyzed = true
+      isAnalyzed = true,
+      referredTempFunctions = referredTempFunctions
     ).run(session)
 
     dataFrameForCachedPlan.logicalPlan

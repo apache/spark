@@ -59,17 +59,17 @@ object MiniReadWriteTest {
       System.exit(1)
     }
 
-    var i = 0
+    val filePath = args(0)
 
-    val localFilePath = new File(args(i))
+    val localFilePath = new File(filePath)
     if (!localFilePath.exists) {
-      System.err.println(s"Given path (${args(i)}) does not exist")
+      System.err.println(s"Given path ($filePath) does not exist")
       printUsage()
       System.exit(1)
     }
 
     if (!localFilePath.isFile) {
-      System.err.println(s"Given path (${args(i)}) is not a file")
+      System.err.println(s"Given path ($filePath) is not a file")
       printUsage()
       System.exit(1)
     }

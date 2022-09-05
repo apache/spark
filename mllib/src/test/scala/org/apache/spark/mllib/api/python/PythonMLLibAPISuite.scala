@@ -96,7 +96,7 @@ class PythonMLLibAPISuite extends SparkFunSuite {
     // Test name of class only occur once
     val rats = (1 to 10).map(x => new Rating(x, x + 1, x + 3.0)).toArray
     val bytes = SerDe.dumps(rats)
-    assert(bytes.toString.split("Rating").length == 1)
+    assert(bytes.mkString(",").split("Rating").length == 1)
     assert(bytes.length / 10 < 25) //  25 bytes per rating
 
   }

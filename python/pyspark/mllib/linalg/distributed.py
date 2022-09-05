@@ -20,32 +20,47 @@ Package for distributed linear algebra.
 """
 
 import sys
+from typing import Any, Generic, Optional, Tuple, TypeVar, Union, TYPE_CHECKING
 
 from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition
+from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition, Vector
 from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.sql import DataFrame
 from pyspark.storagelevel import StorageLevel
 
+UT = TypeVar("UT", bound="DistributedMatrix")
+VT = TypeVar("VT", bound="Matrix")
 
-__all__ = ['BlockMatrix', 'CoordinateMatrix', 'DistributedMatrix', 'IndexedRow',
-           'IndexedRowMatrix', 'MatrixEntry', 'RowMatrix', 'SingularValueDecomposition']
+if TYPE_CHECKING:
+    from pyspark.ml._typing import VectorLike
+
+__all__ = [
+    "BlockMatrix",
+    "CoordinateMatrix",
+    "DistributedMatrix",
+    "IndexedRow",
+    "IndexedRowMatrix",
+    "MatrixEntry",
+    "RowMatrix",
+    "SingularValueDecomposition",
+]
 
 
-class DistributedMatrix(object):
+class DistributedMatrix:
     """
     Represents a distributively stored matrix backed by one or
     more RDDs.
 
     """
-    def numRows(self):
+
+    def numRows(self) -> int:
         """Get or compute the number of rows."""
         raise NotImplementedError
 
-    def numCols(self):
+    def numCols(self) -> int:
         """Get or compute the number of cols."""
         raise NotImplementedError
 
@@ -72,7 +87,13 @@ class RowMatrix(DistributedMatrix):
         of columns will be determined by the size of
         the first row.
     """
-    def __init__(self, rows, numRows=0, numCols=0):
+
+    def __init__(
+        self,
+        rows: Union[RDD[Vector], DataFrame],
+        numRows: int = 0,
+        numCols: int = 0,
+    ):
         """
         Note: This docstring is not shown publicly.
 
@@ -103,8 +124,7 @@ class RowMatrix(DistributedMatrix):
             java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
         elif isinstance(rows, DataFrame):
             java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
-        elif (isinstance(rows, JavaObject)
-              and rows.getClass().getSimpleName() == "RowMatrix"):
+        elif isinstance(rows, JavaObject) and rows.getClass().getSimpleName() == "RowMatrix":
             java_matrix = rows
         else:
             raise TypeError("rows should be an RDD of vectors, got %s" % type(rows))
@@ -112,7 +132,7 @@ class RowMatrix(DistributedMatrix):
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
     @property
-    def rows(self):
+    def rows(self) -> RDD[Vector]:
         """
         Rows of the RowMatrix stored as an RDD of vectors.
 
@@ -125,7 +145,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("rows")
 
-    def numRows(self):
+    def numRows(self) -> int:
         """
         Get or compute the number of rows.
 
@@ -144,7 +164,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numRows")
 
-    def numCols(self):
+    def numCols(self) -> int:
         """
         Get or compute the number of cols.
 
@@ -163,7 +183,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
-    def computeColumnSummaryStatistics(self):
+    def computeColumnSummaryStatistics(self) -> MultivariateStatisticalSummary:
         """
         Computes column-wise summary statistics.
 
@@ -186,7 +206,7 @@ class RowMatrix(DistributedMatrix):
         java_col_stats = self._java_matrix_wrapper.call("computeColumnSummaryStatistics")
         return MultivariateStatisticalSummary(java_col_stats)
 
-    def computeCovariance(self):
+    def computeCovariance(self) -> Matrix:
         """
         Computes the covariance matrix, treating each row as an
         observation.
@@ -207,7 +227,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeCovariance")
 
-    def computeGramianMatrix(self):
+    def computeGramianMatrix(self) -> Matrix:
         """
         Computes the Gramian matrix `A^T A`.
 
@@ -227,8 +247,8 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeGramianMatrix")
 
-    @since('2.0.0')
-    def columnSimilarities(self, threshold=0.0):
+    @since("2.0.0")
+    def columnSimilarities(self, threshold: float = 0.0) -> "CoordinateMatrix":
         """
         Compute similarities between columns of this matrix.
 
@@ -301,7 +321,9 @@ class RowMatrix(DistributedMatrix):
         java_sims_mat = self._java_matrix_wrapper.call("columnSimilarities", float(threshold))
         return CoordinateMatrix(java_sims_mat)
 
-    def tallSkinnyQR(self, computeQ=False):
+    def tallSkinnyQR(
+        self, computeQ: bool = False
+    ) -> QRDecomposition[Optional["RowMatrix"], Matrix]:
         """
         Compute the QR decomposition of this RowMatrix.
 
@@ -351,7 +373,9 @@ class RowMatrix(DistributedMatrix):
         R = decomp.call("R")
         return QRDecomposition(Q, R)
 
-    def computeSVD(self, k, computeU=False, rCond=1e-9):
+    def computeSVD(
+        self, k: int, computeU: bool = False, rCond: float = 1e-9
+    ) -> "SingularValueDecomposition[RowMatrix, Matrix]":
         """
         Computes the singular value decomposition of the RowMatrix.
 
@@ -400,13 +424,12 @@ class RowMatrix(DistributedMatrix):
         >>> svd_model.s
         DenseVector([3.4641, 3.1623])
         >>> svd_model.V
-        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, ...0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call(
-            "computeSVD", int(k), bool(computeU), float(rCond))
+        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
-    def computePrincipalComponents(self, k):
+    def computePrincipalComponents(self, k: int) -> Matrix:
         """
         Computes the k principal components of the given row matrix
 
@@ -442,7 +465,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computePrincipalComponents", k)
 
-    def multiply(self, matrix):
+    def multiply(self, matrix: Matrix) -> "RowMatrix":
         """
         Multiply this matrix by a local dense matrix on the right.
 
@@ -470,16 +493,16 @@ class RowMatrix(DistributedMatrix):
         return RowMatrix(j_model)
 
 
-class SingularValueDecomposition(JavaModelWrapper):
+class SingularValueDecomposition(JavaModelWrapper, Generic[UT, VT]):
     """
     Represents singular value decomposition (SVD) factors.
 
     .. versionadded:: 2.2.0
     """
 
-    @property
-    @since('2.2.0')
-    def U(self):
+    @property  # type: ignore[misc]
+    @since("2.2.0")
+    def U(self) -> Optional[UT]:  # type: ignore[return]
         """
         Returns a distributed matrix whose columns are the left
         singular vectors of the SingularValueDecomposition if computeU was set to be True.
@@ -488,23 +511,23 @@ class SingularValueDecomposition(JavaModelWrapper):
         if u is not None:
             mat_name = u.getClass().getSimpleName()
             if mat_name == "RowMatrix":
-                return RowMatrix(u)
+                return RowMatrix(u)  # type: ignore[return-value]
             elif mat_name == "IndexedRowMatrix":
-                return IndexedRowMatrix(u)
+                return IndexedRowMatrix(u)  # type: ignore[return-value]
             else:
                 raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
-    @property
-    @since('2.2.0')
-    def s(self):
+    @property  # type: ignore[misc]
+    @since("2.2.0")
+    def s(self) -> Vector:
         """
         Returns a DenseVector with singular values in descending order.
         """
         return self.call("s")
 
-    @property
-    @since('2.2.0')
-    def V(self):
+    @property  # type: ignore[misc]
+    @since("2.2.0")
+    def V(self) -> VT:
         """
         Returns a DenseMatrix whose columns are the right singular
         vectors of the SingularValueDecomposition.
@@ -512,7 +535,7 @@ class SingularValueDecomposition(JavaModelWrapper):
         return self.call("V")
 
 
-class IndexedRow(object):
+class IndexedRow:
     """
     Represents a row of an IndexedRowMatrix.
 
@@ -525,15 +548,16 @@ class IndexedRow(object):
     vector : :py:class:`pyspark.mllib.linalg.Vector` or convertible
         The row in the matrix at the given index.
     """
-    def __init__(self, index, vector):
+
+    def __init__(self, index: int, vector: "VectorLike") -> None:
         self.index = int(index)
         self.vector = _convert_to_vector(vector)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "IndexedRow(%s, %s)" % (self.index, self.vector)
 
 
-def _convert_to_indexed_row(row):
+def _convert_to_indexed_row(row: Any) -> IndexedRow:
     if isinstance(row, IndexedRow):
         return row
     elif isinstance(row, tuple) and len(row) == 2:
@@ -562,7 +586,13 @@ class IndexedRowMatrix(DistributedMatrix):
         of columns will be determined by the size of
         the first row.
     """
-    def __init__(self, rows, numRows=0, numCols=0):
+
+    def __init__(
+        self,
+        rows: RDD[Union[Tuple[int, "VectorLike"], IndexedRow]],
+        numRows: int = 0,
+        numCols: int = 0,
+    ):
         """
         Note: This docstring is not shown publicly.
 
@@ -597,21 +627,23 @@ class IndexedRowMatrix(DistributedMatrix):
             # containing the 'index' and 'vector' values, which can
             # both be easily serialized.  We will convert back to
             # IndexedRows on the Scala side.
-            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
-                                        int(numRows), int(numCols))
+            java_matrix = callMLlibFunc(
+                "createIndexedRowMatrix", rows.toDF(), int(numRows), int(numCols)
+            )
         elif isinstance(rows, DataFrame):
             java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, int(numRows), int(numCols))
-        elif (isinstance(rows, JavaObject)
-              and rows.getClass().getSimpleName() == "IndexedRowMatrix"):
+        elif isinstance(rows, JavaObject) and rows.getClass().getSimpleName() == "IndexedRowMatrix":
             java_matrix = rows
         else:
-            raise TypeError("rows should be an RDD of IndexedRows or (int, vector) tuples, "
-                            "got %s" % type(rows))
+            raise TypeError(
+                "rows should be an RDD of IndexedRows or (int, vector) tuples, "
+                "got %s" % type(rows)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
     @property
-    def rows(self):
+    def rows(self) -> RDD[IndexedRow]:
         """
         Rows of the IndexedRowMatrix stored as an RDD of IndexedRows.
 
@@ -631,7 +663,7 @@ class IndexedRowMatrix(DistributedMatrix):
         rows = rows_df.rdd.map(lambda row: IndexedRow(row[0], row[1]))
         return rows
 
-    def numRows(self):
+    def numRows(self) -> int:
         """
         Get or compute the number of rows.
 
@@ -652,7 +684,7 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numRows")
 
-    def numCols(self):
+    def numCols(self) -> int:
         """
         Get or compute the number of cols.
 
@@ -673,7 +705,7 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
-    def columnSimilarities(self):
+    def columnSimilarities(self) -> "CoordinateMatrix":
         """
         Compute all cosine similarities between columns.
 
@@ -689,7 +721,7 @@ class IndexedRowMatrix(DistributedMatrix):
         java_coordinate_matrix = self._java_matrix_wrapper.call("columnSimilarities")
         return CoordinateMatrix(java_coordinate_matrix)
 
-    def computeGramianMatrix(self):
+    def computeGramianMatrix(self) -> Matrix:
         """
         Computes the Gramian matrix `A^T A`.
 
@@ -710,7 +742,7 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeGramianMatrix")
 
-    def toRowMatrix(self):
+    def toRowMatrix(self) -> RowMatrix:
         """
         Convert this matrix to a RowMatrix.
 
@@ -725,7 +757,7 @@ class IndexedRowMatrix(DistributedMatrix):
         java_row_matrix = self._java_matrix_wrapper.call("toRowMatrix")
         return RowMatrix(java_row_matrix)
 
-    def toCoordinateMatrix(self):
+    def toCoordinateMatrix(self) -> "CoordinateMatrix":
         """
         Convert this matrix to a CoordinateMatrix.
 
@@ -740,7 +772,7 @@ class IndexedRowMatrix(DistributedMatrix):
         java_coordinate_matrix = self._java_matrix_wrapper.call("toCoordinateMatrix")
         return CoordinateMatrix(java_coordinate_matrix)
 
-    def toBlockMatrix(self, rowsPerBlock=1024, colsPerBlock=1024):
+    def toBlockMatrix(self, rowsPerBlock: int = 1024, colsPerBlock: int = 1024) -> "BlockMatrix":
         """
         Convert this matrix to a BlockMatrix.
 
@@ -770,12 +802,14 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> print(mat.numCols())
         3
         """
-        java_block_matrix = self._java_matrix_wrapper.call("toBlockMatrix",
-                                                           rowsPerBlock,
-                                                           colsPerBlock)
+        java_block_matrix = self._java_matrix_wrapper.call(
+            "toBlockMatrix", rowsPerBlock, colsPerBlock
+        )
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
-    def computeSVD(self, k, computeU=False, rCond=1e-9):
+    def computeSVD(
+        self, k: int, computeU: bool = False, rCond: float = 1e-9
+    ) -> SingularValueDecomposition["IndexedRowMatrix", Matrix]:
         """
         Computes the singular value decomposition of the IndexedRowMatrix.
 
@@ -824,13 +858,12 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> svd_model.s
         DenseVector([3.4641, 3.1623])
         >>> svd_model.V
-        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, ...0.0], 0)
         """
-        j_model = self._java_matrix_wrapper.call(
-            "computeSVD", int(k), bool(computeU), float(rCond))
+        j_model = self._java_matrix_wrapper.call("computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
-    def multiply(self, matrix):
+    def multiply(self, matrix: Matrix) -> "IndexedRowMatrix":
         """
         Multiply this matrix by a local dense matrix on the right.
 
@@ -857,7 +890,7 @@ class IndexedRowMatrix(DistributedMatrix):
         return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 
-class MatrixEntry(object):
+class MatrixEntry:
     """
     Represents an entry of a CoordinateMatrix.
 
@@ -872,16 +905,17 @@ class MatrixEntry(object):
     value : float
         The (i, j)th entry of the matrix, as a float.
     """
-    def __init__(self, i, j, value):
+
+    def __init__(self, i: int, j: int, value: float) -> None:
         self.i = int(i)
         self.j = int(j)
         self.value = float(value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "MatrixEntry(%s, %s, %s)" % (self.i, self.j, self.value)
 
 
-def _convert_to_matrix_entry(entry):
+def _convert_to_matrix_entry(entry: Any) -> MatrixEntry:
     if isinstance(entry, MatrixEntry):
         return entry
     elif isinstance(entry, tuple) and len(entry) == 3:
@@ -910,7 +944,13 @@ class CoordinateMatrix(DistributedMatrix):
         of columns will be determined by the max row
         index plus one.
     """
-    def __init__(self, entries, numRows=0, numCols=0):
+
+    def __init__(
+        self,
+        entries: RDD[Union[Tuple[int, int, float], MatrixEntry]],
+        numRows: int = 0,
+        numCols: int = 0,
+    ):
         """
         Note: This docstring is not shown publicly.
 
@@ -945,19 +985,24 @@ class CoordinateMatrix(DistributedMatrix):
             # containing the 'i', 'j', and 'value' values, which can
             # each be easily serialized. We will convert back to
             # MatrixEntry inputs on the Scala side.
-            java_matrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
-                                        int(numRows), int(numCols))
-        elif (isinstance(entries, JavaObject)
-              and entries.getClass().getSimpleName() == "CoordinateMatrix"):
+            java_matrix = callMLlibFunc(
+                "createCoordinateMatrix", entries.toDF(), int(numRows), int(numCols)
+            )
+        elif (
+            isinstance(entries, JavaObject)
+            and entries.getClass().getSimpleName() == "CoordinateMatrix"
+        ):
             java_matrix = entries
         else:
-            raise TypeError("entries should be an RDD of MatrixEntry entries or "
-                            "(int, int, float) tuples, got %s" % type(entries))
+            raise TypeError(
+                "entries should be an RDD of MatrixEntry entries or "
+                "(int, int, float) tuples, got %s" % type(entries)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
     @property
-    def entries(self):
+    def entries(self) -> RDD[MatrixEntry]:
         """
         Entries of the CoordinateMatrix stored as an RDD of
         MatrixEntries.
@@ -978,7 +1023,7 @@ class CoordinateMatrix(DistributedMatrix):
         entries = entries_df.rdd.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
         return entries
 
-    def numRows(self):
+    def numRows(self) -> int:
         """
         Get or compute the number of rows.
 
@@ -998,7 +1043,7 @@ class CoordinateMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numRows")
 
-    def numCols(self):
+    def numCols(self) -> int:
         """
         Get or compute the number of cols.
 
@@ -1018,7 +1063,7 @@ class CoordinateMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
-    def transpose(self):
+    def transpose(self) -> "CoordinateMatrix":
         """
         Transpose this CoordinateMatrix.
 
@@ -1041,7 +1086,7 @@ class CoordinateMatrix(DistributedMatrix):
         java_transposed_matrix = self._java_matrix_wrapper.call("transpose")
         return CoordinateMatrix(java_transposed_matrix)
 
-    def toRowMatrix(self):
+    def toRowMatrix(self) -> RowMatrix:
         """
         Convert this matrix to a RowMatrix.
 
@@ -1067,7 +1112,7 @@ class CoordinateMatrix(DistributedMatrix):
         java_row_matrix = self._java_matrix_wrapper.call("toRowMatrix")
         return RowMatrix(java_row_matrix)
 
-    def toIndexedRowMatrix(self):
+    def toIndexedRowMatrix(self) -> IndexedRowMatrix:
         """
         Convert this matrix to an IndexedRowMatrix.
 
@@ -1092,7 +1137,7 @@ class CoordinateMatrix(DistributedMatrix):
         java_indexed_row_matrix = self._java_matrix_wrapper.call("toIndexedRowMatrix")
         return IndexedRowMatrix(java_indexed_row_matrix)
 
-    def toBlockMatrix(self, rowsPerBlock=1024, colsPerBlock=1024):
+    def toBlockMatrix(self, rowsPerBlock: int = 1024, colsPerBlock: int = 1024) -> "BlockMatrix":
         """
         Convert this matrix to a BlockMatrix.
 
@@ -1125,16 +1170,20 @@ class CoordinateMatrix(DistributedMatrix):
         >>> print(mat.numCols())
         5
         """
-        java_block_matrix = self._java_matrix_wrapper.call("toBlockMatrix",
-                                                           rowsPerBlock,
-                                                           colsPerBlock)
+        java_block_matrix = self._java_matrix_wrapper.call(
+            "toBlockMatrix", rowsPerBlock, colsPerBlock
+        )
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
 
-def _convert_to_matrix_block_tuple(block):
-    if (isinstance(block, tuple) and len(block) == 2
-            and isinstance(block[0], tuple) and len(block[0]) == 2
-            and isinstance(block[1], Matrix)):
+def _convert_to_matrix_block_tuple(block: Any) -> Tuple[Tuple[int, int], Matrix]:
+    if (
+        isinstance(block, tuple)
+        and len(block) == 2
+        and isinstance(block[0], tuple)
+        and len(block[0]) == 2
+        and isinstance(block[1], Matrix)
+    ):
         blockRowIndex = int(block[0][0])
         blockColIndex = int(block[0][1])
         subMatrix = block[1]
@@ -1175,7 +1224,15 @@ class BlockMatrix(DistributedMatrix):
         of columns will be calculated when `numCols` is
         invoked.
     """
-    def __init__(self, blocks, rowsPerBlock, colsPerBlock, numRows=0, numCols=0):
+
+    def __init__(
+        self,
+        blocks: RDD[Tuple[Tuple[int, int], Matrix]],
+        rowsPerBlock: int,
+        colsPerBlock: int,
+        numRows: int = 0,
+        numCols: int = 0,
+    ):
         """
         Note: This docstring is not shown publicly.
 
@@ -1212,20 +1269,26 @@ class BlockMatrix(DistributedMatrix):
             # each be easily serialized.  We will convert back to
             # ((blockRowIndex, blockColIndex), sub-matrix) tuples on
             # the Scala side.
-            java_matrix = callMLlibFunc("createBlockMatrix", blocks.toDF(),
-                                        int(rowsPerBlock), int(colsPerBlock),
-                                        int(numRows), int(numCols))
-        elif (isinstance(blocks, JavaObject)
-              and blocks.getClass().getSimpleName() == "BlockMatrix"):
+            java_matrix = callMLlibFunc(
+                "createBlockMatrix",
+                blocks.toDF(),
+                int(rowsPerBlock),
+                int(colsPerBlock),
+                int(numRows),
+                int(numCols),
+            )
+        elif isinstance(blocks, JavaObject) and blocks.getClass().getSimpleName() == "BlockMatrix":
             java_matrix = blocks
         else:
-            raise TypeError("blocks should be an RDD of sub-matrix blocks as "
-                            "((int, int), matrix) tuples, got %s" % type(blocks))
+            raise TypeError(
+                "blocks should be an RDD of sub-matrix blocks as "
+                "((int, int), matrix) tuples, got %s" % type(blocks)
+            )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
     @property
-    def blocks(self):
+    def blocks(self) -> RDD[Tuple[Tuple[int, int], Matrix]]:
         """
         The RDD of sub-matrix blocks
         ((blockRowIndex, blockColIndex), sub-matrix) that form this
@@ -1250,7 +1313,7 @@ class BlockMatrix(DistributedMatrix):
         return blocks
 
     @property
-    def rowsPerBlock(self):
+    def rowsPerBlock(self) -> int:
         """
         Number of rows that make up each block.
 
@@ -1265,7 +1328,7 @@ class BlockMatrix(DistributedMatrix):
         return self._java_matrix_wrapper.call("rowsPerBlock")
 
     @property
-    def colsPerBlock(self):
+    def colsPerBlock(self) -> int:
         """
         Number of columns that make up each block.
 
@@ -1280,7 +1343,7 @@ class BlockMatrix(DistributedMatrix):
         return self._java_matrix_wrapper.call("colsPerBlock")
 
     @property
-    def numRowBlocks(self):
+    def numRowBlocks(self) -> int:
         """
         Number of rows of blocks in the BlockMatrix.
 
@@ -1295,7 +1358,7 @@ class BlockMatrix(DistributedMatrix):
         return self._java_matrix_wrapper.call("numRowBlocks")
 
     @property
-    def numColBlocks(self):
+    def numColBlocks(self) -> int:
         """
         Number of columns of blocks in the BlockMatrix.
 
@@ -1309,7 +1372,7 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numColBlocks")
 
-    def numRows(self):
+    def numRows(self) -> int:
         """
         Get or compute the number of rows.
 
@@ -1328,7 +1391,7 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numRows")
 
-    def numCols(self):
+    def numCols(self) -> int:
         """
         Get or compute the number of cols.
 
@@ -1347,16 +1410,16 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
-    @since('2.0.0')
-    def cache(self):
+    @since("2.0.0")
+    def cache(self) -> "BlockMatrix":
         """
         Caches the underlying RDD.
         """
         self._java_matrix_wrapper.call("cache")
         return self
 
-    @since('2.0.0')
-    def persist(self, storageLevel):
+    @since("2.0.0")
+    def persist(self, storageLevel: StorageLevel) -> "BlockMatrix":
         """
         Persists the underlying RDD with the specified storage level.
         """
@@ -1366,15 +1429,15 @@ class BlockMatrix(DistributedMatrix):
         self._java_matrix_wrapper.call("persist", javaStorageLevel)
         return self
 
-    @since('2.0.0')
-    def validate(self):
+    @since("2.0.0")
+    def validate(self) -> None:
         """
         Validates the block matrix info against the matrix data (`blocks`)
         and throws an exception if any error is found.
         """
         self._java_matrix_wrapper.call("validate")
 
-    def add(self, other):
+    def add(self, other: "BlockMatrix") -> "BlockMatrix":
         """
         Adds two block matrices together. The matrices must have the
         same size and matching `rowsPerBlock` and `colsPerBlock` values.
@@ -1409,7 +1472,7 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("add", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
-    def subtract(self, other):
+    def subtract(self, other: "BlockMatrix") -> "BlockMatrix":
         """
         Subtracts the given block matrix `other` from this block matrix:
         `this - other`. The matrices must have the same size and
@@ -1447,7 +1510,7 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("subtract", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
-    def multiply(self, other):
+    def multiply(self, other: "BlockMatrix") -> "BlockMatrix":
         """
         Left multiplies this BlockMatrix by `other`, another
         BlockMatrix. The `colsPerBlock` of this matrix must equal the
@@ -1484,7 +1547,7 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("multiply", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
-    def transpose(self):
+    def transpose(self) -> "BlockMatrix":
         """
         Transpose this BlockMatrix. Returns a new BlockMatrix
         instance sharing the same underlying data. Is a lazy operation.
@@ -1504,7 +1567,7 @@ class BlockMatrix(DistributedMatrix):
         java_transposed_matrix = self._java_matrix_wrapper.call("transpose")
         return BlockMatrix(java_transposed_matrix, self.colsPerBlock, self.rowsPerBlock)
 
-    def toLocalMatrix(self):
+    def toLocalMatrix(self) -> Matrix:
         """
         Collect the distributed matrix on the driver as a DenseMatrix.
 
@@ -1528,7 +1591,7 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("toLocalMatrix")
 
-    def toIndexedRowMatrix(self):
+    def toIndexedRowMatrix(self) -> IndexedRowMatrix:
         """
         Convert this matrix to an IndexedRowMatrix.
 
@@ -1553,7 +1616,7 @@ class BlockMatrix(DistributedMatrix):
         java_indexed_row_matrix = self._java_matrix_wrapper.call("toIndexedRowMatrix")
         return IndexedRowMatrix(java_indexed_row_matrix)
 
-    def toCoordinateMatrix(self):
+    def toCoordinateMatrix(self) -> CoordinateMatrix:
         """
         Convert this matrix to a CoordinateMatrix.
 
@@ -1569,28 +1632,31 @@ class BlockMatrix(DistributedMatrix):
         return CoordinateMatrix(java_coordinate_matrix)
 
 
-def _test():
+def _test() -> None:
     import doctest
     import numpy
     from pyspark.sql import SparkSession
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("mllib.linalg.distributed tests")\
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .appName("mllib.linalg.distributed tests")
         .getOrCreate()
-    globs['sc'] = spark.sparkContext
-    globs['Matrices'] = Matrices
+    )
+    globs["sc"] = spark.sparkContext
+    globs["Matrices"] = Matrices
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

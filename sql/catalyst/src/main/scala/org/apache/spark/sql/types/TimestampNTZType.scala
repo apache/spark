@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
@@ -29,10 +28,10 @@ import org.apache.spark.annotation.Unstable
  * To represent an absolute point in time, use `TimestampType` instead.
  *
  * Please use the singleton `DataTypes.TimestampNTZType` to refer the type.
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Unstable
-class TimestampNTZType private() extends AtomicType {
+class TimestampNTZType private() extends DatetimeType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000(Unix system time zero)
@@ -59,7 +58,7 @@ class TimestampNTZType private() extends AtomicType {
  * "TimestampNTZType" in byte code. Defined with a private constructor so the companion
  * object is the only possible instantiation.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Unstable
 case object TimestampNTZType extends TimestampNTZType

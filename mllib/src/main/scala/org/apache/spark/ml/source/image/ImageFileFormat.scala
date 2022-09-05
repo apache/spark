@@ -82,7 +82,7 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
         }
         val resultOpt = ImageSchema.decode(origin, bytes)
         val filteredResult = if (imageSourceOptions.dropInvalid) {
-          resultOpt.toIterator
+          resultOpt.iterator
         } else {
           Iterator(resultOpt.getOrElse(ImageSchema.invalidImageRow(origin)))
         }

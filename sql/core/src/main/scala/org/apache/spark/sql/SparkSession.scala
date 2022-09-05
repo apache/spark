@@ -97,12 +97,16 @@ class SparkSession private(
    * since that would cause every new session to reinvoke Spark Session Extensions on the currently
    * running extensions.
    */
-  private[sql] def this(sc: SparkContext) = {
+  private[sql] def this(
+      sc: SparkContext,
+      initialSessionOptions: java.util.HashMap[String, String]) = {
     this(sc, None, None,
       SparkSession.applyExtensions(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions), Map.empty)
+        new SparkSessionExtensions), initialSessionOptions.asScala.toMap)
   }
+
+  private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
 
   private[sql] val sessionUUID: String = UUID.randomUUID.toString
 
@@ -856,6 +860,31 @@ object SparkSession extends Logging {
     }
 
     /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: Map[String, Any]): Builder = synchronized {
+      map.foreach {
+        kv: (String, Any) => {
+          options += kv._1 -> kv._2.toString
+        }
+      }
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both `SparkConf` and SparkSession's own configuration.
+     *
+     * @since 3.4.0
+     */
+    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+      config(map.asScala.toMap)
+    }
+
+    /**
      * Sets a list of config options based on the given `SparkConf`.
      *
      * @since 2.0.0
@@ -926,7 +955,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        applyModifiableSettings(session)
+        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
         return session
       }
 
@@ -935,7 +964,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          applyModifiableSettings(session)
+          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
           return session
         }
 
@@ -962,22 +991,6 @@ object SparkSession extends Logging {
       }
 
       return session
-    }
-
-    private def applyModifiableSettings(session: SparkSession): Unit = {
-      val (staticConfs, otherConfs) =
-        options.partition(kv => SQLConf.isStaticConfigKey(kv._1))
-
-      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-
-      if (staticConfs.nonEmpty) {
-        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
-          " effect.")
-      }
-      if (otherConfs.nonEmpty) {
-        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
-          " effect.")
-      }
     }
   }
 
@@ -1035,7 +1048,7 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getActiveSession: Option[SparkSession] = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       // Return None when running on executors.
       None
     } else {
@@ -1051,7 +1064,7 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       // Return None when running on executors.
       None
     } else {
@@ -1071,19 +1084,58 @@ object SparkSession extends Logging {
   }
 
   /**
+   * Apply modifiable settings to an existing [[SparkSession]]. This method are used
+   * both in Scala and Python, so put this under [[SparkSession]] object.
+   */
+  private[sql] def applyModifiableSettings(
+      session: SparkSession,
+      options: java.util.HashMap[String, String]): Unit = {
+    // Lazy val to avoid an unnecessary session state initialization
+    lazy val conf = session.sessionState.conf
+
+    val dedupOptions = if (options.isEmpty) Map.empty[String, String] else (
+      options.asScala.toSet -- conf.getAllConfs.toSet).toMap
+    val (staticConfs, otherConfs) =
+      dedupOptions.partition(kv => SQLConf.isStaticConfigKey(kv._1))
+
+    otherConfs.foreach { case (k, v) => conf.setConfString(k, v) }
+
+    // Note that other runtime SQL options, for example, for other third-party datasource
+    // can be marked as an ignored configuration here.
+    val maybeIgnoredConfs = otherConfs.filterNot { case (k, _) => conf.isModifiable(k) }
+
+    if (staticConfs.nonEmpty || maybeIgnoredConfs.nonEmpty) {
+      logWarning(
+        "Using an existing Spark session; only runtime SQL configurations will take effect.")
+    }
+    if (staticConfs.nonEmpty) {
+      logDebug("Ignored static SQL configurations:\n  " +
+        conf.redactOptions(staticConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
+    }
+    if (maybeIgnoredConfs.nonEmpty) {
+      // Only print out non-static and non-runtime SQL configurations.
+      // Note that this might show core configurations or source specific
+      // options defined in the third-party datasource.
+      logDebug("Configurations that might not take effect:\n  " +
+        conf.redactOptions(
+          maybeIgnoredConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
+    }
+  }
+
+  /**
    * Returns a cloned SparkSession with all specified configurations disabled, or
    * the original SparkSession if all configurations are already disabled.
    */
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
+    val configsEnabled = configurations.filter(session.conf.get[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.sessionState.conf.setConf(conf, false)
+        newSession.conf.set(conf, false)
       })
       newSession
     }

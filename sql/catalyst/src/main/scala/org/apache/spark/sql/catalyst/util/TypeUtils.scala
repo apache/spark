@@ -26,13 +26,6 @@ import org.apache.spark.sql.types._
  * Functions to help with checking for valid data types and value comparison of various types.
  */
 object TypeUtils {
-  def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (dt.isInstanceOf[NumericType] || dt == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.catalogString}")
-    }
-  }
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {
@@ -78,6 +71,7 @@ object TypeUtils {
     }
   }
 
+  @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -85,17 +79,6 @@ object TypeUtils {
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
     }
-  }
-
-  def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    val limit = if (x.length <= y.length) x.length else y.length
-    var i = 0
-    while (i < limit) {
-      val res = (x(i) & 0xff) - (y(i) & 0xff)
-      if (res != 0) return res
-      i += 1
-    }
-    x.length - y.length
   }
 
   /**
@@ -110,7 +93,7 @@ object TypeUtils {
   }
 
   def failWithIntervalType(dataType: DataType): Unit = {
-    invokeOnceForInterval(dataType, forbidAnsiIntervals = true) {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals = false) {
       throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }

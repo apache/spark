@@ -40,6 +40,7 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
     // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
     if (version == "3.0" || version == "3.1") {
       hadoopConf.set("hive.in.test", "true")
+      hadoopConf.set("hive.query.reexecution.enabled", "false")
     }
     HiveClientBuilder.buildClient(
       version,

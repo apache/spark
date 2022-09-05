@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
@@ -83,10 +81,10 @@ class DataSourceV2DataFrameSessionCatalogSuite
   test("saveAsTable passes path and provider information properly") {
     val t1 = "prop_table"
     withTable(t1) {
-      spark.range(20).write.format(v2Format).option("path", "abc").saveAsTable(t1)
+      spark.range(20).write.format(v2Format).option("path", "/abc").saveAsTable(t1)
       val cat = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
       val tableInfo = cat.loadTable(Identifier.of(Array("default"), t1))
-      assert(tableInfo.properties().get("location") === "abc")
+      assert(tableInfo.properties().get("location") === "file:/abc")
       assert(tableInfo.properties().get("provider") === v2Format)
     }
   }
@@ -97,7 +95,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       name: String,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): InMemoryTable = {
+      properties: java.util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
   }
 
@@ -112,7 +110,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
@@ -210,7 +208,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     verifyTable(t1, df)
 
     // Check that appends are by name
-    df.select('data, 'id).write.format(v2Format).mode("append").saveAsTable(t1)
+    df.select($"data", $"id").write.format(v2Format).mode("append").saveAsTable(t1)
     verifyTable(t1, df.union(df))
   }
 

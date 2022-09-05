@@ -152,11 +152,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Making directory api/R"
     mkdir_p "api/R"
 
-    puts "cp -r ../R/pkg/html/. api/R"
-    cp_r("../R/pkg/html/.", "api/R")
-
-    puts "cp ../R/pkg/DESCRIPTION api"
-    cp("../R/pkg/DESCRIPTION", "api")
+    puts "cp -r ../R/pkg/docs/. api/R"
+    cp_r("../R/pkg/docs/.", "api/R")
   end
 
   if not (ENV['SKIP_SQLDOC'] == '1')

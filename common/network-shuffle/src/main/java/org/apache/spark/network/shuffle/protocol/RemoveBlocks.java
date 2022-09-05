@@ -60,7 +60,7 @@ public class RemoveBlocks extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof RemoveBlocks) {
+    if (other instanceof RemoveBlocks) {
       RemoveBlocks o = (RemoveBlocks) other;
       return Objects.equals(appId, o.appId)
         && Objects.equals(execId, o.execId)

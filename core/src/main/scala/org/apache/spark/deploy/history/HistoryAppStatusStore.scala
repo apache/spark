@@ -44,21 +44,23 @@ private[spark] class HistoryAppStatusStore(
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val execList = super.executorList(activeOnly)
-    logUrlPattern match {
-      case Some(pattern) => execList.map(replaceLogUrls(_, pattern))
-      case None => execList
+    if (logUrlPattern.nonEmpty) {
+      execList.map(replaceLogUrls)
+    } else {
+      execList
     }
   }
 
   override def executorSummary(executorId: String): v1.ExecutorSummary = {
     val execSummary = super.executorSummary(executorId)
-    logUrlPattern match {
-      case Some(pattern) => replaceLogUrls(execSummary, pattern)
-      case None => execSummary
+    if (logUrlPattern.nonEmpty) {
+      replaceLogUrls(execSummary)
+    } else {
+      execSummary
     }
   }
 
-  private def replaceLogUrls(exec: v1.ExecutorSummary, urlPattern: String): v1.ExecutorSummary = {
+  private def replaceLogUrls(exec: v1.ExecutorSummary): v1.ExecutorSummary = {
     val newLogUrlMap = logUrlHandler.applyPattern(exec.executorLogs, exec.attributes)
     replaceExecutorLogs(exec, newLogUrlMap)
   }

@@ -40,7 +40,7 @@ class ClusteringEvaluatorSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    irisDataset = spark.read.format("libsvm").load("../data/mllib/iris_libsvm.txt")
+    irisDataset = spark.read.format("libsvm").load(getTestResourcePath("iris_libsvm.txt"))
     val datasets = MLTestingUtils.generateArrayFeatureDataset(irisDataset)
     newIrisDataset = datasets._1
     newIrisDatasetD = datasets._2

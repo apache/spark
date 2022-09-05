@@ -44,6 +44,7 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -59,6 +60,7 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
+    val numPartitions: Int,
     @transient var localProperties: Properties = new Properties,
     // The default value is only used in tests.
     serializedTaskMetrics: Array[Byte] =
@@ -98,6 +100,7 @@ private[spark] abstract class Task[T](
       partitionId,
       taskAttemptId,
       attemptNumber,
+      numPartitions,
       taskMemoryManager,
       localProperties,
       metricsSystem,
@@ -133,44 +136,27 @@ private[spark] abstract class Task[T](
     plugins.foreach(_.onTaskStart())
 
     try {
-      runTask(context)
-    } catch {
-      case e: Throwable =>
-        // Catch all errors; run task failure callbacks, and rethrow the exception.
-        try {
-          context.markTaskFailed(e)
-        } catch {
-          case t: Throwable =>
-            e.addSuppressed(t)
-        }
-        context.markTaskCompleted(Some(e))
-        throw e
+      context.runTaskWithListeners(this)
     } finally {
       try {
-        // Call the task completion callbacks. If "markTaskCompleted" is called twice, the second
-        // one is no-op.
-        context.markTaskCompleted(None)
-      } finally {
-        try {
-          Utils.tryLogNonFatalError {
-            // Release memory used by this thread for unrolling blocks
-            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
-              MemoryMode.OFF_HEAP)
-            // Notify any tasks waiting for execution memory to be freed to wake up and try to
-            // acquire memory again. This makes impossible the scenario where a task sleeps forever
-            // because there are no other tasks left to notify it. Since this is safe to do but may
-            // not be strictly necessary, we should revisit whether we can remove this in the
-            // future.
-            val memoryManager = SparkEnv.get.memoryManager
-            memoryManager.synchronized { memoryManager.notifyAll() }
-          }
-        } finally {
-          // Though we unset the ThreadLocal here, the context member variable itself is still
-          // queried directly in the TaskRunner to check for FetchFailedExceptions.
-          TaskContext.unset()
-          InputFileBlockHolder.unset()
+        Utils.tryLogNonFatalError {
+          // Release memory used by this thread for unrolling blocks
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
+            MemoryMode.OFF_HEAP)
+          // Notify any tasks waiting for execution memory to be freed to wake up and try to
+          // acquire memory again. This makes impossible the scenario where a task sleeps forever
+          // because there are no other tasks left to notify it. Since this is safe to do but may
+          // not be strictly necessary, we should revisit whether we can remove this in the
+          // future.
+          val memoryManager = SparkEnv.get.memoryManager
+          memoryManager.synchronized { memoryManager.notifyAll() }
         }
+      } finally {
+        // Though we unset the ThreadLocal here, the context member variable itself is still
+        // queried directly in the TaskRunner to check for FetchFailedExceptions.
+        TaskContext.unset()
+        InputFileBlockHolder.unset()
       }
     }
   }

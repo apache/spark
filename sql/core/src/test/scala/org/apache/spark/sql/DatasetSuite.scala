@@ -25,6 +25,8 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TestUtils.withListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
@@ -46,10 +48,12 @@ object TestForTypeAlias {
   type TwoInt = (Int, Int)
   type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+  type IntArray = Array[Int]
 
   def tupleTypeAlias: TwoInt = (1, 1)
   def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+  def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
 class DatasetSuite extends QueryTest
@@ -76,7 +80,7 @@ class DatasetSuite extends QueryTest
   test("toDS should compare map with byte array keys correctly") {
     // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
     // will not incidentally put equal keys together.
-    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.mkString).toArray
     arrays(0)(1) = 1.toByte
     arrays(1)(1) = 2.toByte
     arrays(2)(1) = 2.toByte
@@ -320,23 +324,25 @@ class DatasetSuite extends QueryTest
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       var e = intercept[AnalysisException] {
         ds.select(expr("`(_1)?+.+`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1)?+.+`'"))
+      }
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.head == "`(_1)?+.+`")
 
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      }
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.head == "`(_1|_2)`")
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1|_2)`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1|_2)`\""))
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -752,6 +758,19 @@ class DatasetSuite extends QueryTest
     assert(err2.getMessage.contains("Name must not be empty"))
   }
 
+  test("SPARK-37203: Fix NotSerializableException when observe with TypedImperativeAggregate") {
+    def observe[T](df: Dataset[T], expected: Map[String, _]): Unit = {
+      val namedObservation = Observation("named")
+      val observed_df = df.observe(
+        namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+      observed_df.collect()
+      assert(namedObservation.get === expected)
+    }
+
+    observe(spark.range(100), Map("percentile_approx_val" -> 49))
+    observe(spark.range(0), Map("percentile_approx_val" -> null))
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
@@ -915,7 +934,8 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
   }
 
   test("runtime nullability check") {
@@ -980,24 +1000,6 @@ class DatasetSuite extends QueryTest
     }
 
     checkDataset(cogrouped, "a13", "b24")
-  }
-
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -1441,8 +1443,29 @@ class DatasetSuite extends QueryTest
       }
 
       testCheckpointing("basic") {
-        val ds = spark.range(10).repartition($"id" % 2).filter($"id" > 5).orderBy($"id".desc)
-        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+        val ds = spark
+          .range(10)
+          // Num partitions is set to 1 to avoid a RangePartitioner in the orderBy below
+          .repartition(1, $"id" % 2)
+          .filter($"id" > 5)
+          .orderBy($"id".desc)
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        var cp = ds
+        withListener(spark.sparkContext, listener) { _ =>
+          // AQE adds a job per shuffle. The expression above does multiple shuffles and
+          // that screws up the job counting
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+            cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+          }
+        }
+        if (eager) {
+          assert(jobCounter === 1)
+        }
 
         val logicalRDD = cp.logicalPlan match {
           case plan: LogicalRDD => plan
@@ -1606,6 +1629,12 @@ class DatasetSuite extends QueryTest
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
+  }
+
+  test("SPARK-38042: Dataset should work with a product containing an aliased array type") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.aliasedArrayInTuple)),
+      ("", (1, Array(1))))
   }
 
   test("Check RelationalGroupedDataset toString: Single data") {
@@ -1904,7 +1933,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast id from bigint to tinyint"))
+    assert(thrownException.message.contains("""Cannot up cast id from "BIGINT" to "TINYINT""""))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {

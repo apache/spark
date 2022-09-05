@@ -87,11 +87,16 @@ object SQLExecution {
       val planDescriptionMode =
         ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
 
+      val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
+      val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
+        .filterNot(kv => globalConfigs.get(kv._1).contains(kv._2))
+      val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
+
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
-          sc.listenerBus.post(SparkListenerSQLExecutionStart(
+          val event = SparkListenerSQLExecutionStart(
             executionId = executionId,
             description = desc,
             details = callSite.longForm,
@@ -99,7 +104,10 @@ object SQLExecution {
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
-            time = System.currentTimeMillis()))
+            time = System.currentTimeMillis(),
+            redactedConfigs)
+          event.qe = queryExecution
+          sc.listenerBus.post(event)
           body
         } catch {
           case e: Throwable =>

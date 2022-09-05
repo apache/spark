@@ -26,6 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{ListenerBus, Utils}
 
@@ -74,15 +75,23 @@ trait QueryExecutionListener {
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
 // user-specified listeners during construction. We should not do it when cloning this listener
 // manager, as we will copy all listeners to the cloned listener manager.
-class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
+class ExecutionListenerManager private[sql](
+    session: SparkSession,
+    sqlConf: SQLConf,
+    loadExtensions: Boolean)
   extends Logging {
 
-  private val listenerBus = new ExecutionListenerBus(this, session)
+  // SPARK-39864: lazily create the listener bus on the first register() call in order to
+  // avoid listener overheads when QueryExecutionListeners aren't used:
+  private val listenerBusInitializationLock = new Object()
+  @volatile private var listenerBus: Option[ExecutionListenerBus] = None
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
     conf.get(QUERY_EXECUTION_LISTENERS).foreach { classNames =>
-      Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+      SQLConf.withExistingConf(sqlConf) {
+        Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+      }
     }
   }
 
@@ -91,7 +100,12 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   @DeveloperApi
   def register(listener: QueryExecutionListener): Unit = {
-    listenerBus.addListener(listener)
+    listenerBusInitializationLock.synchronized {
+      if (listenerBus.isEmpty) {
+        listenerBus = Some(new ExecutionListenerBus(this, session))
+      }
+    }
+    listenerBus.get.addListener(listener)
   }
 
   /**
@@ -99,7 +113,7 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   @DeveloperApi
   def unregister(listener: QueryExecutionListener): Unit = {
-    listenerBus.removeListener(listener)
+    listenerBus.foreach(_.removeListener(listener))
   }
 
   /**
@@ -107,20 +121,21 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
    */
   @DeveloperApi
   def clear(): Unit = {
-    listenerBus.removeAllListeners()
+    listenerBus.foreach(_.removeAllListeners())
   }
 
   /** Only exposed for testing. */
   private[sql] def listListeners(): Array[QueryExecutionListener] = {
-    listenerBus.listeners.asScala.toArray
+    listenerBus.map(_.listeners.asScala.toArray).getOrElse(Array.empty[QueryExecutionListener])
   }
 
   /**
    * Get an identical copy of this listener manager.
    */
-  private[sql] def clone(session: SparkSession): ExecutionListenerManager = {
-    val newListenerManager = new ExecutionListenerManager(session, loadExtensions = false)
-    listenerBus.listeners.asScala.foreach(newListenerManager.register)
+  private[sql] def clone(session: SparkSession, sqlConf: SQLConf): ExecutionListenerManager = {
+    val newListenerManager =
+      new ExecutionListenerManager(session, sqlConf, loadExtensions = false)
+    listenerBus.foreach(_.listeners.asScala.foreach(newListenerManager.register))
     newListenerManager
   }
 }

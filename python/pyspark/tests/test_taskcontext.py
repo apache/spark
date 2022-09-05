@@ -27,12 +27,11 @@ from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
 
 
 class TaskContextTests(PySparkTestCase):
-
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         # Allow retries even though they are normally disabled in local mode
-        self.sc = SparkContext('local[4, 2]', class_name)
+        self.sc = SparkContext("local[4, 2]", class_name)
 
     def test_stage_id(self):
         """Test the stage ids are available and incrementing as expected."""
@@ -82,6 +81,7 @@ class TaskContextTests(PySparkTestCase):
                 raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
+
         result = rdd.map(fail_on_first).collect()
         # We should re-submit the first partition to it but other partitions should be attempt 0
         self.assertEqual([0, 0, 1], result[0][0:3])
@@ -161,8 +161,12 @@ class TaskContextTests(PySparkTestCase):
         def f(iterator):
             yield sum(iterator)
 
-        taskInfos = rdd.barrier().mapPartitions(f).map(lambda x: BarrierTaskContext.get()
-                                                       .getTaskInfos()).collect()
+        taskInfos = (
+            rdd.barrier()
+            .mapPartitions(f)
+            .map(lambda x: BarrierTaskContext.get().getTaskInfos())
+            .collect()
+        )
         self.assertTrue(len(taskInfos) == 4)
         self.assertTrue(len(taskInfos[0]) == 4)
 
@@ -211,11 +215,10 @@ class TaskContextTests(PySparkTestCase):
 
 
 class TaskContextTestsWithWorkerReuse(unittest.TestCase):
-
     def setUp(self):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.worker.reuse", "true")
-        self.sc = SparkContext('local[2]', class_name, conf=conf)
+        self.sc = SparkContext("local[2]", class_name, conf=conf)
 
     def test_barrier_with_python_worker_reuse(self):
         """
@@ -287,15 +290,13 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         # Retrying the check as the PIDs from Python workers might be different even
         # when reusing Python workers is enabled if a Python worker is dead for some reasons
         # (e.g., socket connection failure) and new Python worker is created.
-        eventually(
-            self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
+        eventually(self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
 
     def tearDown(self):
         self.sc.stop()
 
 
 class TaskContextTestsWithResources(unittest.TestCase):
-
     def setUp(self):
         class_name = self.__class__.__name__
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
@@ -304,15 +305,17 @@ class TaskContextTestsWithResources(unittest.TestCase):
         # create temporary directory for Worker resources coordination
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
-        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
-                 stat.S_IROTH | stat.S_IXOTH)
+        os.chmod(
+            self.tempFile.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.cpus", 2)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
-        self.sc = SparkContext('local-cluster[2,2,1024]', class_name, conf=conf)
+        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
 
     def test_cpus(self):
         """Test the cpus are available."""
@@ -325,13 +328,14 @@ class TaskContextTestsWithResources(unittest.TestCase):
         rdd = self.sc.parallelize(range(10))
         resources = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
         self.assertEqual(len(resources), 1)
-        self.assertTrue('gpu' in resources)
-        self.assertEqual(resources['gpu'].name, 'gpu')
-        self.assertEqual(resources['gpu'].addresses, ['0'])
+        self.assertTrue("gpu" in resources)
+        self.assertEqual(resources["gpu"].name, "gpu")
+        self.assertEqual(resources["gpu"].addresses, ["0"])
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
         self.sc.stop()
+
 
 if __name__ == "__main__":
     import unittest
@@ -339,7 +343,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

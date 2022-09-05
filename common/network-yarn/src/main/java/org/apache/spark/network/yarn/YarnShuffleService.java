@@ -42,11 +42,14 @@ import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.shuffle.Constants;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
-import org.apache.spark.network.util.LevelDBProvider;
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
+import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.DBBackend;
+import org.apache.spark.network.shuffledb.DBIterator;
+import org.apache.spark.network.shuffledb.StoreVersion;
+import org.apache.spark.network.util.DBProvider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,7 +96,8 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * This {@code classpath} configuration is only supported on YARN versions >= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private static final Logger defaultLogger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private Logger logger = defaultLogger;
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
@@ -107,12 +111,20 @@ public class YarnShuffleService extends AuxiliaryService {
       "spark.yarn.shuffle.service.metrics.namespace";
   private static final String DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME = "sparkShuffleService";
 
+  /**
+   * The namespace to use for the logs produced by the shuffle service
+   */
+  static final String SPARK_SHUFFLE_SERVICE_LOGS_NAMESPACE_KEY =
+      "spark.yarn.shuffle.service.logs.namespace";
+
   // Whether the shuffle server should authenticate fetch requests
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
   private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
 
-  private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
-  private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
+  private static final String RECOVERY_FILE_NAME = "registeredExecutors";
+  private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery";
+  @VisibleForTesting
+  static final String SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME = "sparkShuffleMergeRecovery";
 
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
@@ -124,8 +136,7 @@ public class YarnShuffleService extends AuxiliaryService {
   static int boundPort = -1;
   private static final ObjectMapper mapper = new ObjectMapper();
   private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
-  private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
-      .StoreVersion(1, 0);
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
   /**
    * The name of the resource to search for on the classpath to find a shuffle service-specific
@@ -149,7 +160,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private TransportContext transportContext = null;
 
-  private Configuration _conf = null;
+  @VisibleForTesting
+  Configuration _conf = null;
 
   // The recovery path used to shuffle service recovery
   @VisibleForTesting
@@ -159,6 +171,10 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
 
+  // Handles merged shuffle registration, push blocks and finalization
+  @VisibleForTesting
+  MergedShuffleFileManager shuffleMergeManager;
+
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
   File registeredExecutorFile;
@@ -167,7 +183,13 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File secretsFile;
 
+  // Where to store & reload merge manager info for recovering state after an NM restart
+  @VisibleForTesting
+  File mergeManagerFile;
+
   private DB db;
+
+  private DBBackend dbBackend = null;
 
   public YarnShuffleService() {
     // The name of the auxiliary service configured within the NodeManager
@@ -204,9 +226,24 @@ public class YarnShuffleService extends AuxiliaryService {
           confOverlayUrl);
       _conf.addResource(confOverlayUrl);
     }
+
+    String logsNamespace = _conf.get(SPARK_SHUFFLE_SERVICE_LOGS_NAMESPACE_KEY, "");
+    if (!logsNamespace.isEmpty()) {
+      String className = YarnShuffleService.class.getName();
+      logger = LoggerFactory.getLogger(className + "." + logsNamespace);
+    }
+
     super.serviceInit(_conf);
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+
+    if (_recoveryPath != null) {
+      String dbBackendName = _conf.get(Constants.SHUFFLE_SERVICE_DB_BACKEND,
+        DBBackend.LEVELDB.name());
+      dbBackend = DBBackend.byName(dbBackendName);
+      logger.info("Configured {} as {} and actually used value {}",
+        Constants.SHUFFLE_SERVICE_DB_BACKEND, dbBackendName, dbBackend);
+    }
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
@@ -215,12 +252,18 @@ public class YarnShuffleService extends AuxiliaryService {
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
       if (_recoveryPath != null) {
-        registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
+        registeredExecutorFile = initRecoveryDb(dbBackend.fileName(RECOVERY_FILE_NAME));
+        mergeManagerFile =
+          initRecoveryDb(dbBackend.fileName(SPARK_SHUFFLE_MERGE_RECOVERY_FILE_NAME));
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
-      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf);
+      // Create new MergedShuffleFileManager if shuffleMergeManager is null.
+      // This is because in the unit test, a customized MergedShuffleFileManager will
+      // be created through setShuffleFileManager method.
+      if (shuffleMergeManager == null) {
+        shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
+      }
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -272,8 +315,18 @@ public class YarnShuffleService extends AuxiliaryService {
     }
   }
 
+  /**
+   * Set the customized MergedShuffleFileManager for unit testing only
+   * @param mergeManager
+   */
   @VisibleForTesting
-  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
+  void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
+    this.shuffleMergeManager = mergeManager;
+  }
+
+  @VisibleForTesting
+  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(
+      TransportConf conf, File mergeManagerFile) {
     String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
     try {
       Class<?> mergeManagerImplClazz = Class.forName(
@@ -282,36 +335,38 @@ public class YarnShuffleService extends AuxiliaryService {
         mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
       // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
       // will also need the transport configuration.
-      return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
+      return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
+        .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
-      logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new NoOpMergedShuffleFileManager(conf);
+      defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
+      return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
 
   private void loadSecretsFromDb() throws IOException {
-    secretsFile = initRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
+    secretsFile = initRecoveryDb(dbBackend.fileName(SECRETS_RECOVERY_FILE_NAME));
 
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
     fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
 
-    db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
+    db = DBProvider.initDB(dbBackend, secretsFile, CURRENT_VERSION, mapper);
     logger.info("Recovery location is: " + secretsFile.getPath());
     if (db != null) {
       logger.info("Going to reload spark shuffle data");
-      DBIterator itr = db.iterator();
-      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-      while (itr.hasNext()) {
-        Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), StandardCharsets.UTF_8);
-        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
-          break;
+      try (DBIterator itr = db.iterator()) {
+        itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+        while (itr.hasNext()) {
+          Map.Entry<byte[], byte[]> e = itr.next();
+          String key = new String(e.getKey(), StandardCharsets.UTF_8);
+          if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
+            break;
+          }
+          String id = parseDbAppKey(key);
+          ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
+          logger.info("Reloading tokens for app: " + id);
+          secretManager.registerApp(id, secret);
         }
-        String id = parseDbAppKey(key);
-        ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
-        logger.info("Reloading tokens for app: " + id);
-        secretManager.registerApp(id, secret);
       }
     }
   }

@@ -351,7 +351,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       val partIter = partitionLocs.partsWithLocs.iterator
       groupArr.filter(pg => pg.numPartitions == 0).foreach { pg =>
         while (partIter.hasNext && pg.numPartitions == 0) {
-          var (_, nxt_part) = partIter.next()
+          val (_, nxt_part) = partIter.next()
           if (!initialHash.contains(nxt_part)) {
             pg.partitions += nxt_part
             initialHash += nxt_part

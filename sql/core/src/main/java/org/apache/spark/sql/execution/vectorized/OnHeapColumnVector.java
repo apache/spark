@@ -127,7 +127,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return nulls[rowId] == 1;
+    return isAllNull || nulls[rowId] == 1;
   }
 
   //
@@ -145,6 +145,18 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       byteData[i + rowId] = v;
     }
+  }
+
+  @Override
+  public void putBooleans(int rowId, byte src) {
+    byteData[rowId] = (byte)(src & 1);
+    byteData[rowId + 1] = (byte)(src >>> 1 & 1);
+    byteData[rowId + 2] = (byte)(src >>> 2 & 1);
+    byteData[rowId + 3] = (byte)(src >>> 3 & 1);
+    byteData[rowId + 4] = (byte)(src >>> 4 & 1);
+    byteData[rowId + 5] = (byte)(src >>> 5 & 1);
+    byteData[rowId + 6] = (byte)(src >>> 6 & 1);
+    byteData[rowId + 7] = (byte)(src >>> 7 & 1);
   }
 
   @Override
@@ -206,6 +218,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromBytes(byteData, rowId, count);
   }
+
+  @Override
+  public ByteBuffer getByteBuffer(int rowId, int count) {
+    return ByteBuffer.wrap(byteData, rowId, count);
+  }
+
 
   //
   // APIs dealing with Shorts
@@ -312,6 +330,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
    * This should only be called when the ColumnVector is dictionaryIds.
    * We have this separate method for dictionaryIds as per SPARK-16928.
    */
+  @Override
   public int getDictId(int rowId) {
     assert(dictionary == null)
             : "A ColumnVector dictionary should not have a dictionary for itself.";

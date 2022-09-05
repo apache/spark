@@ -291,7 +291,9 @@ class StreamingDataSourceV2Suite extends StreamTest {
     "fake-write-microbatch-continuous",
     "fake-write-neither-mode")
   val triggers = Seq(
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     Trigger.Once(),
+    Trigger.AvailableNow(),
     Trigger.ProcessingTime(1000),
     Trigger.Continuous(1000))
 
@@ -349,7 +351,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     "supports external metadata") {
     testPositiveCaseWithQuery(
       "fake-read-microbatch-continuous", "fake-write-supporting-external-metadata",
-      Trigger.Once()) { v2Query =>
+      Trigger.AvailableNow()) { v2Query =>
       val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
       assert(sink.isInstanceOf[Table])
       assert(sink.schema() == StructType(Nil))
@@ -359,7 +361,8 @@ class StreamingDataSourceV2Suite extends StreamTest {
   test("disabled v2 write") {
     // Ensure the V2 path works normally and generates a V2 sink..
     testPositiveCaseWithQuery(
-      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v2Query =>
+      "fake-read-microbatch-continuous", "fake-write-v1-fallback",
+      Trigger.AvailableNow()) { v2Query =>
       assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
         .isInstanceOf[Table])
     }
@@ -369,7 +372,8 @@ class StreamingDataSourceV2Suite extends StreamTest {
     val fullSinkName = classOf[FakeWriteSupportProviderV1Fallback].getName
     withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
       testPositiveCaseWithQuery(
-        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v1Query =>
+        "fake-read-microbatch-continuous", "fake-write-v1-fallback",
+        Trigger.AvailableNow()) { v1Query =>
         assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
           .isInstanceOf[FakeSink])
       }
@@ -377,7 +381,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
   }
 
   Seq(
-    Tuple2(classOf[FakeReadMicroBatchOnly], Trigger.Once()),
+    Tuple2(classOf[FakeReadMicroBatchOnly], Trigger.AvailableNow()),
     Tuple2(classOf[FakeReadContinuousOnly], Trigger.Continuous(1000))
   ).foreach { case (source, trigger) =>
     test(s"SPARK-25460: session options are respected in structured streaming sources - $source") {

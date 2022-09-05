@@ -34,7 +34,6 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
@@ -42,13 +41,12 @@ import org.apache.spark.streaming.util._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
-class ReceivedBlockTrackerSuite
-  extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with Matchers {
 
   val hadoopConf = new Configuration()
   val streamId = 1
 
-  var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
+  val allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
   var checkpointDirectory: File = null
   var conf: SparkConf = null
 
@@ -378,7 +376,7 @@ class ReceivedBlockTrackerSuite
       recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    var tracker = new ReceivedBlockTracker(
+    val tracker = new ReceivedBlockTracker(
       conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker

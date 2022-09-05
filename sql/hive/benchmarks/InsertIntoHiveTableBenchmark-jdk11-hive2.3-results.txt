@@ -1,11 +1,11 @@
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 insert hive table benchmark:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-INSERT INTO DYNAMIC                                4281           4685         572          0.0      418070.8       1.0X
-INSERT INTO HYBRID                                  776            834          56          0.0       75780.6       5.5X
-INSERT INTO STATIC                                  196            215          14          0.1       19143.1      21.8X
-INSERT OVERWRITE DYNAMIC                           4597           4775         253          0.0      448878.6       0.9X
-INSERT OVERWRITE HYBRID                             722            737          22          0.0       70517.6       5.9X
-INSERT OVERWRITE STATIC                             193            211          14          0.1       18830.4      22.2X
+INSERT INTO DYNAMIC                                5911           6514         853          0.0      577230.6       1.0X
+INSERT INTO HYBRID                                 1207           1209           2          0.0      117906.2       4.9X
+INSERT INTO STATIC                                  276            292          15          0.0       26955.9      21.4X
+INSERT OVERWRITE DYNAMIC                           5890           6090         283          0.0      575186.3       1.0X
+INSERT OVERWRITE HYBRID                             980           1170         269          0.0       95713.5       6.0X
+INSERT OVERWRITE STATIC                             265            286          27          0.0       25914.8      22.3X
 

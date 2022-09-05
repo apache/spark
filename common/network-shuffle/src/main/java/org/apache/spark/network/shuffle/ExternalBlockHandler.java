@@ -80,7 +80,7 @@ public class ExternalBlockHandler extends RpcHandler
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager(conf));
+      new NoOpMergedShuffleFileManager(conf, null));
   }
 
   public ExternalBlockHandler(
@@ -101,7 +101,7 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
-    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null));
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null, null));
   }
 
   /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
@@ -157,14 +157,14 @@ public class ExternalBlockHandler extends RpcHandler
             iterator = new ShuffleChunkManagedBufferIterator((FetchShuffleBlockChunks) msgObj);
           }
           streamId = streamManager.registerStream(client.getClientId(), iterator,
-            client.getChannel());
+            client.getChannel(), true);
         } else {
           // For the compatibility with the old version, still keep the support for OpenBlocks.
           OpenBlocks msg = (OpenBlocks) msgObj;
           numBlockIds = msg.blockIds.length;
           checkAuth(client, msg.appId);
           streamId = streamManager.registerStream(client.getClientId(),
-            new ManagedBufferIterator(msg), client.getChannel());
+            new ManagedBufferIterator(msg), client.getChannel(), true);
         }
         if (logger.isTraceEnabled()) {
           logger.trace(
@@ -295,6 +295,7 @@ public class ExternalBlockHandler extends RpcHandler
 
   public void close() {
     blockManager.close();
+    mergeManager.close();
   }
 
   private void checkAuth(TransportClient client, String appId) {
@@ -512,14 +513,14 @@ public class ExternalBlockHandler extends RpcHandler
       mapIds = msg.mapIds;
       reduceIds = msg.reduceIds;
       batchFetchEnabled = msg.batchFetchEnabled;
-    }
-
-    @Override
-    public boolean hasNext() {
       // mapIds.length must equal to reduceIds.length, and the passed in FetchShuffleBlocks
       // must have non-empty mapIds and reduceIds, see the checking logic in
       // OneForOneBlockFetcher.
       assert(mapIds.length != 0 && mapIds.length == reduceIds.length);
+    }
+
+    @Override
+    public boolean hasNext() {
       return mapIdx < mapIds.length && reduceIdx < reduceIds[mapIdx].length;
     }
 

@@ -17,15 +17,63 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.types._
 
 private object DB2Dialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
+
+  private val distinctUnsupportedAggregateFunctions =
+    Set("COVAR_POP", "COVAR_SAMP", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+
+  // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  class DB2SQLBuilder extends JDBCSQLBuilder {
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+      if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
+        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
+          s"support aggregate function: $funcName with DISTINCT");
+      } else {
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
+      }
+
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARIANCE"
+      case "VAR_SAMP" => "VARIANCE_SAMP"
+      case "STDDEV_POP" => "STDDEV"
+      case "STDDEV_SAMP" => "STDDEV_SAMP"
+      case "COVAR_POP" => "COVARIANCE"
+      case "COVAR_SAMP" => "COVARIANCE_SAMP"
+      case _ => super.dialectFunctionName(funcName)
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val db2SQLBuilder = new DB2SQLBuilder()
+    try {
+      Some(db2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
 
   override def getCatalystType(
       sqlType: Int,
@@ -53,6 +101,15 @@ private object DB2Dialect extends JdbcDialect {
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // scalastyle:off line.size.limit
+  // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0053474.html
+  // scalastyle:on line.size.limit
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    s"TRUNCATE TABLE $table IMMEDIATE"
+  }
+
+  // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0000980.html
   // scalastyle:on line.size.limit
   override def renameTable(oldTable: String, newTable: String): String = {
@@ -78,5 +135,29 @@ private object DB2Dialect extends JdbcDialect {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
+          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
+  }
+
+  override def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
+    }
   }
 }

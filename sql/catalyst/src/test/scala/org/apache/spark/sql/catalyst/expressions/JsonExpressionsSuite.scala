@@ -736,17 +736,17 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
   test("SPARK-24709: infer schema of json strings") {
     checkEvaluation(new SchemaOfJson(Literal.create("""{"col":0}""")),
-      "STRUCT<`col`: BIGINT>")
+      "STRUCT<col: BIGINT>")
     checkEvaluation(
       new SchemaOfJson(Literal.create("""{"col0":["a"], "col1": {"col2": "b"}}""")),
-      "STRUCT<`col0`: ARRAY<STRING>, `col1`: STRUCT<`col2`: STRING>>")
+      "STRUCT<col0: ARRAY<STRING>, col1: STRUCT<col2: STRING>>")
   }
 
   test("infer schema of JSON strings by using options") {
     checkEvaluation(
       new SchemaOfJson(Literal.create("""{"col":01}"""),
         CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
-      "STRUCT<`col`: BIGINT>")
+      "STRUCT<col: BIGINT>")
   }
 
   test("parse date with locale") {
@@ -811,7 +811,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach {
-        checkDecimalInfer(_, """STRUCT<`d`: DECIMAL(7,3)>""")
+        checkDecimalInfer(_, """STRUCT<d: DECIMAL(7,3)>""")
     }
   }
 

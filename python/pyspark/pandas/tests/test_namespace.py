@@ -15,13 +15,18 @@
 # limitations under the License.
 #
 
+from distutils.version import LooseVersion
 import itertools
+import inspect
 
 import pandas as pd
+import numpy as np
 
 from pyspark import pandas as ps
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
+from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -70,6 +75,119 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
             ps.to_datetime([1, 2, 3], unit="D", origin=pd.Timestamp("1960-01-01")),
         )
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "month": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "day": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"years": [2015, 2016], "months": [2, 3], "days": [4, 5]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        # SPARK-36946: Support time for ps.to_datetime
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5], "hour": [2, 3]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "Year": [2015, 2016],
+                "Month": [2, 3],
+                "Day": [4, 5],
+                "Hour": [2, 3],
+                "Minute": [10, 30],
+                "Second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
     def test_date_range(self):
         self.assert_eq(
@@ -122,6 +240,84 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, freq="N")
         )
 
+    def test_to_timedelta(self):
+        self.assert_eq(
+            ps.to_timedelta("1 days 06:05:01.00003"),
+            pd.to_timedelta("1 days 06:05:01.00003"),
+        )
+        self.assert_eq(
+            ps.to_timedelta("15.5us"),
+            pd.to_timedelta("15.5us"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(["1 days 06:05:01.00003", "15.5us", "nan"]),
+            pd.to_timedelta(["1 days 06:05:01.00003", "15.5us", "nan"]),
+        )
+        self.assert_eq(
+            ps.to_timedelta(np.arange(5), unit="s"),
+            pd.to_timedelta(np.arange(5), unit="s"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(ps.Series([1, 2]), unit="d"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(pd.Series([1, 2]), unit="d"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+        )
+
+    def test_timedelta_range(self):
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days"),
+            pd.timedelta_range(start="1 day", end="3 days"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", periods=3),
+            pd.timedelta_range(start="1 day", periods=3),
+        )
+        self.assert_eq(
+            ps.timedelta_range(end="3 days", periods=3),
+            pd.timedelta_range(end="3 days", periods=3),
+        )
+        self.assert_eq(
+            ps.timedelta_range(end="3 days", periods=3, closed="right"),
+            pd.timedelta_range(end="3 days", periods=3, closed="right"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days", periods=4),
+            pd.timedelta_range(start="1 day", end="3 days", periods=4),
+        )
+
+        self.assertRaises(
+            AssertionError, lambda: ps.timedelta_range(start="1 day", periods=3, freq="ns")
+        )
+
+    def test_concat_multiindex_sort(self):
+        # SPARK-39314: Respect ps.concat sort parameter to follow pandas behavior
+        idx = pd.MultiIndex.from_tuples([("Y", "A"), ("Y", "B"), ("X", "C"), ("X", "D")])
+        pdf = pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
+        psdf = ps.from_pandas(pdf)
+
+        ignore_indexes = [True, False]
+        joins = ["inner", "outer"]
+        sorts = [True]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            sorts += [False]
+        objs = [
+            ([psdf, psdf.reset_index()], [pdf, pdf.reset_index()]),
+            ([psdf.reset_index(), psdf], [pdf.reset_index(), pdf]),
+        ]
+        for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+            for i, (psdfs, pdfs) in enumerate(objs):
+                self.assert_eq(
+                    ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                )
+
     def test_concat_index_axis(self):
         pdf = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5], "C": [6, 7, 8]})
         # TODO: pdf.columns.names = ["ABC"]
@@ -133,15 +329,30 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
 
         objs = [
             ([psdf, psdf], [pdf, pdf]),
+            # no Series
             ([psdf, psdf.reset_index()], [pdf, pdf.reset_index()]),
             ([psdf.reset_index(), psdf], [pdf.reset_index(), pdf]),
             ([psdf, psdf[["C", "A"]]], [pdf, pdf[["C", "A"]]]),
             ([psdf[["C", "A"]], psdf], [pdf[["C", "A"]], pdf]),
-            ([psdf, psdf["C"]], [pdf, pdf["C"]]),
-            ([psdf["C"], psdf], [pdf["C"], pdf]),
+            # more than two Series
             ([psdf["C"], psdf, psdf["A"]], [pdf["C"], pdf, pdf["A"]]),
-            ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
         ]
+
+        # See also https://github.com/pandas-dev/pandas/issues/47127
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4.3"):
+            series_objs = [
+                # more than two Series
+                ([psdf, psdf["C"], psdf["A"]], [pdf, pdf["C"], pdf["A"]]),
+                # only one Series
+                ([psdf, psdf["C"]], [pdf, pdf["C"]]),
+                ([psdf["C"], psdf], [pdf["C"], pdf]),
+            ]
+            for psdfs, pdfs in series_objs:
+                for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+                    self.assert_eq(
+                        ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                        pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    )
 
         for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
@@ -177,10 +388,14 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         objs = [
             ([psdf3, psdf3], [pdf3, pdf3]),
             ([psdf3, psdf3.reset_index()], [pdf3, pdf3.reset_index()]),
-            ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
             ([psdf3, psdf3[[("Y", "C"), ("X", "A")]]], [pdf3, pdf3[[("Y", "C"), ("X", "A")]]]),
-            ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
         ]
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.4"):
+            objs += [
+                ([psdf3.reset_index(), psdf3], [pdf3.reset_index(), pdf3]),
+                ([psdf3[[("Y", "C"), ("X", "A")]], psdf3], [pdf3[[("Y", "C"), ("X", "A")]], pdf3]),
+            ]
 
         for ignore_index, sort in itertools.product(ignore_indexes, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
@@ -383,6 +598,20 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             "'ignore' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
+
+    def test_missing(self):
+        missing_functions = inspect.getmembers(
+            _MissingPandasLikeGeneralFunctions, inspect.isfunction
+        )
+        unsupported_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
+        ]
+        for name in unsupported_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "The method.*pd.*{}.*not implemented yet.".format(name),
+            ):
+                getattr(ps, name)()
 
 
 if __name__ == "__main__":

@@ -60,8 +60,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         options = Map.empty)(sparkSession = spark)
 
       val logicalRelation = LogicalRelation(relation, tableMeta)
-      val query = Project(Seq(Symbol("id"), Symbol("p")),
-        Filter(Symbol("p") === 1, logicalRelation)).analyze
+      val query = Project(Seq($"id", $"p"),
+        Filter($"p" === 1, logicalRelation)).analyze
 
       val optimized = Optimize.execute(query)
       assert(optimized.missingInput.isEmpty)
@@ -113,6 +113,28 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
           assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
           assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
+  test("SPARK-38357: data + partition filters with OR") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
+            2,
+            "((tmp.p = 0) || (tmp.p = 1))")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND id > 0",
+            1,
+            "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0",
+            1,
+            "(tmp.p = 0)")
         }
       }
     }

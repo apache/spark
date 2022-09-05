@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.types._
 
 /**
@@ -156,6 +157,32 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
   }
 
+  def convertStorageFormat(storage: CatalogStorageFormat): CatalogStorageFormat = {
+    val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+
+    if (serde.contains("parquet")) {
+      val options = storage.properties + (ParquetOptions.MERGE_SCHEMA ->
+        SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
+      storage.copy(
+        serde = None,
+        properties = options
+      )
+    } else {
+      val options = storage.properties
+      if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
+        storage.copy(
+          serde = None,
+          properties = options
+        )
+      } else {
+        storage.copy(
+          serde = None,
+          properties = options
+        )
+      }
+    }
+  }
+
   private def convertToLogicalRelation(
       relation: HiveTableRelation,
       options: Map[String, String],
@@ -222,7 +249,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           // Spark SQL's data source table now support static and dynamic partition insert. Source
           // table converted from Hive table should always use dynamic.
-          val enableDynamicPartition = hiveOptions.updated("partitionOverwriteMode", "dynamic")
+          val enableDynamicPartition = hiveOptions.updated(DataSourceUtils.PARTITION_OVERWRITE_MODE,
+            PartitionOverwriteMode.DYNAMIC.toString)
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,

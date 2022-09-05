@@ -38,8 +38,8 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/AggregateBenchmark-results.txt".
  * }}}
  */
@@ -57,11 +57,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val N = 100L << 20
 
       codegenBenchmark("stddev", N) {
-        spark.range(N).groupBy().agg("id" -> "stddev").noop()
+        spark.range(N).agg("id" -> "stddev").noop()
       }
 
       codegenBenchmark("kurtosis", N) {
-        spark.range(N).groupBy().agg("id" -> "kurtosis").noop()
+        spark.range(N).agg("id" -> "kurtosis").noop()
       }
     }
 

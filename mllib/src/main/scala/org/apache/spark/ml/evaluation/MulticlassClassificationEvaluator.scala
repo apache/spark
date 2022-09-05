@@ -18,7 +18,6 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -180,18 +179,13 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-
     if ($(metricName) == "logLoss") {
       // probabilityCol is only needed to compute logloss
       require(schema.fieldNames.contains($(probabilityCol)),
         "probabilityCol is needed to compute logloss")
     }
 
+    val w = DatasetUtils.checkNonNegativeWeights(get(weightCol))
     val rdd = if (schema.fieldNames.contains($(probabilityCol))) {
       val p = DatasetUtils.columnToVector(dataset, $(probabilityCol))
       dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)

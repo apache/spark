@@ -208,6 +208,6 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     val errMsg = intercept[DateTimeException] {
       formatter.parse("x123")
     }.getMessage
-    assert(errMsg.contains("Cannot cast x123 to DateType"))
+    assert(errMsg.contains("""The value 'x123' of the type "STRING" cannot be cast to "DATE""""))
   }
 }

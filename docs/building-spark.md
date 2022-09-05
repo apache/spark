@@ -27,8 +27,8 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.6.3 and Java 8.
-Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
+Building Spark using Maven requires Maven 3.8.6 and Java 8.
+Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -79,9 +79,9 @@ Example:
 
     ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
 
-If you want to build with Hadoop 2.x, enable hadoop-2.7 profile:
+If you want to build with Hadoop 2.x, enable `hadoop-2` profile:
 
-    ./build/mvn -Phadoop-2.7 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
+    ./build/mvn -Phadoop-2 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -303,3 +303,17 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
   </td>
 </tr>
 </table>
+
+### Building and testing on IPv6-only environment
+
+Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
+
+    https://gitbox.apache.org/repos/asf/spark.git
+
+To build and run tests on IPv6-only environment, the following configurations are required.
+
+    export SPARK_LOCAL_HOSTNAME="your-IPv6-address" # e.g. '[2600:1700:232e:3de0:...]'
+    export DEFAULT_ARTIFACT_REPOSITORY=https://ipv6.repo1.maven.org/maven2/
+    export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
+    export SERIAL_SBT_TESTS=1

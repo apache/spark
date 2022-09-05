@@ -23,10 +23,11 @@ package org.apache.spark.sql.catalyst
  * Format (unquoted): "name" or "db.name"
  * Format (quoted): "`name`" or "`db`.`name`"
  */
-sealed trait IdentifierWithDatabase {
+sealed trait CatalystIdentifier {
   val identifier: String
 
   def database: Option[String]
+  def catalog: Option[String]
 
   /*
    * Escapes back-ticks within the identifier name with double-back-ticks.
@@ -35,13 +36,26 @@ sealed trait IdentifierWithDatabase {
 
   def quotedString: String = {
     val replacedId = quoteIdentifier(identifier)
-    val replacedDb = database.map(quoteIdentifier(_))
+    val replacedDb = database.map(quoteIdentifier)
+    val replacedCatalog = catalog.map(quoteIdentifier)
 
-    if (replacedDb.isDefined) s"`${replacedDb.get}`.`$replacedId`" else s"`$replacedId`"
+    if (replacedCatalog.isDefined && replacedDb.isDefined) {
+      s"`${replacedCatalog.get}`.`${replacedDb.get}`.`$replacedId`"
+    } else if (replacedDb.isDefined) {
+      s"`${replacedDb.get}`.`$replacedId`"
+    } else {
+      s"`$replacedId`"
+    }
   }
 
   def unquotedString: String = {
-    if (database.isDefined) s"${database.get}.$identifier" else identifier
+    if (catalog.isDefined && database.isDefined) {
+      s"${catalog.get}.${database.get}.$identifier"
+    } else if (database.isDefined) {
+      s"${database.get}.$identifier"
+    } else {
+      identifier
+    }
   }
 
   override def toString: String = quotedString
@@ -72,12 +86,14 @@ object AliasIdentifier {
  * When we register a permanent function in the FunctionRegistry, we use
  * unquotedString as the function name.
  */
-case class TableIdentifier(table: String, database: Option[String])
-  extends IdentifierWithDatabase {
+case class TableIdentifier(table: String, database: Option[String], catalog: Option[String])
+  extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = table
 
-  def this(table: String) = this(table, None)
+  def this(table: String) = this(table, None, None)
+  def this(table: String, database: Option[String]) = this(table, database, None)
 }
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
@@ -87,6 +103,8 @@ case class QualifiedTableName(database: String, name: String) {
 
 object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
+  def apply(table: String, database: Option[String]): TableIdentifier =
+    new TableIdentifier(table, database)
 }
 
 
@@ -94,16 +112,20 @@ object TableIdentifier {
  * Identifies a function in a database.
  * If `database` is not defined, the current database is used.
  */
-case class FunctionIdentifier(funcName: String, database: Option[String])
-  extends IdentifierWithDatabase {
+case class FunctionIdentifier(funcName: String, database: Option[String], catalog: Option[String])
+  extends CatalystIdentifier {
+  assert(catalog.isEmpty || database.isDefined)
 
   override val identifier: String = funcName
 
-  def this(funcName: String) = this(funcName, None)
+  def this(funcName: String) = this(funcName, None, None)
+  def this(funcName: String, database: Option[String]) = this(funcName, database, None)
 
   override def toString: String = unquotedString
 }
 
 object FunctionIdentifier {
   def apply(funcName: String): FunctionIdentifier = new FunctionIdentifier(funcName)
+  def apply(funcName: String, database: Option[String]): FunctionIdentifier =
+    new FunctionIdentifier(funcName, database)
 }

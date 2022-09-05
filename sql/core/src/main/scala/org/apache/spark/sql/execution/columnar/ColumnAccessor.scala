@@ -106,7 +106,7 @@ private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer, dataType: CalendarIntervalType)
+private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
   with NullableColumnAccessor
 
@@ -158,11 +158,11 @@ private[sql] object ColumnAccessor {
 
   def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
       Unit = {
-    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
-      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
-      nativeAccessor.decompress(columnVector, numRows)
-    } else {
-      throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
+    columnAccessor match {
+      case nativeAccessor: NativeColumnAccessor[_] =>
+        nativeAccessor.decompress(columnVector, numRows)
+      case _ =>
+        throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
     }
   }
 

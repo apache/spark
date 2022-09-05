@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
@@ -204,13 +204,11 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      // If dynamic allocation shuffle tracking or worker decommissioning along with
-      // storage shuffle decommissioning is enabled we have *experimental* support for
-      // decommissioning without a shuffle service.
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED) ||
-          (decommissionEnabled &&
-            conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))) {
-        logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+        logInfo("Dynamic allocation is enabled without a shuffle service.")
+      } else if (decommissionEnabled &&
+          conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+        logInfo("Shuffle data decommission is enabled without a shuffle service.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
           "shuffle service. You may enable this through spark.shuffle.service.enabled.")
@@ -233,16 +231,7 @@ private[spark] class ExecutorAllocationManager(
     cleaner.foreach(_.attachListener(executorMonitor))
 
     val scheduleTask = new Runnable() {
-      override def run(): Unit = {
-        try {
-          schedule()
-        } catch {
-          case ct: ControlThrowable =>
-            throw ct
-          case t: Throwable =>
-            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-        }
-      }
+      override def run(): Unit = Utils.tryLog(schedule())
     }
 
     if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {
@@ -1007,6 +996,8 @@ private[spark] class ExecutorAllocationManagerSource(
   registerGauge("numberMaxNeededExecutors",
     executorAllocationManager.numExecutorsTargetPerResourceProfileId.keys
       .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
+  registerGauge("numberDecommissioningExecutors",
+    executorAllocationManager.executorMonitor.decommissioningCount, 0)
 }
 
 private object ExecutorAllocationManager {

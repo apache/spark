@@ -26,10 +26,11 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -45,6 +46,12 @@ object DataSourceUtils extends PredicateHelper {
    * The key to use for storing partitionBy columns as options.
    */
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
+
+  /**
+   * The key to use for specifying partition overwrite mode when
+   * INSERT OVERWRITE a partitioned data source table.
+   */
+  val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
    * Utility methods for converting partitionBy columns to options and back.
@@ -85,7 +92,6 @@ object DataSourceUtils extends PredicateHelper {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be
@@ -109,44 +115,53 @@ object DataSourceUtils extends PredicateHelper {
       case _ => false
     }
 
-  def datetimeRebaseMode(
+  private def getRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
+      modeByConfig: String,
+      minVersion: String,
+      metadataKey: String): RebaseSpec = {
+    val policy = if (Utils.isTesting &&
+      SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else {
+      // If there is no version, we return the mode specified by the config.
+      Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+        // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+        // rebase the datetime values.
+        // Files written by `minVersion` and latter may also need the rebase if they were written
+        // with the "LEGACY" rebase mode.
+        if (version < minVersion || lookupFileMeta(metadataKey) != null) {
+          LegacyBehaviorPolicy.LEGACY
+        } else {
+          LegacyBehaviorPolicy.CORRECTED
+        }
+      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
     }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the datetime values.
-      // Files written by Spark 3.0 and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+    policy match {
+      case LegacyBehaviorPolicy.LEGACY =>
+        RebaseSpec(LegacyBehaviorPolicy.LEGACY, Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
+      case _ => RebaseSpec(policy)
+    }
   }
 
-  def int96RebaseMode(
+  def datetimeRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
-    }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 3.0 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the INT96 timestamp values.
-      // Files written by Spark 3.1 and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < "3.1.0" || lookupFileMeta(SPARK_LEGACY_INT96) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.0.0",
+      SPARK_LEGACY_DATETIME_METADATA_KEY)
+  }
+
+  def int96RebaseSpec(
+      lookupFileMeta: String => String,
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.1.0",
+      SPARK_LEGACY_INT96_METADATA_KEY)
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
@@ -157,7 +172,7 @@ object DataSourceUtils extends PredicateHelper {
         (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
-      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
@@ -167,12 +182,12 @@ object DataSourceUtils extends PredicateHelper {
       case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
       case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
-  def creteDateRebaseFuncInRead(
+  def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -184,7 +199,7 @@ object DataSourceUtils extends PredicateHelper {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteDateRebaseFuncInWrite(
+  def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -196,19 +211,20 @@ object DataSourceUtils extends PredicateHelper {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteTimestampRebaseFuncInRead(
-      rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String): Long => Long = rebaseMode match {
+  def createTimestampRebaseFuncInRead(
+      rebaseSpec: RebaseSpec,
+      format: String): Long => Long = rebaseSpec.mode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
-  def creteTimestampRebaseFuncInWrite(
+  def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
@@ -216,7 +232,9 @@ object DataSourceUtils extends PredicateHelper {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      val timeZone = SQLConf.get.sessionLocalTimeZone
+      RebaseDateTime.rebaseGregorianToJulianMicros(timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 

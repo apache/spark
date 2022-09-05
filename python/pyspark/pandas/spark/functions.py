@@ -23,7 +23,7 @@ import numpy as np
 
 from pyspark import SparkContext
 from pyspark.sql import functions as F
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _create_column_from_literal,
@@ -36,13 +36,39 @@ from pyspark.sql.types import (
 )
 
 
+def skew(col: Column) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+
+
+def kurt(col: Column) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+
+
+def mode(col: Column, dropna: bool) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+
+
 def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
     """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
+
+
+def date_part(field: Union[str, Column], source: Column) -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+    """
+    sc = SparkContext._active_spark_context
+    field = (
+        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
+    )
+    return _call_udf(sc, "date_part", field, _to_java_column(source))
 
 
 def lit(literal: Any) -> Column:

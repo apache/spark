@@ -151,11 +151,11 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row4 = create_row(11.toShort, 16)
     val row5 = create_row(11.toByte, 16)
 
-    val tl = 't.long.at(0)
-    val ti = 't.int.at(0)
-    val ts = 't.short.at(0)
-    val tb = 't.byte.at(0)
-    val p = 'p.int.at(1)
+    val tl = $"t".long.at(0)
+    val ti = $"t".int.at(0)
+    val ts = $"t".short.at(0)
+    val tb = $"t".byte.at(0)
+    val p = $"p".int.at(1)
 
     val expr = BitwiseGet(tl, p)
     checkExceptionInExpression[IllegalArgumentException](

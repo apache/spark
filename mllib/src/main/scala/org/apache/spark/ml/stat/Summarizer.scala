@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -256,7 +256,7 @@ private[ml] class SummaryBuilderImpl(
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
 
-    new Column(AggregateExpression(agg, mode = Complete, isDistinct = false))
+    new Column(agg.toAggregateExpression())
   }
 }
 
@@ -596,7 +596,7 @@ private[spark] class SummarizerBuffer(
         // merge max and min
         if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
         if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
-        if (nnz != null) { nnz(i) = nnz(i) + other.nnz(i) }
+        if (nnz != null) { nnz(i) += other.nnz(i) }
         i += 1
       }
     } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {

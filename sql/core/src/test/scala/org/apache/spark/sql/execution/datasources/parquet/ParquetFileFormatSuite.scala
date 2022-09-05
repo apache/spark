@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.{Duration, Period}
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -62,6 +65,66 @@ abstract class ParquetFileFormatSuite
       testReadFooters(false)
     }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
+  }
+
+  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        Seq(
+          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+        ).foreach { case (it, f) =>
+          val data = (1 to 10).map(i => Row(i, f(i)))
+          val schema = StructType(Array(StructField("d", IntegerType, false),
+            StructField("i", it, false)))
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val df2 = spark.read.parquet(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("support batch reads for schema") {
+    val testUDT = new TestUDT.MyDenseVectorUDT
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+        Seq(
+          Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
+          Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
+        ).foreach { case (schema, expected) =>
+          assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
+        }
+      }
+    }
+  }
+
+  test("support batch reads for data type") {
+    val testUDT = new TestUDT.MyDenseVectorUDT
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+        Seq(
+          IntegerType -> true,
+          BooleanType -> true,
+          ArrayType(TimestampType) -> enabled,
+          StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
+            StructField("f2", StringType))) -> enabled,
+          MapType(keyType = LongType, valueType = DateType) -> enabled,
+          testUDT -> enabled,
+          ArrayType(testUDT) -> enabled,
+          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> enabled,
+          MapType(keyType = testUDT, valueType = BinaryType) -> enabled
+        ).foreach { case (dt, expected) =>
+          assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
+        }
+      }
+    }
   }
 }
 

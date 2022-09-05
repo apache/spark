@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.util.truncatedString
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -54,6 +55,21 @@ case class MapInPandas(
   override val producedAttributes = AttributeSet(output)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas =
+    copy(child = newChild)
+}
+
+/**
+ * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
+ * This is used by DataFrame.mapInArrow() in PySpark
+ */
+case class PythonMapInArrow(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
     copy(child = newChild)
 }
 
@@ -131,4 +147,10 @@ case class AttachDistributedSequence(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): AttachDistributedSequence =
     copy(child = newChild)
+
+  override def simpleString(maxFields: Int): String = {
+    val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val indexColumn = s"Index: $sequenceAttr"
+    s"$nodeName$truncatedOutputString $indexColumn"
+  }
 }

@@ -18,11 +18,11 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.filter.Filter;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down V2 {@link Filter} to the data source and reduce the size of the data to be read.
+ * push down V2 {@link Predicate} to the data source and reduce the size of the data to be read.
  * Please Note that this interface is preferred over {@link SupportsPushDownFilters}, which uses
  * V1 {@link org.apache.spark.sql.sources.Filter} and is less efficient due to the
  * internal -&gt; external data conversion.
@@ -33,28 +33,31 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
 public interface SupportsPushDownV2Filters extends ScanBuilder {
 
   /**
-   * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * Pushes down predicates, and returns predicates that need to be evaluated after scanning.
    * <p>
-   * Rows should be returned from the data source if and only if all of the filters match. That is,
-   * filters must be interpreted as ANDed together.
+   * Rows should be returned from the data source if and only if all of the predicates match.
+   * That is, predicates must be interpreted as ANDed together.
    */
-  Filter[] pushFilters(Filter[] filters);
+  Predicate[] pushPredicates(Predicate[] predicates);
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
+   * Returns the predicates that are pushed to the data source via
+   * {@link #pushPredicates(Predicate[])}.
    * <p>
-   * There are 3 kinds of filters:
+   * There are 3 kinds of predicates:
    * <ol>
-   *  <li>pushable filters which don't need to be evaluated again after scanning.</li>
-   *  <li>pushable filters which still need to be evaluated after scanning, e.g. parquet row
-   *  group filter.</li>
-   *  <li>non-pushable filters.</li>
+   *  <li>pushable predicates which don't need to be evaluated again after scanning.</li>
+   *  <li>pushable predicates which still need to be evaluated after scanning, e.g. parquet row
+   *  group predicate.</li>
+   *  <li>non-pushable predicates.</li>
    * </ol>
    * <p>
-   * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
+   * Both case 1 and 2 should be considered as pushed predicates and should be returned
+   * by this method.
    * <p>
-   * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
-   * is never called, empty array should be returned for this case.
+   * It's possible that there is no predicates in the query and
+   * {@link #pushPredicates(Predicate[])} is never called,
+   * empty array should be returned for this case.
    */
-  Filter[] pushedFilters();
+  Predicate[] pushedPredicates();
 }

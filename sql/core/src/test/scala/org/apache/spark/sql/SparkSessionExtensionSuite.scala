@@ -27,7 +27,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -45,7 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -170,8 +171,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
-      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+        .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
@@ -209,7 +211,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
@@ -396,6 +398,36 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         Nil)
     }
   }
+
+  test("SPARK-37202: temp view refers a inject function") {
+    val extensions = create { extensions =>
+      extensions.injectFunction(MyExtensions.myFunction)
+    }
+    withSession(extensions) { session =>
+      session.sql("CREATE TEMP VIEW v AS SELECT myFunction(a) FROM VALUES(1), (2) t(a)")
+      session.sql("SELECT * FROM v")
+    }
+  }
+
+  test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
+    def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    }
+    val extensions = create { extensions =>
+      extensions.injectRuntimeOptimizerRule(_ => AddLimit)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules.contains(AddLimit))
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val df = session.range(2).repartition()
+        assert(!executedPlan(df).isInstanceOf[CollectLimitExec])
+        df.collect()
+        assert(executedPlan(df).isInstanceOf[CollectLimitExec])
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -431,6 +463,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
+
+  override def parseQuery(sqlText: String): LogicalPlan =
+    delegate.parseQuery(sqlText)
 }
 
 object MyExtensions {
@@ -536,7 +571,7 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
 
   override def getBinary(rowId: Int): Array[Byte] = wrapped.getBinary(rowId)
 
-  override protected def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
+  override def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
 }
 
 trait ColumnarExpression extends Expression with Serializable {
@@ -567,7 +602,7 @@ trait ColumnarExpression extends Expression with Serializable {
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarExpression]
+    other.isInstanceOf[ColumnarExpression]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -683,7 +718,7 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarProjectExec]
+    other.isInstanceOf[ColumnarProjectExec]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -700,7 +735,7 @@ class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
     failOnError: Boolean = false)
-  extends Add(left, right, failOnError) with ColumnarExpression {
+  extends Add(left, right, EvalMode.fromBoolean(failOnError)) with ColumnarExpression {
 
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 
@@ -712,37 +747,32 @@ class BrokenColumnarAdd(
       lhs = left.columnarEval(batch)
       rhs = right.columnarEval(batch)
 
-      if (lhs == null || rhs == null) {
-        ret = null
-      } else if (lhs.isInstanceOf[ColumnVector] && rhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[ColumnVector]
-        val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+      (lhs, rhs) match {
+        case (null, null) =>
+          ret = null
+        case (l: ColumnVector, r: ColumnVector) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l.getLong(i) + r.getLong(i) + 1) // BUG to show we replaced Add
-        }
-      } else if (rhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[Long]
-        val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l.getLong(i) + r.getLong(i) + 1) // BUG to show we replaced Add
+          }
+        case (l: Long, r: ColumnVector) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l + r.getLong(i) + 1) // BUG to show we replaced Add
-        }
-      } else if (lhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[ColumnVector]
-        val r = rhs.asInstanceOf[Long]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l + r.getLong(i) + 1) // BUG to show we replaced Add
+          }
+        case (l: ColumnVector, r: Long) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l.getLong(i) + r + 1) // BUG to show we replaced Add
-        }
-      } else {
-        ret = nullSafeEval(lhs, rhs)
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l.getLong(i) + r + 1) // BUG to show we replaced Add
+          }
+        case  (l, r) =>
+          ret = nullSafeEval(l, r)
       }
     } finally {
       if (lhs != null && lhs.isInstanceOf[ColumnVector]) {
@@ -871,7 +901,7 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ReplacedRowToColumnarExec]
+    other.isInstanceOf[ReplacedRowToColumnarExec]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -1014,5 +1044,12 @@ class YourExtensions extends SparkSessionExtensionsProvider {
 
   override def apply(v1: SparkSessionExtensions): Unit = {
     v1.injectFunction(getAppName)
+  }
+}
+
+object AddLimit extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    case Limit(_, _) => plan
+    case _ => Limit(Literal(1), plan)
   }
 }

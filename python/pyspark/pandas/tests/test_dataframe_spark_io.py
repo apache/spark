@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 import unittest
 import glob
 import os
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -56,31 +54,17 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 1
             ).write.parquet(tmp, mode="overwrite")
 
-            def check(columns, expected):
-                if LooseVersion("0.21.1") <= LooseVersion(pd.__version__):
-                    expected = pd.read_parquet(tmp, columns=columns)
+            def check(columns):
+                expected = pd.read_parquet(tmp, columns=columns)
                 actual = ps.read_parquet(tmp, columns=columns)
                 self.assertPandasEqual(expected, actual.to_pandas())
 
-            check(None, data)
-            check(["i32", "i64"], data[["i32", "i64"]])
-            check(["i64", "i32"], data[["i64", "i32"]])
-
-            if LooseVersion(pa.__version__) < LooseVersion("1.0.0"):
-                # TODO: `pd.read_parquet()` changed the behavior due to PyArrow 1.0.0.
-                #       We might want to adjust the behavior. Let's see how pandas handles it.
-                check(("i32", "i64"), data[["i32", "i64"]])
-                check(["a", "b", "i32", "i64"], data[["i32", "i64"]])
-                check([], pd.DataFrame([]))
-                check(["a"], pd.DataFrame([]))
-                check("i32", pd.DataFrame([]))
-                check("float", data[["f"]])
+            check(None)
+            check(["i32", "i64"])
+            check(["i64", "i32"])
 
             # check with pyspark patch.
-            if LooseVersion("0.21.1") <= LooseVersion(pd.__version__):
-                expected = pd.read_parquet(tmp)
-            else:
-                expected = data
+            expected = pd.read_parquet(tmp)
             actual = ps.read_parquet(tmp)
             self.assertPandasEqual(expected, actual.to_pandas())
 
@@ -139,6 +123,28 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
             expected.to_parquet(tmp, mode="overwrite", partition_cols=["i32", "bhello"])
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Set `compression` with string
+            expected.to_parquet(tmp, mode="overwrite", partition_cols="i32", compression="none")
+            actual = ps.read_parquet(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_parquet(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
             actual = ps.read_parquet(tmp)
             self.assertFalse((actual.columns == self.test_column_order).all())
             actual = actual[self.test_column_order]
@@ -377,10 +383,6 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 1
             ).write.orc(path, mode="overwrite")
 
-            # `spark.write.orc` create a directory contains distributed orc files.
-            # But pandas only can read from file, not directory. Therefore, we need orc file path.
-            orc_file_path = glob.glob(os.path.join(path, "*.orc"))[0]
-
             expected = data.reset_index()[data.columns]
             actual = ps.read_orc(path)
             self.assertPandasEqual(expected, actual.to_pandas())
@@ -435,6 +437,20 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
 
             # Write out partitioned by two columns
             expected.to_orc(tmp, mode="overwrite", partition_cols=["i32", "bhello"])
+            # Reset column order, as once the data is written out, Spark rearranges partition
+            # columns to appear first.
+            actual = ps.read_orc(tmp)
+            self.assertFalse((actual.columns == self.test_column_order).all())
+            actual = actual[self.test_column_order]
+            self.assert_eq(
+                actual.sort_values(by="f").to_spark().toPandas(),
+                expected.sort_values(by="f").to_spark().toPandas(),
+            )
+
+            # Test `options` parameter
+            expected.to_orc(
+                tmp, mode="overwrite", partition_cols="i32", options={"compression": "none"}
+            )
             # Reset column order, as once the data is written out, Spark rearranges partition
             # columns to appear first.
             actual = ps.read_orc(tmp)

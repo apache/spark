@@ -1,6 +1,6 @@
 -- create a table with properties
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-TBLPROPERTIES('p1'='v1', 'p2'='v2');
+TBLPROPERTIES('p1'='v1', 'p2'='v2', password = 'password');
 
 SHOW TBLPROPERTIES tbl;
 SHOW TBLPROPERTIES tbl("p1");

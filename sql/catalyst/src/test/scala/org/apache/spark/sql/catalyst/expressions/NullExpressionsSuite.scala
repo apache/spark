@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -112,25 +113,31 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal.create(BigDecimal.valueOf(10.2), DecimalType(20, 2))
 
-    assert(analyze(new Nvl(decimalLit, stringLit)).dataType == StringType)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      assert(analyze(new Nvl(decimalLit, stringLit)).dataType == StringType)
+    }
     assert(analyze(new Nvl(doubleLit, decimalLit)).dataType == DoubleType)
     assert(analyze(new Nvl(decimalLit, doubleLit)).dataType == DoubleType)
     assert(analyze(new Nvl(decimalLit, floatLit)).dataType == DoubleType)
     assert(analyze(new Nvl(floatLit, decimalLit)).dataType == DoubleType)
 
-    assert(analyze(new Nvl(timestampLit, stringLit)).dataType == StringType)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      assert(analyze(new Nvl(timestampLit, stringLit)).dataType == StringType)
+      assert(analyze(new Nvl(intLit, stringLit)).dataType == StringType)
+      assert(analyze(new Nvl(stringLit, doubleLit)).dataType == StringType)
+      assert(analyze(new Nvl(doubleLit, stringLit)).dataType == StringType)
+    }
     assert(analyze(new Nvl(intLit, doubleLit)).dataType == DoubleType)
-    assert(analyze(new Nvl(intLit, stringLit)).dataType == StringType)
-    assert(analyze(new Nvl(stringLit, doubleLit)).dataType == StringType)
-    assert(analyze(new Nvl(doubleLit, stringLit)).dataType == StringType)
 
     assert(analyze(new Nvl(nullLit, intLit)).dataType == IntegerType)
     assert(analyze(new Nvl(doubleLit, nullLit)).dataType == DoubleType)
     assert(analyze(new Nvl(nullLit, stringLit)).dataType == StringType)
 
-    assert(analyze(new Nvl(floatLit, stringLit)).dataType == StringType)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      assert(analyze(new Nvl(floatLit, stringLit)).dataType == StringType)
+      assert(analyze(new Nvl(floatNullLit, intLit)).dataType == FloatType)
+    }
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
-    assert(analyze(new Nvl(floatNullLit, intLit)).dataType == FloatType)
   }
 
   test("AtLeastNNonNulls") {

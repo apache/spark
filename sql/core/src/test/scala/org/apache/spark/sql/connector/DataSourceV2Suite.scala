@@ -18,25 +18,26 @@
 package org.apache.spark.sql.connector
 
 import java.io.File
-import java.util
 import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter, GreaterThan => V2GreaterThan}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -80,8 +81,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 5), (6 until 10).map(i => Row(i, -i)))
+        checkAnswer(df.select($"j"), (0 until 10).map(i => Row(-i)))
+        checkAnswer(df.filter($"i" > 5), (6 until 10).map(i => Row(i, -i)))
       }
     }
   }
@@ -92,7 +93,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
 
-        val q1 = df.select('j)
+        val q1 = df.select($"j")
         checkAnswer(q1, (0 until 10).map(i => Row(-i)))
         if (cls == classOf[AdvancedDataSourceV2]) {
           val batch = getBatch(q1)
@@ -104,7 +105,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
 
-        val q2 = df.filter('i > 3)
+        val q2 = df.filter($"i" > 3)
         checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
         if (cls == classOf[AdvancedDataSourceV2]) {
           val batch = getBatch(q2)
@@ -116,7 +117,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
         }
 
-        val q3 = df.select('i).filter('i > 6)
+        val q3 = df.select($"i").filter($"i" > 6)
         checkAnswer(q3, (7 until 10).map(i => Row(i)))
         if (cls == classOf[AdvancedDataSourceV2]) {
           val batch = getBatch(q3)
@@ -128,16 +129,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           assert(batch.requiredSchema.fieldNames === Seq("i"))
         }
 
-        val q4 = df.select('j).filter('j < -10)
+        val q4 = df.select($"j").filter($"j" < -10)
         checkAnswer(q4, Nil)
         if (cls == classOf[AdvancedDataSourceV2]) {
           val batch = getBatch(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // $"j" < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatch(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // $"j" < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
@@ -152,53 +153,53 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
 
-        val q1 = df.select('j)
+        val q1 = df.select($"j")
         checkAnswer(q1, (0 until 10).map(i => Row(-i)))
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q1)
-          assert(batch.filters.isEmpty)
+          assert(batch.predicates.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatchWithV2Filter(q1)
-          assert(batch.filters.isEmpty)
+          assert(batch.predicates.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
 
-        val q2 = df.filter('i > 3)
+        val q2 = df.filter($"i" > 3)
         checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q2)
-          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
         } else {
           val batch = getJavaBatchWithV2Filter(q2)
-          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
         }
 
-        val q3 = df.select('i).filter('i > 6)
+        val q3 = df.select($"i").filter($"i" > 6)
         checkAnswer(q3, (7 until 10).map(i => Row(i)))
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q3)
-          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i"))
         } else {
           val batch = getJavaBatchWithV2Filter(q3)
-          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i"))
         }
 
-        val q4 = df.select('j).filter('j < -10)
+        val q4 = df.select($"j").filter($"j" < -10)
         checkAnswer(q4, Nil)
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(batch.filters.isEmpty)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatchWithV2Filter(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(batch.filters.isEmpty)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
       }
@@ -210,8 +211,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 90).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 90).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 50), (51 until 90).map(i => Row(i, -i)))
+        checkAnswer(df.select($"j"), (0 until 90).map(i => Row(-i)))
+        checkAnswer(df.filter($"i" > 50), (51 until 90).map(i => Row(i, -i)))
       }
     }
   }
@@ -235,45 +236,131 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     "supports external metadata") {
     withTempDir { dir =>
       val cls = classOf[SupportsExternalMetadataWritableDataSource].getName
-      spark.range(10).select('id as 'i, -'id as 'j).write.format(cls)
-          .option("path", dir.getCanonicalPath).mode("append").save()
+      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+        .write.format(cls).option("path", dir.getCanonicalPath).mode("append").save()
       val schema = new StructType().add("i", "long").add("j", "long")
         checkAnswer(
           spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
-          spark.range(10).select('id, -'id))
+          spark.range(10).select($"id", -$"id"))
     }
   }
 
   test("partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
-    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
-        val groupByColA = df.groupBy('i).agg(sum('j))
-        checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-        assert(collectFirst(groupByColA.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+          val groupByColI = df.groupBy($"i").agg(sum($"j"))
+          checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+          assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-        val groupByColAB = df.groupBy('i, 'j).agg(count("*"))
-        checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-        assert(collectFirst(groupByColAB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
+          val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
+          checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+          assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
 
-        val groupByColB = df.groupBy('j).agg(sum('i))
-        checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-        assert(collectFirst(groupByColB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
+          val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+          checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+          assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
 
-        val groupByAPlusB = df.groupBy('i + 'j).agg(count("*"))
-        checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-        assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
+          val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+          checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+          assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+        }
+      }
+    }
+  }
+
+  test("ordering and partitioning reporting") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(
+        classOf[OrderAndPartitionAwareDataSource],
+        classOf[JavaOrderAndPartitionAwareDataSource]
+      ).foreach { cls =>
+        withClue(cls.getName) {
+          // we test report ordering (together with report partitioning) with these transformations:
+          // - groupBy("i").flatMapGroups:
+          //   hash-partitions by "i" and sorts each partition by "i"
+          //   requires partitioning and sort by "i"
+          // - aggregation function over window partitioned by "i" and ordered by "j":
+          //   hash-partitions by "i" and sorts each partition by "j"
+          //   requires partitioning by "i" and sort by "i" and "j"
+          Seq(
+            // with no partitioning and no order, we expect shuffling AND sorting
+            (None, None, (true, true), (true, true)),
+            // partitioned by i and no order, we expect NO shuffling BUT sorting
+            (Some("i"), None, (false, true), (false, true)),
+            // partitioned by i and in-partition sorted by i,
+            // we expect NO shuffling AND sorting for groupBy but sorting for window function
+            (Some("i"), Some("i"), (false, false), (false, true)),
+            // partitioned by i and in-partition sorted by j, we expect NO shuffling BUT sorting
+            (Some("i"), Some("j"), (false, true), (false, true)),
+            // partitioned by i and in-partition sorted by i,j, we expect NO shuffling NOR sorting
+            (Some("i"), Some("i,j"), (false, false), (false, false)),
+            // partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
+            (Some("j"), Some("i"), (true, true), (true, true)),
+            // partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
+            (Some("j"), Some("i,j"), (true, true), (true, true))
+          ).foreach { testParams =>
+            val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
+
+            withClue(f"${partitionKeys.orNull} ${orderKeys.orNull}") {
+              val df = spark.read
+                .option("partitionKeys", partitionKeys.orNull)
+                .option("orderKeys", orderKeys.orNull)
+                .format(cls.getName)
+                .load()
+              checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
+
+              // groupBy(i).flatMapGroups
+              {
+                val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+                  .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
+                    Iterator.single((i, it.length)) }
+                checkAnswer(
+                  groupBy.toDF(),
+                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+                )
+
+                val (shuffleExpected, sortExpected) = groupByExpects
+                assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
+
+              // aggregation function over window partitioned by i and ordered by j
+              {
+                val windowPartByColIOrderByColJ = df.withColumn("no",
+                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                )
+                checkAnswer(windowPartByColIOrderByColJ, Seq(
+                  Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
+                ))
+
+                val (shuffleExpected, sortExpected) = windowFuncExpects
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -307,62 +394,46 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+        spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName)
           .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(10).select('id, -'id))
+          spark.range(10).select($"id", -$"id"))
 
         // default save mode is ErrorIfExists
         intercept[AnalysisException] {
-          spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+          spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).save()
         }
-        spark.range(10).select('id as 'i, -'id as 'j).write.mode("append").format(cls.getName)
+        spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.mode("append").format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(10).union(spark.range(10)).select('id, -'id))
+          spark.range(10).union(spark.range(10)).select($"id", -Symbol("id")))
 
-        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
+        spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName)
           .option("path", path).mode("overwrite").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(5).select('id, -'id))
+          spark.range(5).select($"id", -$"id"))
 
         val e = intercept[AnalysisException] {
-          spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
+          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).mode("ignore").save()
         }
         assert(e.message.contains("please use Append or Overwrite modes instead"))
 
         val e2 = intercept[AnalysisException] {
-          spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
+          spark.range(5).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).mode("error").save()
         }
         assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
-
-        // test transaction
-        val failingUdf = org.apache.spark.sql.functions.udf {
-          var count = 0
-          (id: Long) => {
-            if (count > 5) {
-              throw new RuntimeException("testing error")
-            }
-            count += 1
-            id
-          }
-        }
-        // this input data will fail to read middle way.
-        val input = spark.range(15).select(failingUdf('id).as('i)).select('i, -'i as 'j)
-        val e3 = intercept[SparkException] {
-          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        }
-        assert(e3.getMessage.contains("Writing job aborted"))
-        assert(e3.getErrorClass == "WRITING_JOB_ABORTED")
-        assert(e3.getSqlState == "40000")
-        // make sure we don't have partial data.
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
     }
   }
@@ -374,11 +445,13 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
         val numPartition = 6
-        spark.range(0, 10, 1, numPartition).select('id as 'i, -'id as 'j).write.format(cls.getName)
+        spark.range(0, 10, 1, numPartition)
+          .select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName)
           .mode("append").option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(10).select('id, -'id))
+          spark.range(10).select($"id", -$"id"))
 
         assert(SimpleCounter.getCounter == numPartition,
           "method onDataWriterCommit should be called as many as the number of partitions")
@@ -395,7 +468,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("SPARK-23301: column pruning with arbitrary expressions") {
     val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
 
-    val q1 = df.select('i + 1)
+    val q1 = df.select($"i" + 1)
     checkAnswer(q1, (1 until 11).map(i => Row(i)))
     val batch1 = getBatch(q1)
     assert(batch1.requiredSchema.fieldNames === Seq("i"))
@@ -406,14 +479,14 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(batch2.requiredSchema.isEmpty)
 
     // 'j === 1 can't be pushed down, but we should still be able do column pruning
-    val q3 = df.filter('j === -1).select('j * 2)
+    val q3 = df.filter($"j" === -1).select($"j" * 2)
     checkAnswer(q3, Row(-2))
     val batch3 = getBatch(q3)
     assert(batch3.filters.isEmpty)
     assert(batch3.requiredSchema.fieldNames === Seq("j"))
 
     // column pruning should work with other operators.
-    val q4 = df.sort('i).limit(1).select('i + 1)
+    val q4 = df.sort($"i").limit(1).select($"i" + 1)
     checkAnswer(q4, Row(1))
     val batch4 = getBatch(q4)
     assert(batch4.requiredSchema.fieldNames === Seq("i"))
@@ -435,7 +508,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
     val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
     checkCanonicalizedOutput(df, 2, 2)
-    checkCanonicalizedOutput(df.select('i), 2, 1)
+    checkCanonicalizedOutput(df.select($"i"), 2, 1)
   }
 
   test("SPARK-25425: extra options should override sessions options during reading") {
@@ -474,7 +547,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     withTempView("t1") {
       val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
       Seq(2, 3).toDF("a").createTempView("t1")
-      val df = t2.where("i < (select max(a) from t1)").select('i)
+      val df = t2.where("i < (select max(a) from t1)").select($"i")
       val subqueries = stripAQEPlan(df.queryExecution.executedPlan).collect {
         case p => p.subqueries
       }.flatten
@@ -493,8 +566,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
-        val q1 = df.select('i).filter('i > 6)
-        val q2 = df.select('i).filter('i > 5)
+        val q1 = df.select($"i").filter($"i" > 6)
+        val q2 = df.select($"i").filter($"i" > 5)
         val scan1 = getScanExec(q1)
         val scan2 = getScanExec(q2)
         assert(!scan1.equals(scan2))
@@ -507,7 +580,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         // before SPARK-33267 below query just threw NPE
-        df.select('i).where("i in (1, null)").collect()
+        df.select($"i").where("i in (1, null)").collect()
       }
     }
   }
@@ -552,7 +625,7 @@ abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def name(): String = this.getClass.toString
 
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(BATCH_READ)
+  override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(BATCH_READ)
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder
@@ -575,7 +648,7 @@ trait TestingV2Source extends TableProvider {
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     getTable(new CaseInsensitiveStringMap(properties))
   }
 
@@ -696,7 +769,7 @@ class AdvancedScanBuilderWithV2Filter extends ScanBuilder
   with Scan with SupportsPushDownV2Filters with SupportsPushDownRequiredColumns {
 
   var requiredSchema = TestingV2Source.schema
-  var filters = Array.empty[V2Filter]
+  var predicates = Array.empty[Predicate]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     this.requiredSchema = requiredSchema
@@ -704,29 +777,32 @@ class AdvancedScanBuilderWithV2Filter extends ScanBuilder
 
   override def readSchema(): StructType = requiredSchema
 
-  override def pushFilters(filters: Array[V2Filter]): Array[V2Filter] = {
-    val (supported, unsupported) = filters.partition {
-      case _: V2GreaterThan => true
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (supported, unsupported) = predicates.partition {
+      case p: Predicate if p.name() == ">" => true
       case _ => false
     }
-    this.filters = supported
+    this.predicates = supported
     unsupported
   }
 
-  override def pushedFilters(): Array[V2Filter] = filters
+  override def pushedPredicates(): Array[Predicate] = predicates
 
   override def build(): Scan = this
 
-  override def toBatch: Batch = new AdvancedBatchWithV2Filter(filters, requiredSchema)
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(predicates, requiredSchema)
 }
 
 class AdvancedBatchWithV2Filter(
-    val filters: Array[V2Filter],
+    val predicates: Array[Predicate],
     val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
-    val lowerBound = filters.collectFirst {
-      case gt: V2GreaterThan => gt.value
+    val lowerBound = predicates.collectFirst {
+      case p: Predicate if p.name().equals(">") =>
+        val value = p.children()(1)
+        assert(value.isInstanceOf[Literal[_]])
+        value.asInstanceOf[Literal[_]]
     }
 
     val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
@@ -792,7 +868,7 @@ class SchemaRequiredDataSource extends TableProvider {
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
@@ -872,10 +948,10 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
 class PartitionAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
-    with SupportsReportPartitioning{
+    with SupportsReportPartitioning {
 
     override def planInputPartitions(): Array[InputPartition] = {
-      // Note that we don't have same value of column `a` across partitions.
+      // Note that we don't have same value of column `i` across partitions.
       Array(
         SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
         SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2)))
@@ -885,7 +961,8 @@ class PartitionAwareDataSource extends TestingV2Source {
       SpecificReaderFactory
     }
 
-    override def outputPartitioning(): Partitioning = new MyPartitioning
+    override def outputPartitioning(): Partitioning =
+      new KeyGroupedPartitioning(Array(FieldReference("i")), 2)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -893,18 +970,75 @@ class PartitionAwareDataSource extends TestingV2Source {
       new MyScanBuilder()
     }
   }
+}
 
-  class MyPartitioning extends Partitioning {
-    override def numPartitions(): Int = 2
+class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-    override def satisfy(distribution: Distribution): Boolean = distribution match {
-      case c: ClusteredDistribution => c.clusteredColumns.contains("i")
-      case _ => false
+  class MyScanBuilder(
+      val partitionKeys: Option[Seq[String]],
+      val orderKeys: Seq[String])
+    extends SimpleScanBuilder
+    with SupportsReportPartitioning with SupportsReportOrdering {
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // data are partitioned by column `i` or `j`, so we can report any partitioning
+      // column `i` is not ordered globally, but within partitions, together with`j`
+      // this allows us to report ordering by [i] and [i, j]
+      Array(
+        SpecificInputPartition(Array(1, 1, 3), Array(4, 5, 5)),
+        SpecificInputPartition(Array(2, 4, 4), Array(6, 1, 2)))
     }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputPartitioning(): Partitioning = {
+      partitionKeys.map(keys =>
+        new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, 2)
+      ).getOrElse(
+        new UnknownPartitioning(2)
+      )
+    }
+
+    override def outputOrdering(): Array[SortOrder] = orderKeys.map(
+      new MySortOrder(_)
+    ).toArray
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder(
+        Option(options.get("partitionKeys")).map(_.split(",")),
+        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+      )
+    }
+  }
+
+  class MySortOrder(columnName: String) extends SortOrder {
+    override def expression(): Expression = new MyIdentityTransform(
+      new MyNamedReference(columnName)
+    )
+    override def direction(): SortDirection = SortDirection.ASCENDING
+    override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+  }
+
+  class MyNamedReference(parts: String*) extends NamedReference {
+    override def fieldNames(): Array[String] = parts.toArray
+  }
+
+  class MyIdentityTransform(namedReference: NamedReference) extends Transform {
+    override def name(): String = "identity"
+    override def references(): Array[NamedReference] = Array.empty
+    override def arguments(): Array[Expression] = Seq(namedReference).toArray
   }
 }
 
-case class SpecificInputPartition(i: Array[Int], j: Array[Int]) extends InputPartition
+case class SpecificInputPartition(
+    i: Array[Int],
+    j: Array[Int]) extends InputPartition with HasPartitionKey {
+  override def partitionKey(): InternalRow = InternalRow.fromSeq(Seq(i(0)))
+}
 
 object SpecificReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {

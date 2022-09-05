@@ -27,6 +27,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -43,7 +44,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * @since 2.0.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
+class StreamingQueryManager private[sql] (
+    sparkSession: SparkSession,
+    sqlConf: SQLConf) extends Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
@@ -70,11 +73,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
-      Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
-        sparkSession.sparkContext.conf).foreach(listener => {
-        addListener(listener)
-        logInfo(s"Registered listener ${listener.getClass.getName}")
-      })
+      SQLConf.withExistingConf(sqlConf) {
+        Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+          sparkSession.sparkContext.conf).foreach { listener =>
+          addListener(listener)
+          logInfo(s"Registered listener ${listener.getClass.getName}")
+        }
+      }
     }
     sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
       addListener(listener)
@@ -238,7 +243,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
       triggerClock: Clock,
-      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQueryWrapper = {
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+      catalogTable: Option[CatalogTable] = None): StreamingQueryWrapper = {
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
@@ -252,7 +258,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       df.sparkSession.sessionState.newHadoopConf(),
       trigger.isInstanceOf[ContinuousTrigger],
       analyzedPlan,
-      catalogAndIdent)
+      catalogAndIdent,
+      catalogTable)
 
     val analyzedStreamWritePlan =
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
@@ -307,7 +314,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock(),
-      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+      catalogTable: Option[CatalogTable] = None): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
@@ -319,7 +327,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation,
       trigger,
       triggerClock,
-      catalogAndIdent)
+      catalogAndIdent,
+      catalogTable)
     // scalastyle:on argcount
 
     // The following code block checks if a stream with the same name or id is running. Then it
@@ -339,7 +348,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         .orElse(activeQueries.get(query.id)) // shouldn't be needed but paranoia ...
 
       val shouldStopActiveRun =
-        sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
+        sparkSession.conf.get(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART)
       if (activeOption.isDefined) {
         if (shouldStopActiveRun) {
           val oldQuery = activeOption.get

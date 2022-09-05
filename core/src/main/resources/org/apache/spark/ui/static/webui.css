@@ -88,12 +88,14 @@ a:not([href]):hover {
   height: 50px;
   padding: 10px 15px 10px;
   line-height: 2;
+  white-space: nowrap;
 }
 
 .navbar .navbar-nav .nav-item.active .nav-link {
   background-color: #e5e5e5;
   box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.125);
   color: #555555;
+  white-space: nowrap;
 }
 
 table.sortable thead {
@@ -333,8 +335,8 @@ a.expandbutton {
   width: 190px;
 }
 
-.shuffle-read-blocked-time-checkbox-div {
-  width: 200px;
+.shuffle-read-fetch-wait-time-checkbox-div {
+  width: 215px;
 }
 
 .shuffle-remote-reads-checkbox-div {
@@ -380,6 +382,16 @@ a.expandbutton {
 }
 
 #summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#speculation-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#speculation-metrics-table th:first-child {
   border-left: 1px solid #dddddd;
 }
 

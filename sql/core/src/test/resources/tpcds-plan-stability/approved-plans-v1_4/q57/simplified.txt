@@ -31,21 +31,21 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                             Filter [i_item_sk,i_category,i_brand]
                                                               ColumnarToRow
                                                                 InputAdapter
-                                                                  Scan parquet default.item [i_item_sk,i_brand,i_category]
+                                                                  Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_category]
                                                             InputAdapter
                                                               BroadcastExchange #3
                                                                 WholeStageCodegen (1)
                                                                   Filter [cs_item_sk,cs_call_center_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.catalog_sales [cs_call_center_sk,cs_item_sk,cs_sales_price,cs_sold_date_sk]
+                                                                        Scan parquet spark_catalog.default.catalog_sales [cs_call_center_sk,cs_item_sk,cs_sales_price,cs_sold_date_sk]
                                                                           SubqueryBroadcast [d_date_sk] #1
                                                                             BroadcastExchange #4
                                                                               WholeStageCodegen (1)
                                                                                 Filter [d_year,d_moy,d_date_sk]
                                                                                   ColumnarToRow
                                                                                     InputAdapter
-                                                                                      Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                                                      Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                                         InputAdapter
                                                           ReusedExchange [d_date_sk,d_year,d_moy] #4
                                                     InputAdapter
@@ -54,7 +54,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                           Filter [cc_call_center_sk,cc_name]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.call_center [cc_call_center_sk,cc_name]
+                                                                Scan parquet spark_catalog.default.call_center [cc_call_center_sk,cc_name]
             InputAdapter
               BroadcastExchange #6
                 WholeStageCodegen (14)

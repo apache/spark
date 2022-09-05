@@ -53,19 +53,52 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     throw new UnsupportedOperationException();
   }
 
+  private void updateCurrentByte() {
+    try {
+      currentByte = (byte) in.read();
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to read a byte", e);
+    }
+  }
+
   @Override
   public final void readBooleans(int total, WritableColumnVector c, int rowId) {
-    // TODO: properly vectorize this
-    for (int i = 0; i < total; i++) {
-      c.putBoolean(rowId + i, readBoolean());
+    int i = 0;
+    if (bitOffset > 0) {
+      i = Math.min(8 - bitOffset, total);
+      c.putBooleans(rowId, i, currentByte, bitOffset);
+      bitOffset = (bitOffset + i) & 7;
+    }
+    for (; i + 7 < total; i += 8) {
+      updateCurrentByte();
+      c.putBooleans(rowId + i, currentByte);
+    }
+    if (i < total) {
+      updateCurrentByte();
+      bitOffset = total - i;
+      c.putBooleans(rowId + i, bitOffset, currentByte, 0);
     }
   }
 
   @Override
   public final void skipBooleans(int total) {
-    // TODO: properly vectorize this
-    for (int i = 0; i < total; i++) {
-      readBoolean();
+    int i = 0;
+    if (bitOffset > 0) {
+      i = Math.min(8 - bitOffset, total);
+      bitOffset = (bitOffset + i) & 7;
+    }
+    if (i + 7 < total) {
+      int numBytesToSkip = (total - i) / 8;
+      try {
+        in.skipFully(numBytesToSkip);
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Failed to skip bytes", e);
+      }
+      i += numBytesToSkip * 8;
+    }
+    if (i < total) {
+      updateCurrentByte();
+      bitOffset = total - i;
     }
   }
 
@@ -173,7 +206,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   // if rebase is not needed.
   @Override
   public final void readLongsWithRebase(
-      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone) {
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
     boolean rebase = false;
@@ -185,7 +222,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
         throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
       } else {
         for (int i = 0; i < total; i += 1) {
-          c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(buffer.getLong()));
+          c.putLong(
+            rowId + i,
+            RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, buffer.getLong()));
         }
       }
     } else {
@@ -276,13 +315,8 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final boolean readBoolean() {
-    // TODO: vectorize decoding and keep boolean[] instead of currentByte
     if (bitOffset == 0) {
-      try {
-        currentByte = (byte) in.read();
-      } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read a byte", e);
-      }
+      updateCurrentByte();
     }
 
     boolean v = (currentByte & (1 << bitOffset)) != 0;

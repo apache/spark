@@ -21,6 +21,8 @@ import java.sql.Timestamp
 
 import scala.math.Ordering
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -328,7 +330,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
     GenerateUnsafeProjection.generate(
       ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"), IntegerType) :: Nil)
+        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"),
+        IntegerType,
+        lenient = false) :: Nil)
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
@@ -520,7 +524,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
     val appender = new LogAppender("huge method limit")
-    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName)) {
+    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        Some(Level.INFO)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
@@ -528,7 +533,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(actual.getInt(0) == x)
     }
     assert(appender.loggingEvents
-      .exists(_.getRenderedMessage().contains("Generated method too long")))
+      .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
   }
 
   test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
@@ -563,7 +568,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }
 
-  // TODO (SPARK-35579): Fix this bug in janino and upgrade janino in Spark.
   test("SPARK-35578: final local variable bug in janino") {
     val code =
       """

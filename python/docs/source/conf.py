@@ -22,6 +22,15 @@ import errno
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('.'))
 
+# generate user_guide/pandas_on_spark/supported_pandas_api.rst
+from pyspark.pandas.supported_api_gen import generate_supported_api
+
+output_rst_file_path = (
+    "%s/user_guide/pandas_on_spark/supported_pandas_api.rst"
+    % os.path.dirname(os.path.abspath(__file__))
+)
+generate_supported_api(output_rst_file_path)
+
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
 shutil.rmtree(
@@ -398,7 +407,7 @@ epub_exclude_files = ['search.html']
 #epub_use_index = True
 def setup(app):
     # The app.add_javascript() is deprecated.
-    getattr(app, "add_js_file", getattr(app, "add_javascript"))('copybutton.js')
+    getattr(app, "add_js_file", getattr(app, "add_javascript", None))('copybutton.js')
 
 # Skip sample endpoint link (not expected to resolve)
 linkcheck_ignore = [r'https://kinesis.us-east-1.amazonaws.com']

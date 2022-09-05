@@ -31,8 +31,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
+import org.apache.spark.sql.connector.distributions.UnspecifiedDistribution
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -62,7 +64,8 @@ class ContinuousExecution(
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _, _, _) =>
+      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
+        catalog, identifier, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
         if (!table.supports(TableCapability.CONTINUOUS_READ)) {
           throw QueryExecutionErrors.continuousProcessingUnsupportedByDataSourceError(sourceName)
@@ -75,7 +78,7 @@ class ContinuousExecution(
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan, stream)
+          StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
         })
     }
 
@@ -85,9 +88,34 @@ class ContinuousExecution(
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-    val (streamingWrite, customMetrics) = createStreamingWrite(
-      plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+    val write = createWrite(plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+
+    if (hasDistributionRequirements(write) || hasOrderingRequirements(write)) {
+      throw QueryCompilationErrors.writeDistributionAndOrderingNotSupportedInContinuousExecution()
+    }
+
+    val streamingWrite = write.toStreaming
+    val customMetrics = write.supportedCustomMetrics.toSeq
     WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
+  }
+
+  private def hasDistributionRequirements(write: Write): Boolean = write match {
+    case w: RequiresDistributionAndOrdering if w.requiredNumPartitions == 0 =>
+      w.requiredDistribution match {
+        case _: UnspecifiedDistribution =>
+          false
+        case _ =>
+          true
+      }
+    case _ =>
+      false
+  }
+
+  private def hasOrderingRequirements(write: Write): Boolean = write match {
+    case w: RequiresDistributionAndOrdering if w.requiredOrdering.nonEmpty =>
+      true
+    case _ =>
+      false
   }
 
   private val triggerExecutor = trigger match {
@@ -130,7 +158,7 @@ class ContinuousExecution(
    *    Start a new query log
    *  DONE
    */
-  private def getStartOffsets(sparkSessionToRunBatches: SparkSession): OffsetSeq = {
+  private def getStartOffsets(): OffsetSeq = {
     // Note that this will need a slight modification for exactly once. If ending offsets were
     // reported but not committed for any epochs, we must replay exactly to those offsets.
     // For at least once, we can just ignore those reports and risk duplicates.
@@ -161,7 +189,11 @@ class ContinuousExecution(
    * @param sparkSessionForQuery Isolated [[SparkSession]] to run the continuous query with.
    */
   private def runContinuous(sparkSessionForQuery: SparkSession): Unit = {
-    val offsets = getStartOffsets(sparkSessionForQuery)
+    val offsets = getStartOffsets()
+
+    if (currentBatchId > 0) {
+      AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(Some(offsets), sources)
+    }
 
     val withNewSources: LogicalPlan = logicalPlan transform {
       case relation: StreamingDataSourceV2Relation =>
@@ -237,7 +269,6 @@ class ContinuousExecution(
         } catch {
           case _: InterruptedException =>
             // Cleanly stop the query.
-            return
         }
       }
     }, s"epoch update thread for $prettyIdString")

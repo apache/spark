@@ -22,26 +22,24 @@ import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
 
 /**
  * A reasonable complete test suite (i.e. behaviors) for a [[ExternalCatalog]].
  *
  * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
-abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEach {
+abstract class ExternalCatalogSuite extends SparkFunSuite {
   protected val utils: CatalogTestUtils
   import utils._
 
@@ -279,8 +277,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   }
 
   test("get tables by name") {
-    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", "tbl2"))
-      .map(_.identifier.table) == Seq("tbl1", "tbl2"))
+    val catalog = newBasicCatalog()
+    val tables = catalog.getTablesByName("db2", Seq("tbl1", "tbl2"))
+    assert(tables.map(_.identifier.table).sorted == Seq("tbl1", "tbl2"))
+
+    catalog.renameTable("db2", "tbl1", "tblone")
+    val tables2 = catalog.getTablesByName("db2", Seq("tbl2", "tblone"))
+    assert(tables2.map(_.identifier.table).sorted == Seq("tbl2", "tblone"))
   }
 
   test("get tables by name when some tables do not exists") {
@@ -481,6 +484,29 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listPartitions("db2", "tbl1", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
   }
 
+  test("SPARK-38120: list partitions with special chars and mixed case column name") {
+    val catalog = newBasicCatalog()
+    val table = CatalogTable(
+      identifier = TableIdentifier("tbl", Some("db1")),
+      tableType = CatalogTableType.EXTERNAL,
+      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("partCol1", "int")
+        .add("partCol2", "string"),
+      provider = Some(defaultProvider),
+      partitionColumnNames = Seq("partCol1", "partCol2"))
+    catalog.createTable(table, ignoreIfExists = false)
+
+    val part1 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i.j"), storageFormat)
+    catalog.createPartitions("db1", "tbl", Seq(part1, part2), ignoreIfExists = false)
+
+    assert(catalog.listPartitions("db1", "tbl", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db1", "tbl", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
+  }
+
   test("list partitions by filter") {
     val tz = TimeZone.getDefault.getID
     val catalog = newBasicCatalog()
@@ -498,18 +524,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val tbl2 = catalog.getTable("db2", "tbl2")
 
     checkAnswer(tbl2, Seq.empty, Set(part1, part2))
-    checkAnswer(tbl2, Seq('a.int <= 1), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 2), Set.empty)
-    checkAnswer(tbl2, Seq(In('a.int * 10, Seq(30))), Set(part2))
-    checkAnswer(tbl2, Seq(Not(In('a.int, Seq(4)))), Set(part1, part2))
-    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 1 && 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "x"), Set.empty)
-    checkAnswer(tbl2, Seq('a.int === 1 || 'b.string === "x"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int <= 1), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 2), Set.empty)
+    checkAnswer(tbl2, Seq(In($"a".int * 10, Seq(30))), Set(part2))
+    checkAnswer(tbl2, Seq(Not(In($"a".int, Seq(4)))), Set(part1, part2))
+    checkAnswer(tbl2, Seq($"a".int === 1, $"b".string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 1 && $"b".string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 1, $"b".string === "x"), Set.empty)
+    checkAnswer(tbl2, Seq($"a".int === 1 || $"b".string === "x"), Set(part1))
 
     intercept[AnalysisException] {
       try {
-        checkAnswer(tbl2, Seq('a.int > 0 && 'col1.int > 0), Set.empty)
+        checkAnswer(tbl2, Seq($"a".int > 0 && $"col1".int > 0), Set.empty)
       } catch {
         // HiveExternalCatalog may be the first one to notice and throw an exception, which will
         // then be caught and converted to a RuntimeException with a descriptive message.
@@ -745,8 +771,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("get function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1") ==
-      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
-        Seq.empty[FunctionResource]))
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")),
+        funcClass, Seq.empty[FunctionResource]))
     intercept[NoSuchFunctionException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -1002,16 +1028,45 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(name: String, database: Option[String] = None): CatalogTable = {
+  def newTable(
+      name: String,
+      database: Option[String] = None,
+      defaultColumns: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "string"),
+      schema = if (defaultColumns) {
+        new StructType()
+          .add("col1", "int")
+          .add("col2", "string")
+          .add("a", IntegerType, nullable = true,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
+              .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "41").build())
+          .add("b", StringType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+          // The default value fails to parse.
+          .add("c", LongType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "_@#$%").build())
+          // The default value fails to resolve.
+          .add("d", LongType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "(select min(x) from badtable)").build())
+          // The default value fails to coerce to the required type.
+          .add("e", BooleanType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1").build())
+      } else {
+        new StructType()
+          .add("col1", "int")
+          .add("col2", "string")
+          .add("a", "int")
+          .add("b", "string")
+      },
       provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))

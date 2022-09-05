@@ -30,7 +30,7 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.errors.SparkCoreErrors
 
 /**
- * A class to test Pyrolite serialization on the Scala side, that will be deserialized
+ * A class to test Pickle serialization on the Scala side, that will be deserialized
  * in Python
  */
 case class TestWritable(var str: String, var int: Int, var double: Double) extends Writable {
