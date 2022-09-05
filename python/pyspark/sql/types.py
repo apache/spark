@@ -2277,17 +2277,25 @@ class NumpyArrayConverter:
 
         gateway = SparkContext._gateway
         assert gateway is not None
-
         plist = obj.tolist()
-        # np.array([]).dtype is dtype('float64') so set float for empty plist
-        ptpe = type(plist[0]) if len(plist) > 0 else float
-        tpe_dict = {
-            int: gateway.jvm.int,
-            float: gateway.jvm.double,
-            bool: gateway.jvm.boolean,
-            str: gateway.jvm.String,
+        tpe_np_to_java = {
+            np.dtype("int64"): gateway.jvm.long,
+            np.dtype("int32"): gateway.jvm.int,
+            np.dtype("int16"): gateway.jvm.short,
+            # Mapping to gateway.jvm.byte causes
+            #   TypeError: 'bytes' object does not support item assignment
+            np.dtype("int8"): gateway.jvm.short,
+            np.dtype("float32"): gateway.jvm.float,
+            np.dtype("float64"): gateway.jvm.double,
+            np.dtype("bool"): gateway.jvm.boolean,
         }
-        jarr = gateway.new_array(tpe_dict[ptpe], len(plist))
+        if len(obj) > 0 and isinstance(plist[0], str):
+            jtpe = gateway.jvm.String
+        else:
+            jtpe = tpe_np_to_java.get(obj.dtype)
+            if jtpe is None:
+                raise TypeError("The type of array scalar is not supported")
+        jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]
         return jarr

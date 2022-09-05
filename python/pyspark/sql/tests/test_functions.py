@@ -1037,25 +1037,19 @@ class FunctionsTests(ReusedSQLTestCase):
     def test_ndarray_input(self):
         import numpy as np
 
-        int_arrs = [np.array([1, 2]).astype(t) for t in ["int8", "int16", "int32", "int64"]]
-        for arr in int_arrs:
+        arr_dtype_to_spark_dtypes = [
+            ("int8", [("b", "array<smallint>")]),
+            ("int16", [("b", "array<smallint>")]),
+            ("int32", [("b", "array<int>")]),
+            ("int64", [("b", "array<bigint>")]),
+            ("float32", [("b", "array<float>")]),
+            ("float64", [("b", "array<double>")]),
+        ]
+        for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
+            arr = np.array([1, 2]).astype(t)
             self.assertEqual(
-                [Row(b=[1, 2])], self.spark.range(1).select(lit(arr).alias("b")).collect()
+                expected_spark_dtypes, self.spark.range(1).select(lit(arr).alias("b")).dtypes
             )
-
-        float_arrs = [np.array([0.1, 0.2]).astype(t) for t in ["float32", "float64"]]
-
-        self.assertEqual(
-            [("b", "array<double>")],
-            self.spark.range(1).select(lit(float_arrs[0]).alias("b")).dtypes,
-        )
-        self.assertEqual(
-            [0.10000000149011612, 0.20000000298023224],
-            self.spark.range(1).select(lit(float_arrs[0]).alias("b")).collect()[0][0],
-        )
-        self.assertEqual(
-            [Row(b=[0.1, 0.2])], self.spark.range(1).select(lit(float_arrs[1]).alias("b")).collect()
-        )
 
     def test_binary_math_function(self):
         funcs, expected = zip(*[(atan2, 0.13664), (hypot, 8.07527), (pow, 2.14359), (pmod, 1.1)])
