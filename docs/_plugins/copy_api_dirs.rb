@@ -119,8 +119,14 @@ if not (ENV['SKIP_API'] == '1')
     puts "Moving to project root and building API docs."
     cd("..")
 
+    # Sometimes, SBT just hates us and we need to use big hammers.
+    # See https://github.com/sbt/sbt/issues/5542.
+    system("rm -Rf ~/.m2.old") || raise("Failed to clean m2.old cache")
+    system("mv ~/.m2 ~/.m2.old") || raise("Failed to backup m2 cache")
     puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
     system("build/sbt clean package -Phive") || raise("PySpark doc generation failed")
+    system("rm -Rf ~/.m2") || raise("Failed to clean m2 cache")
+    system("mv ~/.m2.old ~/.m2") || raise("Failed to restore m2.old cache")
 
     puts "Moving back into docs dir."
     cd("docs")
