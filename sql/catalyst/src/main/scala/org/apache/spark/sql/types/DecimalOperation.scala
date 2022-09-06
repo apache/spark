@@ -228,8 +228,11 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
     getAsBigDecimal().longValue
   }
 
-  def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
-      (f1: Long => T) (f2: Double => T): T = {
+  def roundToNumeric[T <: AnyVal](
+      decimal: Decimal,
+      integralType: IntegralType,
+      maxValue: Int,
+      minValue: Int) (f1: Long => T) (f2: Double => T): T = {
     if (isNull()) {
       val actualLongVal = longVal / POW_10(_scale)
       val numericVal = f1(actualLongVal)
@@ -237,7 +240,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
         numericVal
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
+          decimal, DecimalType(this.precision, this.scale), integralType)
       }
     } else {
       val doubleVal = getAsBigDecimal().toDouble
@@ -245,12 +248,12 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
         f2(doubleVal)
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), integralType)
+          decimal, DecimalType(this.precision, this.scale), integralType)
       }
     }
   }
 
-  def roundToLong(): Long = if (isNull()) {
+  def roundToLong(decimal: Decimal): Long = if (isNull()) {
     longVal / POW_10(_scale)
   } else {
     try {
@@ -261,7 +264,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
     } catch {
       case _: ArithmeticException =>
         throw QueryExecutionErrors.castingCauseOverflowError(
-          this, DecimalType(this.precision, this.scale), LongType)
+          decimal, DecimalType(this.precision, this.scale), LongType)
     }
   }
 

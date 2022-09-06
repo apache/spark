@@ -247,10 +247,10 @@ final class Decimal(
    */
   private[sql] def roundToByte(): Byte = if (decimal128Enabled) {
     decimal128Operation.roundToNumeric[Byte](
-      ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
+      this, ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
   } else {
     jdkDecimalOperation.roundToNumeric[Byte](
-      ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
+      this, ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
   }
 
   /**
@@ -259,10 +259,10 @@ final class Decimal(
    */
   private[sql] def roundToShort(): Short = if (decimal128Enabled) {
     decimal128Operation.roundToNumeric[Short](
-      ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
+      this, ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
   } else {
     jdkDecimalOperation.roundToNumeric[Short](
-      ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
+      this, ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
   }
 
   /**
@@ -271,10 +271,10 @@ final class Decimal(
    */
   private[sql] def roundToInt(): Int = if (decimal128Enabled) {
     decimal128Operation.roundToNumeric[Int](
-      IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
+      this, IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
   } else {
     jdkDecimalOperation.roundToNumeric[Int](
-      IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
+      this, IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
   }
 
   /**
@@ -282,9 +282,9 @@ final class Decimal(
    * @throws ArithmeticException if the decimal too big to fit in Long type.
    */
   private[sql] def roundToLong(): Long = if (decimal128Enabled) {
-    decimal128Operation.roundToLong()
+    decimal128Operation.roundToLong(this)
   } else {
-    jdkDecimalOperation.roundToLong()
+    jdkDecimalOperation.roundToLong(this)
   }
 
   /**
