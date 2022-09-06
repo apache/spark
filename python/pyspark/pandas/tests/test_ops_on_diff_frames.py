@@ -598,6 +598,16 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                         repr(actual.sort_values(list(actual.columns)).reset_index(drop=True)),
                         repr(expected.sort_values(list(expected.columns)).reset_index(drop=True)),
                     )
+                    actual = ps.concat(
+                        psdfs, axis=1, ignore_index=ignore_index, join=join, sort=True
+                    )
+                    expected = pd.concat(
+                        pdfs, axis=1, ignore_index=ignore_index, join=join, sort=True
+                    )
+                    self.assert_eq(
+                        repr(actual.reset_index(drop=True)),
+                        repr(expected.reset_index(drop=True)),
+                    )
 
     def test_combine_first(self):
         pser1 = pd.Series({"falcon": 330.0, "eagle": 160.0})
