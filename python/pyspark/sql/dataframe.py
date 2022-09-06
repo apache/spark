@@ -4430,7 +4430,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sparkSession)
 
-    def withColumnsRenamed(self, *colsMap: Dict[str, Column]) -> "DataFrame":
+    def withColumnsRenamed(self, *colsMap: Dict[str]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by renaming multiple columns.
         This is a no-op if schema doesn't contain the given column names.
