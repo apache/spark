@@ -2189,7 +2189,7 @@ class Frame(object, metaclass=ABCMeta):
                 return F.stddev_samp(spark_column)
 
         def sem(psser: "Series") -> Column:
-            return std(psser) / pow(Frame._count_expr(psser), 0.5)
+            return std(psser) / F.sqrt(Frame._count_expr(psser))
 
         return self._reduce_for_stat_function(
             sem,
@@ -2462,8 +2462,6 @@ class Frame(object, metaclass=ABCMeta):
             df = self
         elif isinstance(self, ps.Series):
             df = self.to_dataframe()
-        else:
-            raise TypeError("bool() expects DataFrame or Series; however, " "got [%s]" % (self,))
         return df.head(2)._to_internal_pandas().bool()
 
     def first_valid_index(self) -> Optional[Union[Scalar, Tuple[Scalar, ...]]]:
