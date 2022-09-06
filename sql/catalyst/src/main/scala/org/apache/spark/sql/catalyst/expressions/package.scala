@@ -266,7 +266,7 @@ package object expressions  {
         case (Seq(), _) =>
           val name = nameParts.head
           val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
-          (attributes.filterNot(_.qualifiedAccess), nameParts.tail)
+          (attributes.filterNot(_.qualifiedAccessOnly), nameParts.tail)
         case _ => matches
       }
     }
@@ -316,7 +316,7 @@ package object expressions  {
       while (i >= 0 && candidates.isEmpty) {
         val name = nameParts(i)
         val attrsToLookup = if (i == 0) {
-          direct.get(name.toLowerCase(Locale.ROOT)).map(_.filterNot(_.qualifiedAccess))
+          direct.get(name.toLowerCase(Locale.ROOT)).map(_.filterNot(_.qualifiedAccessOnly))
         } else {
           direct.get(name.toLowerCase(Locale.ROOT))
         }

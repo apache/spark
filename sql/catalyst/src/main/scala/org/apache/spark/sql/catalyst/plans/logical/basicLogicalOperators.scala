@@ -1559,7 +1559,7 @@ case class SubqueryAlias(
     // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
     if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
       val qualifierList = identifier.qualifier :+ alias
-      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccess)
+      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
       nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
     } else {
       Nil
