@@ -164,13 +164,11 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
 
     // We expect two objects to be equal and to have the same hashCode if they have the same
     // elements.
-    assert(arrayBasedMapData1 == arrayBasedMapData2)
     assert(arrayBasedMapData1.equals(arrayBasedMapData2))
     assert(arrayBasedMapData1.hashCode() == arrayBasedMapData2.hashCode())
 
-    // If two objects have different elements, we expect them to not be equal and their hashCode
+    // If two objects have different elements, we expect them not to be equal and their hashCode
     // to be different.
-    assert(arrayBasedMapData1 != arrayBasedMapData3)
     assert(!arrayBasedMapData1.equals(arrayBasedMapData3))
     assert(arrayBasedMapData1.hashCode() != arrayBasedMapData3.hashCode())
   }

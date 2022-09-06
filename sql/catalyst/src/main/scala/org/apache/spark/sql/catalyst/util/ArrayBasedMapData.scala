@@ -39,17 +39,10 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
   }
 
   override def equals(obj: Any): Boolean = {
-    if (obj == null && this == null) {
-      return true
+    obj match {
+      case other: ArrayBasedMapData => keyArray == other.keyArray && valueArray == other.valueArray
+      case _ => false
     }
-
-    if (obj == null || !obj.isInstanceOf[ArrayBasedMapData]) {
-      return false
-    }
-
-    val other = obj.asInstanceOf[ArrayBasedMapData]
-
-    keyArray.equals(other.keyArray) && valueArray.equals(other.valueArray)
   }
 
   // Hash this class as a Product of two hashCodes. We don't know the DataType which prevents us

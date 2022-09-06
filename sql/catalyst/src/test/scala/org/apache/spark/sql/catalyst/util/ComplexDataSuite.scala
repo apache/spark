@@ -39,8 +39,6 @@ class ComplexDataSuite extends SparkFunSuite {
     val testArrayMap2 = ArrayBasedMapData(testMap2.toMap)
     val testArrayMap3 = ArrayBasedMapData(testMap3.toMap)
     val testArrayMap4 = ArrayBasedMapData(testMap4.toMap)
-    assert(testArrayMap1 !== testArrayMap3)
-    assert(testArrayMap2 !== testArrayMap4)
 
     // UnsafeMapData
     val unsafeConverter = UnsafeProjection.create(Array[DataType](MapType(StringType, IntegerType)))
