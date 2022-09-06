@@ -22,7 +22,7 @@ import java.math.BigInteger
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
-trait DecimalOperation[T <: DecimalOperation[T]] {
+trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
   import org.apache.spark.sql.types.Decimal._
 
   private var longVal: Long = 0L
