@@ -121,7 +121,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {
-    val isCompact = d.invokePrivate(decimalVal()).eq(null)
+    assert(d.decimalOperation.isInstanceOf[JDKDecimalOperation])
+    val isCompact = d.decimalOperation.invokePrivate(decimalVal()).eq(null)
     assert(isCompact == expected, s"$d ${if (expected) "was not" else "was"} compact")
   }
 
