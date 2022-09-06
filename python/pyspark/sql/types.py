@@ -1447,26 +1447,6 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     return None
 
 
-def _from_numpy_type_to_java_type(nt: "np.dtype", gateway: JavaGateway) -> Optional[JavaClass]:
-    """Convert NumPy type to Py4J Java type."""
-    if nt in [np.dtype("int8"), np.dtype("int16")]:
-        # Mapping int8 to gateway.jvm.byte causes
-        #   TypeError: 'bytes' object does not support item assignment
-        return gateway.jvm.short
-    elif nt == np.dtype("int32"):
-        return gateway.jvm.int
-    elif nt == np.dtype("int64"):
-        return gateway.jvm.long
-    elif nt == np.dtype("float32"):
-        return gateway.jvm.float
-    elif nt == np.dtype("float64"):
-        return gateway.jvm.double
-    elif nt == np.dtype("bool"):
-        return gateway.jvm.boolean
-
-    return None
-
-
 def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
@@ -2289,6 +2269,27 @@ class NumpyScalarConverter:
 
 
 class NumpyArrayConverter:
+    def _from_numpy_type_to_java_type(
+        self, nt: "np.dtype", gateway: JavaGateway
+    ) -> Optional[JavaClass]:
+        """Convert NumPy type to Py4J Java type."""
+        if nt in [np.dtype("int8"), np.dtype("int16")]:
+            # Mapping int8 to gateway.jvm.byte causes
+            #   TypeError: 'bytes' object does not support item assignment
+            return gateway.jvm.short
+        elif nt == np.dtype("int32"):
+            return gateway.jvm.int
+        elif nt == np.dtype("int64"):
+            return gateway.jvm.long
+        elif nt == np.dtype("float32"):
+            return gateway.jvm.float
+        elif nt == np.dtype("float64"):
+            return gateway.jvm.double
+        elif nt == np.dtype("bool"):
+            return gateway.jvm.boolean
+
+        return None
+
     def can_convert(self, obj: Any) -> bool:
         return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
 
@@ -2302,7 +2303,7 @@ class NumpyArrayConverter:
         if len(obj) > 0 and isinstance(plist[0], str):
             jtpe = gateway.jvm.String
         else:
-            jtpe = _from_numpy_type_to_java_type(obj.dtype, gateway)
+            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
             if jtpe is None:
                 raise TypeError("The type of array scalar '%s' is not supported" % (obj.dtype))
         jarr = gateway.new_array(jtpe, len(obj))
