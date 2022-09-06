@@ -476,6 +476,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
 
+    val s6 = Literal("a=1&b=2&c=3")
+    val m6 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    checkEvaluation(new StringToMap(s6, NonFoldableLiteral("&"), NonFoldableLiteral("=")), m6)
+
     checkExceptionInExpression[RuntimeException](
       new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -492,12 +496,6 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(StringToMap(Literal("a:1,b:2,c:3"), Literal(null), Literal(null))
       .checkInputDataTypes().isFailure)
     assert(new StringToMap(Literal(null), Literal(null)).checkInputDataTypes().isFailure)
-
-    assert(new StringToMap(Literal("a:1_b:2_c:3"), NonFoldableLiteral("_"))
-        .checkInputDataTypes().isFailure)
-    assert(
-      new StringToMap(Literal("a=1_b=2_c=3"), Literal("_"), NonFoldableLiteral("="))
-        .checkInputDataTypes().isFailure)
   }
 
   test("SPARK-22693: CreateNamedStruct should not use global variables") {

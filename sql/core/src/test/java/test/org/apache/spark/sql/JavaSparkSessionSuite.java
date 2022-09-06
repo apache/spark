@@ -19,6 +19,7 @@ package test.org.apache.spark.sql;
 
 import org.apache.spark.sql.*;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -50,7 +51,7 @@ public class JavaSparkSessionSuite {
       .getOrCreate();
 
     for (Map.Entry<String, Object> e : map.entrySet()) {
-      assert(spark.conf().get(e.getKey()).equals(e.getValue().toString()));
+      Assert.assertEquals(spark.conf().get(e.getKey()), e.getValue().toString());
     }
   }
 }

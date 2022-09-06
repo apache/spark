@@ -65,7 +65,6 @@ class MissingPandasLikeDataFrameGroupBy:
     pipe = _unsupported_function("pipe")
     prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")
-    sem = _unsupported_function("sem")
 
 
 class MissingPandasLikeSeriesGroupBy:
@@ -100,4 +99,3 @@ class MissingPandasLikeSeriesGroupBy:
     pipe = _unsupported_function("pipe")
     prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")
-    sem = _unsupported_function("sem")
