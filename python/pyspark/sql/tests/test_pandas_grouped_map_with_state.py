@@ -58,11 +58,16 @@ class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
         )
         state_type = StructType([StructField("c", LongType())])
 
-        def func(key, pdf, state):
+        def func(key, pdf_iter, state):
             assert isinstance(state, GroupStateImpl)
-            state.update((len(pdf),))
+
+            total_len = 0
+            for pdf in pdf_iter:
+                total_len += len(pdf)
+
+            state.update((total_len,))
             assert state.get[0] == 1
-            return pd.DataFrame({"key": [key[0]], "countAsString": [str(len(pdf))]})
+            return pd.DataFrame({"key": [key[0]], "countAsString": [str(total_len)]})
 
         def check_results(batch_df, _):
             self.assertEqual(
