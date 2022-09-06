@@ -53,6 +53,10 @@ class TruncateTableParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
       },
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."))
+      parameters = Map("inputString" -> "Partition key `b` must set value (can't be empty)."),
+      context = ExpectedContext(
+        fragment = "PARTITION (a='1', b)",
+        start = 24,
+        stop = 43))
   }
 }
