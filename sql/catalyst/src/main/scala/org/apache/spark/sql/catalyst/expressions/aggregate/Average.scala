@@ -46,6 +46,8 @@ case class Average(
   with SupportQueryContext
   with UnaryLike[Expression] {
 
+  def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
+
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def inputTypes: Seq[AbstractDataType] =
