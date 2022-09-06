@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
 
 class PruneFiltersSuite extends PlanTest {
 
@@ -166,47 +165,13 @@ class PruneFiltersSuite extends PlanTest {
     val x = testRelation.where(!$"a".attr.in(1, 3, 5)).subquery("x")
 
     comparePlans(
-      Optimize.execute(x.where($"b".attr === 7 && Rand(10) > 0.1).analyze),
-      testRelation.where(!$"a".attr.in(1, 3, 5) && $"b".attr === 7).where(Rand(10) > 0.1).analyze)
+      Optimize.execute(x.where($"a".attr === 7 && Rand(10) > 0.1).analyze),
+      testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7).where(Rand(10) > 0.1).analyze)
 
     comparePlans(
       Optimize.execute(
-        x.where($"b".attr === 7 && Rand(10) > 0.1 && $"c".attr === 1 && Rand(10) < 1.1).analyze),
-      testRelation.where(!$"a".attr.in(1, 3, 5) && $"b".attr === 7 && $"c".attr === 1)
+        x.where($"a".attr === 7 && Rand(10) > 0.1 && $"b".attr === 1 && Rand(10) < 1.1).analyze),
+      testRelation.where(!$"a".attr.in(1, 3, 5) && $"a".attr === 7 && $"b".attr === 1)
         .where(Rand(10) > 0.1 && Rand(10) < 1.1).analyze)
-  }
-
-  test("SPARK-39069: Pushing EqualTo with Literal to other conditions") {
-    comparePlans(
-      Optimize.execute(testRelation.where('a > 'b && 'b + 1 > 'c && 'b === 2).analyze),
-      testRelation.where('a > 2 && (Literal(2) + Literal(1)) > 'c && 'b === 2).analyze)
-
-    comparePlans(
-      Optimize.execute(testRelation.where('b === 1 && 'b === 2).analyze),
-      testRelation.where(Literal(2) === Literal(1) && Literal(1) === Literal(2)).analyze)
-
-    comparePlans(
-      Optimize.execute(testRelation.where('b <=> 1 && 'b === 2).analyze),
-      testRelation.where(Literal(2) <=> Literal(1) && 'b === 2).analyze.analyze)
-
-    comparePlans(
-      Optimize.execute(testRelation
-        .where('a === 'b + Rand(10).cast(IntegerType) && 'b === 10).analyze),
-      testRelation.where('a === Literal(10) + Rand(10).cast(IntegerType) && 'b === 10).analyze)
-
-    val semanticEqualsQuery = testRelation.where('b === 1 && Literal(1) === 'b).analyze
-    comparePlans(Optimize.execute(semanticEqualsQuery), semanticEqualsQuery)
-
-    val containsIsNotNullQuery = testRelation.where('b.isNotNull && 'b === 10).analyze
-    comparePlans(Optimize.execute(containsIsNotNullQuery), containsIsNotNullQuery)
-
-    val equalWithUdfQuery = testRelation.where('a > 'b + 1 && 'b + 1 === 10).analyze
-    comparePlans(Optimize.execute(equalWithUdfQuery), equalWithUdfQuery)
-
-    val nonDeterministicQuery =
-      testRelation
-        .where('b + Rand(10).cast(IntegerType) === 'a &&
-          'b + Rand(10).cast(IntegerType) === 10).analyze
-    comparePlans(Optimize.execute(nonDeterministicQuery), nonDeterministicQuery)
   }
 }

@@ -186,4 +186,19 @@ class ConstantPropagationSuite extends PlanTest {
       .analyze
     comparePlans(Optimize.execute(query2), correctAnswer2)
   }
+
+  test("SPARK-39069: Replace constants in inequality predicate") {
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" > $"b" && $"b" + 1 > $"c" && $"b" === 2).analyze),
+      testRelation.where($"a" > 2 && Literal(3) > $"c" && $"b" === 2).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a".in(1, 2) && $"a" === 2).analyze),
+      testRelation.where($"a" === 2).analyze)
+  }
+
+  test("SPARK-39069: Don't replace constants in IsNotNull") {
+    val originalQuery = testRelation.where($"a" === Literal(1) && $"a".isNotNull).analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
 }

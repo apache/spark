@@ -1616,47 +1616,19 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * Removes filters that can be evaluated trivially.  This can be done through the following ways:
  * 1) by eliding the filter for cases where it will always evaluate to `true`.
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
- * 3) by pushing EqualTo with Literal to other conditions.
- * 4) by eliminating the always-true conditions given the constraints on the child's output.
+ * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
-    case Filter(Literal.TrueLiteral, child) => child
+    case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
-    case Filter(Literal.FalseLiteral, child) =>
+    case Filter(Literal(false, BooleanType), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
-    case f @ Filter(condition, _: LeafNode) =>
-      val predicates = splitConjunctivePredicates(condition)
-      val equalToWithLiterals = predicates.collect {
-        case eq @ EqualTo(a: Attribute, l: Literal) => eq -> (a -> l)
-        case eq @ EqualTo(l: Literal, a: Attribute) => eq -> (a -> l)
-      }
-      if (equalToWithLiterals.nonEmpty) {
-        val defaultEqualKeyValues = AttributeMap(equalToWithLiterals.map(_._2))
-        val newCondition = predicates.map {
-          // Don't push to IsNotNull because InferFiltersFromConstraints may infer another IsNotNull
-          case isNotNull: IsNotNull => isNotNull
-          // Exclude the current EqualTo, and push. e.g.: a = 1 and a = 2 ==> 2 = 1 and 1 = 2
-          case equalTo: EqualTo =>
-            val excludeCurrentEqualKeyValues =
-              AttributeMap(equalToWithLiterals.filterNot(_._1.semanticEquals(equalTo)).map(_._2))
-            equalTo.transformUp {
-              case a: Attribute => excludeCurrentEqualKeyValues.getOrElse(a, a)
-            }
-          case other =>
-            other.transformUp {
-              case a: Attribute => defaultEqualKeyValues.getOrElse(a, a)
-            }
-        }.reduceLeft(And)
-        f.copy(condition = newCondition)
-      } else {
-        f
-      }
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>

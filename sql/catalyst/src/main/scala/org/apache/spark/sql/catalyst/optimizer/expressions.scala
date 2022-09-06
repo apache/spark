@@ -205,10 +205,14 @@ object ConstantPropagation extends Rule[LogicalPlan] {
     def replaceConstants0(expression: Expression) = expression transform {
       case a: AttributeReference => constantsMap.getOrElse(a, a)
     }
-    condition transform {
-      case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants0(e)
-      case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants0(e)
-    }
+    splitConjunctivePredicates(condition).map {
+      // Don't replace constants in IsNotNull because InferFiltersFromConstraints may infer
+      // another IsNotNull
+      case isNotNull: IsNotNull => isNotNull
+      case e: EqualTo if predicates.contains(e) => e
+      case e: EqualNullSafe if predicates.contains(e) => e
+      case other => replaceConstants0(other)
+    }.reduceLeft(And)
   }
 }
 

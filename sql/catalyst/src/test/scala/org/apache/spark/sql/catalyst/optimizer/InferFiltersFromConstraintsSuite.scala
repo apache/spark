@@ -36,7 +36,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         InferFiltersFromConstraints,
         CombineFilters,
         SimplifyBinaryComparison,
-        BooleanSimplification) :: Nil
+        BooleanSimplification,
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
@@ -169,8 +170,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .analyze
     val correctAnswer = t1
       .where(IsNotNull($"a") && IsNotNull($"b") &&$"a" === $"b")
-      .select($"a", $"b".as("d"))
-      .where(Literal.TrueLiteral).as("t")
+      .select($"a", $"b".as("d")).as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
