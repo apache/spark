@@ -64,6 +64,14 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: f(freq="ns"))
         self.assertRaises(ValueError, lambda: f(freq="N"))
 
+    def test_datetime_index(self):
+        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+            ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"], name=[(1, 2)])
+        with self.assertRaisesRegexp(
+            TypeError, "Cannot perform 'all' with this index type: DatetimeIndex"
+        ):
+            ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
+
     def test_properties(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(psidx.year, pidx.year)

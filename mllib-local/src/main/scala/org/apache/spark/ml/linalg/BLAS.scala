@@ -17,9 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
-import dev.ludovic.netlib.{BLAS => NetlibBLAS,
-                           JavaBLAS => NetlibJavaBLAS,
-                           NativeBLAS => NetlibNativeBLAS}
+import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, JavaBLAS => NetlibJavaBLAS, NativeBLAS => NetlibNativeBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.

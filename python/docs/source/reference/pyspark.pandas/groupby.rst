@@ -68,11 +68,13 @@ Computations / Descriptive Stats
    GroupBy.filter
    GroupBy.first
    GroupBy.last
+   GroupBy.mad
    GroupBy.max
    GroupBy.mean
    GroupBy.median
    GroupBy.min
    GroupBy.rank
+   GroupBy.sem
    GroupBy.std
    GroupBy.sum
    GroupBy.var
