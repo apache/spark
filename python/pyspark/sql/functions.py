@@ -2307,7 +2307,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     ----------
     timeColumn : :class:`~pyspark.sql.Column`
         The column or the expression to use as the timestamp for windowing by time.
-        The time column must be of TimestampType or TimestampNTZType.
+        The time column must be of TimestampType.
     windowDuration : str
         A string specifying the width of the window, e.g. `10 minutes`,
         `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
