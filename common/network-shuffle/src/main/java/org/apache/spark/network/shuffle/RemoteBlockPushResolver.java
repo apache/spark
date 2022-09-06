@@ -817,7 +817,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (!mergedShuffleCleaner.awaitTermination(cleanerShutdownTimeout, TimeUnit.SECONDS)) {
           shutdownMergedShuffleCleanerNow();
         }
-      } catch (InterruptedException ignored) {
+      } catch (InterruptedException e) {
+        logger.warn("mergedShuffleCleaner is interrupted in the process of graceful shutdown", e);
         shutdownMergedShuffleCleanerNow();
         Thread.currentThread().interrupt();
       }
