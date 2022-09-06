@@ -1146,7 +1146,9 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException](
       dataset.createTempView("tempView"))
     intercept[AnalysisException](dataset.createTempView("tempView"))
-    assert(e.message.contains("already exists"))
+    checkError(e,
+      errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relationName" -> "`tempView`"))
     dataset.sparkSession.catalog.dropTempView("tempView")
   }
 

@@ -288,8 +288,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           sql("DROP TABLE IF EXISTS default.t")
           val e = intercept[AnalysisException] {
             sql(s"SELECT * FROM $viewName").collect()
-          }.getMessage
-          assert(e.contains("Table or view not found: t"))
+          }
+          checkErrorTableNotFound(e, "`t`",
+            ExpectedContext("VIEW", viewName, 14, 14, "t"))
         }
       }
     }

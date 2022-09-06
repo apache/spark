@@ -747,11 +747,13 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("insert overwrite to dir from non-existent table") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
-
+      val stmt = s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE nonexistent"
       val e = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE nonexistent")
-      }.getMessage
-      assert(e.contains("Table or view not found"))
+        sql(stmt)
+      }
+      checkErrorTableNotFound(e, "`nonexistent`",
+        ExpectedContext("TABLE nonexistent", stmt.length - "TABLE nonexistent".length,
+          stmt.length - 1))
     }
   }
 
@@ -769,7 +771,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         spark.sql(
           """
             |INSERT INTO TABLE tab2 PARTITION(first)
-            |SELECT word, length, cast(first as string) as first FROM tab1
+            |SELECT word, length, cast(first as string) as first FRy_OM tab1
           """.stripMargin)
 
         checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
