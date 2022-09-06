@@ -4694,7 +4694,7 @@ def hash(*cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        list of columns to work on.
+        one or more columns to compute on.
 
     Returns
     -------
@@ -4703,8 +4703,25 @@ def hash(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
-    [Row(hash=-757602832)]
+    >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+
+    Hash for one column
+
+    >>> df.select(hash('c1').alias('hash')).show()
+    +----------+
+    |      hash|
+    +----------+
+    |-757602832|
+    +----------+
+
+    Two or more columns
+
+    >>> df.select(hash('c1', 'c2').alias('hash')).show()
+    +---------+
+    |     hash|
+    +---------+
+    |599895104|
+    +---------+
     """
     return _invoke_function_over_seq_of_columns("hash", cols)
 
@@ -4718,7 +4735,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or str
-        list of columns to work on.
+        one or more columns to compute on.
 
     Returns
     -------
@@ -4727,8 +4744,25 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(xxhash64('a').alias('hash')).collect()
-    [Row(hash=4105715581806190027)]
+    >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+
+    Hash for one column
+
+    >>> df.select(xxhash64('c1').alias('hash')).show()
+    +-------------------+
+    |               hash|
+    +-------------------+
+    |4105715581806190027|
+    +-------------------+
+
+    Two or more columns
+
+    >>> df.select(xxhash64('c1', 'c2').alias('hash')).show()
+    +-------------------+
+    |               hash|
+    +-------------------+
+    |3233247871021311208|
+    +-------------------+
     """
     return _invoke_function_over_seq_of_columns("xxhash64", cols)
 
@@ -4762,7 +4796,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
     [Row(r=None)]
     >>> df.select(assert_true(df.a > df.b, 'My error msg').alias('r')).collect() # doctest: +SKIP
-    22/09/03 20:18:15 ERROR Executor: Exception in task 15.0 in stage 45.0 (TID 383)
+    ...
     java.lang.RuntimeException: My error msg
     ...
     """
@@ -4797,7 +4831,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     --------
     >>> df = spark.range(1)
     >>> df.select(raise_error("My error message")).show() # doctest: +SKIP
-    22/09/03 20:26:49 ERROR Executor: Exception in task 15.0 in stage 46.0 (TID 399)
+    ...
     java.lang.RuntimeException: My error message
     ...
     """
@@ -4831,8 +4865,7 @@ def upper(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], types.StringType())
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
     >>> df.select(upper("value")).show()
     +------------+
     |upper(value)|
@@ -4863,8 +4896,7 @@ def lower(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], types.StringType())
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
     >>> df.select(lower("value")).show()
     +------------+
     |lower(value)|
@@ -4895,8 +4927,7 @@ def ascii(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], types.StringType())
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
     >>> df.select(ascii("value")).show()
     +------------+
     |ascii(value)|
@@ -4927,8 +4958,7 @@ def base64(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], types.StringType())
+    >>> df = spark.createDataFrame(["Spark", "PySpark", "Pandas API"], "STRING")
     >>> df.select(base64("value")).show()
     +----------------+
     |   base64(value)|
@@ -4959,10 +4989,9 @@ def unbase64(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
     >>> df = spark.createDataFrame(["U3Bhcms=",
     ...                             "UHlTcGFyaw==",
-    ...                             "UGFuZGFzIEFQSQ=="], types.StringType())
+    ...                             "UGFuZGFzIEFQSQ=="], "STRING")
     >>> df.select(unbase64("value")).show()
     +--------------------+
     |     unbase64(value)|
