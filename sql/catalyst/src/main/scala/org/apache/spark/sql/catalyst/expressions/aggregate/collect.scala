@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * A base class for collect_list and collect_set aggregate functions.
@@ -193,4 +193,35 @@ case class CollectSet(
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =
     copy(child = newChild)
+}
+
+case class CollectTopK(
+    child: Expression,
+    num: Int,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
+  require(num > 0)
+
+  def this(child: Expression, num: Int) = this(child, num, 0, 0)
+
+  override protected lazy val bufferElementType: DataType = child.dataType
+  override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(child.dataType).reverse
+
+  override def createAggregationBuffer(): BoundedPriorityQueue[Any] =
+    new BoundedPriorityQueue[Any](num)(ordering)
+
+  override def eval(buffer: BoundedPriorityQueue[Any]): Any =
+    new GenericArrayData(buffer.toArray.sorted(ordering))
+
+  override protected def withNewChildInternal(newChild: Expression): CollectTopK =
+    copy(child = newChild)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CollectTopK =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): CollectTopK =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 }
