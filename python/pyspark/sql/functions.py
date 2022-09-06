@@ -2557,7 +2557,7 @@ def window(
     ----------
     timeColumn : :class:`~pyspark.sql.Column`
         The column or the expression to use as the timestamp for windowing by time.
-        The time column must be of TimestampType or TimestampNTZType.
+        The time column must be of TimestampType.
     windowDuration : str
         A string specifying the width of the window, e.g. `10 minutes`,
         `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
@@ -2632,7 +2632,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     ----------
     timeColumn : :class:`~pyspark.sql.Column` or str
         The column name or column to use as the timestamp for windowing by time.
-        The time column must be of TimestampType or TimestampNTZType.
+        The time column must be of TimestampType.
     gapDuration : :class:`~pyspark.sql.Column` or str
         A Python string literal or column specifying the timeout of the session. It could be
         static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
