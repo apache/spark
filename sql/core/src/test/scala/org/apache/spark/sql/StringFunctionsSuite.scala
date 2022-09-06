@@ -433,14 +433,10 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(length($"a"), length($"b")),
       Row(3, 4))
 
-    checkAnswer(
-      df.selectExpr("length(a)", "length(b)"),
-      Row(3, 4))
-
-    checkAnswer(
-      df.selectExpr("length(c)", "length(d)", "length(e)"),
-      Row(3, 3, 5)
-    )
+    Seq("length", "len").foreach { len =>
+      checkAnswer(df.selectExpr(s"$len(a)", s"$len(b)"), Row(3, 4))
+      checkAnswer(df.selectExpr(s"$len(c)", s"$len(d)", s"$len(e)"), Row(3, 3, 5))
+    }
   }
 
   test("SPARK-36751: add octet length api for scala") {

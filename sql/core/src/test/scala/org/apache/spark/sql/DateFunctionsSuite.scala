@@ -45,8 +45,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
     val d2 = DateTimeUtils.fromJavaDate(
       sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.currentDate(ZoneId.systemDefault())
-    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    val d3 = DateTimeUtils.fromJavaDate(
+      sql("""SELECT CURDATE()""").collect().head.getDate(0))
+    val d4 = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 <= d4 && d4 - d0 <= 1)
   }
 
   test("function current_timestamp and now") {
@@ -257,6 +259,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
     checkAnswer(
       df.selectExpr("""DATE_ADD(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.selectExpr("""DATEADD(d, 1)"""),
       Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
   }
 
@@ -821,6 +826,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(datediff(col("a"), col("c"))), Seq(Row(1), Row(1)))
     checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
+    checkAnswer(df.selectExpr("date_diff(a, d)"), Seq(Row(1), Row(1)))
   }
 
   test("to_timestamp with microseconds precision") {
