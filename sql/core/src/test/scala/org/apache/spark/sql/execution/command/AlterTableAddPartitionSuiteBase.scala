@@ -81,10 +81,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`test_catalog`.`ns`.`does_not_exist`"))
     }
   }
 
@@ -172,11 +174,14 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
-      val errMsg = intercept[PartitionsAlreadyExistException] {
+      val e = intercept[PartitionsAlreadyExistException] {
         sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
           " PARTITION (id=2) LOCATION 'loc1'")
-      }.getMessage
-      assert(errMsg.contains("The following partitions already exists"))
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_ALREADY_EXIST",
+        parameters = Map("partition_list" -> "PARTITION (`id` = 1)",
+        "table_name" -> "`ns`.`tbl`"))
 
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")

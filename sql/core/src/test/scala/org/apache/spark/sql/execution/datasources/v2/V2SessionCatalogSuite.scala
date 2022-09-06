@@ -232,7 +232,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> "`db`.`test_table`"))
   }
 
   test("invalidateTable") {
@@ -683,8 +685,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.alterTable(testIdent, TableChange.setProperty("prop", "val"))
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> testIdent.quoted))
   }
 
   test("alterTable: location") {
@@ -760,7 +763,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> "`db`.`test_table`"))
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -779,8 +784,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdentNew.quoted))
-    assert(exc.message.contains("already exists"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      parameters = Map("relation_name" -> testIdentNew.quoted))
   }
 
   test("renameTable: fail if db does not match for old and new table names") {

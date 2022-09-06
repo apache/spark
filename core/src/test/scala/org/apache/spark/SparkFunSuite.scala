@@ -321,14 +321,22 @@ abstract class SparkFunSuite
     } else {
       assert(expectedParameters === parameters)
     }
-    val actualQueryContext = exception.getQueryContext()
-    assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
-    actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
-      assert(actual.objectType() === expected.objectType(), "Invalid objectType of a query context")
-      assert(actual.objectName() === expected.objectName(), "Invalid objectName of a query context")
-      assert(actual.startIndex() === expected.startIndex(), "Invalid startIndex of a query context")
-      assert(actual.stopIndex() === expected.stopIndex(), "Invalid stopIndex of a query context")
-      assert(actual.fragment() === expected.fragment(), "Invalid fragment of a query context")
+    if (!queryContext.isEmpty) {
+      val actualQueryContext = exception.getQueryContext()
+      assert(actualQueryContext.length === queryContext.length,
+        "Invalid length of the query context")
+      actualQueryContext.zip(queryContext).foreach { case (actual, expected) =>
+        assert(actual.objectType() === expected.objectType(),
+          "Invalid objectType of a query context")
+        assert(actual.objectName() === expected.objectName(),
+          "Invalid objectName of a query context")
+        assert(actual.startIndex() === expected.startIndex(),
+          "Invalid startIndex of a query context")
+        assert(actual.stopIndex() === expected.stopIndex(),
+          "Invalid stopIndex of a query context")
+        assert(actual.fragment() === expected.fragment(),
+          "Invalid fragment of a query context")
+      }
     }
   }
 

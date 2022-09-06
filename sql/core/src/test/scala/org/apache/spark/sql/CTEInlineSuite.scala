@@ -275,7 +275,9 @@ abstract class CTEInlineSuiteBase
            |  select * from v2 where c1 > 0 union select * from v2 where c2 > 0
            |)
          """.stripMargin))
-      assert(ex.message.contains("Table or view not found: v1"))
+      checkError(ex,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`v`"))
     }
   }
 

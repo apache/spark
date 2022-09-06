@@ -86,10 +86,12 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`test_catalog`.`ns`.`does_not_exist`"))
     }
   }
 
@@ -130,10 +132,13 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
-      val errMsg = intercept[NoSuchPartitionsException] {
+      val e = intercept[NoSuchPartitionsException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("partitions not found in table"))
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partition_list" -> "PARTITION (`id` = 2)",
+        "table_name" -> "`test_catalog`.`ns`.`tbl`"))
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")

@@ -102,18 +102,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("uncache of nonexistent tables") {
-    val expectedErrorMsg = "Table or view not found:"
     // make sure table doesn't exist
-    var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
-    assert(e.contains(s"$expectedErrorMsg nonexistentTable"))
+    var e = intercept[AnalysisException](spark.table("nonexistentTable"))
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> "`nonexistentTable`"))
     e = intercept[AnalysisException] {
       uncacheTable("nonexistentTable")
-    }.getMessage
-    assert(e.contains(expectedErrorMsg))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> "`nonexistentTable`"))
     e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistentTable")
-    }.getMessage
-    assert(e.contains("Table or view not found: nonexistentTable"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> "`nonexistentTable`"))
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 

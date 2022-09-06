@@ -36,10 +36,12 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("table does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $t")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`spark_catalog`.`ns`.`does_not_exist`"))
     }
   }
 

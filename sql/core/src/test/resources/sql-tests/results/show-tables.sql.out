@@ -209,7 +209,13 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'show_t*' not found in database 'showdb'
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "relation_name" : "`showdb`.`show_t*`"
+  }
+}
 
 
 -- !query
@@ -236,9 +242,14 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Ch', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-Partition not found in table 'show_t1' database 'showdb':
-c -> Ch
-d -> 1
+{
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "partition_list" : "PARTITION (`c` = Ch, `d` = 1)",
+    "table_name" : "`showdb`.`show_t1`"
+  }
+}
 
 
 -- !query

@@ -722,7 +722,7 @@ test_that("test tableExists, cache, uncache and clearCache", {
   clearCache()
 
   expect_error(uncacheTable("zxwtyswklpf"),
-      "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
+      "[TABLE_OR_VIEW_NOT_FOUND] The table or view `zxwtyswklpf` cannot be found.")
 
   expect_true(tableExists("table1"))
   expect_true(tableExists("default.table1"))
@@ -3367,8 +3367,8 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql("select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table or view not found", retError), TRUE)
-  expect_equal(grepl("blah", retError), TRUE)
+  expect_equal(grepl("[TABLE_OR_VIEW_NOT_FOUND]", retError), TRUE)
+  expect_equal(grepl("`blah`", retError), TRUE)
 })
 
 irisDF <- suppressWarnings(createDataFrame(iris))
@@ -4076,8 +4076,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, get
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-               paste0("Error in setCurrentDatabase : no such database - Database ",
-               "'zxwtyswklpf' not found"))
+               "[SCHEMA_NOT_FOUND] The schema `zxwtyswklpf` cannot be found.")
 
   expect_true(databaseExists("default"))
   expect_true(databaseExists("spark_catalog.default"))
@@ -4109,7 +4108,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   tbs <- collect(tb)
   expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
   expect_error(listTables("bar"),
-               "Error in listTables : no such database - Database 'bar' not found")
+               "[SCHEMA_NOT_FOUND] The schema `bar` cannot be found.")
 
   c <- listColumns("cars")
   expect_equal(nrow(c), 2)
@@ -4117,7 +4116,8 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
-               paste("Table or view not found: spark_catalog.default.zxwtyswklpf"))
+               paste("[TABLE_OR_VIEW_NOT_FOUND]",
+               " The table or view `spark_catalog`.`default`.`zxwtyswklpf` cannot be found."))
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
@@ -4126,8 +4126,7 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   expect_equal(take(orderBy(filter(f, "className IS NOT NULL"), "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : no such database - Database",
-                     "'zxwtyswklpf_db' not found"))
+               paste("[SCHEMA_NOT_FOUND] The schema `zxwtyswklpf_db` cannot be found."))
 
   expect_true(functionExists("abs"))
   expect_false(functionExists("aabbss"))

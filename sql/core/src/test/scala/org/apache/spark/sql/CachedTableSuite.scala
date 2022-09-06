@@ -153,7 +153,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CACHE TABLE tempView AS SELECT 1")
       }
-      assert(e.getMessage.contains("Temporary view 'tempView' already exists"))
+      checkError(e,
+        errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relation_name" -> "`tempView`"))
     }
   }
 
@@ -962,7 +964,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           if (!storeAnalyzed) {
             // t2 should become invalid after t1 is dropped
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-            assert(e.message.contains(s"Table or view not found"))
+            checkError(e,
+              errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+              parameters = Map("relation_name" -> "`t1`"))
           }
         }
       }
@@ -993,7 +997,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
               if (!storeAnalyzed) {
                 // t2 should become invalid after t1 is dropped
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-                assert(e.message.contains(s"Table or view not found"))
+                checkError(e,
+                  errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+                  parameters = Map("relation_name" -> "`t1`"))
               }
             }
           }
@@ -1431,7 +1437,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      assert(e.message.contains(s"Table or view not found: $t"))
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> s"`$t`"))
     }
   }
 

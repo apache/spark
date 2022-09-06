@@ -84,10 +84,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("non-existent global temp view") {
     val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
-    }.getMessage
-    assert(message.contains("Table or view not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> s"`${global_temp_db}`.`nonexistentview`"))
   }
 
   test("script") {

@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, UnresolvedAttribute}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -186,13 +186,23 @@ private[sql] object H2Dialect extends JdbcDialect {
         exception.getErrorCode match {
           // TABLE_OR_VIEW_ALREADY_EXISTS_1
           case 42101 =>
-            throw new TableAlreadyExistsException(message, cause = Some(e))
+            val quotedName = UnresolvedAttribute.parseAttributeName(message)
+              .map(part => quoteIdentifier(part)).mkString(".")
+            throw new TableAlreadyExistsException(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+              messageParameters = Map("relation_name" -> quotedName),
+              cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
-            throw NoSuchTableException(message, cause = Some(e))
+            val quotedName = UnresolvedAttribute.parseAttributeName(message)
+              .map(part => quoteIdentifier(part)).mkString(".")
+            throw new NoSuchTableException(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+              messageParameters = Map("relation_name" -> quotedName))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
-            throw NoSuchNamespaceException(message, cause = Some(e))
+            val quotedName = UnresolvedAttribute.parseAttributeName(message)
+              .map(part => quoteIdentifier(part)).mkString(".")
+            throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
+              messageParameters = Map("schema_name" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
           case 42111 =>
             throw new IndexAlreadyExistsException(message, cause = Some(e))

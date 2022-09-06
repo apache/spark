@@ -174,13 +174,17 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean = true): Unit = {
+      caseSensitive: Boolean = true,
+      line: Int = -1,
+      pos: Int = -1): Unit = {
     assertAnalysisErrorClass(
       inputPlan,
       expectedErrorClass,
       null,
       expectedMessageParameters,
-      caseSensitive)
+      caseSensitive,
+      line,
+      pos)
   }
 
   protected def assertAnalysisErrorClass(
@@ -188,7 +192,9 @@ trait AnalysisTest extends PlanTest {
       expectedErrorClass: String,
       expectedErrorSubClass: String,
       expectedMessageParameters: Map[String, String],
-      caseSensitive: Boolean): Unit = {
+      caseSensitive: Boolean,
+      line: Int,
+      pos: Int ): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
@@ -197,7 +203,9 @@ trait AnalysisTest extends PlanTest {
 
       if (e.getErrorClass != expectedErrorClass ||
         !e.messageParameters.sameElements(expectedMessageParameters) ||
-        e.getErrorSubClass != expectedErrorSubClass) {
+        e.getErrorSubClass != expectedErrorSubClass ||
+        (line >= 0 && e.line.getOrElse(-1) != line) ||
+        (pos >= 0) && e.startPosition.getOrElse(-1) != pos) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
@@ -215,6 +223,12 @@ trait AnalysisTest extends PlanTest {
           failMsg +=
             s"""Message parameters should be: ${expectedMessageParameters.mkString("\n  ")}
                |Actual message parameters: ${e.messageParameters.mkString("\n  ")}
+             """.stripMargin
+        }
+        if (e.line.getOrElse(-1) != line || e.startPosition.getOrElse(-1) != pos) {
+          failMsg +=
+            s"""Line/position should be: $line, $pos
+               |Actual line/position: ${e.line.getOrElse(-1)}, ${e.startPosition.getOrElse(-1)}
              """.stripMargin
         }
         fail(failMsg)

@@ -40,7 +40,9 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE TABLE ${tbl}_non_existence")
       }
-      assert(e.getMessage.contains(s"Table or view not found: ${tbl}_non_existence"))
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`spark_catalog`.`ns`.`table_non_existence`"))
     }
   }
 

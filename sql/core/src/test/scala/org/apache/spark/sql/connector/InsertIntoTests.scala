@@ -234,8 +234,9 @@ trait InsertIntoSQLOnlyTests
         val e = intercept[AnalysisException] {
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
-        assert(e.getMessage.contains(t2))
-        assert(e.getMessage.contains("Table not found"))
+        checkError(e,
+          errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relation_name" -> "`tbl2`"))
       }
     }
 

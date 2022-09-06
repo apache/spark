@@ -750,8 +750,10 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       val e = intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE nonexistent")
-      }.getMessage
-      assert(e.contains("Table or view not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> "`nonexistent`"))
     }
   }
 

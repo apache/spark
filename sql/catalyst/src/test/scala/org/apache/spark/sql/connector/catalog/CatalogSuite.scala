@@ -171,8 +171,9 @@ class CatalogSuite extends SparkFunSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> testIdent.quoted))
   }
 
   test("invalidateTable") {
@@ -623,8 +624,9 @@ class CatalogSuite extends SparkFunSuite {
       catalog.alterTable(testIdent, TableChange.setProperty("prop", "val"))
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> testIdent.quoted))
   }
 
   test("dropTable") {
@@ -680,8 +682,9 @@ class CatalogSuite extends SparkFunSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkError(exc,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> testIdent.quoted))
   }
 
   test("renameTable: fail if new table name already exists") {

@@ -382,10 +382,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
     withTable("t") {
       sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
-      val msg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
-      }.getMessage
-      assert(msg.contains(s"Table `$SESSION_CATALOG_NAME`.`default`.`t` already exists"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relation_name" -> s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
     }
   }
 

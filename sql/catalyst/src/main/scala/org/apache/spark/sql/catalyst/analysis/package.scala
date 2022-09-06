@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -62,6 +63,22 @@ package object analysis {
         errorClass = "DATATYPE_MISMATCH",
         errorSubClass = mismatch.errorSubClass,
         messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
+        origin = t.origin)
+    }
+
+    def tableNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        messageParameters = Map("relation_name" ->
+          name.map(part => quoteIdentifier(part)).mkString(".")),
+        origin = t.origin)
+    }
+
+    def schemaNotFound(name: Seq[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = "SCHEMA_NOT_FOUND",
+        messageParameters = Map("schema_name" ->
+          name.map(part => quoteIdentifier(part)).mkString(".")),
         origin = t.origin)
     }
   }

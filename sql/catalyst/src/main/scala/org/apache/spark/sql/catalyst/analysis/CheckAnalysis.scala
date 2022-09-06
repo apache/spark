@@ -126,10 +126,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
-        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+        u.schemaNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
@@ -138,15 +138,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             s"$cmd expects a view.")
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTableOrView =>
-        val viewStr = if (u.allowTempView) "view" else "permanent view"
-        u.failAnalysis(
-          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        u.tableNotFound(u.multipartIdentifier)
 
       case u: UnresolvedFunc =>
         throw QueryCompilationErrors.noSuchFunctionError(
@@ -156,7 +154,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>

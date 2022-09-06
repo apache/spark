@@ -54,10 +54,12 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE NAMESPACE $catalog.ns")
       checkTables("ns") // no tables
 
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"DROP TABLE $catalog.ns.tbl")
-      }.getMessage
-      assert(errMsg.contains("Table or view not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> s"`$catalog`.`ns`.`tbl`"))
     }
   }
 

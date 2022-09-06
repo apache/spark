@@ -92,7 +92,9 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       val e = intercept[NamespaceAlreadyExistsException] {
         sql(s"CREATE NAMESPACE $ns")
       }
-      assert(e.getMessage.contains(s"$notFoundMsgPrefix '$namespace' already exists"))
+      checkError(e,
+        errorClass = "SCHEMA_ALREADY_EXISTS",
+        parameters = Map("schema_name" -> s"`$namespace`"))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")

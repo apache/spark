@@ -239,6 +239,24 @@
       }
     }
   },
+  "INDEX_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the index because it already exists. <message>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INDEX_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the index. <message>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INDEX_OUT_OF_BOUNDS" : {
+    "message" : [
+      "Index <indexValue> must be between 0 and the length of the ArrayData."
+    ],
+    "sqlState" : "22023"
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -400,6 +418,21 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITIONS_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot ADD or RENAME TO partition(s) <partition_list> in table <table_name> because they already exist.",
+      "Choose a different name, drop the existing partition, or add the IF NOT EXISTS clause to tolerate a pre-existing partition."
+    ],
+    "sqlState" : "42000"
+  },
+  "PARTITIONS_NOT_FOUND" : {
+    "message" : [
+      "The partition(s) <partition_list> cannot be found in table <table_name>.",
+      "Verify the partition specification and table name.",
+      "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
+    ],
+    "sqlState" : "42000"
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [
       "Invalid pivot value '<value>': value data type <valueType> does not match pivot column data type <pivotType>"
@@ -417,11 +450,70 @@
       "Failed to set original permission <permission> back to the created path: <path>. Exception: <message>"
     ]
   },
+  "ROUTINE_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the function <routine_name> because it already exists.",
+      "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
+    ],
+    "sqlState" : "42000"
+  },
+  "ROUTINE_NOT_FOUND" : {
+    "message" : [
+      "The function <routine_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create schema <schema_name> because it already exists.",
+      "Choose a different name, drop the existing schema, or add the IF NOT EXISTS clause to tolerate pre-existing schema."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_NOT_EMPTY" : {
+    "message" : [
+      "Cannot drop a schema <schema_name> because it contains objects.",
+      "Use DROP SCHEMA ... CASCADE to drop the schema and all its objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "SCHEMA_NOT_FOUND" : {
+    "message" : [
+      "The schema <schema_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.",
+      "To tolerate the error on drop use DROP SCHEMA IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "TABLE_OR_VIEW_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create table or view <relation_name> because it already exists.",
+      "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
+    ],
+    "sqlState" : "42000"
+  },
+  "TABLE_OR_VIEW_NOT_FOUND" : {
+    "message" : [
+      "The table or view <relation_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
+      "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
+    ],
+    "sqlState" : "42000"
+  },
+  "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create the temporary view <relation_name> because it already exists.",
+      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+    ],
+    "sqlState" : "42000"
   },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [

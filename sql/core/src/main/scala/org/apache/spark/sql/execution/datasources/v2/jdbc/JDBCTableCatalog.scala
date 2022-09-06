@@ -158,7 +158,7 @@ class JDBCTableCatalog extends TableCatalog
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.classifyException(s"Failed table creation: $ident", dialect) {
+      JdbcUtils.classifyException(ident.quoted, dialect) {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }

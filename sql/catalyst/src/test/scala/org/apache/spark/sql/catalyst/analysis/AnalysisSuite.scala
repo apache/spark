@@ -106,7 +106,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
       Map("objectName" -> "`tBl`.`a`", "proposal" -> "`TbL`.`a`"),
-      caseSensitive = true)
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
 
     checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
@@ -716,7 +718,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
       Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
-      caseSensitive = true)
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
   }
 
   test("CTE with non-matching column alias") {
@@ -726,8 +730,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
-    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
-      Seq("Table not found: test"))
+    assertAnalysisErrorClass(parsePlan("INSERT INTO test VALUES (1)"),
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relation_name" -> "`test`"))
   }
 
   test("check CollectMetrics resolved") {
@@ -1156,7 +1160,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
       Map("objectName" -> "`c`.`y`", "proposal" -> "`x`"),
-      caseSensitive = true)
+      caseSensitive = true,
+      line = -1,
+      pos = -1)
   }
 
   test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
@@ -1183,16 +1189,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-39354: should be `Table or view not found`") {
-    assertAnalysisError(parsePlan(
+  test("SPARK-39354: should be [TABLE_OR_VIEW_NOT_FOUND]") {
+    assertAnalysisErrorClass(parsePlan(
       s"""
          |WITH t1 as (SELECT 1 user_id, CAST("2022-06-02" AS DATE) dt)
          |SELECT *
          |FROM t1
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
-      Seq(s"Table or view not found: t2"),
-      false)
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relation_name" -> "`t2`"))
   }
 
   test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {

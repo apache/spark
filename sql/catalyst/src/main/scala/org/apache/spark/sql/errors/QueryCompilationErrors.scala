@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -648,13 +648,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def renameTempViewToExistingViewError(oldName: String, newName: String): Throwable = {
-    new AnalysisException(
-      s"rename temporary view from '$oldName' to '$newName': destination view already exists")
+    new TableAlreadyExistsException(newName)
   }
 
   def cannotDropNonemptyDatabaseError(db: String): Throwable = {
-    new AnalysisException(s"Cannot drop a non-empty database: $db. " +
-      "Use CASCADE option to drop a non-empty database.")
+    new AnalysisException(errorClass = "SCHEMA_NOT_EMPTY",
+      Map("schema_name" -> toSQLId(db)))
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
@@ -720,8 +719,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
-    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
-      "destination table already exists")
+    new TableAlreadyExistsException(newName.parts)
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
@@ -729,7 +727,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
-    new AnalysisException(s"Function $func already exists")
+    new FunctionAlreadyExistsException(func.parts)
   }
 
   def cannotLoadClassWhenRegisteringFunctionError(
@@ -1714,7 +1712,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableIdentifierExistsError(tableIdentifier: TableIdentifier): Throwable = {
-    new AnalysisException(s"$tableIdentifier already exists.")
+    new TableAlreadyExistsException(tableIdentifier.parts)
   }
 
   def tableIdentifierNotConvertedToHadoopFsRelationError(
@@ -1853,8 +1851,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       s"$name of data type: $dataType.")
   }
 
-  def tableAlreadyExistsError(table: String, guide: String = ""): Throwable = {
-    new AnalysisException(s"Table $table already exists." + guide)
+  def tableAlreadyExistsError(table: String): Throwable = {
+    new TableAlreadyExistsException(table)
   }
 
   def createTableAsSelectWithNonEmptyDirectoryError(tablePath: String): Throwable = {
@@ -1865,7 +1863,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableOrViewNotFoundError(table: String): Throwable = {
-    new AnalysisException(s"Table or view not found: $table")
+    new NoSuchTableException(table)
   }
 
   def noSuchFunctionError(
@@ -2269,7 +2267,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
-    new AnalysisException(s"Table or view '${ident.quoted}' not found")
+    new NoSuchTableException(ident.quoted)
   }
 
   def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
@@ -2331,7 +2329,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(s"Table $tableIdent already exists.")
+    new TableAlreadyExistsException(tableIdent.parts)
   }
 
   def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {

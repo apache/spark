@@ -57,10 +57,12 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
   test("table to alter does not exist") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relation_name" -> s"`$catalog`.`ns`.`no_tbl`"))
     }
   }
 
@@ -68,10 +70,13 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
       checkPartitions(t, Map("id" -> "1"))
-      val errMsg = intercept[NoSuchPartitionException] {
+      val e = intercept[NoSuchPartitionException] {
         sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition not found in table"))
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partition_list" -> "PARTITION (`id` = 3)",
+          "table_name" -> "`ns`.`tbl`"))
     }
   }
 
@@ -80,10 +85,12 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       createSinglePartTable(t)
       sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      val errMsg = intercept[PartitionAlreadyExistsException] {
+      val e = intercept[PartitionAlreadyExistsException] {
         sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition already exists"))
+      }
+      checkError(e,
+        errorClass = "PARTITIONS_ALREADY_EXIST",
+        parameters = Map("partition_list" -> "PARTITION (`id` = 2)", "table_name" -> "`ns`.`tbl`"))
     }
   }
 

@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -298,7 +299,7 @@ class InMemoryV1Provider
     }
 
     if (mode == SaveMode.ErrorIfExists && tableOpt.isDefined) {
-      throw new AnalysisException("Table already exists")
+      throw new TableAlreadyExistsException(table.name)
     } else if (mode == SaveMode.Ignore && tableOpt.isDefined) {
       // do nothing
       return getRelation

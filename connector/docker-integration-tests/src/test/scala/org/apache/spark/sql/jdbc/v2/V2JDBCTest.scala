@@ -20,8 +20,9 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
@@ -99,10 +100,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg.contains("Cannot add column, because C3 already exists"))
     }
     // Add a column to not existing table
-    val msg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> s"`$catalogName`.`not_existing_table`"))
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -120,10 +123,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg.contains(s"Missing field bad_column in table $catalogName.alt_table"))
     }
     // Drop a column from a not existing table
-    val msg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> s"`$catalogName`.`not_existing_table`"))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -136,10 +141,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg2.contains("Missing field bad_column"))
     }
     // Update column type in not existing table
-    val msg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> s"`$catalogName`.`not_existing_table`"))
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -154,10 +161,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg.contains("Cannot rename column, because ID2 already exists"))
     }
     // Rename a column in a not existing table
-    val msg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" ->
+        UnresolvedAttribute.parseAttributeName(s"$catalogName.not_existing_table")
+          .map(part => quoteIdentifier(part)).mkString(".")))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -165,10 +176,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       testUpdateColumnNullability(s"$catalogName.alt_table")
     }
     // Update column nullability in not existing table
-    val msg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
-    }.getMessage
-    assert(msg.contains("Table not found"))
+    }
+    checkError(e,
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relation_name" -> s"`$catalogName`.`not_existing_table`"))
   }
 
   test("CREATE TABLE with table comment") {
@@ -187,10 +200,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
-      val m = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
-      }.message
-      assert(m.contains("Failed table creation"))
+      }
+      checkError(e,
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relation_name" -> s"`$catalogName`.`new_table`"))
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }

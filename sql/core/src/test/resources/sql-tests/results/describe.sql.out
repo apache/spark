@@ -362,9 +362,14 @@ DESC t PARTITION (c='Us', d=2)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-Partition not found in table 't' database 'default':
-c -> Us
-d -> 2
+{
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "partition_list" : "PARTITION (`c` = Us, `d` = 2)",
+    "table_name" : "`default`.`t`"
+  }
+}
 
 
 -- !query
