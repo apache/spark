@@ -504,11 +504,18 @@ class ALSModel private[ml] (
     val aggFunc = CollectTopK(struct(ratingColumn, dstOutputColumn).expr, num)
       .toAggregateExpression(false)
 
+    val arrayType = ArrayType(
+      new StructType()
+        .add(dstOutputColumn, IntegerType)
+        .add(ratingColumn, FloatType)
+    )
+
     ratings.groupBy(srcOutputColumn)
       .agg(new Column(aggFunc))
       .as[(Int, Seq[(Float, Int)])]
       .map(t => (t._1, t._2.map(p => (p._2, p._1))))
       .toDF(srcOutputColumn, recommendColumn)
+      .withColumn(recommendColumn, col(recommendColumn).cast(arrayType))
   }
 
   /**

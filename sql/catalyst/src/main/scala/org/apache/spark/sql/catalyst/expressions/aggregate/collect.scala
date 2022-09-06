@@ -195,6 +195,9 @@ case class CollectSet(
     copy(child = newChild)
 }
 
+/**
+ * Collect the top-k elements. This expression is dedicated only for MLLIB.
+ */
 case class CollectTopK(
     child: Expression,
     num: Int,
@@ -208,13 +211,13 @@ case class CollectTopK(
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
   @transient private lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(child.dataType).reverse
+    TypeUtils.getInterpretedOrdering(child.dataType)
 
   override def createAggregationBuffer(): BoundedPriorityQueue[Any] =
     new BoundedPriorityQueue[Any](num)(ordering)
 
   override def eval(buffer: BoundedPriorityQueue[Any]): Any =
-    new GenericArrayData(buffer.toArray.sorted(ordering))
+    new GenericArrayData(buffer.toArray.sorted(ordering.reverse))
 
   override protected def withNewChildInternal(newChild: Expression): CollectTopK =
     copy(child = newChild)
