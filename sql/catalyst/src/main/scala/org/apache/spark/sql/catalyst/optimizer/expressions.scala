@@ -121,7 +121,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  type EqualityPredicates = Seq[((AttributeReference, Literal), BinaryComparison)]
+  type EqualityPredicates = Seq[((AttributeReference, Literal), Predicate)]
 
   /**
    * Traverse a condition as a tree and replace attributes with constant values.
