@@ -477,8 +477,11 @@ object Decimal {
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
-  private[sql] val ZERO = Decimal(0)
-  private[sql] val ONE = Decimal(1)
+  private[sql] val ZERO = new Decimal(false).set(0)
+  private[sql] val ONE = new Decimal(false).set(1)
+
+  private[sql] val ZERO128 = new Decimal(true).set(0)
+  private[sql] val ONE128 = new Decimal(true).set(1)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 

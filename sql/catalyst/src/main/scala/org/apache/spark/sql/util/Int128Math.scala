@@ -456,9 +456,8 @@ object Int128Math {
       // then with 2**rescaleFactor
       val result = scaleDownFive(high, low, rescale)
       shiftRight(result._1, result._2, rescale, roundUp)
-    }
-    else {
-      scaleDownTen(high, low, rescale, roundUp)
+    } else {
+      scaleDownTen(tmpHigh, tmpLow, rescale, roundUp)
     }
 
     if (negative) {

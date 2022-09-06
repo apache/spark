@@ -28,6 +28,9 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
 
   private var int128: Int128 = null
 
+  def high: Long = if (int128.eq(null)) this.longVal >> 63 else int128.high
+  def low: Long = if (int128.eq(null)) this.longVal else int128.low
+
   def newInstance(): Decimal128Operation = new Decimal128Operation()
 
   private def set(int128: Int128, precision: Int, scale: Int): Decimal128Operation = {
@@ -63,6 +66,10 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   def getAsJavaBigInteger(): java.math.BigInteger = this.int128.toBigInteger
 
   def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+    val newDecimalVal = getAsBigDecimal().setScale(scale, roundMode)
+    if (newDecimalVal.precision > precision) {
+      return false
+    }
     val diff = scale - _scale
     val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.int128.high, this.int128.low, diff)
     this.int128 = Int128(newLeftHigh, newLeftLow)
@@ -73,8 +80,10 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     operatorWithRescale(
       scale,
       that.scale,
-      this.int128,
-      that.int128) (Int128.compare)
+      high,
+      low,
+      that.high,
+      that.low) (Int128.compare)
 
   def isEqualsZero(): Boolean = this.int128.isZero()
 
@@ -82,8 +91,10 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     val (newHigh, newLow) = operatorWithRescale(
       scale,
       that.scale,
-      this.int128,
-      that.int128) (Int128Math.add)
+      high,
+      low,
+      that.high,
+      that.low) (Int128Math.add)
 
     checkOverflow(newHigh, newLow, "Decimal128 addition.")
 
@@ -99,8 +110,10 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     val (newHigh, newLow) = operatorWithRescale(
       scale,
       that.scale,
-      this.int128,
-      that.int128) (Int128Math.subtract)
+      high,
+      low,
+      that.high,
+      that.low) (Int128Math.subtract)
 
     checkOverflow(newHigh, newLow, "Decimal128 subtract.")
 
@@ -191,8 +204,10 @@ object Decimal128Operation {
   def operatorWithRescale[T](
       leftScale: Int,
       rightScale: Int,
-      left: Int128,
-      right: Int128) (f: (Long, Long, Long, Long) => T): T = {
+      leftHigh: Long,
+      leftLow: Long,
+      rightHigh: Long,
+      rightLow: Long) (f: (Long, Long, Long, Long) => T): T = {
     val (rescale, rescaleLeft) = if (leftScale > rightScale) {
       (leftScale - rightScale, false)
     } else if (leftScale < rightScale) {
@@ -201,14 +216,14 @@ object Decimal128Operation {
       (0, false)
     }
     if (rescale == 0) {
-      f(left.high, left.low, right.high, right.low)
+      f(leftHigh, leftLow, rightHigh, rightLow)
     } else {
       if (rescaleLeft) {
-        val (newLeftHigh, newLeftLow) = Int128Math.rescale(left.high, left.low, rescale)
-        f(newLeftHigh, newLeftLow, right.high, right.low)
+        val (newLeftHigh, newLeftLow) = Int128Math.rescale(leftHigh, leftLow, rescale)
+        f(newLeftHigh, newLeftLow, rightHigh, rightLow)
       } else {
-        val (newRightHigh, newRightLow) = Int128Math.rescale(right.high, right.low, rescale)
-        f(left.high, left.low, newRightHigh, newRightLow)
+        val (newRightHigh, newRightLow) = Int128Math.rescale(rightHigh, rightLow, rescale)
+        f(leftHigh, leftLow, newRightHigh, newRightLow)
       }
     }
   }
