@@ -54,8 +54,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def handlePlan(session: SparkSession, request: proto.Request): Unit = {
     // Extract the plan from the request and convert it to a logical plan
+    val planner = new SparkConnectPlanner(request.getPlan.getRoot, session)
     val rows =
-      Dataset.ofRows(session, SparkConnectPlanner(request.getPlan.getRoot, session).transform())
+      Dataset.ofRows(session, planner.transform())
     processRows(request.getClientId, rows)
   }
 
@@ -110,7 +111,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[Response]) exte
 
   def handleCommand(session: SparkSession, request: Request): Unit = {
     val command = request.getPlan.getCommand
-    SparkConnectCommandPlanner(session, command).process()
+    val planner = new SparkConnectCommandPlanner(session, command)
+    planner.process()
     responseObserver.onCompleted()
 
   }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.types.StringType
 
 @Experimental
-case class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
+class SparkConnectCommandPlanner(session: SparkSession, command: proto.Command) {
 
   lazy val pythonVersion =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))

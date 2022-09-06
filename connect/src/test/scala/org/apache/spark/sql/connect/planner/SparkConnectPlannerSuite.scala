@@ -27,7 +27,7 @@ import org.apache.spark.sql.sparkconnect.planner.{InvalidPlanInput, SparkConnect
 
 trait SparkConnectPlanTest {
   def transform(rel: proto.Relation): LogicalPlan = {
-    SparkConnectPlanner(rel, None.orNull).transform()
+    new SparkConnectPlanner(rel, None.orNull).transform()
   }
 
   def readRel: proto.Relation =
@@ -64,7 +64,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("LIMIT simple") {
     assertThrows[IndexOutOfBoundsException] {
-      SparkConnectPlanner(
+      new SparkConnectPlanner(
         proto.Relation.newBuilder.setFetch(proto.Fetch.newBuilder.setLimit(10).build()).build(),
         None.orNull)
         .transform()
@@ -74,10 +74,10 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      SparkConnectPlanner(proto.Relation.newBuilder().build(), None.orNull).transform())
+      new SparkConnectPlanner(proto.Relation.newBuilder().build(), None.orNull).transform())
 
     intercept[InvalidPlanInput](
-      SparkConnectPlanner(
+      new SparkConnectPlanner(
         proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build(),
         None.orNull).transform())
 

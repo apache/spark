@@ -50,7 +50,7 @@ final case class InvalidPlanInput(
     extends Exception(message, cause)
 
 @Experimental
-case class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
+class SparkConnectPlanner(plan: proto.Relation, session: SparkSession) {
 
   def transform(): LogicalPlan = {
     transformRelation(plan)

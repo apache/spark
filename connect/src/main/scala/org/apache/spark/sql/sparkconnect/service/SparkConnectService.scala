@@ -64,7 +64,7 @@ class SparkConnectService(debug: Boolean)
 
     val logicalPlan = request.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.ROOT =>
-        SparkConnectPlanner(request.getPlan.getRoot, session).transform()
+        new SparkConnectPlanner(request.getPlan.getRoot, session).transform()
       case _ =>
         responseObserver.onError(
           new UnsupportedOperationException(
