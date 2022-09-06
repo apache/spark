@@ -21,6 +21,7 @@ import org.apache.spark.sql.IntegratedUDFTestUtils._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Complete, Update}
+import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -521,4 +522,79 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
   }
   testWithTimeout(NoTimeout)
   testWithTimeout(ProcessingTimeTimeout)
+
+  test("applyInPandasWithState - uses state format version 2 by default") {
+    assume(shouldTestPandasUDFs)
+
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count if state is defined, otherwise does not return anything
+    val pythonScript =
+    """
+      |import pandas as pd
+      |from pyspark.sql.types import StructType, StructField, StringType
+      |
+      |tpe = StructType([
+      |    StructField("key", StringType()),
+      |    StructField("countAsString", StringType())])
+      |
+      |def func(key, pdf_iter, state):
+      |    assert state.getCurrentProcessingTimeMs() >= 0
+      |    try:
+      |        state.getCurrentWatermarkMs()
+      |        assert False
+      |    except RuntimeError as e:
+      |        assert "watermark" in str(e)
+      |
+      |    count = state.getOption
+      |    if count is None:
+      |        count = 0
+      |    else:
+      |        count = count[0]
+      |
+      |    for pdf in pdf_iter:
+      |        count += len(pdf)
+      |        state.update((count,))
+      |
+      |    ret = pd.DataFrame()
+      |    if count >= 3:
+      |        state.remove()
+      |    else:
+      |        ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+      |
+      |    return ret
+      |""".stripMargin
+    val pythonFunc = TestGroupedMapPandasUDFWithState(
+      name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+
+    val inputData = MemoryStream[String]
+    val outputStructType = StructType(
+      Seq(
+        StructField("key", StringType),
+        StructField("countAsString", StringType)))
+    val stateStructType = StructType(Seq(StructField("count", LongType)))
+    val inputDataDS = inputData.toDS()
+    val result =
+      inputDataDS
+        .groupBy("value")
+        .applyInPandasWithState(
+          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          outputStructType,
+          stateStructType,
+          "Update",
+          "NoTimeout")
+
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckNewAnswer(("a", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+      Execute { query =>
+        // Verify state format = 2
+        val f = query.lastExecution.executedPlan.collect {
+          case f: FlatMapGroupsInPandasWithStateExec => f
+        }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 2)
+      }
+    )
+  }
 }
