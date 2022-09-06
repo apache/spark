@@ -118,7 +118,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
-        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -1149,7 +1148,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   /**
    * Check if the given expression is cheap that we can inline it.
    */
-  private def isCheap(e: Expression): Boolean = e match {
+  def isCheap(e: Expression): Boolean = e match {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs

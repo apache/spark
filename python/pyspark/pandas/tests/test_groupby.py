@@ -158,11 +158,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by="a"))
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by=["a", "b"]))
         self.assertRaises(KeyError, lambda: psdf.a.groupby(by=("a", "b")))
+        self.assertRaises(KeyError, lambda: psdf.a.groupby(by=[("a", "b")]))
 
         # we can't use DataFrame as a parameter `by` for `DataFrameGroupBy`/`SeriesGroupBy`.
         self.assertRaises(ValueError, lambda: psdf.groupby(psdf))
         self.assertRaises(ValueError, lambda: psdf.a.groupby(psdf))
         self.assertRaises(ValueError, lambda: psdf.a.groupby((psdf,)))
+
+        with self.assertRaisesRegex(ValueError, "Grouper for 'list' not 1-dimensional"):
+            psdf.groupby(by=[["a", "b"]])
 
         # non-string names
         pdf = pd.DataFrame(
@@ -1321,9 +1325,19 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         ):
             psdf.groupby("A")[["C"]].std()
 
+        with self.assertRaisesRegex(
+            TypeError, "Unaccepted data types of aggregation columns; numeric or bool expected."
+        ):
+            psdf.groupby("A")[["C"]].sem()
+
         self.assert_eq(
             psdf.groupby("A").std().sort_index(),
             pdf.groupby("A").std().sort_index(),
+            check_exact=False,
+        )
+        self.assert_eq(
+            psdf.groupby("A").sem().sort_index(),
+            pdf.groupby("A").sem().sort_index(),
             check_exact=False,
         )
 
@@ -3053,6 +3067,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 pdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
                 psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
+                check_exact=False,
+            )
+            # sem
+            self.assert_eq(
+                pdf.groupby("a").sem(ddof=ddof).sort_index(),
+                psdf.groupby("a").sem(ddof=ddof).sort_index(),
+                check_exact=False,
+            )
+            self.assert_eq(
+                pdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
+                psdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
                 check_exact=False,
             )
 

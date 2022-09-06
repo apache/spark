@@ -395,6 +395,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.1.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.diskBackend</td>
+    <td>LEVELDB</td>
+    <td>
+      Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.
+    </td>
+    <td>3.3.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.update.batchSize</td>
+    <td>Int.MaxValue</td>
+    <td>
+      Specifies the batch size for updating new eventlog files.
+      This controls each scan process to be completed within a reasonable time, and such
+      prevent the initial scan from running too long and blocking new eventlog files to
+      be scanned in time in large environments.
+    </td>
+    <td>3.4.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
