@@ -171,8 +171,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         )
         merge_message_flags += ["-m", message]
 
-    # The string "Closes #%s" string is required for GitHub to correctly close the PR
-    merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
+    # The string "Merges #%s" string is required for GitHub to correctly close the PR
+    merge_message_flags += ["-m", "Merges #%s from %s." % (pr_num, pr_repo_desc)]
 
     authors = "Authored-by:" if len(distinct_authors) == 1 else "Lead-authored-by:"
     authors += " %s" % (distinct_authors.pop(0))
