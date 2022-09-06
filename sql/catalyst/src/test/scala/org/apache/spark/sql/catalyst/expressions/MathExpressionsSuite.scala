@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -340,10 +341,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Ceil, (d: Double) => math.ceil(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
 
-    testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
+        checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
+        checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
+        checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
+      }
+    }
 
     val doublePi: Double = 3.1415
     val floatPi: Float = 3.1415f
@@ -370,10 +375,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Floor, (d: Double) => math.floor(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
 
-    testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
+        checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
+        checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
+        checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
+      }
+    }
 
     val doublePi: Double = 3.1415
     val floatPi: Float = 3.1415f
@@ -739,26 +748,30 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(intPi, scale), intResultsB(i), EmptyRow)
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
       checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundFloor(Literal(shortPi), Literal(scale))), shortResultsFloor(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundFloor(Literal(intPi), Literal(scale))), intResultsFloor(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundFloor(Literal(longPi), Literal(scale))), longResultsFloor(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundFloor(Literal(floatPi), Literal(scale))), floatResultsFloor(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundCeil(Literal(doublePi), Literal(scale))), doubleResultsCeil(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundCeil(Literal(shortPi), Literal(scale))), shortResultsCeil(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundCeil(Literal(intPi), Literal(scale))), intResultsCeil(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundCeil(Literal(longPi), Literal(scale))), longResultsCeil(i), EmptyRow)
-      checkEvaluation(checkDataTypeAndCast(
-        RoundCeil(Literal(floatPi), Literal(scale))), floatResultsCeil(i), EmptyRow)
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkEvaluation(checkDataTypeAndCast(
+            RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundFloor(Literal(shortPi), Literal(scale))), shortResultsFloor(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundFloor(Literal(intPi), Literal(scale))), intResultsFloor(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundFloor(Literal(longPi), Literal(scale))), longResultsFloor(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundFloor(Literal(floatPi), Literal(scale))), floatResultsFloor(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundCeil(Literal(doublePi), Literal(scale))), doubleResultsCeil(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundCeil(Literal(shortPi), Literal(scale))), shortResultsCeil(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundCeil(Literal(intPi), Literal(scale))), intResultsCeil(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundCeil(Literal(longPi), Literal(scale))), longResultsCeil(i), EmptyRow)
+          checkEvaluation(checkDataTypeAndCast(
+            RoundCeil(Literal(floatPi), Literal(scale))), floatResultsCeil(i), EmptyRow)
+        }
+      }
     }
 
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
@@ -774,17 +787,21 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14160"),
       BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
-    (0 to 7).foreach { i =>
-      checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
-      checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
-      checkEvaluation(RoundFloor(bdPi, i), bdResultsFloor(i), EmptyRow)
-      checkEvaluation(RoundCeil(bdPi, i), bdResultsCeil(i), EmptyRow)
-    }
-    (8 to 10).foreach { scale =>
-      checkEvaluation(Round(bdPi, scale), bdPi, EmptyRow)
-      checkEvaluation(BRound(bdPi, scale), bdPi, EmptyRow)
-      checkEvaluation(RoundFloor(bdPi, scale), bdPi, EmptyRow)
-      checkEvaluation(RoundCeil(bdPi, scale), bdPi, EmptyRow)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        (0 to 7).foreach { i =>
+          checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
+          checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
+          checkEvaluation(RoundFloor(bdPi, i), bdResultsFloor(i), EmptyRow)
+          checkEvaluation(RoundCeil(bdPi, i), bdResultsCeil(i), EmptyRow)
+        }
+        (8 to 10).foreach { scale =>
+          checkEvaluation(Round(bdPi, scale), bdPi, EmptyRow)
+          checkEvaluation(BRound(bdPi, scale), bdPi, EmptyRow)
+          checkEvaluation(RoundFloor(bdPi, scale), bdPi, EmptyRow)
+          checkEvaluation(RoundCeil(bdPi, scale), bdPi, EmptyRow)
+        }
+      }
     }
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>
@@ -806,34 +823,45 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Round(-3.5, 0), -4.0)
     checkEvaluation(Round(-0.35, 1), -0.4)
     checkEvaluation(Round(-35, -1), -40)
-    checkEvaluation(Round(BigDecimal("45.00"), -1), BigDecimal(50))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(Round(BigDecimal("45.00"), -1), BigDecimal(50))
+      }
+    }
     checkEvaluation(BRound(2.5, 0), 2.0)
     checkEvaluation(BRound(3.5, 0), 4.0)
     checkEvaluation(BRound(-2.5, 0), -2.0)
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
-    checkEvaluation(BRound(BigDecimal("45.00"), -1), BigDecimal(40))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-2.5), Literal(0))), Decimal(-3L))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-3.5), Literal(0))), Decimal(-4L))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.35), Literal(1))), Decimal(-0.4))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-35), Literal(-1))), Decimal(-40))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.1), Literal(0))), Decimal(-1))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(5), Literal(0))), Decimal(5))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.1411), Literal(-3))), Decimal(0))
-    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(135.135), Literal(-2))), Decimal(100))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(2.5), Literal(0))), Decimal(3))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.5), Literal(0))), Decimal(4L))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-2.5), Literal(0))), Decimal(-2L))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-3.5), Literal(0))), Decimal(-3L))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.35), Literal(1))), Decimal(-0.3))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-35), Literal(-1))), Decimal(-30))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.1), Literal(0))), Decimal(0))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(1000))
-    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(BRound(BigDecimal("45.00"), -1), BigDecimal(40))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-2.5), Literal(0))), Decimal(-3L))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-3.5), Literal(0))), Decimal(-4L))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.35), Literal(1))), Decimal(-0.4))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-35), Literal(-1))), Decimal(-40))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.1), Literal(0))), Decimal(-1))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(5), Literal(0))), Decimal(5))
+        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.1411), Literal(-3))), Decimal(0))
+        checkEvaluation(
+          checkDataTypeAndCast(RoundFloor(Literal(135.135), Literal(-2))), Decimal(100))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(2.5), Literal(0))), Decimal(3))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.5), Literal(0))), Decimal(4L))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-2.5), Literal(0))), Decimal(-2L))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-3.5), Literal(0))), Decimal(-3L))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.35), Literal(1))), Decimal(-0.3))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-35), Literal(-1))), Decimal(-30))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.1), Literal(0))), Decimal(0))
+        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
+        checkEvaluation(
+          checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(1000))
+        checkEvaluation(
+          checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
+      }
+    }
   }
 
   test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {

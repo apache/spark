@@ -25,6 +25,7 @@ import org.apache.spark.sql.util.Int128Math
 @Unstable
 class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   import org.apache.spark.sql.types.Decimal128Operation._
+  import org.apache.spark.sql.types.Decimal.{ROUND_CEILING, ROUND_FLOOR}
 
   private var int128: Int128 = null
 
@@ -70,9 +71,15 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     if (newDecimalVal.precision > precision) {
       return false
     }
-    val diff = scale - _scale
-    val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.int128.high, this.int128.low, diff)
-    this.int128 = Int128(newLeftHigh, newLeftLow)
+
+    val rescale = scale - _scale
+    if (roundMode == ROUND_CEILING || roundMode == ROUND_FLOOR) {
+      set(newDecimalVal)
+    } else {
+      val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.int128.high, this.int128.low, rescale)
+      this.int128 = Int128(newLeftHigh, newLeftLow)
+    }
+
     true
   }
 
