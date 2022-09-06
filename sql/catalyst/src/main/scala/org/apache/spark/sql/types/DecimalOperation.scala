@@ -329,7 +329,7 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
     if (isNotNull()) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
-      if (!rescale(scale, roundMode)) {
+      if (!rescale(precision, scale, roundMode)) {
         return false
       }
     } else {
@@ -346,7 +346,8 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
     true
   }
 
-  protected def rescale(scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean
+  protected def rescale(
+      precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean
 
   def compare(that: T): Int =
     if (isNull() && that.isNull() && _scale == that._scale) {

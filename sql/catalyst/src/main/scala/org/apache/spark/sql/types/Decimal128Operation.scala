@@ -62,7 +62,7 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
 
   def getAsJavaBigInteger(): java.math.BigInteger = this.int128.toBigInteger
 
-  def rescale(scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+  def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val diff = scale - _scale
     val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.int128.high, this.int128.low, diff)
     this.int128 = Int128(newLeftHigh, newLeftLow)

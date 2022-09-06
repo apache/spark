@@ -55,7 +55,7 @@ class JDKDecimalOperation extends DecimalOperation[JDKDecimalOperation] {
 
   def getAsJavaBigInteger(): java.math.BigInteger = this.decimalVal.underlying().toBigInteger
 
-  def rescale(scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+  def rescale(precision: Int, scale: Int, roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     val newDecimalVal = this.decimalVal.setScale(scale, roundMode)
     if (newDecimalVal.precision > precision) {
       return false
