@@ -1695,10 +1695,12 @@ class SubquerySuite extends QueryTest
     Seq(true, false).foreach { enableNAAJ =>
       Seq(true, false).foreach { enableAQE =>
         Seq(true, false).foreach { enableCodegen =>
+          Seq("", ConstantPropagation.ruleName).foreach { excludedRule =>
           withSQLConf(
             SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> enableNAAJ.toString,
             SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
-            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString) {
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString,
+            SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRule) {
 
             def findJoinExec(df: DataFrame): BaseJoinExec = {
               df.queryExecution.sparkPlan.collectFirst {
@@ -1725,8 +1727,12 @@ class SubquerySuite extends QueryTest
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              if (excludedRule.nonEmpty) {
+                assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+                assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              } else {
+                assert(joinExec.isInstanceOf[BroadcastNestedLoopJoinExec])
+              }
             } else {
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
             }
@@ -1761,8 +1767,12 @@ class SubquerySuite extends QueryTest
             checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              if (excludedRule.nonEmpty) {
+                assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+                assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              } else {
+                assert(joinExec.isInstanceOf[BroadcastNestedLoopJoinExec])
+              }
             } else {
               assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
             }
@@ -1782,16 +1792,18 @@ class SubquerySuite extends QueryTest
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
               assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin ===
+                excludedRule.isEmpty)
             } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
+              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec] ===
+                excludedRule.isEmpty)
             }
 
             // multi column not in subquery
             df = sql("select * from l where (a, b) not in (select c, d from r where c > 10)")
             checkAnswer(df, spark.table("l"))
             assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-          }
+          }}
         }
       }
     }
