@@ -5085,8 +5085,7 @@ def trim(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], types.StringType())
+    >>> df = spark.createDataFrame(["   Spark", "Spark  ", " Spark"], "STRING")
     >>> df.select(trim("value").alias("r")).withColumn("length", length("r")).show()
     +-----+------+
     |    r|length|
