@@ -1050,6 +1050,11 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(
                 expected_spark_dtypes, self.spark.range(1).select(lit(arr).alias("b")).dtypes
             )
+        arr = np.array([1, 2]).astype(np.uint)
+        with self.assertRaisesRegex(
+            TypeError, "The type of array scalar '%s' is not supported" % arr.dtype
+        ):
+            self.spark.range(1).select(lit(arr).alias("b"))
 
     def test_binary_math_function(self):
         funcs, expected = zip(*[(atan2, 0.13664), (hypot, 8.07527), (pow, 2.14359), (pmod, 1.1)])

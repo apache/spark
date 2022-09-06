@@ -2304,7 +2304,7 @@ class NumpyArrayConverter:
         else:
             jtpe = _from_numpy_type_to_java_type(obj.dtype, gateway)
             if jtpe is None:
-                raise TypeError("The type of array scalar is not supported")
+                raise TypeError("The type of array scalar '%s' is not supported" % (obj.dtype))
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]
