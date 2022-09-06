@@ -368,7 +368,7 @@ object KeyGroupedPartitioning {
     }
 
     expressions.forall {
-      case _: AttributeReference => true
+      case _: NamedExpression => true
       case t: TransformExpression if isSupportedTransform(t) => true
       case _ => false
     }
