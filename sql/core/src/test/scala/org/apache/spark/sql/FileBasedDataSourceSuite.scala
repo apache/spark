@@ -254,6 +254,29 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  private def checkPushedFilters(
+      format: String,
+      df: DataFrame,
+      filters: Array[sources.Filter],
+      noScan: Boolean = false): Unit = {
+    val scanExec = df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec])
+    if (noScan) {
+      assert(scanExec.isEmpty)
+      return
+    }
+    val scan = scanExec.get.asInstanceOf[BatchScanExec].scan
+    format match {
+      case "orc" =>
+        assert(scan.isInstanceOf[OrcScan])
+        assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+      case "parquet" =>
+        assert(scan.isInstanceOf[ParquetScan])
+        assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
+      case _ =>
+        fail(s"unknown format $format")
+    }
+  }
+
   // Text file format only supports string type
   test("SPARK-24691 error handling for unsupported types - text") {
     withTempDir { dir =>
@@ -953,29 +976,6 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("test casts pushdown on orc/parquet for integral types") {
-    def checkPushedFilters(
-        format: String,
-        df: DataFrame,
-        filters: Array[sources.Filter],
-        noScan: Boolean = false): Unit = {
-      val scanExec = df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec])
-      if (noScan) {
-        assert(scanExec.isEmpty)
-        return
-      }
-      val scan = scanExec.get.asInstanceOf[BatchScanExec].scan
-      format match {
-        case "orc" =>
-          assert(scan.isInstanceOf[OrcScan])
-          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
-        case "parquet" =>
-          assert(scan.isInstanceOf[ParquetScan])
-          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
-        case _ =>
-          fail(s"unknown format $format")
-      }
-    }
-
     Seq("orc", "parquet").foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
@@ -1038,6 +1038,32 @@ class FileBasedDataSourceSuite extends QueryTest
             sources.GreaterThan("id", 30)))
           checkPushedFilters(format, df.where(lit(100) >= $"id"),
             Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-40355: test casts pushdown on orc/parquet for " +
+    "the type of column does not match the type of value") {
+    Seq("orc", "parquet").foreach { format =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempPath { dir =>
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").
+            write.parquet(dir.getCanonicalPath)
+
+          val df = spark.read.format(format).load(dir.getCanonicalPath)
+          checkPushedFilters(format, df.filter("b = 1"),
+            Array(sources.IsNotNull("b"), sources.EqualTo("b", "1")))
+          checkPushedFilters(format, df.filter("b <=> 1"),
+            Array(sources.EqualNullSafe("b", "1")))
+          checkPushedFilters(format, df.filter("b > 1"),
+            Array(sources.IsNotNull("b"), sources.GreaterThan("b", "1")))
+          checkPushedFilters(format, df.filter("b < 1"),
+            Array(sources.IsNotNull("b"), sources.LessThan("b", "1")))
+          checkPushedFilters(format, df.filter("b >= 1"),
+            Array(sources.IsNotNull("b"), sources.GreaterThanOrEqual("b", "1")))
+          checkPushedFilters(format, df.filter("b <= 1"),
+            Array(sources.IsNotNull("b"), sources.LessThanOrEqual("b", "1")))
         }
       }
     }

@@ -503,35 +503,90 @@ object DataSourceStrategy
   private def translateLeafNodeFilter(
       predicate: Expression,
       pushableColumn: PushableColumnBase): Option[Filter] = predicate match {
+
     case expressions.EqualTo(pushableColumn(name), Literal(v, t)) =>
       Some(sources.EqualTo(name, convertToScala(v, t)))
     case expressions.EqualTo(Literal(v, t), pushableColumn(name)) =>
       Some(sources.EqualTo(name, convertToScala(v, t)))
+
+    case expressions.EqualTo(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.EqualTo(name, convertToScala(castValue, e.dataType)))
+    case expressions.EqualTo(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.EqualTo(name, convertToScala(castValue, e.dataType)))
 
     case expressions.EqualNullSafe(pushableColumn(name), Literal(v, t)) =>
       Some(sources.EqualNullSafe(name, convertToScala(v, t)))
     case expressions.EqualNullSafe(Literal(v, t), pushableColumn(name)) =>
       Some(sources.EqualNullSafe(name, convertToScala(v, t)))
 
+    case expressions.EqualNullSafe(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.EqualNullSafe(name, convertToScala(castValue, e.dataType)))
+    case expressions.EqualNullSafe(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.EqualNullSafe(name, convertToScala(castValue, e.dataType)))
+
     case expressions.GreaterThan(pushableColumn(name), Literal(v, t)) =>
       Some(sources.GreaterThan(name, convertToScala(v, t)))
     case expressions.GreaterThan(Literal(v, t), pushableColumn(name)) =>
       Some(sources.LessThan(name, convertToScala(v, t)))
+
+    case expressions.GreaterThan(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.GreaterThan(name, convertToScala(castValue, e.dataType)))
+    case expressions.GreaterThan(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.LessThan(name, convertToScala(castValue, e.dataType)))
 
     case expressions.LessThan(pushableColumn(name), Literal(v, t)) =>
       Some(sources.LessThan(name, convertToScala(v, t)))
     case expressions.LessThan(Literal(v, t), pushableColumn(name)) =>
       Some(sources.GreaterThan(name, convertToScala(v, t)))
 
+    case expressions.LessThan(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast (l, e.dataType).eval()
+      Some(sources.LessThan(name, convertToScala(castValue, e.dataType)))
+    case expressions.LessThan(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast (t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some (sources.GreaterThan(name, convertToScala(castValue, e.dataType)))
+
     case expressions.GreaterThanOrEqual(pushableColumn(name), Literal(v, t)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
     case expressions.GreaterThanOrEqual(Literal(v, t), pushableColumn(name)) =>
       Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
 
+    case expressions.GreaterThanOrEqual(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.GreaterThanOrEqual(name, convertToScala(castValue, e.dataType)))
+    case expressions.GreaterThanOrEqual(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.LessThanOrEqual(name, convertToScala(castValue, e.dataType)))
+
     case expressions.LessThanOrEqual(pushableColumn(name), Literal(v, t)) =>
       Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
     case expressions.LessThanOrEqual(Literal(v, t), pushableColumn(name)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
+
+    case expressions.LessThanOrEqual(Cast(e @ pushableColumn(name), _, _, _), l @ Literal(_, t))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.LessThanOrEqual(name, convertToScala(castValue, e.dataType)))
+    case expressions.LessThanOrEqual(l @ Literal(_, t), Cast(e @ pushableColumn(name), _, _, _))
+      if Cast.canCast(t, e.dataType) =>
+      val castValue = cast(l, e.dataType).eval()
+      Some(sources.GreaterThanOrEqual(name, convertToScala(castValue, e.dataType)))
 
     case expressions.InSet(e @ pushableColumn(name), set) =>
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
