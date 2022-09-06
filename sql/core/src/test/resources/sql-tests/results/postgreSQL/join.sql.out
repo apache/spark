@@ -3518,7 +3518,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "GENERIC",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
@@ -3534,7 +3534,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "GENERIC",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
@@ -3550,7 +3550,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "GENERIC",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
@@ -3566,7 +3566,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "GENERIC",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"

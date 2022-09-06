@@ -65,7 +65,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "GENERIC",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`FROM`"

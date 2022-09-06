@@ -159,7 +159,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("UNRESOLVED_COLUMN", "GENERIC", Array.empty)
+      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty)
     }
 
     // Does not fail with too many args (expects 0 args)

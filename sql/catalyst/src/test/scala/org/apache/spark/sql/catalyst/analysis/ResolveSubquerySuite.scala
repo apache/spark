@@ -134,7 +134,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b", $"c"))),
       "UNRESOLVED_COLUMN",
-      "GENERIC",
+      "WITHOUT_SUGGESTION",
       Array("`a`"),
       caseSensitive = true)
   }
@@ -144,7 +144,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, t0.select($"a", $"c")),
       "UNRESOLVED_COLUMN",
-      "GENERIC",
+      "WITHOUT_SUGGESTION",
       Array("`c`"),
       caseSensitive = true)
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
@@ -158,14 +158,14 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
       "UNRESOLVED_COLUMN",
-      "GENERIC",
+      "WITHOUT_SUGGESTION",
       Array("`t1`.`a`"),
       caseSensitive = true)
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
     assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"a", $"b"))),
       "UNRESOLVED_COLUMN",
-      "GENERIC",
+      "WITHOUT_SUGGESTION",
       Array("`a`"),
       caseSensitive = true)
   }

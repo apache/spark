@@ -121,11 +121,11 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   def errorClassTest(
-    name: String,
-    plan: LogicalPlan,
-    errorClass: String,
-    errorSubClass: String,
-    messageParameters: Array[String]): Unit = {
+      name: String,
+      plan: LogicalPlan,
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String]): Unit = {
     test(name) {
       assertAnalysisErrorClass(plan, errorClass, errorSubClass, messageParameters,
         caseSensitive = true)

@@ -3481,7 +3481,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {
           val candidates = i.table.output.map(_.name)
-          val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates).take(5)
+          val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
           throw QueryCompilationErrors
             .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
         }

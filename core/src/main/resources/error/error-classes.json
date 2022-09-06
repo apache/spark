@@ -418,7 +418,7 @@
       "A column or function parameter with name <objectName> cannot be resolved."
     ],
     "subClass" : {
-      "GENERIC" : {
+      "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
         ]
@@ -436,7 +436,7 @@
       "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
     ],
     "subClass" : {
-      "GENERIC" : {
+      "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
         ]
@@ -454,7 +454,7 @@
       "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
     "subClass" : {
-      "GENERIC" : {
+      "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
         ]

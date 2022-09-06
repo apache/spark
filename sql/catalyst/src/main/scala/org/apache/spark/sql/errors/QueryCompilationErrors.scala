@@ -171,11 +171,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = errorClass,
-      errorSubClass = if (candidates.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
       messageParameters = Array.concat(Array(toSQLId(colName)), if (candidates.isEmpty) {
         Array.empty
       } else {
-        Array(candidates.map(toSQLId).mkString(", "))
+        Array(candidates.take(5).map(toSQLId).mkString(", "))
       }),
       origin = origin
     )
@@ -184,11 +184,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = if (proposal.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
       messageParameters = Array.concat(Array(toSQLId(columnName)), if (proposal.isEmpty) {
         Array.empty
       } else {
-        Array(proposal.map(toSQLId).mkString(", "))
+        Array(proposal.take(5).map(toSQLId).mkString(", "))
       }))
   }
 
@@ -198,7 +198,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      errorSubClass = if (proposal.isEmpty) "GENERIC" else "WITH_SUGGESTION",
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
       messageParameters =
         Array.concat(Array(toSQLId(fieldName), toSQLId(columnPath)), if (proposal.isEmpty) {
           Array.empty
