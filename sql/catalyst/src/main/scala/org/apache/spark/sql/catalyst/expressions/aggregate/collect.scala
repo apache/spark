@@ -219,6 +219,8 @@ case class CollectTopK(
   override def eval(buffer: BoundedPriorityQueue[Any]): Any =
     new GenericArrayData(buffer.toArray.sorted(ordering.reverse))
 
+  override def prettyName: String = "collect_top_k"
+
   override protected def withNewChildInternal(newChild: Expression): CollectTopK =
     copy(child = newChild)
 
