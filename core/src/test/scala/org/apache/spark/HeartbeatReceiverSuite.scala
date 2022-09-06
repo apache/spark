@@ -64,6 +64,7 @@ class HeartbeatReceiverSuite
   private val _executorLastSeen =
     PrivateMethod[collection.Map[String, Long]](Symbol("executorLastSeen"))
   private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
+  private val _expiryCandidatesTimeoutMs = PrivateMethod[Long](Symbol("expiryCandidatesTimeout"))
   private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
   private val _executorExpiryCandidates =
     PrivateMethod[mutable.HashMap[String, Long]](Symbol("executorExpiryCandidates"))
@@ -186,7 +187,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
     when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
 
-    // executorTimeout = 120000
+    // executorTimeout = 30000
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
@@ -205,12 +206,12 @@ class HeartbeatReceiverSuite
     // executorLastSeen = Map(1 -> 0); now = 0
     triggerHeartbeat(executorId1, executorShouldReregister = false)
 
-    // now = 120001
+    // now = executorTimeout + 1
     heartbeatReceiverClock.advance(executorTimeout + 1)
-    // Executor1 will not be killed because workerLastHeartbeat is 120000. Executor1 will be removed
+    // Executor1 will not be killed because workerLastHeartbeat is 30000. Executor1 will be removed
     // from executorLastSeen (trackedExecutors.size === 0) and moved to executorExpiryCandidates
     // (executorExpiryCandidates.size === 1). In other words, executorExpiryCandidates is equal to
-    // Map(1 -> 120000).
+    // Map(1 -> 30000).
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
     var trackedExecutors = getTrackedExecutors
@@ -219,10 +220,11 @@ class HeartbeatReceiverSuite
     assert(executorExpiryCandidates.size === 1)
     assert(executorExpiryCandidates.contains(executorId1))
 
-    // now = 240001
+    // now = 30001 + expiryCandidatesTimeout
     // The executor will be removed from executorExpiryCandidates because
-    // (now - executorExpiryCandidates(1)) is larger than (executorTimeoutMs / 2).
-    heartbeatReceiverClock.advance(executorTimeout)
+    // (now - executorExpiryCandidates(1)) is larger than expiryCandidatesTimeout.
+    val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
+    heartbeatReceiverClock.advance(expiryCandidatesTimeout)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
     trackedExecutors = getTrackedExecutors
     executorExpiryCandidates = heartbeatReceiver.invokePrivate(_executorExpiryCandidates())
@@ -332,9 +334,9 @@ class HeartbeatReceiverSuite
 
     // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is enabled, but we did not set the
     // value of HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT. Hence, expiryCandidatesTimeout is same as
-    // default value (30s = 30000ms).
+    // default value (90s = 90000ms).
     val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
-    assert(expiryCandidatesTimeout == 30000)
+    assert(expiryCandidatesTimeout == 90000)
 
     // Advance the clock and only trigger a heartbeat for the first executor
     heartbeatReceiverClock.advance(expiryCandidatesTimeout)
@@ -377,7 +379,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverRef = sc.env.rpcEnv.setupEndpoint("heartbeat", heartbeatReceiver)
     when(scheduler.executorHeartbeatReceived(any(), any(), any(), any())).thenReturn(true)
 
-    // executorTimeout = 120000
+    // executorTimeout = 30000
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
@@ -404,7 +406,8 @@ class HeartbeatReceiverSuite
     // When (now - executorLastSeen(execID)) is larger than executorTimeout, heartbeatReceiver will
     // ask master node for workerLastHeartbeat. However, in this test, heartbeatReceiver cannot
     // reach master node, and thus we will remove the executor.
-    heartbeatReceiverClock.advance(executorTimeout + 1)
+    val expiryCandidatesTimeout = heartbeatReceiver.invokePrivate(_expiryCandidatesTimeout())
+    heartbeatReceiverClock.advance(expiryCandidatesTimeout + 1)
     heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
 
     // Both executors will be removed from executorLastSeen and executorExpiryCandidates.
@@ -430,7 +433,7 @@ class HeartbeatReceiverSuite
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
     val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
-    assert(executorTimeout == 100000)
+    assert(executorTimeout == 30000)
 
     // HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT is not enabled, so the value
     // of expiryCandidatesTimeout is 0.

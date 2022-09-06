@@ -103,10 +103,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private val executorTimeoutMs = sc.conf.get(
     config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT
   ).getOrElse(
-    sc.conf.get(Network.NETWORK_EXECUTOR_TIMEOUT) match {
-      case Some(executorTimeout) => executorTimeout
-      case None => Utils.timeStringAsMs(s"${sc.conf.get(Network.NETWORK_TIMEOUT)}s")
-    }
+    sc.conf.get(Network.NETWORK_EXECUTOR_TIMEOUT)
   )
 
   private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
@@ -119,10 +116,16 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    * `checkWorkerLastHeartbeat`: A flag to enable two-phase executor timeout.
    * `expiryCandidatesTimeout`: The timeout used for executorExpiryCandidates.
    */
-  private val checkWorkerLastHeartbeat =
-    sc.conf.get(config.HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT)
+  private lazy val checkWorkerLastHeartbeat = sc.schedulerBackend match {
+    case _: CoarseGrainedSchedulerBackend =>
+      sc.conf.get(config.HEARTBEAT_RECEIVER_CHECK_WORKER_LAST_HEARTBEAT) &&
+        sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
+    case _: LocalSchedulerBackend => false
+    case other => throw new UnsupportedOperationException(
+      s"Unknown scheduler backend: ${other.getClass}")
+  }
 
-  private val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
+  private lazy val expiryCandidatesTimeout = checkWorkerLastHeartbeat match {
     case true =>
       logWarning(s"Worker heartbeat check is enabled. It only works normally when" +
         s"${config.HEARTBEAT_EXPIRY_CANDIDATES_TIMEOUT.key} is larger than worker's" +
@@ -150,7 +153,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   override def onStart(): Unit = {
     timeoutCheckingTask = eventLoopThread.scheduleAtFixedRate(
       () => Utils.tryLogNonFatalError { Option(self).foreach(_.ask[Boolean](ExpireDeadHosts)) },
-      0, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
+      executorTimeoutMs, checkTimeoutIntervalMs, TimeUnit.MILLISECONDS)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -176,8 +179,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       var reregisterBlockManager = !sc.isStopped
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId) ||
-          (checkWorkerLastHeartbeat && isStandalone() &&
-            executorExpiryCandidates.contains(executorId))) {
+          (checkWorkerLastHeartbeat && executorExpiryCandidates.contains(executorId))) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           removeExecutorFromExpiryCandidates(executorId)
           eventLoopThread.submit(new Runnable {
@@ -278,12 +280,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     })
   }
 
-  private def isStandalone(): Boolean = {
-    sc.schedulerBackend.isInstanceOf[StandaloneSchedulerBackend]
-  }
-
   private def removeExecutorFromExpiryCandidates(executorId: String): Unit = {
-    if (checkWorkerLastHeartbeat && isStandalone()) {
+    if (checkWorkerLastHeartbeat) {
       executorExpiryCandidates.remove(executorId)
     }
   }
@@ -309,7 +307,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
    */
     logTrace("Checking for hosts with no recent heartbeats in HeartbeatReceiver.")
     val now = clock.getTimeMillis()
-    if (!checkWorkerLastHeartbeat || !isStandalone()) {
+    if (!checkWorkerLastHeartbeat) {
       for ((executorId, lastSeenMs) <- executorLastSeen) {
         if (now - lastSeenMs > executorTimeoutMs) {
           killExecutor(executorId, now - lastSeenMs)
