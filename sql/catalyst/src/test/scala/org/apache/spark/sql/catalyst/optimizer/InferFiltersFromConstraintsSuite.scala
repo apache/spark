@@ -208,7 +208,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       // as("left")
       testRelation.subquery("left").where(IsNotNull($"a") && $"a" === 2).as("left")
     } else {
-      val optimizedLeft = testRelation.subquery("left")
+      testRelation.subquery("left")
         .where(IsNotNull($"a") && $"a" <=> 2).as("left")
     }
     val right = Project(Seq(Literal(2).as("two")),

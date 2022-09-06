@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.GenTraversableOnce
-import scala.collection.mutable
+import scala.collection.{mutable, GenSet, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
@@ -149,6 +148,11 @@ class ExpressionSet protected(
     newSet
   }
 
+  override def union(that: GenSet[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
   override def iterator: Iterator[Expression] = originals.iterator
 
   override def apply(elem: Expression): Boolean = this.contains(elem)

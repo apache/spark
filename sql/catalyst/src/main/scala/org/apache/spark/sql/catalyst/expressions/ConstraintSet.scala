@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{mutable, GenTraversableOnce}
+import scala.collection.{mutable, GenSet, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 import ConstraintSetImplicit._
@@ -134,7 +134,7 @@ class ConstraintSet private(
     originals.clone(), this.attribRefBasedEquivalenceList.map(_.clone()),
     this.expressionBasedEquivalenceList.map(_.clone()))
 
-  override def union(that: ExpressionSet): ExpressionSet = {
+  override def union(that: GenSet[Expression]): ExpressionSet = {
     def commonEquivList[T <: Expression](thisList: Seq[mutable.Buffer[T]],
                                          thatList: Seq[mutable.Buffer[T]]): Seq[mutable.Buffer[T]]
     = {
