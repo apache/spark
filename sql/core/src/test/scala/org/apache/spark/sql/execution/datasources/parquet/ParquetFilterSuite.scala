@@ -76,6 +76,7 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * within the test.
  */
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+
   protected def createParquetFilters(
       schema: MessageType,
       caseSensitive: Option[Boolean] = None,
@@ -369,7 +370,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("filter pushdown - int SPARK-40280") {
+  test("SPARK-40280: filter pushdown - int with annotation") {
     implicit val df = readResourceParquetFile("test-data/tagged_int.parquet")
 
     val intAttr = df("_c0").expr
@@ -399,6 +400,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], 4)
     checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
       Seq(Row(1), Row(4)))
+
+    Seq(3, 20).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+        checkFilterPredicate(
+          In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
+          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          Seq(Row(2), Row(3), Row(4)))
+      }
+    }
   }
 
   test("filter pushdown - long") {
@@ -445,7 +455,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("filter pushdown - long SPARK-40280") {
+  test("SPARK-40280: filter pushdown - long with annotation") {
     implicit val df = readResourceParquetFile("test-data/tagged_long.parquet")
 
     val longAttr = df("_c0").expr
@@ -475,6 +485,15 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     checkFilterPredicate(!(longAttr < 4), classOf[GtEq[_]], 4)
     checkFilterPredicate(longAttr < 2 || longAttr > 3, classOf[Operators.Or],
       Seq(Row(1), Row(4)))
+
+    Seq(3, 20).foreach { threshold =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+        checkFilterPredicate(
+          In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
+          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          Seq(Row(2L), Row(3L), Row(4L)))
+      }
+    }
   }
 
   test("filter pushdown - float") {

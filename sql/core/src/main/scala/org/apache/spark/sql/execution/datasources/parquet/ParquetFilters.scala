@@ -60,17 +60,14 @@ class ParquetFilters(
   // See `org.apache.spark.sql.connector.catalog.quote` for implementation details.
   private val nameToParquetField : Map[String, ParquetPrimitiveField] = {
     def getNormalizedLogicalType(p: PrimitiveType): LogicalTypeAnnotation = {
-      // signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but the rest of
-      // the code here assumes they are not set, so normalize them to not being set. SPARK-40280
-      p.getLogicalTypeAnnotation match {
-        case la : IntLogicalTypeAnnotation if la.isSigned &&
-            la.getBitWidth == 32 && p.getPrimitiveTypeName == PrimitiveTypeName.INT32 =>
-          null
-        case la : IntLogicalTypeAnnotation if la.isSigned &&
-            la.getBitWidth == 64 && p.getPrimitiveTypeName == PrimitiveTypeName.INT64 =>
-          null
-        case other =>
-          other
+      // SPARK-40280: Signed 64 bits on an INT64 and signed 32 bits on an INT32 are optional, but
+      // the rest of the code here assumes they are not set, so normalize them to not being set.
+      (p.getPrimitiveTypeName, p.getLogicalTypeAnnotation) match {
+        case (INT32, intType: IntLogicalTypeAnnotation)
+          if intType.getBitWidth() == 32 && intType.isSigned() => null
+        case (INT64, intType: IntLogicalTypeAnnotation)
+          if intType.getBitWidth() == 64 && intType.isSigned() => null
+        case (_, otherType) => otherType
       }
     }
 
