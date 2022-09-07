@@ -266,12 +266,9 @@ class ProtoFunctionsSuite extends QueryTest with SharedSparkSession with Seriali
   }
 
   test("test Proto Schema") {
-    val MULTIPLE_EXAMPLE = "protobuf/protobuf_multiple_message.desc"
-    val desc = ProtoUtils.buildDescriptor(testFile(MULTIPLE_EXAMPLE).replace("file:/", "/"), "MultipleExample")
   }
 
   test("handle invalid input in from_proto") {
-
   }
 
   test("roundtrip in to_proto and from_proto - with null") {
