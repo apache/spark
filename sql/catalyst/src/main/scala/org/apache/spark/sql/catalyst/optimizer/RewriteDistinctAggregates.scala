@@ -214,11 +214,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   }
 
   def rewrite(aOrig: Aggregate): Aggregate = {
-    // make children of distinct aggregations the same if they are different
-    // only because of superficial reasons, e.g.:
-    //   "1 + col1" vs "col1 + 1", both become "1 + col1"
+    // Make children of distinct aggregations the same if they are only
+    // different due to superficial reasons, e.g.:
+    //   "1 + col1" vs "col1 + 1", both should become "1 + col1"
     // or
-    //   "col1" vs "Col1", both become "col1"
+    //   "col1" vs "Col1", both should become "col1"
+    // This could potentially reduce the number of distinct
+    // aggregate groups, and therefore reduce the number of
+    // projections in Expand (or eliminate the need for Expand)
     val a = reduceDistinctAggregateGroups(aOrig)
 
     val aggExpressions = collectAggregateExprs(a)
@@ -408,6 +411,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
+      // It's possible we avoided rewriting the plan to use Expand only because
+      // reduceDistinctAggregateGroups reduced the number of distinct aggregate groups
+      // from > 1 to 1. To prevent SparkStrategies from complaining during sanity check,
+      // we use the potentially patched Aggregate returned by reduceDistinctAggregateGroups.
       a
     }
   }
