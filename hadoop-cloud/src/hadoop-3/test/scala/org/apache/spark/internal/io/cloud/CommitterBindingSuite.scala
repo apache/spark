@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
-import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.CAPABILITY_DYNAMIC_PARTITIONING
+import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME}
 
 class CommitterBindingSuite extends SparkFunSuite {
 
@@ -80,6 +80,8 @@ class CommitterBindingSuite extends SparkFunSuite {
     assert(inner.jobAborted, s"$inner job not aborted")
 
     val binding = new BindingPathOutputCommitter(path, tContext)
+    // MAPREDUCE-7403 only arrived after hadoop 3.3.4; this test case
+    // is designed to work with versions with and without the feature.
     if (binding.isInstanceOf[StreamCapabilities]) {
       // this version of hadoop does support hasCapability probes
       // through the BindingPathOutputCommitter used by the
@@ -136,6 +138,11 @@ class CommitterBindingSuite extends SparkFunSuite {
     assert("file:///tmp" === protocol.destination)
   }
 
+  /*
+   * Bind a job to a committer which doesn't support dynamic partitioning.
+   * Job setup must fail, and calling `newTaskTempFileAbsPath()` must
+   * raise `UnsupportedOperationException`.
+   */
   test("reject dynamic partitioning if not supported") {
     val path = new Path("http://example/data")
     val job = newJob(path)
@@ -146,21 +153,28 @@ class CommitterBindingSuite extends SparkFunSuite {
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val committer = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
-      jobId, path.toUri.toString, true)
+      jobId,
+      path.toUri.toString,
+      true)
     val ioe = intercept[IOException] {
       committer.setupJob(tContext)
     }
     if (!ioe.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
       throw ioe
     }
+
+    // calls to newTaskTempFileAbsPath() will be rejected
     intercept[UnsupportedOperationException] {
-      committer.newTaskTempFileAbsPath(
-        tContext,
-        "/tmp",
-        FileNameSpec("lotus", ".123"))
+      verifyAbsTempFileWorks(tContext, committer)
     }
   }
 
+  /*
+   * Bind to a committer with dynamic partitioning support,
+   * verify that job and task setup works, and that
+   * `newTaskTempFileAbsPath()` creates a temp file which
+   * can be moved to an absolute path later.
+   */
   test("permit dynamic partitioning if the committer says it works") {
     val path = new Path("http://example/data")
     val job = newJob(path)
@@ -176,6 +190,50 @@ class CommitterBindingSuite extends SparkFunSuite {
       true).asInstanceOf[PathOutputCommitProtocol]
     committer.setupJob(tContext)
     committer.setupTask(tContext)
+    verifyAbsTempFileWorks(tContext, committer)
+  }
+
+  /*
+   * Create a FileOutputCommitter through the PathOutputCommitProtocol
+   * using the relevant factory in hadoop-mapreduce-core JAR.
+   */
+  test("FileOutputCommitter through PathOutputCommitProtocol") {
+    // temp path; use a unique filename
+    val jobCommitDir = File.createTempFile("FileOutputCommitter-through-PathOutputCommitProtocol", "")
+    try {
+      // delete the temp file and create a temp dir.
+      jobCommitDir.delete();
+      val jobUri = jobCommitDir.toURI
+      // hadoop path of the job
+      val path = new Path(jobUri)
+      val job = newJob(path)
+      val conf = job.getConfiguration
+      conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+      conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+      bindToFileOutputCommitterFactory(conf, "file")
+      val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+      val committer: PathOutputCommitProtocol = FileCommitProtocol.instantiate(
+        pathCommitProtocolClassname,
+        jobId,
+        jobUri.toString,
+        true).asInstanceOf[PathOutputCommitProtocol]
+      committer.setupJob(tContext)
+      committer.setupTask(tContext)
+      verifyAbsTempFileWorks(tContext, committer)
+    } finally {
+      jobCommitDir.delete();
+    }
+  }
+
+  /**
+   * Verify that a committer supports `newTaskTempFileAbsPath()`.
+   *
+   * @param tContext task context
+   * @param committer committer
+   */
+  private def verifyAbsTempFileWorks(
+    tContext: TaskAttemptContextImpl,
+    committer: FileCommitProtocol): Unit = {
     val spec = FileNameSpec(".lotus.", ".123")
     val absPath = committer.newTaskTempFileAbsPath(
       tContext,
@@ -183,6 +241,18 @@ class CommitterBindingSuite extends SparkFunSuite {
       spec)
     assert(absPath.endsWith(".123"), s"wrong suffix in $absPath")
     assert(absPath.contains("lotus"), s"wrong prefix in $absPath")
+  }
+
+  /**
+   * Given a hadoop configuration, explicitly set up the factory binding for the scheme
+   * to a committer factory which always creates FileOutputCommitters.
+   *
+   * @param conf   config to patch
+   * @param scheme filesystem scheme.
+   */
+  def bindToFileOutputCommitterFactory(conf: Configuration, scheme: String): Unit = {
+    conf.set(OUTPUTCOMMITTER_FACTORY_SCHEME + "." + scheme,
+      "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory")
   }
 
 }
