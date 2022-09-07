@@ -24,30 +24,37 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 /**
  * Tests of [[RandomDataGenerator]].
  */
-class RandomDataGeneratorSuite extends SparkFunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
 
   /**
    * Tests random data generation for the given type by using it to generate random values then
    * converting those values into their Catalyst equivalents using CatalystTypeConverters.
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
-    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
-      fail(s"Random data generator was not defined for $dataType")
-    }
-    if (nullable) {
-      assert(Iterator.fill(100)(generator()).contains(null))
-    } else {
-      assert(!Iterator.fill(100)(generator()).contains(null))
-    }
-    for (_ <- 1 to 10) {
-      val generatedValue = generator()
-      toCatalyst(generatedValue)
+    Seq(false, true).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
+        val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
+          fail(s"Random data generator was not defined for $dataType")
+        }
+        if (nullable) {
+          assert(Iterator.fill(100)(generator()).contains(null))
+        } else {
+          assert(!Iterator.fill(100)(generator()).contains(null))
+        }
+        for (_ <- 1 to 10) {
+          val generatedValue = generator()
+          toCatalyst(generatedValue)
+        }
+      }
     }
   }
 
@@ -136,5 +143,19 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
     val array2 = ByteBuffer.allocate(8).putDouble(nan2).array
     assert(!Arrays.equals(array1, arrayExpected))
     assert(Arrays.equals(array2, arrayExpected))
+  }
+
+  test("SPARK-35116: The generated data fits the precision of DayTimeIntervalType in spark") {
+    (dayTimeIntervalTypes ++ yearMonthIntervalTypes).foreach { dt =>
+      for (seed <- 1 to 1000) {
+        val generator = RandomDataGenerator.forType(dt, false, new Random(seed)).get
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dt)
+        val toScala = CatalystTypeConverters.createToScalaConverter(dt)
+        val data = generator.apply()
+        val catalyst = toCatalyst(data)
+        val convertedBack = toScala(catalyst)
+        assert(data == convertedBack)
+      }
+    }
   }
 }

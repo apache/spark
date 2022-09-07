@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import scala.xml.{Node, Text}
+import scala.xml.Utility.trim
 
 import org.apache.spark.SparkFunSuite
 
@@ -112,8 +113,8 @@ class UIUtilsSuite extends SparkFunSuite {
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
     val generated = makeProgressBar(2, 3, 0, 0, Map.empty, 4).head.child.filter(_.label == "div")
     val expected = Seq(
-      <div class="bar bar-completed" style="width: 75.0%"></div>,
-      <div class="bar bar-running" style="width: 25.0%"></div>
+      <div class="progress-bar progress-completed" style="width: 75.0%"></div>,
+      <div class="progress-bar progress-started" style="width: 25.0%"></div>
     )
     assert(generated.sameElements(expected),
       s"\nRunning progress bar should round down\n\nExpected:\n$expected\nGenerated:\n$generated")
@@ -127,6 +128,55 @@ class UIUtilsSuite extends SparkFunSuite {
 
     // verify that no affect to decoded URL.
     assert(decoded1 === decodeURLParameter(decoded1))
+  }
+
+  test("listingTable with tooltips") {
+
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+    val tooltip = Seq(None, Some("tooltip"))
+
+    val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
+
+    val expected: Node =
+      <table class="table table-bordered table-sm table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">
+              <span data-toggle="tooltip" title="tooltip">
+                {header(1)}
+              </span>
+          </th>
+        </thead>
+      <tbody>
+        {data.map(generateDataRowValue)}
+      </tbody>
+    </table>
+
+    assert(trim(generated(0)) == trim(expected))
+  }
+
+  test("listingTable without tooltips") {
+
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+
+    val generated = listingTable(header, generateDataRowValue, data)
+
+    val expected =
+      <table class="table table-bordered table-sm table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">{header(1)}</th>
+        </thead>
+        <tbody>
+          {data.map(generateDataRowValue)}
+        </tbody>
+      </table>
+
+    assert(trim(generated(0)) == trim(expected))
   }
 
   private def verify(

@@ -40,8 +40,8 @@ import org.apache.spark.util.{CausedBy, Utils}
 private object ResourceRequestHelper extends Logging {
   private val AMOUNT_AND_UNIT_REGEX = "([0-9]+)([A-Za-z]*)".r
   private val RESOURCE_INFO_CLASS = "org.apache.hadoop.yarn.api.records.ResourceInformation"
-  val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
-  val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
+  private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
+  @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
       sparkConf: SparkConf,
@@ -51,17 +51,21 @@ private object ResourceRequestHelper extends Logging {
       if (splitIndex == -1) {
         val errorMessage = s"Missing suffix for ${componentName}${key}, you must specify" +
           s" a suffix - $AMOUNT is currently the only supported suffix."
-        throw new IllegalArgumentException(errorMessage.toString())
+        throw new IllegalArgumentException(errorMessage)
       }
       val resourceName = key.substring(0, splitIndex)
       val resourceSuffix = key.substring(splitIndex + 1)
       if (!AMOUNT.equals(resourceSuffix)) {
         val errorMessage = s"Unsupported suffix: $resourceSuffix in: ${componentName}${key}, " +
           s"only .$AMOUNT is supported."
-        throw new IllegalArgumentException(errorMessage.toString())
+        throw new IllegalArgumentException(errorMessage)
       }
       (resourceName, value)
     }.toMap
+  }
+
+  private[yarn] def getResourceNameMapping(sparkConf: SparkConf): Map[String, String] = {
+    Map(GPU -> sparkConf.get(YARN_GPU_DEVICE), FPGA -> sparkConf.get(YARN_FPGA_DEVICE))
   }
 
   /**
@@ -74,9 +78,9 @@ private object ResourceRequestHelper extends Logging {
       confPrefix: String,
       sparkConf: SparkConf
   ): Map[String, String] = {
-    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG).map {
+    getResourceNameMapping(sparkConf).map {
       case (rName, yarnName) =>
-        (yarnName -> sparkConf.get(ResourceID(confPrefix, rName).amountConf, "0"))
+        (yarnName -> sparkConf.get(new ResourceID(confPrefix, rName).amountConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }
   }
 
@@ -108,14 +112,14 @@ private object ResourceRequestHelper extends Logging {
       (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
-      (ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
-        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
-        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
-        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"),
-      (ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
-        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"))
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "fpga").amountConf,
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
+      (new ResourceID(SPARK_DRIVER_PREFIX, "fpga").amountConf,
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_FPGA_DEVICE)}"),
+      (new ResourceID(SPARK_EXECUTOR_PREFIX, "gpu").amountConf,
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"),
+      (new ResourceID(SPARK_DRIVER_PREFIX, "gpu").amountConf,
+        s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${sparkConf.get(YARN_GPU_DEVICE)}"))
 
     val errorMessage = new mutable.StringBuilder()
 
@@ -185,7 +189,24 @@ private object ResourceRequestHelper extends Logging {
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
         case CausedBy(e: IllegalArgumentException) =>
           throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
-        case e: InvocationTargetException if e.getCause != null => throw e.getCause
+        case e: InvocationTargetException =>
+          if (e.getCause != null) {
+            if (Try(Utils.classForName(RESOURCE_NOT_FOUND)).isSuccess) {
+              if (e.getCause().getClass().getName().equals(RESOURCE_NOT_FOUND)) {
+                // warn a couple times and then stop so we don't spam the logs
+                if (numResourceErrors < 2) {
+                  logWarning(s"YARN doesn't know about resource $name, your resource discovery " +
+                    s"has to handle properly discovering and isolating the resource! Error: " +
+                    s"${e.getCause().getMessage}")
+                  numResourceErrors += 1
+                }
+              } else {
+                throw e.getCause
+              }
+            } else {
+              throw e.getCause
+            }
+          }
       }
     }
   }
@@ -206,6 +227,17 @@ private object ResourceRequestHelper extends Logging {
         resInfoNewInstanceMethod.invoke(null, resourceName, amount.asInstanceOf[JLong])
       }
     resourceInformation
+  }
+
+  def isYarnCustomResourcesNonEmpty(resource: Resource): Boolean = {
+    try {
+      // Use reflection as this uses APIs only available in Hadoop 3
+      val getResourcesMethod = resource.getClass().getMethod("getResources")
+      val resources = getResourcesMethod.invoke(resource).asInstanceOf[Array[Any]]
+      if (resources.nonEmpty) true else false
+    } catch {
+      case  _: NoSuchMethodException => false
+    }
   }
 
   /**

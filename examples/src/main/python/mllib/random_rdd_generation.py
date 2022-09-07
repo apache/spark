@@ -18,8 +18,6 @@
 """
 Randomly generated RDDs.
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext

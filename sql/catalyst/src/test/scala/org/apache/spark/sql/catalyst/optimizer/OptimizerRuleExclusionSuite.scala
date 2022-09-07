@@ -26,9 +26,9 @@ import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_EXCLUDED_RULES
 
 class OptimizerRuleExclusionSuite extends PlanTest {
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
-  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]) {
+  private def verifyExcludedRules(optimizer: Optimizer, rulesToExclude: Seq[String]): Unit = {
     val nonExcludableRules = optimizer.nonExcludableRules
 
     val excludedRuleNames = rulesToExclude.filter(!nonExcludableRules.contains(_))
@@ -121,9 +121,9 @@ class OptimizerRuleExclusionSuite extends PlanTest {
       PropagateEmptyRelation.ruleName,
       CombineUnions.ruleName)
 
-    val testRelation1 = LocalRelation('a.int, 'b.int, 'c.int)
-    val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
-    val testRelation3 = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation1 = LocalRelation($"a".int, $"b".int, $"c".int)
+    val testRelation2 = LocalRelation($"a".int, $"b".int, $"c".int)
+    val testRelation3 = LocalRelation($"a".int, $"b".int, $"c".int)
 
     withSQLConf(
       OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.foldLeft("")((l, r) => l + "," + r)) {

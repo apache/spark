@@ -62,23 +62,34 @@ done
 init_java
 init_maven_sbt
 
-ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
+function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
+
+declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
 
 rm -rf spark
-git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"
-git config user.email $GIT_EMAIL
+git config user.email "$GIT_EMAIL"
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
-# Set the release version in R/pkg/DESCRIPTION
-sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+if [[ $RELEASE_VERSION != *"preview"* ]]; then
+  # Set the release version in R/pkg/DESCRIPTION
+  sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+else
+  sed -i".tmp1" 's/-SNAPSHOT/'"-$(cut -d "-" -f 2 <<< $RELEASE_VERSION)"'/g' R/pkg/R/sparkR.R
+fi
 # Set the release version in docs
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
-sed -i".tmp3" 's/__version__ = .*$/__version__ = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
+if [[ $RELEASE_VERSION == 3.0* ]] || [[ $RELEASE_VERSION == 3.1* ]] || [[ $RELEASE_VERSION == 3.2* ]]; then
+  sed -i".tmp4" 's/__version__ = .*$/__version__ = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+else
+  sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
+fi
 
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
@@ -88,23 +99,32 @@ git tag $RELEASE_TAG
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 # Remove -SNAPSHOT before setting the R version as R expects version strings to only have numbers
 R_NEXT_VERSION=`echo $NEXT_VERSION | sed 's/-SNAPSHOT//g'`
-sed -i".tmp4" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
+sed -i".tmp5" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
 # Write out the R_NEXT_VERSION to PySpark version info we use dev0 instead of SNAPSHOT to be closer
 # to PEP440.
-sed -i".tmp5" 's/__version__ = .*$/__version__ = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
-
+if [[ $RELEASE_VERSION == 3.0* ]] || [[ $RELEASE_VERSION == 3.1* ]] || [[ $RELEASE_VERSION == 3.2* ]]; then
+  sed -i".tmp6" 's/__version__ = .*$/__version__ = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
+else
+  sed -i".tmp6" 's/__version__: str = .*$/__version__: str = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
+fi
 
 # Update docs with next version
-sed -i".tmp6" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_config.yml
+sed -i".tmp7" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_config.yml
 # Use R version for short version
-sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
+sed -i".tmp8" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
+# Update the version index of DocSearch as the short version
+sed -i".tmp9" "s/'facetFilters':.*$/'facetFilters': [\"version:$R_NEXT_VERSION\"]/g" docs/_config.yml
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
 if ! is_dry_run; then
   # Push changes
   git push origin $RELEASE_TAG
-  git push origin HEAD:$GIT_BRANCH
+  if [[ $RELEASE_VERSION != *"preview"* ]]; then
+    git push origin HEAD:$GIT_BRANCH
+  else
+    echo "It's preview release. We only push $RELEASE_TAG to remote."
+  fi
 
   cd ..
   rm -rf spark

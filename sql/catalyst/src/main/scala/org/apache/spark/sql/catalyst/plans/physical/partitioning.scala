@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -69,9 +73,14 @@ case object AllTuples extends Distribution {
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located in the same partition.
+ *
+ * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
+ *                              must match all `clustering` expressions in the same ordering.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
+    requireAllClusterKeys: Boolean = SQLConf.get.getConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION),
     requiredNumPartitions: Option[Int] = None) extends Distribution {
   require(
     clustering != Nil,
@@ -85,29 +94,58 @@ case class ClusteredDistribution(
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(clustering, numPartitions)
   }
+
+  /**
+   * Checks if `expressions` match all `clustering` expressions in the same ordering.
+   *
+   * `Partitioning` should call this to check its expressions when `requireAllClusterKeys`
+   * is set to true.
+   */
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
+    expressions.length == clustering.length &&
+      expressions.zip(clustering).forall {
+        case (l, r) => l.semanticEquals(r)
+      }
+  }
 }
 
 /**
- * Represents data where tuples have been clustered according to the hash of the given
- * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
- * [[HashPartitioning]] can satisfy this distribution.
+ * Represents the requirement of distribution on the stateful operator in Structured Streaming.
  *
- * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
- * number of partitions, this distribution strictly requires which partition the tuple should be in.
+ * Each partition in stateful operator initializes state store(s), which are independent with state
+ * store(s) in other partitions. Since it is not possible to repartition the data in state store,
+ * Spark should make sure the physical partitioning of the stateful operator is unchanged across
+ * Spark versions. Violation of this requirement may bring silent correctness issue.
+ *
+ * Since this distribution relies on [[HashPartitioning]] on the physical partitioning of the
+ * stateful operator, only [[HashPartitioning]] (and HashPartitioning in
+ * [[PartitioningCollection]]) can satisfy this distribution.
+ * When `_requiredNumPartitions` is 1, [[SinglePartition]] is essentially same as
+ * [[HashPartitioning]], so it can satisfy this distribution as well.
+ *
+ * NOTE: This is applied only to stream-stream join as of now. For other stateful operators, we
+ * have been using ClusteredDistribution, which could construct the physical partitioning of the
+ * state in different way (ClusteredDistribution requires relaxed condition and multiple
+ * partitionings can satisfy the requirement.) We need to construct the way to fix this with
+ * minimizing possibility to break the existing checkpoints.
+ *
+ * TODO(SPARK-38204): address the issue explained in above note.
  */
-case class HashClusteredDistribution(
+case class StatefulOpClusteredDistribution(
     expressions: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
+    _requiredNumPartitions: Int) extends Distribution {
   require(
     expressions != Nil,
-    "The expressions for hash of a HashClusteredDistribution should not be Nil. " +
+    "The expressions for hash of a StatefulOpClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  override val requiredNumPartitions: Option[Int] = Some(_requiredNumPartitions)
+
   override def createPartitioning(numPartitions: Int): Partitioning = {
-    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
-      s"This HashClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
-        s"the actual number of partitions is $numPartitions.")
+    assert(_requiredNumPartitions == numPartitions,
+      s"This StatefulOpClusteredDistribution requires ${_requiredNumPartitions} " +
+        s"partitions, but the actual number of partitions is $numPartitions.")
     HashPartitioning(expressions, numPartitions)
   }
 }
@@ -164,12 +202,23 @@ trait Partitioning {
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
    *
-   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` doesn't match
    * [[Distribution.requiredNumPartitions]].
    */
   final def satisfies(required: Distribution): Boolean = {
     required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
+
+  /**
+   * Creates a shuffle spec for this partitioning and its required distribution. The
+   * spec is used in the scenario where an operator has multiple children (e.g., join), and is
+   * used to decide whether this child is co-partitioned with others, therefore whether extra
+   * shuffle shall be introduced.
+   *
+   * @param distribution the required clustered distribution for this partitioning
+   */
+  def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    throw new IllegalStateException(s"Unexpected partitioning: ${getClass.getSimpleName}")
 
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
@@ -202,12 +251,20 @@ case object SinglePartition extends Partitioning {
     case _: BroadcastDistribution => false
     case _ => true
   }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    SinglePartitionShuffleSpec
 }
 
 /**
  * Represents a partitioning where rows are split up across partitions based on the hash
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
+ *
+ * Since [[StatefulOpClusteredDistribution]] relies on this partitioning and Spark requires
+ * stateful operators to retain the same physical partitioning during the lifetime of the query
+ * (including restart), the result of evaluation on `partitionIdExpression` must be unchanged
+ * across Spark versions. Violation of this requirement may bring silent correctness issue.
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression with Partitioning with Unevaluable {
@@ -219,22 +276,91 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
       required match {
-        case h: HashClusteredDistribution =>
+        case h: StatefulOpClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
   }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    HashShuffleSpec(this, distribution)
 
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
+}
+
+/**
+ * Represents a partitioning where rows are split across partitions based on transforms defined
+ * by `expressions`. `partitionValuesOpt`, if defined, should contain value of partition key(s) in
+ * ascending order, after evaluated by the transforms in `expressions`, for each input partition.
+ * In addition, its length must be the same as the number of input partitions (and thus is a 1-1
+ * mapping), and each row in `partitionValuesOpt` must be unique.
+ *
+ * For example, if `expressions` is `[years(ts_col)]`, then a valid value of `partitionValuesOpt` is
+ * `[0, 1, 2]`, which represents 3 input partitions with distinct partition values. All rows
+ * in each partition have the same value for column `ts_col` (which is of timestamp type), after
+ * being applied by the `years` transform.
+ *
+ * On the other hand, `[0, 0, 1]` is not a valid value for `partitionValuesOpt` since `0` is
+ * duplicated twice.
+ *
+ * @param expressions partition expressions for the partitioning.
+ * @param numPartitions the number of partitions
+ * @param partitionValuesOpt if set, the values for the cluster keys of the distribution, must be
+ *                           in ascending order.
+ */
+case class KeyGroupedPartitioning(
+    expressions: Seq[Expression],
+    numPartitions: Int,
+    partitionValuesOpt: Option[Seq[InternalRow]] = None) extends Partitioning {
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            // Checks whether this partitioning is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            // We'll need to find leaf attributes from the partition expressions first.
+            val attributes = expressions.flatMap(_.collectLeaves())
+            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+
+        case _ =>
+          false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    KeyGroupedShuffleSpec(this, distribution)
+}
+
+object KeyGroupedPartitioning {
+  def apply(
+      expressions: Seq[Expression],
+      partitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
+    KeyGroupedPartitioning(expressions, partitionValues.size, Some(partitionValues))
+  }
 }
 
 /**
@@ -278,12 +404,26 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          val expressions = ordering.map(_.child)
+          if (requireAllClusterKeys) {
+            // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
   }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    RangeShuffleSpec(this.numPartitions, distribution)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RangePartitioning =
+    copy(ordering = newChildren.asInstanceOf[Seq[SortOrder]])
 }
 
 /**
@@ -323,9 +463,18 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
+    val filtered = partitionings.filter(_.satisfies(distribution))
+    ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
+  }
+
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): PartitioningCollection =
+    super.legacyWithNewChildren(newChildren).asInstanceOf[PartitioningCollection]
 }
 
 /**
@@ -336,7 +485,247 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
   override def satisfies0(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
+  }
+}
+
+/**
+ * This is used in the scenario where an operator has multiple children (e.g., join) and one or more
+ * of which have their own requirement regarding whether its data can be considered as
+ * co-partitioned from others. This offers APIs for:
+ *
+ *   - Comparing with specs from other children of the operator and check if they are compatible.
+ *      When two specs are compatible, we can say their data are co-partitioned, and Spark will
+ *      potentially be able to eliminate shuffle if necessary.
+ *   - Creating a partitioning that can be used to re-partition another child, so that to make it
+ *      having a compatible partitioning as this node.
+ */
+trait ShuffleSpec {
+  /**
+   * Returns the number of partitions of this shuffle spec
+   */
+  def numPartitions: Int
+
+  /**
+   * Returns true iff this spec is compatible with the provided shuffle spec.
+   *
+   * A true return value means that the data partitioning from this spec can be seen as
+   * co-partitioned with the `other`, and therefore no shuffle is required when joining the two
+   * sides.
+   *
+   * Note that Spark assumes this to be reflexive, symmetric and transitive.
+   */
+  def isCompatibleWith(other: ShuffleSpec): Boolean
+
+  /**
+   * Whether this shuffle spec can be used to create partitionings for the other children.
+   */
+  def canCreatePartitioning: Boolean
+
+  /**
+   * Creates a partitioning that can be used to re-partition the other side with the given
+   * clustering expressions.
+   *
+   * This will only be called when:
+   *  - [[canCreatePartitioning]] returns true.
+   *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
+   */
+  def createPartitioning(clustering: Seq[Expression]): Partitioning =
+    throw new UnsupportedOperationException("Operation unsupported for " +
+        s"${getClass.getCanonicalName}")
+}
+
+case object SinglePartitionShuffleSpec extends ShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = {
+    other.numPartitions == 1
+  }
+
+  override def canCreatePartitioning: Boolean = true
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
+    SinglePartition
+
+  override def numPartitions: Int = 1
+}
+
+case class RangeShuffleSpec(
+    numPartitions: Int,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  // `RangePartitioning` is not compatible with any other partitioning since it can't guarantee
+  // data are co-partitioned for all the children, as range boundaries are randomly sampled. We
+  // can't let `RangeShuffleSpec` to create a partitioning.
+  override def canCreatePartitioning: Boolean = false
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec => numPartitions == 1
+    case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
+    // `RangePartitioning` is not compatible with any other partitioning since it can't guarantee
+    // data are co-partitioned for all the children, as range boundaries are randomly sampled.
+    case _ => false
+  }
+}
+
+case class HashShuffleSpec(
+    partitioning: HashPartitioning,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  /**
+   * A sequence where each element is a set of positions of the hash partition key to the cluster
+   * keys. For instance, if cluster keys are [a, b, b] and hash partition keys are [a, b], the
+   * result will be [(0), (1, 2)].
+   *
+   * This is useful to check compatibility between two `HashShuffleSpec`s. If the cluster keys are
+   * [a, b, b] and [x, y, z] for the two join children, and the hash partition keys are
+   * [a, b] and [x, z], they are compatible. With the positions, we can do the compatibility check
+   * by looking at if the positions of hash partition keys from two sides have overlapping.
+   */
+  lazy val hashKeyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map(k => distKeyToPos.getOrElse(k.canonicalized, mutable.BitSet.empty))
+  }
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      partitioning.numPartitions == 1
+    case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution) =>
+      // we need to check:
+      //  1. both distributions have the same number of clustering expressions
+      //  2. both partitioning have the same number of partitions
+      //  3. both partitioning have the same number of expressions
+      //  4. each pair of partitioning expression from both sides has overlapping positions in their
+      //     corresponding distributions.
+      distribution.clustering.length == otherDistribution.clustering.length &&
+      partitioning.numPartitions == otherPartitioning.numPartitions &&
+      partitioning.expressions.length == otherPartitioning.expressions.length && {
+        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
+        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
+          left.intersect(right).nonEmpty
+        }
+      }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  override def canCreatePartitioning: Boolean = {
+    // To avoid potential data skew, we don't allow `HashShuffleSpec` to create partitioning if
+    // the hash partition keys are not the full join keys (the cluster keys). Then the planner
+    // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
+    // the join keys.
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      distribution.areAllClusterKeysMatched(partitioning.expressions)
+    } else {
+      true
+    }
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    val exprs = hashKeyPositions.map(v => clustering(v.head))
+    HashPartitioning(exprs, partitioning.numPartitions)
+  }
+
+  override def numPartitions: Int = partitioning.numPartitions
+}
+
+case class KeyGroupedShuffleSpec(
+    partitioning: KeyGroupedPartitioning,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  /**
+   * A sequence where each element is a set of positions of the partition expression to the cluster
+   * keys. For instance, if cluster keys are [a, b, b] and partition expressions are
+   * [bucket(4, a), years(b)], the result will be [(0), (1, 2)].
+   *
+   * Note that we only allow each partition expression to contain a single partition key.
+   * Therefore the mapping here is very similar to that from `HashShuffleSpec`.
+   */
+  lazy val keyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map { e =>
+      val leaves = e.collectLeaves()
+      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
+      distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
+    }
+  }
+
+  private lazy val ordering: Ordering[InternalRow] =
+    RowOrdering.createNaturalAscendingOrdering(partitioning.expressions.map(_.dataType))
+
+  override def numPartitions: Int = partitioning.numPartitions
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    // Here we check:
+    //  1. both distributions have the same number of clustering keys
+    //  2. both partitioning have the same number of partitions
+    //  3. partition expressions from both sides are compatible, which means:
+    //    3.1 both sides have the same number of partition expressions
+    //    3.2 for each pair of partition expressions at the same index, the corresponding
+    //        partition keys must share overlapping positions in their respective clustering keys.
+    //    3.3 each pair of partition expressions at the same index must share compatible
+    //        transform functions.
+    //  4. the partition values, if present on both sides, are following the same order.
+    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
+      val expressions = partitioning.expressions
+      val otherExpressions = otherPartitioning.expressions
+
+      distribution.clustering.length == otherDistribution.clustering.length &&
+        numPartitions == other.numPartitions &&
+          expressions.length == otherExpressions.length && {
+            val otherKeyPositions = otherSpec.keyPositions
+            keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
+              left.intersect(right).nonEmpty
+            }
+          } && expressions.zip(otherExpressions).forall {
+            case (l, r) => isExpressionCompatible(l, r)
+          } && partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
+            case (left, right) => left.zip(right).forall { case (l, r) =>
+              ordering.compare(l, r) == 0
+            }
+         }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ => false
+  }
+
+  private def isExpressionCompatible(left: Expression, right: Expression): Boolean =
+    (left, right) match {
+      case (_: LeafExpression, _: LeafExpression) => true
+      case (left: TransformExpression, right: TransformExpression) =>
+        left.isSameFunction(right)
+      case _ => false
+    }
+
+  override def canCreatePartitioning: Boolean = false
+}
+
+case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = {
+    specs.exists(_.isCompatibleWith(other))
+  }
+
+  override def canCreatePartitioning: Boolean =
+    specs.forall(_.canCreatePartitioning)
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    // as we only consider # of partitions as the cost now, it doesn't matter which one we choose
+    // since they should all have the same # of partitions.
+    require(specs.map(_.numPartitions).toSet.size == 1, "expected all specs in the collection " +
+      "to have the same number of partitions")
+    specs.head.createPartitioning(clustering)
+  }
+
+  override def numPartitions: Int = {
+    require(specs.nonEmpty, "expected specs to be non-empty")
+    specs.head.numPartitions
   }
 }

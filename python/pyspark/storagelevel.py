@@ -17,8 +17,10 @@
 
 __all__ = ["StorageLevel"]
 
+from typing import ClassVar
 
-class StorageLevel(object):
+
+class StorageLevel:
 
     """
     Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
@@ -29,18 +31,40 @@ class StorageLevel(object):
     formats.
     """
 
-    def __init__(self, useDisk, useMemory, useOffHeap, deserialized, replication=1):
+    DISK_ONLY: ClassVar["StorageLevel"]
+    DISK_ONLY_2: ClassVar["StorageLevel"]
+    DISK_ONLY_3: ClassVar["StorageLevel"]
+    MEMORY_ONLY: ClassVar["StorageLevel"]
+    MEMORY_ONLY_2: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK_2: ClassVar["StorageLevel"]
+    OFF_HEAP: ClassVar["StorageLevel"]
+    MEMORY_AND_DISK_DESER: ClassVar["StorageLevel"]
+
+    def __init__(
+        self,
+        useDisk: bool,
+        useMemory: bool,
+        useOffHeap: bool,
+        deserialized: bool,
+        replication: int = 1,
+    ):
         self.useDisk = useDisk
         self.useMemory = useMemory
         self.useOffHeap = useOffHeap
         self.deserialized = deserialized
         self.replication = replication
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
-            self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
+            self.useDisk,
+            self.useMemory,
+            self.useOffHeap,
+            self.deserialized,
+            self.replication,
+        )
 
-    def __str__(self):
+    def __str__(self) -> str:
         result = ""
         result += "Disk " if self.useDisk else ""
         result += "Memory " if self.useMemory else ""
@@ -49,10 +73,13 @@ class StorageLevel(object):
         result += "%sx Replicated" % self.replication
         return result
 
+
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)
+StorageLevel.DISK_ONLY_3 = StorageLevel(True, False, False, False, 3)
 StorageLevel.MEMORY_ONLY = StorageLevel(False, True, False, False)
 StorageLevel.MEMORY_ONLY_2 = StorageLevel(False, True, False, False, 2)
 StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, False, False)
 StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, False, 2)
 StorageLevel.OFF_HEAP = StorageLevel(True, True, True, False, 1)
+StorageLevel.MEMORY_AND_DISK_DESER = StorageLevel(True, True, False, True)

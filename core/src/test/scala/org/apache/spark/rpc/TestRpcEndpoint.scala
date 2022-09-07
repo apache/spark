@@ -20,6 +20,7 @@ package org.apache.spark.rpc
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalactic.TripleEquals
+import org.scalatest.Assertions._
 
 class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
 

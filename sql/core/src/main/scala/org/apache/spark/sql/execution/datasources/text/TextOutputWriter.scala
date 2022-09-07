@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.text
 
-import java.io.OutputStream
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
@@ -26,29 +24,23 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types.StructType
 
 class TextOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     lineSeparator: Array[Byte],
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private var outputStream: Option[OutputStream] = None
+  private val writer = CodecStreams.createOutputStream(context, new Path(path))
 
   override def write(row: InternalRow): Unit = {
-    val os = outputStream.getOrElse {
-      val newStream = CodecStreams.createOutputStream(context, new Path(path))
-      outputStream = Some(newStream)
-      newStream
-    }
-
     if (!row.isNullAt(0)) {
       val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(os)
+      utf8string.writeTo(writer)
     }
-    os.write(lineSeparator)
+    writer.write(lineSeparator)
   }
 
   override def close(): Unit = {
-    outputStream.foreach(_.close())
+    writer.close()
   }
 }

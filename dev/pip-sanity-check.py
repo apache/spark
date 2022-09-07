@@ -15,21 +15,15 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
-from pyspark.mllib.linalg import *
 import sys
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("PipSanityCheck")\
-        .getOrCreate()
+    spark = SparkSession.builder.appName("PipSanityCheck").getOrCreate()
     sc = spark.sparkContext
     rdd = sc.parallelize(range(100), 10)
     value = rdd.reduce(lambda x, y: x + y)
-    if (value != 4950):
+    if value != 4950:
         print("Value {0} did not match expected value.".format(value), file=sys.stderr)
         sys.exit(-1)
     print("Successfully ran pip sanity check")

@@ -19,7 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import org.apache.hadoop.yarn.api.records.Resource
 import org.apache.hadoop.yarn.util.Records
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
@@ -59,8 +60,8 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   test("get yarn resources from configs") {
     val sparkConf = new SparkConf()
-    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "2G",
-      YARN_FPGA_RESOURCE_CONFIG -> "3G", "custom" -> "4")
+    val resources = Map(sparkConf.get(YARN_GPU_DEVICE) -> "2G",
+      sparkConf.get(YARN_GPU_DEVICE) -> "3G", "custom" -> "4")
     resources.foreach { case (name, value) =>
       sparkConf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${name}.${AMOUNT}", value)
       sparkConf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${name}.${AMOUNT}", value)

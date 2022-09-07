@@ -43,7 +43,6 @@ public class JavaUDAFSuite {
     spark = null;
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
     spark.range(1, 10).toDF("value").createOrReplaceTempView("df");

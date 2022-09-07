@@ -22,31 +22,25 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 
-class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingLinearRegressionSuite
+  extends SparkFunSuite
+  with LocalStreamingContext
+  with TestSuiteBase {
 
   // use longer wait time to ensure job completion
-  override def maxWaitTimeMillis: Int = 20000
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
+  override def maxWaitTimeMillis: Int = 100000
 
   // Assert that two values are equal within tolerance epsilon
-  def assertEqual(v1: Double, v2: Double, epsilon: Double) {
+  def assertEqual(v1: Double, v2: Double, epsilon: Double): Unit = {
     def errorMessage = v1.toString + " did not equal " + v2.toString
     assert(math.abs(v1-v2) <= epsilon, errorMessage)
   }
 
   // Assert that model predictions are correct
-  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       math.abs(prediction - expected.label) > 0.5

@@ -16,6 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
+import java.io.File
+
+import scala.util.Random
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
@@ -113,6 +117,48 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, "Location"))
     }
   }
+
+  test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
+    withTempPath { path =>
+      // create a sub-directory with long name so that each root path will always exceed the limit
+      // this is to ensure we always test the case for the path truncation
+      val dataDirName = Random.alphanumeric.take(100).toList.mkString
+      val dataDir = new File(path, dataDirName)
+      dataDir.mkdir()
+
+      val partitionCol = "partitionCol"
+      spark.range(10)
+        .select("id", "id")
+        .toDF("value", partitionCol)
+        .write
+        .partitionBy(partitionCol)
+        .orc(dataDir.getCanonicalPath)
+      val paths = (0 to 9).map(i => new File(dataDir, s"$partitionCol=$i").getCanonicalPath)
+      val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
+      }
+      assert(location.isDefined)
+      // The location metadata should at least contain one path
+      assert(location.get.contains(paths.head))
+
+      // The location metadata should have the number of root paths
+      assert(location.get.contains("(10 paths)"))
+
+      // The location metadata should have bracket wrapping paths
+      assert(location.get.indexOf('[') > -1)
+      assert(location.get.indexOf(']') > -1)
+
+      // extract paths in location metadata (removing classname, brackets, separators)
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
+
+      // the only one path should be available
+      assert(pathsInLocation.size == 2)
+      // indicator ("...") should be available
+      assert(pathsInLocation.exists(_.contains("...")))
+    }
+  }
 }
 
 /**
@@ -136,29 +182,35 @@ class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // Respect SparkConf and replace file:/
       assert(isIncluded(df.queryExecution, replacement))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
+      assert(isIncluded(df.queryExecution, s"BatchScan orc"))
       assert(!isIncluded(df.queryExecution, "file:/"))
 
-      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)BatchScan") {
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> s"(?i)BatchScan orc file:$basePath") {
         // Respect SQLConf and replace FileScan
         assert(isIncluded(df.queryExecution, replacement))
 
-        assert(!isIncluded(df.queryExecution, "BatchScan"))
+        assert(!isIncluded(df.queryExecution, s"BatchScan orc file:$basePath"))
         assert(isIncluded(df.queryExecution, "file:/"))
       }
     }
   }
 
   test("FileScan description") {
-    withTempPath { path =>
-      val dir = path.getCanonicalPath
-      spark.range(0, 10).write.orc(dir)
-      val df = spark.read.orc(dir)
-
-      assert(isIncluded(df.queryExecution, "ReadSchema"))
-      assert(isIncluded(df.queryExecution, "BatchScan"))
-      assert(isIncluded(df.queryExecution, "PushedFilters"))
-      assert(isIncluded(df.queryExecution, "Location"))
+    Seq("json", "orc", "parquet").foreach { format =>
+      withTempPath { path =>
+        val dir = path.getCanonicalPath
+        spark.range(0, 10).write.format(format).save(dir)
+        val df = spark.read.format(format).load(dir)
+        withClue(s"Source '$format':") {
+          logError(s"${df.queryExecution}")
+          assert(isIncluded(df.queryExecution, "ReadSchema"))
+          assert(isIncluded(df.queryExecution, s"BatchScan $format"))
+          if (Seq("orc", "parquet").contains(format)) {
+            assert(isIncluded(df.queryExecution, "PushedFilters"))
+          }
+          assert(isIncluded(df.queryExecution, "Location"))
+        }
+      }
     }
   }
 }

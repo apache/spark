@@ -20,12 +20,14 @@ package org.apache.spark
 import java.util.concurrent.{Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
@@ -40,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
 class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   with LocalSparkContext {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       resetSparkContext()
       JobCancellationSuite.taskStartedSemaphore.drainPermits()
@@ -127,7 +129,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
       }
     })
@@ -157,7 +159,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
       }
     })
@@ -192,7 +194,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
       }
     })
@@ -225,7 +227,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
       }
     })
@@ -264,7 +266,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Add a listener to release the semaphore once any tasks are launched.
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
       }
     })
@@ -301,7 +303,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     sc = new SparkContext("local[2]", "test")
     sc.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem1.release()
       }
     })
@@ -391,7 +393,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(executionOfInterruptibleCounter.get() < numElements)
  }
 
-  def testCount() {
+  def testCount(): Unit = {
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
@@ -405,7 +407,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       // Add a listener to release the semaphore once any tasks are launched.
       val sem = new Semaphore(0)
       sc.addSparkListener(new SparkListener {
-        override def onTaskStart(taskStart: SparkListenerTaskStart) {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
           sem.release()
         }
       })
@@ -421,7 +423,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     }
   }
 
-  def testTake() {
+  def testTake(): Unit = {
     // Cancel before launching any tasks
     {
       val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
@@ -435,7 +437,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       // Add a listener to release the semaphore once any tasks are launched.
       val sem = new Semaphore(0)
       sc.addSparkListener(new SparkListener {
-        override def onTaskStart(taskStart: SparkListenerTaskStart) {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
           sem.release()
         }
       })

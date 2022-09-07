@@ -20,22 +20,13 @@ package org.apache.spark.mllib.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
 
-class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingKMeansSuite extends SparkFunSuite with LocalStreamingContext with TestSuiteBase {
 
-  override def maxWaitTimeMillis: Int = 30000
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
+  override def maxWaitTimeMillis: Int = 100000
 
   test("accuracy for single center and equivalence to grand average") {
     // set parameters

@@ -110,29 +110,29 @@ private[streaming] abstract class ReceiverSupervisor(
    * Note that this must be called before the receiver.onStart() is called to ensure
    * things like [[BlockGenerator]]s are started before the receiver starts sending data.
    */
-  protected def onStart() { }
+  protected def onStart(): Unit = { }
 
   /**
    * Called when supervisor is stopped.
    * Note that this must be called after the receiver.onStop() is called to ensure
    * things like [[BlockGenerator]]s are cleaned up after the receiver stops sending data.
    */
-  protected def onStop(message: String, error: Option[Throwable]) { }
+  protected def onStop(message: String, error: Option[Throwable]): Unit = { }
 
   /** Called when receiver is started. Return true if the driver accepts us */
   protected def onReceiverStart(): Boolean
 
   /** Called when receiver is stopped */
-  protected def onReceiverStop(message: String, error: Option[Throwable]) { }
+  protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = { }
 
   /** Start the supervisor */
-  def start() {
+  def start(): Unit = {
     onStart()
     startReceiver()
   }
 
   /** Mark the supervisor and the receiver for stopping */
-  def stop(message: String, error: Option[Throwable]) {
+  def stop(message: String, error: Option[Throwable]): Unit = {
     stoppingError = error.orNull
     stopReceiver(message, error)
     onStop(message, error)
@@ -180,17 +180,17 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   /** Restart receiver with delay */
-  def restartReceiver(message: String, error: Option[Throwable] = None) {
+  def restartReceiver(message: String, error: Option[Throwable] = None): Unit = {
     restartReceiver(message, error, defaultRestartDelay)
   }
 
   /** Restart receiver with delay */
-  def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
+  def restartReceiver(message: String, error: Option[Throwable], delay: Int): Unit = {
     Future {
       // This is a blocking action so we should use "futureExecutionContext" which is a cached
       // thread pool.
       logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-        error.getOrElse(null))
+        error.orNull)
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
@@ -214,7 +214,7 @@ private[streaming] abstract class ReceiverSupervisor(
 
 
   /** Wait the thread until the supervisor is stopped */
-  def awaitTermination() {
+  def awaitTermination(): Unit = {
     logInfo("Waiting for receiver to be stopped")
     stopLatch.await()
     if (stoppingError != null) {

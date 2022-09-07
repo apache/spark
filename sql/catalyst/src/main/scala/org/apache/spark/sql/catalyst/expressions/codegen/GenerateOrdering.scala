@@ -29,19 +29,11 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-/**
- * Inherits some default implementation for Java from `Ordering[Row]`
- */
-class BaseOrdering extends Ordering[InternalRow] {
-  def compare(a: InternalRow, b: InternalRow): Int = {
-    throw new UnsupportedOperationException
-  }
-}
 
 /**
  * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with Logging {
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
@@ -79,7 +71,9 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     ctx.INPUT_ROW = row
     // to use INPUT_ROW we must make sure currentVars is null
     ctx.currentVars = null
-    ordering.map(_.child.genCode(ctx))
+    // SPARK-33260: To avoid unpredictable modifications to `ctx` when `ordering` is a Stream, we
+    // use `toIndexedSeq` to make the transformation eager.
+    ordering.toIndexedSeq.map(_.child.genCode(ctx))
   }
 
   /**

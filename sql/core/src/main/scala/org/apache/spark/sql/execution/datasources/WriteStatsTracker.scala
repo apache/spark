@@ -32,20 +32,7 @@ trait WriteTaskStats extends Serializable
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
  *
- * This trait is coupled with the way [[FileFormatWriter]] works, in the sense that its methods
- * will be called according to how tuples are being written out to disk, namely in sorted order
- * according to partitionValue(s), then bucketId.
- *
- * As such, a typical call scenario is:
- *
- * newPartition -> newBucket -> newFile -> newRow -.
- *    ^        |______^___________^ ^         ^____|
- *    |               |             |______________|
- *    |               |____________________________|
- *    |____________________________________________|
- *
- * newPartition and newBucket events are only triggered if the relation to be written out is
- * partitioned and/or bucketed, respectively.
+ * newPartition event is only triggered if the relation to be written out is partitioned.
  */
 trait WriteTaskStatsTracker {
 
@@ -57,33 +44,33 @@ trait WriteTaskStatsTracker {
   def newPartition(partitionValues: InternalRow): Unit
 
   /**
-   * Process the fact that a new bucket is about to written.
-   * Only triggered when the relation is bucketed by a (non-empty) sequence of columns.
-   * @param bucketId The bucket number.
-   */
-  def newBucket(bucketId: Int): Unit
-
-  /**
    * Process the fact that a new file is about to be written.
    * @param filePath Path of the file into which future rows will be written.
    */
   def newFile(filePath: String): Unit
 
   /**
+   * Process the fact that a file is finished to be written and closed.
+   * @param filePath Path of the file.
+   */
+  def closeFile(filePath: String): Unit
+
+  /**
    * Process the fact that a new row to update the tracked statistics accordingly.
-   * The row will be written to the most recently witnessed file (via `newFile`).
    * @note Keep in mind that any overhead here is per-row, obviously,
    *       so implementations should be as lightweight as possible.
+   * @param filePath Path of the file which the row is written to.
    * @param row Current data row to be processed.
    */
-  def newRow(row: InternalRow): Unit
+  def newRow(filePath: String, row: InternalRow): Unit
 
   /**
    * Returns the final statistics computed so far.
+   * @param taskCommitTime Time of committing the task.
    * @note This may only be called once. Further use of the object may lead to undefined behavior.
    * @return An object of subtype of [[WriteTaskStats]], to be sent to the driver.
    */
-  def getFinalStats(): WriteTaskStats
+  def getFinalStats(taskCommitTime: Long): WriteTaskStats
 }
 
 
@@ -107,6 +94,7 @@ trait WriteJobStatsTracker extends Serializable {
    * Process the given collection of stats computed during this job.
    * E.g. aggregate them, write them to memory / disk, issue warnings, whatever.
    * @param stats One [[WriteTaskStats]] object from each successful write task.
+   * @param jobCommitTime Time of committing the job.
    * @note The type of @param `stats` is too generic. These classes should probably be parametrized:
    *   WriteTaskStatsTracker[S <: WriteTaskStats]
    *   WriteJobStatsTracker[S <: WriteTaskStats, T <: WriteTaskStatsTracker[S]]
@@ -117,5 +105,5 @@ trait WriteJobStatsTracker extends Serializable {
    * to the expected derived type when implementing this method in a derived class.
    * The framework will make sure to call this with the right arguments.
    */
-  def processStats(stats: Seq[WriteTaskStats]): Unit
+  def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit
 }

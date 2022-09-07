@@ -25,18 +25,18 @@ import org.apache.spark.sql.catalyst.util._
  * A framework for running the query tests that are listed as a set of text files.
  *
  * TestSuites that derive from this class must provide a map of testCaseName to testCaseFiles
- * that should be included. Additionally, there is support for whitelisting and blacklisting
+ * that should be included. Additionally, there is support for including and excluding
  * tests as development progresses.
  */
 abstract class HiveQueryFileTest extends HiveComparisonTest {
   /** A list of tests deemed out of scope and thus completely disregarded */
-  def blackList: Seq[String] = Nil
+  def excludeList: Seq[String] = Nil
 
   /**
-   * The set of tests that are believed to be working in catalyst. Tests not in whiteList
-   * blacklist are implicitly marked as ignored.
+   * The set of tests that are believed to be working in catalyst. Tests not in includeList or
+   * excludeList are implicitly marked as ignored.
    */
-  def whiteList: Seq[String] = ".*" :: Nil
+  def includeList: Seq[String] = ".*" :: Nil
 
   def testCases: Seq[(String, File)]
 
@@ -45,25 +45,34 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
     runOnlyDirectories.nonEmpty ||
     skipDirectories.nonEmpty
 
-  val whiteListProperty: String = "spark.hive.whitelist"
-  // Allow the whiteList to be overridden by a system property
-  val realWhiteList: Seq[String] =
-    Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
+  val deprecatedIncludeListProperty: String = "spark.hive.whitelist"
+  val includeListProperty: String = "spark.hive.includelist"
+  if (System.getProperty(deprecatedIncludeListProperty) != null) {
+    logWarning(s"System property `$deprecatedIncludeListProperty` is deprecated; please update " +
+        s"to use new property: $includeListProperty")
+  }
+  // Allow the includeList to be overridden by a system property
+  val realIncludeList: Seq[String] =
+    Option(System.getProperty(includeListProperty))
+        .orElse(Option(System.getProperty(deprecatedIncludeListProperty)))
+        .map(_.split(",").toSeq)
+        .getOrElse(includeList)
 
   // Go through all the test cases and add them to scala test.
   testCases.sorted.foreach {
     case (testCaseName, testCaseFile) =>
-      if (blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
-        logDebug(s"Blacklisted test skipped $testCaseName")
-      } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
+      if (excludeList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
+        logDebug(s"Excluded test skipped $testCaseName")
+      } else if (
+        realIncludeList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
         runAll) {
         // Build a test case and submit it to scala test framework...
         val queriesString = fileToString(testCaseFile)
         createQueryTest(testCaseName, queriesString, reset = true, tryWithoutResettingFirst = true)
       } else {
-        // Only output warnings for the built in whitelist as this clutters the output when the user
-        // trying to execute a single test from the commandline.
-        if (System.getProperty(whiteListProperty) == null && !runAll) {
+        // Only output warnings for the built in includeList as this clutters the output when the
+        // user is trying to execute a single test from the commandline.
+        if (System.getProperty(includeListProperty) == null && !runAll) {
           ignore(testCaseName) {}
         }
       }

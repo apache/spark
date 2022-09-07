@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
 
@@ -32,6 +32,15 @@ import org.apache.spark.unsafe.Platform
  */
 class InterpretedUnsafeProjection(expressions: Array[Expression]) extends UnsafeProjection {
   import InterpretedUnsafeProjection._
+
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
+  private[this] val exprs = if (subExprEliminationEnabled) {
+    runtime.proxyExpressions(expressions)
+  } else {
+    expressions.toSeq
+  }
 
   /** Number of (top level) fields in the resulting row. */
   private[this] val numFields = expressions.length
@@ -63,17 +72,21 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
+    exprs.foreach(_.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     })
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(row)
+    }
+
     // Put the expression results in the intermediate row.
     var i = 0
     while (i < numFields) {
-      values(i) = expressions(i).eval(row)
+      values(i) = exprs(i).eval(row)
       i += 1
     }
 
@@ -132,7 +145,7 @@ object InterpretedUnsafeProjection {
       dt: DataType,
       nullable: Boolean): (SpecializedGetters, Int) => Unit = {
 
-    // Create the the basic writer.
+    // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case BooleanType =>
         (v, i) => writer.write(i, v.getBoolean(i))
@@ -143,10 +156,10 @@ object InterpretedUnsafeProjection {
       case ShortType =>
         (v, i) => writer.write(i, v.getShort(i))
 
-      case IntegerType | DateType =>
+      case IntegerType | DateType | _: YearMonthIntervalType =>
         (v, i) => writer.write(i, v.getInt(i))
 
-      case LongType | TimestampType =>
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
         (v, i) => writer.write(i, v.getLong(i))
 
       case FloatType =>
@@ -240,7 +253,8 @@ object InterpretedUnsafeProjection {
         (_, _) => {}
 
       case _ =>
-        throw new SparkException(s"Unsupported data type $dt")
+        throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
+          "generating a writer function for a struct field, array element, map key or map value.")
     }
 
     // Always wrap the writer with a null safe version.

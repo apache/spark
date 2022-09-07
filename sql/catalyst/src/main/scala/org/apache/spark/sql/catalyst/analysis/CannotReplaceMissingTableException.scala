@@ -19,11 +19,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.connector.catalog.Identifier
 
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
     cause: Option[Throwable] = None)
   extends AnalysisException(
     s"Table $tableIdentifier cannot be replaced as it did not exist." +
-    s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
+      s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)

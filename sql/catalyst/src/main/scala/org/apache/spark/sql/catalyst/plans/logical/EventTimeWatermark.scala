@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -28,9 +30,7 @@ object EventTimeWatermark {
   val delayKey = "spark.watermarkDelayMs"
 
   def getDelayMs(delay: CalendarInterval): Long = {
-    // We define month as `31 days` to simplify calculation.
-    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
-    delay.milliseconds + delay.months * millisPerMonth
+    IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
   }
 }
 
@@ -41,6 +41,8 @@ case class EventTimeWatermark(
     eventTime: Attribute,
     delay: CalendarInterval,
     child: LogicalPlan) extends UnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
   // Update the metadata on the eventTime column to include the desired delay.
   override val output: Seq[Attribute] = child.output.map { a =>
@@ -62,4 +64,7 @@ case class EventTimeWatermark(
       a
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): EventTimeWatermark =
+    copy(child = newChild)
 }

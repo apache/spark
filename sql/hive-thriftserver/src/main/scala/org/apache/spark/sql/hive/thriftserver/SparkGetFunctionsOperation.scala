@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.DatabaseMetaData
-import java.util.UUID
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
@@ -30,7 +29,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetFunctionsOperation
@@ -42,22 +40,16 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param functionName function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
-  }
+  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
@@ -80,7 +72,7 @@ private[hive] class SparkGetFunctionsOperation(
       authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -96,20 +88,15 @@ private[hive] class SparkGetFunctionsOperation(
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
-              info.getUsage, // REMARKS
+              s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
               info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);
         }
       }
       setState(OperationState.FINISHED)
-    } catch {
-      case e: HiveSQLException =>
-        setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw e
-    }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    } catch onError()
+
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 }

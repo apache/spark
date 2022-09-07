@@ -22,11 +22,10 @@ import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.timeIt
 import org.apache.spark.util.random.XORShiftRandom
 
-class SorterSuite extends SparkFunSuite with Logging {
+class SorterSuite extends SparkFunSuite {
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
@@ -39,8 +38,8 @@ class SorterSuite extends SparkFunSuite with Logging {
     new Sorter(new KeyReuseIntArraySortDataFormat)
       .sort(data2, 0, data2.length, Ordering[IntWrapper])
 
-    assert(data0.view === data1.view)
-    assert(data0.view === data2.view)
+    assert(data0 === data1)
+    assert(data0 === data2)
   }
 
   test("KVArraySorter") {
@@ -59,7 +58,7 @@ class SorterSuite extends SparkFunSuite with Logging {
 
     Arrays.sort(keys)
     new Sorter(new KVArraySortDataFormat[Double, Number])
-      .sort(keyValueArray, 0, keys.length, Ordering.Double)
+      .sort(keyValueArray, 0, keys.length, (x, y) => java.lang.Double.compare(x, y))
 
     keys.zipWithIndex.foreach { case (k, i) =>
       assert(k === keyValueArray(2 * i))
@@ -311,12 +310,13 @@ abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int) {
+  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
-  override def copyRange(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int, length: Int) {
+  override def copyRange(src: Array[Int], srcPos: Int,
+      dst: Array[Int], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 
@@ -334,13 +334,13 @@ abstract class AbstractByteArraySortDataFormat[K] extends SortDataFormat[K, Arra
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int) {
+  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
   override def copyRange(src: Array[Byte],
-                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int) {
+                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 

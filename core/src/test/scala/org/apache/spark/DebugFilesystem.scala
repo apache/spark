@@ -21,7 +21,6 @@ import java.io.{FileDescriptor, InputStream}
 import java.lang
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs._
@@ -58,8 +57,14 @@ object DebugFilesystem extends Logging {
 }
 
 /**
- * DebugFilesystem wraps file open calls to track all open connections. This can be used in tests
- * to check that connections are not leaked.
+ * DebugFilesystem wraps
+ *     1) file open calls to track all open connections. This can be used in tests to check that
+ *        connections are not leaked;
+ *     2) rename calls to return false when destination's parent path does not exist. When
+ *        destination parent does not exist, LocalFileSystem uses FileUtil#copy to copy the
+ *        file and returns true if succeed, while many other hadoop file systems (e.g. HDFS, S3A)
+ *        return false without renaming any file. This helps to test that Spark can work with the
+ *        latter file systems.
  */
 // TODO(ekl) we should consider always interposing this to expose num open conns as a metric
 class DebugFilesystem extends LocalFileSystem {
@@ -120,5 +125,9 @@ class DebugFilesystem extends LocalFileSystem {
 
       override def hashCode(): Int = wrapped.hashCode()
     }
+  }
+
+  override def rename(src: Path, dst: Path): Boolean = {
+    exists(dst.getParent) && super.rename(src, dst)
   }
 }

@@ -20,8 +20,10 @@ package org.apache.spark.sql.util
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 
@@ -41,8 +43,38 @@ private[spark] object SchemaUtils {
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkSchemaColumnNameDuplication(
-      schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
-    checkColumnNameDuplication(schema.map(_.name), colType, caseSensitiveAnalysis)
+      schema: DataType,
+      colType: String,
+      caseSensitiveAnalysis: Boolean = false): Unit = {
+    schema match {
+      case ArrayType(elementType, _) =>
+        checkSchemaColumnNameDuplication(elementType, colType, caseSensitiveAnalysis)
+      case MapType(keyType, valueType, _) =>
+        checkSchemaColumnNameDuplication(keyType, colType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(valueType, colType, caseSensitiveAnalysis)
+      case structType: StructType =>
+        val fields = structType.fields
+        checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
+        fields.foreach { field =>
+          checkSchemaColumnNameDuplication(field.dataType, colType, caseSensitiveAnalysis)
+        }
+      case _ =>
+    }
+  }
+
+  /**
+   * Checks if an input schema has duplicate column names. This throws an exception if the
+   * duplication exists.
+   *
+   * @param schema schema to check
+   * @param colType column type name, used in an exception message
+   * @param resolver resolver used to determine if two identifiers are equal
+   */
+  def checkSchemaColumnNameDuplication(
+      schema: StructType,
+      colType: String,
+      resolver: Resolver): Unit = {
+    checkSchemaColumnNameDuplication(schema, colType, isCaseSensitiveAnalysis(resolver))
   }
 
   // Returns true if a given resolver is case-sensitive
@@ -52,7 +84,8 @@ private[spark] object SchemaUtils {
     } else if (resolver == caseInsensitiveResolution) {
       false
     } else {
-      sys.error("A resolver to check if two identifiers are equal must be " +
+      throw QueryExecutionErrors.unreachableError(
+        ": A resolver to check if two identifiers are equal must be " +
         "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
     }
   }
@@ -87,8 +120,7 @@ private[spark] object SchemaUtils {
       val duplicateColumns = names.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => s"`$x`"
       }
-      throw new AnalysisException(
-        s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}")
+      throw QueryCompilationErrors.foundDuplicateColumnError(colType, duplicateColumns.toSeq)
     }
   }
 
@@ -240,5 +272,29 @@ private[spark] object SchemaUtils {
       }
     }
     field._1
+  }
+
+  def restoreOriginalOutputNames(
+      projectList: Seq[NamedExpression],
+      originalNames: Seq[String]): Seq[NamedExpression] = {
+    projectList.zip(originalNames).map {
+      case (attr: Attribute, name) => attr.withName(name)
+      case (alias: Alias, name) => alias.withName(name)
+      case (other, _) => other
+    }
+  }
+
+  /**
+   * @param str The string to be escaped.
+   * @return The escaped string.
+   */
+  def escapeMetaCharacters(str: String): String = {
+    str.replaceAll("\n", "\\\\n")
+      .replaceAll("\r", "\\\\r")
+      .replaceAll("\t", "\\\\t")
+      .replaceAll("\f", "\\\\f")
+      .replaceAll("\b", "\\\\b")
+      .replaceAll("\u000B", "\\\\v")
+      .replaceAll("\u0007", "\\\\a")
   }
 }

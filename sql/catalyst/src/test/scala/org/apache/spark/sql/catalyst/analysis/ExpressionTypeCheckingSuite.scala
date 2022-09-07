@@ -23,18 +23,20 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class ExpressionTypeCheckingSuite extends SparkFunSuite {
+class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
 
   val testRelation = LocalRelation(
-    'intField.int,
-    'stringField.string,
-    'booleanField.boolean,
-    'decimalField.decimal(8, 0),
-    'arrayField.array(StringType),
-    'mapField.map(StringType, LongType))
+    $"intField".int,
+    $"stringField".string,
+    $"booleanField".boolean,
+    $"decimalField".decimal(8, 0),
+    $"arrayField".array(StringType),
+    Symbol("mapField").map(StringType, LongType))
 
   def assertError(expr: Expression, errorMessage: String): Unit = {
     val e = intercept[AnalysisException] {
@@ -50,89 +52,236 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     SimpleAnalyzer.checkAnalysis(analyzed)
   }
 
-  def assertErrorForDifferingTypes(expr: Expression): Unit = {
-    assertError(expr,
-      s"differing types in '${expr.sql}'")
+  def assertErrorForDifferingTypes(
+      expr: Expression, messageParameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(expr)
+      },
+      errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+      parameters = messageParameters)
+  }
+
+  def assertForWrongType(expr: Expression, messageParameters: Map[String, String]): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        assertSuccess(expr)
+      }, errorClass = "DATATYPE_MISMATCH",
+      errorSubClass = Some("BINARY_OP_WRONG_TYPE"),
+      parameters = messageParameters)
   }
 
   test("check types for unary arithmetic") {
-    assertError(BitwiseNot('stringField), "requires integral type")
+    assertError(BitwiseNot($"stringField"), "requires integral type")
   }
 
   test("check types for binary arithmetic") {
     // We will cast String to Double for binary arithmetic
-    assertSuccess(Add('intField, 'stringField))
-    assertSuccess(Subtract('intField, 'stringField))
-    assertSuccess(Multiply('intField, 'stringField))
-    assertSuccess(Divide('intField, 'stringField))
-    assertSuccess(Remainder('intField, 'stringField))
-    // checkAnalysis(BitwiseAnd('intField, 'stringField))
+    assertSuccess(Add($"intField", $"stringField"))
+    assertSuccess(Subtract($"intField", $"stringField"))
+    assertSuccess(Multiply($"intField", $"stringField"))
+    assertSuccess(Divide($"intField", $"stringField"))
+    assertSuccess(Remainder($"intField", $"stringField"))
+    // checkAnalysis(BitwiseAnd($"intField", $"stringField"))
 
-    assertErrorForDifferingTypes(Add('intField, 'booleanField))
-    assertErrorForDifferingTypes(Subtract('intField, 'booleanField))
-    assertErrorForDifferingTypes(Multiply('intField, 'booleanField))
-    assertErrorForDifferingTypes(Divide('intField, 'booleanField))
-    assertErrorForDifferingTypes(Remainder('intField, 'booleanField))
-    assertErrorForDifferingTypes(BitwiseAnd('intField, 'booleanField))
-    assertErrorForDifferingTypes(BitwiseOr('intField, 'booleanField))
-    assertErrorForDifferingTypes(BitwiseXor('intField, 'booleanField))
+    assertErrorForDifferingTypes(
+      expr = Add($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField + booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = Subtract($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField - booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = Multiply($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField * booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = Divide($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField / booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = Remainder($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField % booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = BitwiseAnd($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField & booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = BitwiseOr($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField | booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = BitwiseXor($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField ^ booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
 
-    assertError(Add('booleanField, 'booleanField), "requires (numeric or interval) type")
-    assertError(Subtract('booleanField, 'booleanField),
-      "requires (numeric or interval) type")
-    assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
-    assertError(Divide('booleanField, 'booleanField), "requires (double or decimal) type")
-    assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
+    // scalastyle:off line.size.limit
+    assertForWrongType(
+      expr = Add($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField + booleanField)\"",
+        "inputType" -> "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = Subtract($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField - booleanField)\"",
+        "inputType" -> "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = Multiply($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField * booleanField)\"",
+        "inputType" -> "\"NUMERIC\"",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = Divide($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField / booleanField)\"",
+        "inputType" -> "(\"DOUBLE\" or \"DECIMAL\")",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = Remainder($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField % booleanField)\"",
+        "inputType" -> "\"NUMERIC\"",
+        "actualDataType" -> "\"BOOLEAN\""))
 
-    assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
-    assertError(BitwiseOr('booleanField, 'booleanField), "requires integral type")
-    assertError(BitwiseXor('booleanField, 'booleanField), "requires integral type")
+    assertForWrongType(
+      expr = BitwiseAnd($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField & booleanField)\"",
+        "inputType" -> "\"INTEGRAL\"",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = BitwiseOr($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField | booleanField)\"",
+        "inputType" -> "\"INTEGRAL\"",
+        "actualDataType" -> "\"BOOLEAN\""))
+    assertForWrongType(
+      expr = BitwiseXor($"booleanField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(booleanField ^ booleanField)\"",
+        "inputType" -> "\"INTEGRAL\"",
+        "actualDataType" -> "\"BOOLEAN\""))
+    // scalastyle:on line.size.limit
   }
 
   test("check types for predicates") {
     // We will cast String to Double for binary comparison
-    assertSuccess(EqualTo('intField, 'stringField))
-    assertSuccess(EqualNullSafe('intField, 'stringField))
-    assertSuccess(LessThan('intField, 'stringField))
-    assertSuccess(LessThanOrEqual('intField, 'stringField))
-    assertSuccess(GreaterThan('intField, 'stringField))
-    assertSuccess(GreaterThanOrEqual('intField, 'stringField))
+    assertSuccess(EqualTo($"intField", $"stringField"))
+    assertSuccess(EqualNullSafe($"intField", $"stringField"))
+    assertSuccess(LessThan($"intField", $"stringField"))
+    assertSuccess(LessThanOrEqual($"intField", $"stringField"))
+    assertSuccess(GreaterThan($"intField", $"stringField"))
+    assertSuccess(GreaterThanOrEqual($"intField", $"stringField"))
 
     // We will transform EqualTo with numeric and boolean types to CaseKeyWhen
-    assertSuccess(EqualTo('intField, 'booleanField))
-    assertSuccess(EqualNullSafe('intField, 'booleanField))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      assertSuccess(EqualTo($"intField", $"booleanField"))
+      assertSuccess(EqualNullSafe($"intField", $"booleanField"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      assertErrorForDifferingTypes(
+        expr = EqualTo($"intField", $"booleanField"),
+        messageParameters = Map(
+          "sqlExpr" -> "\"(intField = booleanField)\"",
+          "left" -> "\"INT\"",
+          "right" -> "\"BOOLEAN\""))
+      assertErrorForDifferingTypes(
+        expr = EqualNullSafe($"intField", $"booleanField"),
+        messageParameters = Map(
+          "sqlExpr" -> "\"(intField <=> booleanField)\"",
+          "left" -> "\"INT\"",
+          "right" -> "\"BOOLEAN\""))
+    }
 
-    assertErrorForDifferingTypes(EqualTo('intField, 'mapField))
-    assertErrorForDifferingTypes(EqualNullSafe('intField, 'mapField))
-    assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
-    assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
-    assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
-    assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
+    assertErrorForDifferingTypes(
+      expr = EqualTo($"intField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField = mapField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"MAP<STRING, BIGINT>\""))
+    assertErrorForDifferingTypes(
+      expr = EqualNullSafe($"intField", $"mapField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField <=> mapField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"MAP<STRING, BIGINT>\""))
+    assertErrorForDifferingTypes(
+      expr = LessThan($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField < booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = LessThanOrEqual($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField <= booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = GreaterThan($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField > booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
+    assertErrorForDifferingTypes(
+      expr = GreaterThanOrEqual($"intField", $"booleanField"),
+      messageParameters = Map(
+        "sqlExpr" -> "\"(intField >= booleanField)\"",
+        "left" -> "\"INT\"",
+        "right" -> "\"BOOLEAN\""))
 
-    assertError(EqualTo('mapField, 'mapField), "EqualTo does not support ordering on type map")
-    assertError(EqualNullSafe('mapField, 'mapField),
+    assertError(EqualTo($"mapField", $"mapField"),
+      "EqualTo does not support ordering on type map")
+    assertError(EqualNullSafe($"mapField", $"mapField"),
       "EqualNullSafe does not support ordering on type map")
-    assertError(LessThan('mapField, 'mapField),
+    assertError(LessThan($"mapField", $"mapField"),
       "LessThan does not support ordering on type map")
-    assertError(LessThanOrEqual('mapField, 'mapField),
+    assertError(LessThanOrEqual($"mapField", $"mapField"),
       "LessThanOrEqual does not support ordering on type map")
-    assertError(GreaterThan('mapField, 'mapField),
+    assertError(GreaterThan($"mapField", $"mapField"),
       "GreaterThan does not support ordering on type map")
-    assertError(GreaterThanOrEqual('mapField, 'mapField),
+    assertError(GreaterThanOrEqual($"mapField", $"mapField"),
       "GreaterThanOrEqual does not support ordering on type map")
 
-    assertError(If('intField, 'stringField, 'stringField),
+    assertError(If($"intField", $"stringField", $"stringField"),
       "type of predicate expression in If should be boolean")
-    assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
+    assertError(If($"booleanField", $"intField", $"booleanField"),
+      "data type mismatch")
 
     assertError(
-      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('booleanField.attr, 'mapField.attr))),
+      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
+        ($"booleanField".attr, $"mapField".attr))),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
-      CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'mapField)),
+      CaseKeyWhen($"intField", Seq($"intField", $"stringField",
+        $"intField", $"mapField")),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
-      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('intField.attr, 'intField.attr))),
+      CaseWhen(Seq(($"booleanField".attr, $"intField".attr),
+        ($"intField".attr, $"intField".attr))),
       "WHEN expressions in CaseWhen should all be boolean type")
   }
 
@@ -141,30 +290,30 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     // instead of from AggregateExpression, which is the wrapper of an AggregateFunction.
 
     // We will cast String to Double for sum and average
-    assertSuccess(Sum('stringField))
-    assertSuccess(Average('stringField))
-    assertSuccess(Min('arrayField))
-    assertSuccess(new EveryAgg('booleanField))
-    assertSuccess(new AnyAgg('booleanField))
-    assertSuccess(new SomeAgg('booleanField))
+    assertSuccess(Sum($"stringField"))
+    assertSuccess(Average($"stringField"))
+    assertSuccess(Min($"arrayField"))
+    assertSuccess(new BoolAnd($"booleanField"))
+    assertSuccess(new BoolOr($"booleanField"))
 
-    assertError(Min('mapField), "min does not support ordering on type")
-    assertError(Max('mapField), "max does not support ordering on type")
-    assertError(Sum('booleanField), "function sum requires numeric type")
-    assertError(Average('booleanField), "function average requires numeric type")
+    assertError(Min($"mapField"), "min does not support ordering on type")
+    assertError(Max($"mapField"), "max does not support ordering on type")
+    assertError(Sum($"booleanField"), "function sum requires numeric or interval types")
+    assertError(Average($"booleanField"),
+      "function average requires numeric or interval types")
   }
 
   test("check types for others") {
-    assertError(CreateArray(Seq('intField, 'booleanField)),
+    assertError(CreateArray(Seq($"intField", $"booleanField")),
       "input to function array should all be the same type")
-    assertError(Coalesce(Seq('intField, 'booleanField)),
+    assertError(Coalesce(Seq($"intField", $"booleanField")),
       "input to function coalesce should all be the same type")
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(new XxHash64(Nil), "function xxhash64 requires at least one argument")
-    assertError(Explode('intField),
+    assertError(Explode($"intField"),
       "input to function explode should be array or map type")
-    assertError(PosExplode('intField),
+    assertError(PosExplode($"intField"),
       "input to function explode should be array or map type")
   }
 
@@ -175,7 +324,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       CreateNamedStruct(Seq(1, "a", "b", 2.0)),
       "Only foldable string expressions are allowed to appear at odd position")
     assertError(
-      CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
+      CreateNamedStruct(Seq($"a".string.at(0), "a", "b", 2.0)),
       "Only foldable string expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
@@ -185,36 +334,57 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   test("check types for CreateMap") {
     assertError(CreateMap(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
-      CreateMap(Seq('intField, 'stringField, 'booleanField, 'stringField)),
+      CreateMap(Seq($"intField", $"stringField",
+        $"booleanField", $"stringField")),
       "keys of function map should all be the same type")
     assertError(
-      CreateMap(Seq('stringField, 'intField, 'stringField, 'booleanField)),
+      CreateMap(Seq($"stringField", $"intField",
+        $"stringField", $"booleanField")),
       "values of function map should all be the same type")
   }
 
   test("check types for ROUND/BROUND") {
     assertSuccess(Round(Literal(null), Literal(null)))
-    assertSuccess(Round('intField, Literal(1)))
+    assertSuccess(Round($"intField", Literal(1)))
 
-    assertError(Round('intField, 'intField), "Only foldable Expression is allowed")
-    assertError(Round('intField, 'booleanField), "requires int type")
-    assertError(Round('intField, 'mapField), "requires int type")
-    assertError(Round('booleanField, 'intField), "requires numeric type")
+    assertError(Round($"intField", $"intField"),
+      "Only foldable Expression is allowed")
+    assertError(Round($"intField", $"booleanField"), "requires int type")
+    assertError(Round($"intField", $"mapField"), "requires int type")
+    assertError(Round($"booleanField", $"intField"), "requires numeric type")
 
     assertSuccess(BRound(Literal(null), Literal(null)))
-    assertSuccess(BRound('intField, Literal(1)))
+    assertSuccess(BRound($"intField", Literal(1)))
 
-    assertError(BRound('intField, 'intField), "Only foldable Expression is allowed")
-    assertError(BRound('intField, 'booleanField), "requires int type")
-    assertError(BRound('intField, 'mapField), "requires int type")
-    assertError(BRound('booleanField, 'intField), "requires numeric type")
+    assertError(BRound($"intField", $"intField"),
+      "Only foldable Expression is allowed")
+    assertError(BRound($"intField", $"booleanField"), "requires int type")
+    assertError(BRound($"intField", $"mapField"), "requires int type")
+    assertError(BRound($"booleanField", $"intField"), "requires numeric type")
   }
 
   test("check types for Greatest/Least") {
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
-      assertError(operator(Seq('booleanField)), "requires at least two arguments")
-      assertError(operator(Seq('intField, 'stringField)), "should all have the same type")
-      assertError(operator(Seq('mapField, 'mapField)), "does not support ordering")
+      assertError(operator(Seq($"booleanField")), "requires at least two arguments")
+      assertError(operator(Seq($"intField", $"stringField")),
+        "should all have the same type")
+      assertError(operator(Seq($"mapField", $"mapField")),
+        "does not support ordering")
     }
+  }
+
+  test("check types for SQL string generation") {
+    assert(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)).sql ==
+      "ARRAY(1, 2, 3)")
+    assert(Literal.create(Array(1, 2, null), ArrayType(IntegerType)).sql ==
+      "ARRAY(1, 2, CAST(NULL AS INT))")
+    assert(Literal.default(StructType(Seq(StructField("col", StringType)))).sql ==
+      "NAMED_STRUCT('col', '')")
+    assert(Literal.default(StructType(Seq(StructField("col", NullType)))).sql ==
+      "NAMED_STRUCT('col', NULL)")
+    assert(Literal.create(Map(42L -> true), MapType(LongType, BooleanType)).sql ==
+      "MAP(42L, true)")
+    assert(Literal.create(Map(42L -> null), MapType(LongType, NullType)).sql ==
+      "MAP(42L, NULL)")
   }
 }

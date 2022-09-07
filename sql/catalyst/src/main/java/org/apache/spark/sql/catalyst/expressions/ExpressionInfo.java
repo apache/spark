@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.google.common.annotations.VisibleForTesting;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Expression information, will be used to describe a expression.
  */
@@ -29,8 +35,20 @@ public class ExpressionInfo {
     private String arguments;
     private String examples;
     private String note;
+    private String group;
     private String since;
     private String deprecated;
+    private String source;
+
+    private static final Set<String> validGroups =
+        new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
+            "collection_funcs", "predicate_funcs", "conditional_funcs", "conversion_funcs",
+            "csv_funcs", "datetime_funcs", "generator_funcs", "hash_funcs", "json_funcs",
+            "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs", "string_funcs", "struct_funcs",
+            "window_funcs", "xml_funcs", "table_funcs", "url_funcs"));
+
+    private static final Set<String> validSources =
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "java_udf"));
 
     public String getClassName() {
         return className;
@@ -56,6 +74,11 @@ public class ExpressionInfo {
         return arguments;
     }
 
+    @VisibleForTesting
+    public String getOriginalExamples() {
+        return examples;
+    }
+
     public String getExamples() {
         return replaceFunctionName(examples);
     }
@@ -68,8 +91,16 @@ public class ExpressionInfo {
         return deprecated;
     }
 
+    public String getGroup() {
+        return group;
+    }
+
     public String getDb() {
         return db;
+    }
+
+    public String getSource() {
+        return source;
     }
 
     public ExpressionInfo(
@@ -80,15 +111,19 @@ public class ExpressionInfo {
             String arguments,
             String examples,
             String note,
+            String group,
             String since,
-            String deprecated) {
+            String deprecated,
+            String source) {
         assert name != null;
         assert arguments != null;
         assert examples != null;
         assert examples.isEmpty() || examples.contains("    Examples:");
         assert note != null;
+        assert group != null;
         assert since != null;
         assert deprecated != null;
+        assert source != null;
 
         this.className = className;
         this.db = db;
@@ -97,8 +132,10 @@ public class ExpressionInfo {
         this.arguments = arguments;
         this.examples = examples;
         this.note = note;
+        this.group = group;
         this.since = since;
         this.deprecated = deprecated;
+        this.source = source;
 
         // Make the extended description.
         this.extended = arguments + examples;
@@ -112,6 +149,16 @@ public class ExpressionInfo {
                     "with a newline and two spaces; however, got [" + note + "].");
             }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
+        }
+        if (!group.isEmpty() && !validGroups.contains(group)) {
+            throw new IllegalArgumentException("'group' is malformed in the expression [" +
+                this.name + "]. It should be a value in " + validGroups + "; however, " +
+                "got [" + group + "].");
+        }
+        if (!source.isEmpty() && !validSources.contains(source)) {
+            throw new IllegalArgumentException("'source' is malformed in the expression [" +
+                    this.name + "]. It should be a value in " + validSources + "; however, " +
+                    "got [" + source + "].");
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
@@ -133,11 +180,11 @@ public class ExpressionInfo {
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, "", "", "", "", "");
+        this(className, null, name, null, "", "", "", "", "", "", "");
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, "", "", "", "", "");
+        this(className, db, name, null, "", "", "", "", "", "", "");
     }
 
     /**
@@ -148,7 +195,7 @@ public class ExpressionInfo {
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.
-        this(className, db, name, usage, extended, "", "", "", "");
+        this(className, db, name, usage, extended, "", "", "", "", "", "");
     }
 
     private String replaceFunctionName(String usage) {

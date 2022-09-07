@@ -19,11 +19,14 @@
 PySpark supports custom serializers for transferring data; this can improve
 performance.
 
-By default, PySpark uses :class:`PickleSerializer` to serialize objects using Python's
+By default, PySpark uses :class:`CloudPickleSerializer` to serialize objects using Python's
 `cPickle` serializer, which can serialize nearly any Python object.
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
+
+Examples
+--------
 The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext
@@ -58,24 +61,24 @@ import types
 import collections
 import zlib
 import itertools
+import pickle
 
-if sys.version < '3':
-    import cPickle as pickle
-    from itertools import izip as zip, imap as map
-else:
-    import pickle
-    basestring = unicode = str
-    xrange = range
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import _exception_message
+from pyspark.util import print_exec
 
 
-__all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
+__all__ = [
+    "PickleSerializer",
+    "CPickleSerializer",
+    "CloudPickleSerializer",
+    "MarshalSerializer",
+    "UTF8Deserializer",
+]
 
 
-class SpecialLengths(object):
+class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
@@ -84,8 +87,7 @@ class SpecialLengths(object):
     START_ARROW_STREAM = -6
 
 
-class Serializer(object):
-
+class Serializer:
     def dump_stream(self, iterator, stream):
         """
         Serialize an iterator of objects to the output stream.
@@ -95,6 +97,13 @@ class Serializer(object):
     def load_stream(self, stream):
         """
         Return an iterator of deserialized objects from the input stream.
+        """
+        raise NotImplementedError
+
+    def dumps(self, obj):
+        """
+        Serialize an object into a byte array.
+        When batching is used, this will be called with an array of objects.
         """
         raise NotImplementedError
 
@@ -132,11 +141,6 @@ class FramedSerializer(Serializer):
     where `length` is a 32-bit integer and data is `length` bytes.
     """
 
-    def __init__(self):
-        # On Python 2.6, we can't write bytearrays to streams, so we need to convert them
-        # to strings first. Check if the version number is that old.
-        self._only_write_strings = sys.version_info[0:2] <= (2, 6)
-
     def dump_stream(self, iterator, stream):
         for obj in iterator:
             self._write_with_length(obj, stream)
@@ -155,10 +159,7 @@ class FramedSerializer(Serializer):
         if len(serialized) > (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
-        if self._only_write_strings:
-            stream.write(str(serialized))
-        else:
-            stream.write(serialized)
+        stream.write(serialized)
 
     def _read_with_length(self, stream):
         length = read_int(stream)
@@ -185,222 +186,6 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class ArrowCollectSerializer(Serializer):
-    """
-    Deserialize a stream of batches followed by batch order information. Used in
-    DataFrame._collectAsArrow() after invoking Dataset.collectAsArrowToPython() in the JVM.
-    """
-
-    def __init__(self):
-        self.serializer = ArrowStreamSerializer()
-
-    def dump_stream(self, iterator, stream):
-        return self.serializer.dump_stream(iterator, stream)
-
-    def load_stream(self, stream):
-        """
-        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
-        a list of indices that can be used to put the RecordBatches in the correct order.
-        """
-        # load the batches
-        for batch in self.serializer.load_stream(stream):
-            yield batch
-
-        # load the batch order indices or propagate any error that occurred in the JVM
-        num = read_int(stream)
-        if num == -1:
-            error_msg = UTF8Deserializer().loads(stream)
-            raise RuntimeError("An error occurred while calling "
-                               "ArrowCollectSerializer.load_stream: {}".format(error_msg))
-        batch_order = []
-        for i in xrange(num):
-            index = read_int(stream)
-            batch_order.append(index)
-        yield batch_order
-
-    def __repr__(self):
-        return "ArrowCollectSerializer(%s)" % self.serializer
-
-
-class ArrowStreamSerializer(Serializer):
-    """
-    Serializes Arrow record batches as a stream.
-    """
-
-    def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-        writer = None
-        try:
-            for batch in iterator:
-                if writer is None:
-                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
-                writer.write_batch(batch)
-        finally:
-            if writer is not None:
-                writer.close()
-
-    def load_stream(self, stream):
-        import pyarrow as pa
-        reader = pa.ipc.open_stream(stream)
-        for batch in reader:
-            yield batch
-
-    def __repr__(self):
-        return "ArrowStreamSerializer"
-
-
-class ArrowStreamPandasSerializer(ArrowStreamSerializer):
-    """
-    Serializes Pandas.Series as Arrow data with Arrow streaming format.
-
-    :param timezone: A timezone to respect when handling timestamp values
-    :param safecheck: If True, conversion from Arrow to Pandas checks for overflow/truncation
-    :param assign_cols_by_name: If True, then Pandas DataFrames will get columns by name
-    """
-
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(ArrowStreamPandasSerializer, self).__init__()
-        self._timezone = timezone
-        self._safecheck = safecheck
-        self._assign_cols_by_name = assign_cols_by_name
-
-    def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.types import _check_series_localize_timestamps
-
-        # If the given column is a date type column, creates a series of datetime.date directly
-        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
-        # datetime64[ns] type handling.
-        s = arrow_column.to_pandas(date_as_object=True)
-
-        s = _check_series_localize_timestamps(s, self._timezone)
-        return s
-
-    def _create_batch(self, series):
-        """
-        Create an Arrow record batch from the given pandas.Series or list of Series,
-        with optional type.
-
-        :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
-        :return: Arrow RecordBatch
-        """
-        import pandas as pd
-        import pyarrow as pa
-        from pyspark.sql.types import _check_series_convert_timestamps_internal
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or \
-                (len(series) == 2 and isinstance(series[1], pa.DataType)):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-
-        def create_array(s, t):
-            mask = s.isnull()
-            # Ensure timestamp series are in expected form for Spark internal representation
-            if t is not None and pa.types.is_timestamp(t):
-                s = _check_series_convert_timestamps_internal(s, self._timezone)
-            try:
-                array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
-            except pa.ArrowException as e:
-                error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
-                            "Array (%s). It can be caused by overflows or other unsafe " + \
-                            "conversions warned by Arrow. Arrow safe type check can be " + \
-                            "disabled by using SQL config " + \
-                            "`spark.sql.execution.pandas.arrowSafeTypeConversion`."
-                raise RuntimeError(error_msg % (s.dtype, t), e)
-            return array
-
-        arrs = []
-        for s, t in series:
-            if t is not None and pa.types.is_struct(t):
-                if not isinstance(s, pd.DataFrame):
-                    raise ValueError("A field of type StructType expects a pandas.DataFrame, "
-                                     "but got: %s" % str(type(s)))
-
-                # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
-                if len(s) == 0 and len(s.columns) == 0:
-                    arrs_names = [(pa.array([], type=field.type), field.name) for field in t]
-                # Assign result columns by schema name if user labeled with strings
-                elif self._assign_cols_by_name and any(isinstance(name, basestring)
-                                                       for name in s.columns):
-                    arrs_names = [(create_array(s[field.name], field.type), field.name)
-                                  for field in t]
-                # Assign result columns by  position
-                else:
-                    arrs_names = [(create_array(s[s.columns[i]], field.type), field.name)
-                                  for i, field in enumerate(t)]
-
-                struct_arrs, struct_names = zip(*arrs_names)
-                arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
-            else:
-                arrs.append(create_array(s, t))
-
-        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
-
-    def dump_stream(self, iterator, stream):
-        """
-        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
-        a list of series accompanied by an optional pyarrow type to coerce the data to.
-        """
-        batches = (self._create_batch(series) for series in iterator)
-        super(ArrowStreamPandasSerializer, self).dump_stream(batches, stream)
-
-    def load_stream(self, stream):
-        """
-        Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
-        """
-        batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
-        import pyarrow as pa
-        for batch in batches:
-            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
-
-    def __repr__(self):
-        return "ArrowStreamPandasSerializer"
-
-
-class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
-    """
-    Serializer used by Python worker to evaluate Pandas UDFs
-    """
-
-    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
-        super(ArrowStreamPandasUDFSerializer, self) \
-            .__init__(timezone, safecheck, assign_cols_by_name)
-        self._df_for_struct = df_for_struct
-
-    def arrow_to_pandas(self, arrow_column):
-        import pyarrow.types as types
-
-        if self._df_for_struct and types.is_struct(arrow_column.type):
-            import pandas as pd
-            series = [super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(column)
-                      .rename(field.name)
-                      for column, field in zip(arrow_column.flatten(), arrow_column.type)]
-            s = pd.concat(series, axis=1)
-        else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
-        return s
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
-        """
-
-        def init_stream_yield_batches():
-            should_write_start_length = True
-            for series in iterator:
-                batch = self._create_batch(series)
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
-
-        return ArrowStreamSerializer.dump_stream(self, init_stream_yield_batches(), stream)
-
-    def __repr__(self):
-        return "ArrowStreamPandasUDFSerializer"
-
-
 class BatchedSerializer(Serializer):
 
     """
@@ -420,8 +205,8 @@ class BatchedSerializer(Serializer):
             yield list(iterator)
         elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
             n = len(iterator)
-            for i in xrange(0, n, self.batchSize):
-                yield iterator[i: i + self.batchSize]
+            for i in range(0, n, self.batchSize):
+                yield iterator[i : i + self.batchSize]
         else:
             items = []
             count = 0
@@ -455,6 +240,7 @@ class FlattenedValuesSerializer(BatchedSerializer):
     which contain more than a certain number of objects to make them
     have similar sizes.
     """
+
     def __init__(self, serializer, batchSize=10):
         BatchedSerializer.__init__(self, serializer, batchSize)
 
@@ -462,7 +248,7 @@ class FlattenedValuesSerializer(BatchedSerializer):
         n = self.batchSize
         for key, values in iterator:
             for i in range(0, len(values), n):
-                yield key, values[i:i + n]
+                yield key, values[i : i + n]
 
     def load_stream(self, stream):
         return self.serializer.load_stream(stream)
@@ -525,8 +311,7 @@ class CartesianDeserializer(Serializer):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
 
     def __repr__(self):
-        return "CartesianDeserializer(%s, %s)" % \
-               (str(self.key_ser), str(self.val_ser))
+        return "CartesianDeserializer(%s, %s)" % (str(self.key_ser), str(self.val_ser))
 
 
 class PairDeserializer(Serializer):
@@ -547,11 +332,13 @@ class PairDeserializer(Serializer):
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
             # For double-zipped RDDs, the batches can be iterators from other PairDeserializer,
             # instead of lists. We need to convert them to lists if needed.
-            key_batch = key_batch if hasattr(key_batch, '__len__') else list(key_batch)
-            val_batch = val_batch if hasattr(val_batch, '__len__') else list(val_batch)
+            key_batch = key_batch if hasattr(key_batch, "__len__") else list(key_batch)
+            val_batch = val_batch if hasattr(val_batch, "__len__") else list(val_batch)
             if len(key_batch) != len(val_batch):
-                raise ValueError("Can not deserialize PairRDD with different number of items"
-                                 " in batches: (%d, %d)" % (len(key_batch), len(val_batch)))
+                raise ValueError(
+                    "Can not deserialize PairRDD with different number of items"
+                    " in batches: (%d, %d)" % (len(key_batch), len(val_batch))
+                )
             # for correctness with repeated cartesian/zip this must be returned as one batch
             yield zip(key_batch, val_batch)
 
@@ -563,7 +350,6 @@ class PairDeserializer(Serializer):
 
 
 class NoOpSerializer(FramedSerializer):
-
     def loads(self, obj):
         return obj
 
@@ -571,88 +357,81 @@ class NoOpSerializer(FramedSerializer):
         return obj
 
 
-# Hack namedtuple, make it picklable
+if sys.version_info < (3, 8):
+    # Hack namedtuple, make it picklable.
+    # For Python 3.8+, we use CPickle-based cloudpickle.
+    # For Python 3.7 and below, we use legacy build-in CPickle which
+    # requires namedtuple hack.
+    # The whole hack here should be removed once we drop Python 3.7.
 
-__cls = {}
+    __cls = {}
 
+    def _restore(name, fields, value):
+        """Restore an object of namedtuple"""
+        k = (name, fields)
+        cls = __cls.get(k)
+        if cls is None:
+            cls = collections.namedtuple(name, fields)
+            __cls[k] = cls
+        return cls(*value)
 
-def _restore(name, fields, value):
-    """ Restore an object of namedtuple"""
-    k = (name, fields)
-    cls = __cls.get(k)
-    if cls is None:
-        cls = collections.namedtuple(name, fields)
-        __cls[k] = cls
-    return cls(*value)
+    def _hack_namedtuple(cls):
+        """Make class generated by namedtuple picklable"""
+        name = cls.__name__
+        fields = cls._fields
 
+        def __reduce__(self):
+            return (_restore, (name, fields, tuple(self)))
 
-def _hack_namedtuple(cls):
-    """ Make class generated by namedtuple picklable """
-    name = cls.__name__
-    fields = cls._fields
+        cls.__reduce__ = __reduce__
+        cls._is_namedtuple_ = True
+        return cls
 
-    def __reduce__(self):
-        return (_restore, (name, fields, tuple(self)))
-    cls.__reduce__ = __reduce__
-    cls._is_namedtuple_ = True
-    return cls
+    def _hijack_namedtuple():
+        """Hack namedtuple() to make it picklable"""
+        # hijack only one time
+        if hasattr(collections.namedtuple, "__hijack"):
+            return
 
+        global _old_namedtuple  # or it will put in closure
+        global _old_namedtuple_kwdefaults  # or it will put in closure too
 
-def _hijack_namedtuple():
-    """ Hack namedtuple() to make it picklable """
-    # hijack only one time
-    if hasattr(collections.namedtuple, "__hijack"):
-        return
+        def _copy_func(f):
+            return types.FunctionType(
+                f.__code__, f.__globals__, f.__name__, f.__defaults__, f.__closure__
+            )
 
-    global _old_namedtuple  # or it will put in closure
-    global _old_namedtuple_kwdefaults  # or it will put in closure too
+        _old_namedtuple = _copy_func(collections.namedtuple)
+        _old_namedtuple_kwdefaults = collections.namedtuple.__kwdefaults__
 
-    def _copy_func(f):
-        return types.FunctionType(f.__code__, f.__globals__, f.__name__,
-                                  f.__defaults__, f.__closure__)
+        def namedtuple(*args, **kwargs):
+            for k, v in _old_namedtuple_kwdefaults.items():
+                kwargs[k] = kwargs.get(k, v)
+            cls = _old_namedtuple(*args, **kwargs)
+            return _hack_namedtuple(cls)
 
-    def _kwdefaults(f):
-        # __kwdefaults__ contains the default values of keyword-only arguments which are
-        # introduced from Python 3. The possible cases for __kwdefaults__ in namedtuple
-        # are as below:
-        #
-        # - Does not exist in Python 2.
-        # - Returns None in <= Python 3.5.x.
-        # - Returns a dictionary containing the default values to the keys from Python 3.6.x
-        #    (See https://bugs.python.org/issue25628).
-        kargs = getattr(f, "__kwdefaults__", None)
-        if kargs is None:
-            return {}
-        else:
-            return kargs
+        # replace namedtuple with the new one
+        collections.namedtuple.__globals__[
+            "_old_namedtuple_kwdefaults"
+        ] = _old_namedtuple_kwdefaults
+        collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
+        collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
+        collections.namedtuple.__code__ = namedtuple.__code__
+        collections.namedtuple.__hijack = 1
 
-    _old_namedtuple = _copy_func(collections.namedtuple)
-    _old_namedtuple_kwdefaults = _kwdefaults(collections.namedtuple)
-
-    def namedtuple(*args, **kwargs):
-        for k, v in _old_namedtuple_kwdefaults.items():
-            kwargs[k] = kwargs.get(k, v)
-        cls = _old_namedtuple(*args, **kwargs)
-        return _hack_namedtuple(cls)
-
-    # replace namedtuple with the new one
-    collections.namedtuple.__globals__["_old_namedtuple_kwdefaults"] = _old_namedtuple_kwdefaults
-    collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
-    collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
-    collections.namedtuple.__code__ = namedtuple.__code__
-    collections.namedtuple.__hijack = 1
-
-    # hack the cls already generated by namedtuple.
-    # Those created in other modules can be pickled as normal,
-    # so only hack those in __main__ module
-    for n, o in sys.modules["__main__"].__dict__.items():
-        if (type(o) is type and o.__base__ is tuple
+        # hack the cls already generated by namedtuple.
+        # Those created in other modules can be pickled as normal,
+        # so only hack those in __main__ module
+        for n, o in sys.modules["__main__"].__dict__.items():
+            if (
+                type(o) is type
+                and o.__base__ is tuple
                 and hasattr(o, "_fields")
-                and "__reduce__" not in o.__dict__):
-            _hack_namedtuple(o)  # hack inplace
+                and "__reduce__" not in o.__dict__
+            ):
+                _hack_namedtuple(o)  # hack inplace
 
-
-_hijack_namedtuple()
+    _hijack_namedtuple()
 
 
 class PickleSerializer(FramedSerializer):
@@ -669,29 +448,33 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return pickle.dumps(obj, pickle_protocol)
 
-    if sys.version >= '3':
-        def loads(self, obj, encoding="bytes"):
-            return pickle.loads(obj, encoding=encoding)
-    else:
-        def loads(self, obj, encoding=None):
-            return pickle.loads(obj)
+    def loads(self, obj, encoding="bytes"):
+        return pickle.loads(obj, encoding=encoding)
 
 
-class CloudPickleSerializer(PickleSerializer):
-
+class CloudPickleSerializer(FramedSerializer):
     def dumps(self, obj):
         try:
             return cloudpickle.dumps(obj, pickle_protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
-            emsg = _exception_message(e)
+            emsg = str(e)
             if "'i' format requires" in emsg:
                 msg = "Object too large to serialize: %s" % emsg
             else:
                 msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
-            cloudpickle.print_exec(sys.stderr)
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
+
+    def loads(self, obj, encoding="bytes"):
+        return cloudpickle.loads(obj, encoding=encoding)
+
+
+if sys.version_info < (3, 8):
+    CPickleSerializer = PickleSerializer
+else:
+    CPickleSerializer = CloudPickleSerializer
 
 
 class MarshalSerializer(FramedSerializer):
@@ -701,7 +484,7 @@ class MarshalSerializer(FramedSerializer):
 
         http://docs.python.org/2/library/marshal.html
 
-    This serializer is faster than PickleSerializer but supports fewer datatypes.
+    This serializer is faster than CloudPickleSerializer but supports fewer datatypes.
     """
 
     def dumps(self, obj):
@@ -723,18 +506,18 @@ class AutoSerializer(FramedSerializer):
 
     def dumps(self, obj):
         if self._type is not None:
-            return b'P' + pickle.dumps(obj, -1)
+            return b"P" + pickle.dumps(obj, -1)
         try:
-            return b'M' + marshal.dumps(obj)
+            return b"M" + marshal.dumps(obj)
         except Exception:
-            self._type = b'P'
-            return b'P' + pickle.dumps(obj, -1)
+            self._type = b"P"
+            return b"P" + pickle.dumps(obj, -1)
 
     def loads(self, obj):
         _type = obj[0]
-        if _type == b'M':
+        if _type == b"M":
             return marshal.loads(obj[1:])
-        elif _type == b'P':
+        elif _type == b"P":
             return pickle.loads(obj[1:])
         else:
             raise ValueError("invalid serialization type: %s" % _type)
@@ -744,6 +527,7 @@ class CompressedSerializer(FramedSerializer):
     """
     Compress the serialized data
     """
+
     def __init__(self, serializer):
         FramedSerializer.__init__(self)
         assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
@@ -828,7 +612,7 @@ def write_with_length(obj, stream):
     stream.write(obj)
 
 
-class ChunkedStream(object):
+class ChunkedStream:
 
     """
     This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed
@@ -855,14 +639,14 @@ class ChunkedStream(object):
             new_pos = byte_remaining + self.current_pos
             if new_pos < self.buffer_size:
                 # just put it in our buffer
-                self.buffer[self.current_pos:new_pos] = bytes[byte_pos:]
+                self.buffer[self.current_pos : new_pos] = bytes[byte_pos:]
                 self.current_pos = new_pos
                 byte_remaining = 0
             else:
                 # fill the buffer, send the length then the contents, and start filling again
                 space_left = self.buffer_size - self.current_pos
                 new_byte_pos = byte_pos + space_left
-                self.buffer[self.current_pos:self.buffer_size] = bytes[byte_pos:new_byte_pos]
+                self.buffer[self.current_pos : self.buffer_size] = bytes[byte_pos:new_byte_pos]
                 write_int(self.buffer_size, self.wrapped)
                 self.wrapped.write(self.buffer)
                 byte_remaining -= space_left
@@ -873,7 +657,7 @@ class ChunkedStream(object):
         # if there is anything left in the buffer, write it out first
         if self.current_pos > 0:
             write_int(self.current_pos, self.wrapped)
-            self.wrapped.write(self.buffer[:self.current_pos])
+            self.wrapped.write(self.buffer[: self.current_pos])
         # -1 length indicates to the receiving end that we're done.
         write_int(-1, self.wrapped)
         self.wrapped.close()
@@ -888,8 +672,9 @@ class ChunkedStream(object):
         return self.wrapped.closed
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

@@ -51,20 +51,11 @@ public class SparkLauncherSuite extends BaseSuite {
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
 
     launcher.addSparkArg(opts.HELP);
-    try {
-      launcher.addSparkArg(opts.PROXY_USER);
-      fail("Expected IllegalArgumentException.");
-    } catch (IllegalArgumentException e) {
-      // Expected.
-    }
+    assertThrows(IllegalArgumentException.class, () -> launcher.addSparkArg(opts.PROXY_USER));
 
     launcher.addSparkArg(opts.PROXY_USER, "someUser");
-    try {
-      launcher.addSparkArg(opts.HELP, "someValue");
-      fail("Expected IllegalArgumentException.");
-    } catch (IllegalArgumentException e) {
-      // Expected.
-    }
+    assertThrows(IllegalArgumentException.class,
+      () -> launcher.addSparkArg(opts.HELP, "someValue"));
 
     launcher.addSparkArg("--future-argument");
     launcher.addSparkArg("--future-argument", "someValue");
@@ -281,9 +272,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
   private void restoreSystemProperties(Map<Object, Object> properties) {
     Properties p = new Properties();
-    for (Map.Entry<Object, Object> e : properties.entrySet()) {
-      p.put(e.getKey(), e.getValue());
-    }
+    p.putAll(properties);
     System.setProperties(p);
   }
 
@@ -323,7 +312,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
-      assertEquals(args[0], "hello");
+      assertEquals("hello", args[0]);
       new SparkContext().stop();
 
       synchronized (LOCK) {
@@ -340,7 +329,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
     public static void main(String[] args) {
       assertNotEquals(0, args.length);
-      assertEquals(args[0], "hello");
+      assertEquals("hello", args[0]);
       throw DUMMY_EXCEPTION;
     }
   }

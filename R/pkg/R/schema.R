@@ -95,14 +95,14 @@ structType.character <- function(x, ...) {
 #' @param x A StructType object
 #' @param ... further arguments passed to or from other methods
 #' @note print.structType since 1.4.0
+#' @keywords internal
 print.structType <- function(x, ...) {
   cat("StructType\n",
       sapply(x$fields(),
              function(field) {
-               paste("|-", "name = \"", field$name(),
-                     "\", type = \"", field$dataType.toString(),
-                     "\", nullable = ", field$nullable(), "\n",
-                     sep = "")
+               paste0("|-", "name = \"", field$name(),
+                      "\", type = \"", field$dataType.toString(),
+                      "\", nullable = ", field$nullable(), "\n")
              }),
       sep = "")
 }
@@ -183,7 +183,7 @@ checkType <- function(type) {
                 # strsplit does not return the final empty string, so check if
                 # the final char is ","
                 if (substr(fieldsString, nchar(fieldsString), nchar(fieldsString)) != ",") {
-                  fields <- strsplit(fieldsString, ",")[[1]]
+                  fields <- strsplit(fieldsString, ",", fixed = TRUE)[[1]]
                   for (field in fields) {
                     m <- regexec("^(.+):(.+)$", field)
                     matchedStrings <- regmatches(field, m)
@@ -200,7 +200,7 @@ checkType <- function(type) {
             })
   }
 
-  stop(paste("Unsupported type for SparkDataframe:", type))
+  stop("Unsupported type for SparkDataframe: ", type)
 }
 
 #' @param type The data type of the field
@@ -235,6 +235,7 @@ structField.character <- function(x, type, nullable = TRUE, ...) {
 #' @param x A StructField object
 #' @param ... further arguments passed to or from other methods
 #' @note print.structField since 1.4.0
+#' @keywords internal
 print.structField <- function(x, ...) {
   cat("StructField(name = \"", x$name(),
       "\", type = \"", x$dataType.toString(),

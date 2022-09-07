@@ -23,33 +23,35 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 
 /**
  * Evaluator for multiclass classification.
  *
- * @param predictionAndLabels an RDD of (prediction, label, weight) or
- *                         (prediction, label) tuples.
+ * @param predictionAndLabels an RDD of (prediction, label, weight, probability) or
+ *                            (prediction, label, weight) or (prediction, label) tuples.
  */
 @Since("1.1.0")
 class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product]) {
 
   /**
    * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndLabels a DataFrame with two double columns: prediction and label
+   * @param predictionAndLabels a DataFrame with columns: prediction, label, weight (optional)
+   *                            and probability (only for logLoss)
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.rdd.map {
-      case Row(prediction: Double, label: Double, weight: Double) =>
-        (prediction, label, weight)
-      case Row(prediction: Double, label: Double) =>
-        (prediction, label, 1.0)
-      case other =>
-        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    this(predictionAndLabels.rdd.map { r =>
+      r.size match {
+        case 2 => (r.getDouble(0), r.getDouble(1), 1.0, null)
+        case 3 => (r.getDouble(0), r.getDouble(1), r.getDouble(2), null)
+        case 4 => (r.getDouble(0), r.getDouble(1), r.getDouble(2), r.getSeq[Double](3).toArray)
+        case _ => throw new IllegalArgumentException(s"Expected Row of tuples, got $r")
+      }
     })
 
-
-  private val confusions = predictionAndLabels.map {
+  private lazy val confusions = predictionAndLabels.map {
+    case (prediction: Double, label: Double, weight: Double, _) =>
+      ((label, prediction), weight)
     case (prediction: Double, label: Double, weight: Double) =>
       ((label, prediction), weight)
     case (prediction: Double, label: Double) =>
@@ -147,7 +149,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
   def precision(label: Double): Double = {
     val tp = tpByClass(label)
     val fp = fpByClass.getOrElse(label, 0.0)
-    if (tp + fp == 0) 0 else tp.toDouble / (tp + fp)
+    if (tp + fp == 0) 0 else tp / (tp + fp)
   }
 
   /**
@@ -197,7 +199,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   lazy val weightedFalsePositiveRate: Double = labelCountByClass.map { case (category, count) =>
-    falsePositiveRate(category) * count.toDouble / labelCount
+    falsePositiveRate(category) * count / labelCount
   }.sum
 
   /**
@@ -206,7 +208,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   lazy val weightedRecall: Double = labelCountByClass.map { case (category, count) =>
-    recall(category) * count.toDouble / labelCount
+    recall(category) * count / labelCount
   }.sum
 
   /**
@@ -214,7 +216,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   lazy val weightedPrecision: Double = labelCountByClass.map { case (category, count) =>
-    precision(category) * count.toDouble / labelCount
+    precision(category) * count / labelCount
   }.sum
 
   /**
@@ -223,7 +225,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   def weightedFMeasure(beta: Double): Double = labelCountByClass.map { case (category, count) =>
-    fMeasure(category, beta) * count.toDouble / labelCount
+    fMeasure(category, beta) * count / labelCount
   }.sum
 
   /**
@@ -237,4 +239,56 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
+
+  /**
+   * Returns Hamming-loss
+   */
+  @Since("3.0.0")
+  lazy val hammingLoss: Double = {
+    var numerator = 0.0
+    var denominator = 0.0
+    confusions.iterator.foreach {
+      case ((label, prediction), weight) =>
+        if (label != prediction) {
+          numerator += weight
+        }
+        denominator += weight
+    }
+    numerator / denominator
+  }
+
+  /**
+   * Returns the log-loss, aka logistic loss or cross-entropy loss.
+   * @param eps log-loss is undefined for p=0 or p=1, so probabilities are
+   *            clipped to max(eps, min(1 - eps, p)).
+   */
+  @Since("3.0.0")
+  def logLoss(eps: Double = 1e-15): Double = {
+    require(eps > 0 && eps < 0.5, s"eps must be in range (0, 0.5), but got $eps")
+    val loss1 = - math.log(eps)
+    val loss2 = - math.log1p(-eps)
+
+    val (lossSum, weightSum) = predictionAndLabels.map {
+      case (_, label: Double, weight: Double, probability: Array[Double]) =>
+        require(label.toInt == label && label >= 0, s"Invalid label $label")
+        require(probability != null, "probability of each class can not be null")
+        val p = probability(label.toInt)
+        val loss = if (p < eps) {
+          loss1
+        } else if (p > 1 - eps) {
+          loss2
+        } else {
+          - math.log(p)
+        }
+        (loss * weight, weight)
+
+      case other =>
+        throw new IllegalArgumentException(s"Invalid RDD value for MulticlassMetrics.logLoss. " +
+          s"Expected quadruples, got $other")
+    }.treeReduce { case ((l1, w1), (l2, w2)) =>
+      (l1 + l2, w1 + w2)
+    }
+
+    lossSum / weightSum
+  }
 }

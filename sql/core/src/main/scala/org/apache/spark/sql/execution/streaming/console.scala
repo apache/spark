@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -35,7 +34,7 @@ case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends TableProvider
+class ConsoleSinkProvider extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
@@ -68,24 +67,23 @@ object ConsoleTable extends Table with SupportsWrite {
   override def schema(): StructType = StructType(Nil)
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.STREAMING_WRITE).asJava
+    util.EnumSet.of(TableCapability.STREAMING_WRITE)
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate {
-      private var inputSchema: StructType = _
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
+      private val inputSchema: StructType = info.schema()
 
-      override def withInputDataSchema(schema: StructType): WriteBuilder = {
-        this.inputSchema = schema
-        this
-      }
-
-      // Do nothing for truncate. Console sink is special that it just prints all the records.
+      // Do nothing for truncate. Console sink is special and it just prints all the records.
       override def truncate(): WriteBuilder = this
 
-      override def buildForStreaming(): StreamingWrite = {
-        assert(inputSchema != null)
-        new ConsoleWrite(inputSchema, options)
+      override def build(): Write = {
+        new Write {
+          override def toStreaming: StreamingWrite = {
+            assert(inputSchema != null)
+            new ConsoleWrite(inputSchema, info.options)
+          }
+        }
       }
     }
   }

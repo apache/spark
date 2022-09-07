@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.execution
 
-import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.TimeLimits
+import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.SparkSubmitSuite
+import org.apache.spark.TestUtils
+import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{LocalSparkSession, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.functions.{array, col, count, lit}
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.ResetSystemProperties
 
 // Due to the need to set driver's extraJavaOptions, this test needs to use actual SparkSubmit.
-class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
+class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
   with Matchers
   with BeforeAndAfterEach
   with ResetSystemProperties {
@@ -39,17 +40,29 @@ class WholeStageCodegenSparkSubmitSuite extends SparkFunSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     // HotSpot JVM specific: Set up a local cluster with the driver/executor using mismatched
-    // settings of UseCompressedOops JVM option.
+    // settings of UseCompressedClassPointers JVM option.
     val argsForSparkSubmit = Seq(
       "--class", WholeStageCodegenSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--master", "local-cluster[1,1,1024]",
       "--driver-memory", "1g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
-      "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedOops",
-      "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedOops",
+      // SPARK-37008: The results of `Platform.BYTE_ARRAY_OFFSET` using different Java versions
+      // and different args as follows table:
+      // +------------------------------+--------+---------+
+      // |                               |Java 8 |Java 17  |
+      // +------------------------------+--------+---------+
+      // |-XX:-UseCompressedOops         |  24   |   16    |
+      // |-XX:+UseCompressedOops         |  16   |   16    |
+      // |-XX:-UseCompressedClassPointers|  24   |   24    |
+      // |-XX:+UseCompressedClassPointers|  16   |   16    |
+      // +-------------------------------+-------+---------+
+      // So SPARK-37008 replace `UseCompressedOops` with `UseCompressedClassPointers`.
+      "--conf", "spark.driver.extraJavaOptions=-XX:-UseCompressedClassPointers",
+      "--conf", "spark.executor.extraJavaOptions=-XX:+UseCompressedClassPointers",
+      "--conf", "spark.sql.adaptive.enabled=false",
       unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
+    runSparkSubmit(argsForSparkSubmit, timeout = 3.minutes)
   }
 }
 
@@ -58,7 +71,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
   var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     spark = SparkSession.builder().getOrCreate()
 
@@ -71,7 +84,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
     val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
       .groupBy(array(col("v"))).agg(count(col("*")))
     val plan = df.queryExecution.executedPlan
-    assert(plan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
+    assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
 
     val expectedAnswer =
       Row(Array(0), 7178) ::

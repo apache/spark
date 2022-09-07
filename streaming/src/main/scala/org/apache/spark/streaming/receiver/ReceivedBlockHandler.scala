@@ -98,7 +98,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     BlockManagerBasedStoreResult(blockId, numRecords)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     // this is not used as blocks inserted into the BlockManager are cleared by DStream's clearing
     // of BlockRDDs.
   }
@@ -210,11 +210,11 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     writeAheadLog.clean(threshTime, false)
   }
 
-  def stop() {
+  def stop(): Unit = {
     writeAheadLog.close()
     executionContext.shutdown()
   }
@@ -234,7 +234,7 @@ private[streaming] class CountingIterator[T](iterator: Iterator[T]) extends Iter
 
    private def isFullyConsumed: Boolean = !iterator.hasNext
 
-   def hasNext(): Boolean = iterator.hasNext
+   def hasNext: Boolean = iterator.hasNext
 
    def count(): Option[Long] = {
      if (isFullyConsumed) Some(_count) else None

@@ -260,9 +260,20 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) documentation),
 or set the config property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
+
+## Parallel Listing on Input Paths
+
+Sometimes you may also need to increase directory listing parallelism when job input has large number of directories,
+otherwise the process could take a very long time, especially when against object store like S3.
+If your job works on RDD with Hadoop input formats (e.g., via `SparkContext.sequenceFile`), the parallelism is
+controlled via [`spark.hadoop.mapreduce.input.fileinputformat.list-status.num-threads`](https://hadoop.apache.org/docs/current/hadoop-mapreduce-client/hadoop-mapreduce-client-core/mapred-default.xml) (currently default is 1).
+
+For Spark SQL with file-based data sources, you can tune `spark.sql.sources.parallelPartitionDiscovery.threshold` and
+`spark.sql.sources.parallelPartitionDiscovery.parallelism` to improve listing parallelism. Please
+refer to [Spark SQL performance tuning guide](sql-performance-tuning.html) for more details.
 
 ## Memory Usage of Reduce Tasks
 

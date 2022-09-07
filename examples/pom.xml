@@ -21,14 +21,14 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>spark-examples_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>examples</sbt.project.name>
@@ -107,12 +107,7 @@
     <dependency>
       <groupId>com.github.scopt</groupId>
       <artifactId>scopt_${scala.binary.version}</artifactId>
-      <version>3.7.0</version>
-    </dependency>
-    <dependency>
-      <groupId>${hive.parquet.group}</groupId>
-      <artifactId>parquet-hadoop-bundle</artifactId>
-      <scope>provided</scope>
+      <version>3.7.1</version>
     </dependency>
   </dependencies>
 

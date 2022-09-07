@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
  * MultivariateOnlineSummarizer implements [[MultivariateStatisticalSummary]] to compute the mean,
  * variance, minimum, maximum, counts, and nonzero counts for instances in sparse or dense vector
  * format in an online fashion.
@@ -41,7 +40,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * Reliability weights (Wikipedia)</a>.
  */
 @Since("1.1.0")
-@DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
   private var n = 0
@@ -95,25 +93,23 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localNumNonzeros = nnz
     val localCurrMax = currMax
     val localCurrMin = currMin
-    instance.foreachActive { (index, value) =>
-      if (value != 0.0) {
-        if (localCurrMax(index) < value) {
-          localCurrMax(index) = value
-        }
-        if (localCurrMin(index) > value) {
-          localCurrMin(index) = value
-        }
-
-        val prevMean = localCurrMean(index)
-        val diff = value - prevMean
-        localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
-        localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-        localCurrM2(index) += weight * value * value
-        localCurrL1(index) += weight * math.abs(value)
-
-        localWeightSum(index) += weight
-        localNumNonzeros(index) += 1
+    instance.foreachNonZero { (index, value) =>
+      if (localCurrMax(index) < value) {
+        localCurrMax(index) = value
       }
+      if (localCurrMin(index) > value) {
+        localCurrMin(index) = value
+      }
+
+      val prevMean = localCurrMean(index)
+      val diff = value - prevMean
+      localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
+      localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
+      localCurrM2(index) += weight * value * value
+      localCurrL1(index) += weight * math.abs(value)
+
+      localWeightSum(index) += weight
+      localNumNonzeros(index) += 1
     }
 
     totalWeightSum += weight

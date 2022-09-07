@@ -31,7 +31,7 @@ object SimpleTypedAggregator {
       .getOrCreate()
 
     import spark.implicits._
-    val ds = spark.range(20).select(('id % 3).as("key"), 'id).as[(Long, Long)]
+    val ds = spark.range(20).select(($"id" % 3).as("key"), $"id").as[(Long, Long)]
     println("input data:")
     ds.show()
 

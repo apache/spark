@@ -20,7 +20,13 @@ package org.apache.spark.sql.execution;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
+import java.nio.ByteOrder;
+
 public final class RecordBinaryComparator extends RecordComparator {
+
+  private static final boolean UNALIGNED = Platform.unaligned();
+  private static final boolean LITTLE_ENDIAN =
+      ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN);
 
   @Override
   public int compare(
@@ -36,23 +42,30 @@ public final class RecordBinaryComparator extends RecordComparator {
     // we have guaranteed `leftLen` == `rightLen`.
 
     // check if stars align and we can get both offsets to be aligned
-    if ((leftOff % 8) == (rightOff % 8)) {
+    if (!UNALIGNED && ((leftOff % 8) == (rightOff % 8))) {
       while ((leftOff + i) % 8 != 0 && i < leftLen) {
-        final int v1 = Platform.getByte(leftObj, leftOff + i) & 0xff;
-        final int v2 = Platform.getByte(rightObj, rightOff + i) & 0xff;
+        final int v1 = Platform.getByte(leftObj, leftOff + i);
+        final int v2 = Platform.getByte(rightObj, rightOff + i);
         if (v1 != v2) {
-          return v1 > v2 ? 1 : -1;
+          return (v1 & 0xff) > (v2 & 0xff) ? 1 : -1;
         }
         i += 1;
       }
     }
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
-    if (Platform.unaligned() || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
+    if (UNALIGNED || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
       while (i <= leftLen - 8) {
-        final long v1 = Platform.getLong(leftObj, leftOff + i);
-        final long v2 = Platform.getLong(rightObj, rightOff + i);
+        long v1 = Platform.getLong(leftObj, leftOff + i);
+        long v2 = Platform.getLong(rightObj, rightOff + i);
         if (v1 != v2) {
-          return v1 > v2 ? 1 : -1;
+          if (LITTLE_ENDIAN) {
+            // if read as little-endian, we have to reverse bytes so that the long comparison result
+            // is equivalent to byte-by-byte comparison result.
+            // See discussion in https://github.com/apache/spark/pull/26548#issuecomment-554645859
+            v1 = Long.reverseBytes(v1);
+            v2 = Long.reverseBytes(v2);
+          }
+          return Long.compareUnsigned(v1, v2);
         }
         i += 8;
       }
@@ -60,10 +73,10 @@ public final class RecordBinaryComparator extends RecordComparator {
     // this will finish off the unaligned comparisons, or do the entire aligned comparison
     // whichever is needed.
     while (i < leftLen) {
-      final int v1 = Platform.getByte(leftObj, leftOff + i) & 0xff;
-      final int v2 = Platform.getByte(rightObj, rightOff + i) & 0xff;
+      final int v1 = Platform.getByte(leftObj, leftOff + i);
+      final int v2 = Platform.getByte(rightObj, rightOff + i);
       if (v1 != v2) {
-        return v1 > v2 ? 1 : -1;
+        return (v1 & 0xff) > (v2 & 0xff) ? 1 : -1;
       }
       i += 1;
     }

@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
+import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
 /**
  * Utility functions for collections.
@@ -36,4 +36,30 @@ private[spark] object Utils {
     }
     ordering.leastOf(input.asJava, num).iterator.asScala
   }
+
+  /**
+   * Returns an iterator over the merged contents of all given input iterators,
+   * traversing every element of the input iterators.
+   * Equivalent entries will not be de-duplicated.
+   *
+   * Callers must ensure that all the input iterators are already sorted by
+   * the same ordering `ord`, otherwise the result is likely to be incorrect.
+   */
+  def mergeOrdered[T](inputs: Iterable[TraversableOnce[T]])(
+    implicit ord: Ordering[T]): Iterator[T] = {
+    val ordering = new GuavaOrdering[T] {
+      override def compare(l: T, r: T): Int = ord.compare(l, r)
+    }
+    GuavaIterators.mergeSorted(
+      inputs.map(_.toIterator.asJava).asJava, ordering).asScala
+  }
+
+  /**
+   * Only returns `Some` iff ALL elements in `input` are defined. In this case, it is
+   * equivalent to `Some(input.flatten)`.
+   *
+   * Otherwise, returns `None`.
+   */
+  def sequenceToOption[T](input: Seq[Option[T]]): Option[Seq[T]] =
+    if (input.forall(_.isDefined)) Some(input.flatten) else None
 }

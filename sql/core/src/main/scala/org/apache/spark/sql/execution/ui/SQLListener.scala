@@ -35,14 +35,25 @@ case class SparkListenerSQLAdaptiveExecutionUpdate(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerSQLAdaptiveSQLMetricUpdates(
+    executionId: Long,
+    sqlPlanMetrics: Seq[SQLPlanMetric])
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
     description: String,
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
-  extends SparkListenerEvent
+    time: Long,
+    modifiedConfigs: Map[String, String] = Map.empty)
+  extends SparkListenerEvent {
+
+  // The `QueryExecution` instance that represents the SQL execution
+  @JsonIgnore private[sql] var qe: QueryExecution = null
+}
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)

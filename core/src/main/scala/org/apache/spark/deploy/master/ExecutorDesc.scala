@@ -28,12 +28,13 @@ private[master] class ExecutorDesc(
     val memory: Int,
     // resources(e.f. gpu/fpga) allocated to this executor
     // map from resource name to ResourceInformation
-    val resources: Map[String, ResourceInformation]) {
+    val resources: Map[String, ResourceInformation],
+    val rpId: Int) {
 
   var state = ExecutorState.LAUNCHING
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
-  def copyState(execDesc: ExecutorDescription) {
+  def copyState(execDesc: ExecutorDescription): Unit = {
     state = execDesc.state
   }
 

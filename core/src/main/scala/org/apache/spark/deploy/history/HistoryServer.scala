@@ -52,7 +52,12 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"), port, conf)
+  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"),
+    port, conf, name = "HistoryServerUI",
+    // Usually, a History Server stores plenty of event logs for various applications and users
+    // Comparing to Spark LiveUI which is generally for per application usage, it needs more
+    // threads to increase concurrency to handle request from different users and clients.
+    poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain
@@ -69,13 +74,14 @@ class HistoryServer(
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+
+      res.setContentType("text/html;charset=utf-8")
+
       // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
       // attempt ID (separated by a slash).
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
       if (parts.length < 2) {
-        res.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          s"Unexpected path info in request (URI = ${req.getRequestURI()}")
-        return
+        res.sendRedirect("/")
       }
 
       val appId = parts(1)
@@ -96,7 +102,7 @@ class HistoryServer(
       // single attempt, we need to try both. Try the single-attempt route first, and if an
       // error is raised, then try the multiple attempt route.
       if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
-        val msg = <div class="row-fluid">Application {appId} not found.</div>
+        val msg = <div class="row">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
         UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>
           res.getWriter().write(n.toString)
@@ -127,6 +133,11 @@ class HistoryServer(
     appCache.withSparkUI(appId, attemptId)(fn)
   }
 
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    provider.checkUIViewPermissions(appId, attemptId, user)
+  }
+
   initialize()
 
   /**
@@ -135,7 +146,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def initialize() {
+  def initialize(): Unit = {
     attachPage(new HistoryPage(this))
 
     attachHandler(ApiRootResource.getServletHandler(this))
@@ -149,12 +160,12 @@ class HistoryServer(
   }
 
   /** Bind to the HTTP server behind this web interface. */
-  override def bind() {
+  override def bind(): Unit = {
     super.bind()
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
     provider.stop()
   }
@@ -164,7 +175,7 @@ class HistoryServer(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
-      completed: Boolean) {
+      completed: Boolean): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach { handler =>
       serverInfo.get.addHandler(handler, ui.securityManager)
@@ -297,6 +308,7 @@ object HistoryServer extends Logging {
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
+    provider.start()
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
@@ -326,7 +338,7 @@ object HistoryServer extends Logging {
     new SecurityManager(config)
   }
 
-  def initSecurity() {
+  def initSecurity(): Unit = {
     // If we are accessing HDFS and it has security enabled (Kerberos), we have to login
     // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
     // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically

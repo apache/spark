@@ -82,24 +82,24 @@ public class TaskMemoryManagerSuite {
     Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.pageNumber);
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
-    MemoryAllocator.HEAP.free(dataPage);
+    Assert.assertThrows(AssertionError.class, () -> MemoryAllocator.HEAP.free(dataPage));
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
-    manager.freePage(dataPage, c);
+    Assert.assertThrows(AssertionError.class, () -> manager.freePage(dataPage, c));
   }
 
   @Test
@@ -177,6 +177,85 @@ public class TaskMemoryManagerSuite {
     c2.free(80);
     c3.free(10);
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+
+  @Test
+  public void selfSpillIsLowestPriorities() {
+    // Test that requesting memory consumer (a "self-spill") is chosen last to spill.
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+
+    // Self-spill is the lowest priority: c2 and c3 are spilled first even though they have less
+    // memory.
+    c1.use(50);
+    c2.use(40);
+    c3.use(10);
+    c1.use(50);
+    Assert.assertEquals(100, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());
+    Assert.assertEquals(0, c3.getUsed());
+    // Force a self-spill.
+    c1.use(50);
+    Assert.assertEquals(50, c1.getUsed());
+    // Force a self-spill after c2 is spilled.
+    c2.use(10);
+    c1.use(60);
+    Assert.assertEquals(60, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());
+
+    c1.free(c1.getUsed());
+
+    // Redo a similar scenario but with a different memory requester.
+    c1.use(50);
+    c2.use(40);
+    c3.use(10);
+    c3.use(50);
+    Assert.assertEquals(0, c1.getUsed());
+    Assert.assertEquals(40, c2.getUsed());
+    Assert.assertEquals(60, c3.getUsed());
+  }
+
+  @Test
+  public void prefersSmallestBigEnoughAllocation() {
+    // Test that the smallest consumer with at least the requested size is chosen to spill.
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c4 = new TestMemoryConsumer(manager);
+
+
+    c1.use(50);
+    c2.use(40);
+    c3.use(10);
+    c4.use(5);
+    Assert.assertEquals(50, c1.getUsed());
+    Assert.assertEquals(40, c2.getUsed());
+    Assert.assertEquals(0, c3.getUsed());
+    Assert.assertEquals(5, c4.getUsed());
+
+    // Allocate 45. 5 is unused and 40 will come from c2.
+    c3.use(45);
+    Assert.assertEquals(50, c1.getUsed());
+    Assert.assertEquals(0, c2.getUsed());
+    Assert.assertEquals(45, c3.getUsed());
+    Assert.assertEquals(5, c4.getUsed());
+
+    // Allocate 51. 50 is taken from c1, then c4 is the best fit to get 1 more byte.
+    c2.use(51);
+    Assert.assertEquals(0, c1.getUsed());
+    Assert.assertEquals(51, c2.getUsed());
+    Assert.assertEquals(45, c3.getUsed());
+    Assert.assertEquals(0, c4.getUsed());
   }
 
   @Test

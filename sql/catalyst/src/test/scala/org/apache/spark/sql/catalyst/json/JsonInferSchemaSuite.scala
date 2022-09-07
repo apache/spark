@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import com.fasterxml.jackson.core.JsonFactory
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
@@ -28,8 +27,7 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   def checkType(options: Map[String, String], json: String, dt: DataType): Unit = {
     val jsonOptions = new JSONOptions(options, "UTC", "")
     val inferSchema = new JsonInferSchema(jsonOptions)
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
+    val factory = jsonOptions.buildJsonFactory()
     val parser = CreateJacksonParser.string(factory, json)
     parser.nextToken()
     val expectedType = StructType(Seq(StructField("a", dt, true)))
@@ -37,50 +35,76 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(parser) === expectedType)
   }
 
-  def checkTimestampType(pattern: String, json: String): Unit = {
-    checkType(Map("timestampFormat" -> pattern), json, TimestampType)
+  def checkTimestampType(pattern: String, json: String, inferTimestamp: Boolean): Unit = {
+    checkType(
+      Map("timestampFormat" -> pattern, "inferTimestamp" -> inferTimestamp.toString),
+      json,
+      if (inferTimestamp) TimestampType else StringType)
   }
 
   test("inferring timestamp type") {
-    checkTimestampType("yyyy", """{"a": "2018"}""")
-    checkTimestampType("yyyy=MM", """{"a": "2018=12"}""")
-    checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""")
-    checkTimestampType(
-      "yyyy-MM-dd'T'HH:mm:ss.SSS",
-      """{"a": "2018-12-02T21:04:00.123"}""")
-    checkTimestampType(
-      "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
-      """{"a": "2018-12-02T21:04:00.123567+01:00"}""")
+    Seq(true, false).foreach { inferTimestamp =>
+      Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+          checkTimestampType("yyyy", """{"a": "2018"}""", inferTimestamp)
+          checkTimestampType("yyyy=MM", """{"a": "2018=12"}""", inferTimestamp)
+          checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""", inferTimestamp)
+          checkTimestampType(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            """{"a": "2018-12-02T21:04:00.123"}""",
+            inferTimestamp)
+          checkTimestampType(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+            """{"a": "2018-12-02T21:04:00.123567+01:00"}""",
+            inferTimestamp)
+        }
+      }
+    }
   }
 
   test("prefer decimals over timestamps") {
-    checkType(
-      options = Map(
-        "prefersDecimal" -> "true",
-        "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
-      ),
-      json = """{"a": "20181202.210400123"}""",
-      dt = DecimalType(17, 9)
-    )
+    Seq("legacy", "corrected").foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParser) {
+        checkType(
+          options = Map(
+            "prefersDecimal" -> "true",
+            "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
+          ),
+          json = """{"a": "20181202.210400123"}""",
+          dt = DecimalType(17, 9)
+        )
+      }
+    }
   }
 
   test("skip decimal type inferring") {
-    checkType(
-      options = Map(
-        "prefersDecimal" -> "false",
-        "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
-      ),
-      json = """{"a": "20181202.210400123"}""",
-      dt = TimestampType
-    )
+    Seq(true, false).foreach { inferTimestamp =>
+      Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+          checkType(
+            options = Map(
+              "prefersDecimal" -> "false",
+              "timestampFormat" -> "yyyyMMdd.HHmmssSSS",
+              "inferTimestamp" -> inferTimestamp.toString
+            ),
+            json = """{"a": "20181202.210400123"}""",
+            dt = if (inferTimestamp) TimestampType else StringType
+          )
+        }
+      }
+    }
   }
 
   test("fallback to string type") {
-    checkType(
-      options = Map("timestampFormat" -> "yyyy,MM,dd.HHmmssSSS"),
-      json = """{"a": "20181202.210400123"}""",
-      dt = StringType
-    )
+    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+        checkType(
+          options = Map("timestampFormat" -> "yyyy,MM,dd.HHmmssSSS"),
+          json = """{"a": "20181202.210400123"}""",
+          dt = StringType
+        )
+      }
+    }
   }
 
   test("disable timestamp inferring") {

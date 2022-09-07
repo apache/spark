@@ -104,15 +104,10 @@ public class HeapMemoryAllocator implements MemoryAllocator {
     long alignedSize = ((size + 7) / 8) * 8;
     if (shouldPool(alignedSize)) {
       synchronized (this) {
-        LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
-        if (pool == null) {
-          pool = new LinkedList<>();
-          bufferPoolsBySize.put(alignedSize, pool);
-        }
+        LinkedList<WeakReference<long[]>> pool =
+          bufferPoolsBySize.computeIfAbsent(alignedSize, k -> new LinkedList<>());
         pool.add(new WeakReference<>(array));
       }
-    } else {
-      // Do nothing
     }
   }
 }

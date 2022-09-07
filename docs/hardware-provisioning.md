@@ -63,10 +63,10 @@ Note that memory usage is greatly affected by storage level and serialization fo
 the [tuning guide](tuning.html) for tips on how to reduce it.
 
 Finally, note that the Java VM does not always behave well with more than 200 GiB of RAM. If you
-purchase machines with more RAM than this, you can run _multiple worker JVMs per node_. In
-Spark's [standalone mode](spark-standalone.html), you can set the number of workers per node
-with the `SPARK_WORKER_INSTANCES` variable in `conf/spark-env.sh`, and the number of cores
-per worker with `SPARK_WORKER_CORES`.
+purchase machines with more RAM than this, you can launch multiple executors in a single node. In
+Spark's [standalone mode](spark-standalone.html), a worker is responsible for launching multiple
+executors according to its available memory and cores, and each executor will be launched in a
+separate Java VM.
 
 # Network
 

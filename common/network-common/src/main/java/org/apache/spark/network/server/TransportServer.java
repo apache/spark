@@ -100,9 +100,10 @@ public class TransportServer implements Closeable {
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
-    EventLoopGroup bossGroup =
-      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), conf.getModuleName() + "-server");
-    EventLoopGroup workerGroup = bossGroup;
+    EventLoopGroup bossGroup = NettyUtils.createEventLoop(ioMode, 1,
+      conf.getModuleName() + "-boss");
+    EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
+      conf.getModuleName() + "-server");
 
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
@@ -148,8 +149,9 @@ public class TransportServer implements Closeable {
     channelFuture = bootstrap.bind(address);
     channelFuture.syncUninterruptibly();
 
-    port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
-    logger.debug("Shuffle server started on port: {}", port);
+    InetSocketAddress localAddress = (InetSocketAddress) channelFuture.channel().localAddress();
+    port = localAddress.getPort();
+    logger.debug("Shuffle server started on {} with port {}", localAddress.getHostString(), port);
   }
 
   public MetricSet getAllMetrics() {

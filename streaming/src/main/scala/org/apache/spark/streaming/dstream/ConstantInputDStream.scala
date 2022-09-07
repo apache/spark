@@ -31,9 +31,9 @@ class ConstantInputDStream[T: ClassTag](_ssc: StreamingContext, rdd: RDD[T])
   require(rdd != null,
     "parameter rdd null is illegal, which will lead to NPE in the following transformation")
 
-  override def start() {}
+  override def start(): Unit = {}
 
-  override def stop() {}
+  override def stop(): Unit = {}
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     Some(rdd)

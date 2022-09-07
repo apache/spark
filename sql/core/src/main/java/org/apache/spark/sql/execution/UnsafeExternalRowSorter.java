@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 import java.util.function.Supplier;
 
-import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -51,6 +50,12 @@ public final class UnsafeExternalRowSorter {
   private final StructType schema;
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
+
+  // This flag makes sure the cleanupResource() has been called. After the cleanup work,
+  // iterator.next should always return false. Downstream operator triggers the resource
+  // cleanup while they found there's no need to keep the iterator any more.
+  // See more details in SPARK-21492.
+  private boolean isReleased = false;
 
   public abstract static class PrefixComputer {
 
@@ -157,11 +162,12 @@ public final class UnsafeExternalRowSorter {
     return sorter.getSortTimeNanos();
   }
 
-  private void cleanupResources() {
+  public void cleanupResources() {
+    isReleased = true;
     sorter.cleanupResources();
   }
 
-  public Iterator<UnsafeRow> sort() throws IOException {
+  public Iterator<InternalRow> sort() throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       if (!sortedIterator.hasNext()) {
@@ -169,31 +175,32 @@ public final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractIterator<UnsafeRow>() {
+      return new RowIterator() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow(numFields);
 
         @Override
-        public boolean hasNext() {
-          return sortedIterator.hasNext();
-        }
-
-        @Override
-        public UnsafeRow next() {
+        public boolean advanceNext() {
           try {
-            sortedIterator.loadNext();
-            row.pointTo(
-              sortedIterator.getBaseObject(),
-              sortedIterator.getBaseOffset(),
-              sortedIterator.getRecordLength());
-            if (!hasNext()) {
-              UnsafeRow copy = row.copy(); // so that we don't have dangling pointers to freed page
-              row = null; // so that we don't keep references to the base object
-              cleanupResources();
-              return copy;
+            if (!isReleased && sortedIterator.hasNext()) {
+              sortedIterator.loadNext();
+              row.pointTo(
+                  sortedIterator.getBaseObject(),
+                  sortedIterator.getBaseOffset(),
+                  sortedIterator.getRecordLength());
+              // Here is the initial bug fix in SPARK-9364: the bug fix of use-after-free bug
+              // when returning the last row from an iterator. For example, in
+              // [[GroupedIterator]], we still use the last row after traversing the iterator
+              // in `fetchNextGroupIterator`
+              if (!sortedIterator.hasNext()) {
+                row = row.copy(); // so that we don't have dangling pointers to freed page
+                cleanupResources();
+              }
+              return true;
             } else {
-              return row;
+              row = null; // so that we don't keep references to the base object
+              return false;
             }
           } catch (IOException e) {
             cleanupResources();
@@ -203,14 +210,18 @@ public final class UnsafeExternalRowSorter {
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
         }
-      };
+
+        @Override
+        public UnsafeRow getRow() { return row; }
+
+      }.toScala();
     } catch (IOException e) {
       cleanupResources();
       throw e;
     }
   }
 
-  public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
+  public Iterator<InternalRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     while (inputIterator.hasNext()) {
       insertRow(inputIterator.next());
     }

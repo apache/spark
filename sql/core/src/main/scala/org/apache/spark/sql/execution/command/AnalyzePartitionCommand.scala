@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Column, Row, SparkSession}
+import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.PartitioningUtils
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
@@ -43,11 +44,11 @@ import org.apache.spark.sql.execution.datasources.PartitioningUtils
 case class AnalyzePartitionCommand(
     tableIdent: TableIdentifier,
     partitionSpec: Map[String, Option[String]],
-    noscan: Boolean = true) extends RunnableCommand {
+    noscan: Boolean = true) extends LeafRunnableCommand {
 
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =
-      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionColumnNames,
+      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionSchema,
         table.identifier.quotedString, conf.resolver)
 
     // Report an error if partition columns in partition specification do not form
@@ -58,18 +59,15 @@ case class AnalyzePartitionCommand(
       val tableId = table.identifier
       val schemaColumns = table.partitionColumnNames.mkString(",")
       val specColumns = normalizedPartitionSpec.keys.mkString(",")
-      throw new AnalysisException("The list of partition columns with values " +
-        s"in partition specification for table '${tableId.table}' " +
-        s"in database '${tableId.database.get}' is not a prefix of the list of " +
-        "partition columns defined in the table schema. " +
-        s"Expected a prefix of [${schemaColumns}], but got [${specColumns}].")
+      throw QueryCompilationErrors.unexpectedPartitionColumnPrefixError(
+        tableId.table, tableId.database.get, schemaColumns, specColumns)
     }
 
     val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).mapValues(_.get)
     if (filteredSpec.isEmpty) {
       None
     } else {
-      Some(filteredSpec)
+      Some(filteredSpec.toMap)
     }
   }
 
@@ -79,7 +77,7 @@ case class AnalyzePartitionCommand(
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
     }
 
     val partitionValueSpec = getPartitionSpec(tableMeta)
@@ -88,7 +86,8 @@ case class AnalyzePartitionCommand(
 
     if (partitions.isEmpty) {
       if (partitionValueSpec.isDefined) {
-        throw new NoSuchPartitionException(db, tableIdent.table, partitionValueSpec.get)
+        throw QueryCompilationErrors.noSuchPartitionError(
+          db, tableIdent.table, partitionValueSpec.get)
       } else {
         // the user requested to analyze all partitions for a table which has no partitions
         // return normally, since there is nothing to do
@@ -106,11 +105,12 @@ case class AnalyzePartitionCommand(
 
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
-    val newPartitions = partitions.flatMap { p =>
-      val newTotalSize = CommandUtils.calculateLocationSize(
-        sessionState, tableMeta.identifier, p.storage.locationUri)
+
+    val sizes = CommandUtils.calculateMultipleLocationSizes(sparkSession, tableMeta.identifier,
+      partitions.map(_.storage.locationUri))
+    val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
       val newRowCount = rowCounts.get(p.spec)
-      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), newRowCount)
       newStats.map(_ => p.copy(stats = newStats))
     }
 

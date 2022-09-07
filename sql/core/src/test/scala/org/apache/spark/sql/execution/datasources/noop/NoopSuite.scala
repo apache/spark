@@ -32,6 +32,7 @@ class NoopSuite extends SharedSparkSession {
       }
       .write
       .format("noop")
+      .mode("append")
       .save()
     assert(accum.value == numElems)
   }
@@ -41,7 +42,7 @@ class NoopSuite extends SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(numElems)
-        .select('id mod 10 as "key", 'id as "value")
+        .select($"id" mod 10 as "key", $"id" as "value")
         .write
         .partitionBy("key")
         .parquet(path)
@@ -54,7 +55,7 @@ class NoopSuite extends SharedSparkSession {
           accum.add(1)
           x
         }
-        .write.format("noop").save()
+        .write.mode("append").format("noop").save()
       assert(accum.value == numElems)
     }
   }

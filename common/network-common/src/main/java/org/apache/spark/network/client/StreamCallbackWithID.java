@@ -17,6 +17,16 @@
 
 package org.apache.spark.network.client;
 
+import java.nio.ByteBuffer;
+
 public interface StreamCallbackWithID extends StreamCallback {
   String getID();
+
+  /**
+   * Response to return to client upon the completion of a stream. Currently only invoked in
+   * {@link org.apache.spark.network.server.TransportRequestHandler#processStreamUpload}
+   */
+  default ByteBuffer getCompletionResponse() {
+    return ByteBuffer.allocate(0);
+  }
 }

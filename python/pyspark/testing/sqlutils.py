@@ -16,6 +16,7 @@
 #
 
 import datetime
+import math
 import os
 import shutil
 import tempfile
@@ -24,31 +25,33 @@ from contextlib import contextmanager
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.util import _exception_message
 
 
 pandas_requirement_message = None
 try:
-    from pyspark.sql.utils import require_minimum_pandas_version
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
     require_minimum_pandas_version()
 except ImportError as e:
     # If Pandas version requirement is not satisfied, skip related tests.
-    pandas_requirement_message = _exception_message(e)
+    pandas_requirement_message = str(e)
 
 pyarrow_requirement_message = None
 try:
-    from pyspark.sql.utils import require_minimum_pyarrow_version
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
     require_minimum_pyarrow_version()
 except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
-    pyarrow_requirement_message = _exception_message(e)
+    pyarrow_requirement_message = str(e)
 
 test_not_compiled_message = None
 try:
     from pyspark.sql.utils import require_test_compiled
+
     require_test_compiled()
 except Exception as e:
-    test_not_compiled_message = _exception_message(e)
+    test_not_compiled_message = str(e)
 
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
@@ -76,16 +79,16 @@ class ExamplePointUDT(UserDefinedType):
     """
 
     @classmethod
-    def sqlType(self):
+    def sqlType(cls):
         return ArrayType(DoubleType(), False)
 
     @classmethod
     def module(cls):
-        return 'pyspark.sql.tests'
+        return "pyspark.sql.tests"
 
     @classmethod
     def scalaUDT(cls):
-        return 'org.apache.spark.sql.test.ExamplePointUDT'
+        return "org.apache.spark.sql.test.ExamplePointUDT"
 
     def serialize(self, obj):
         return [obj.x, obj.y]
@@ -112,8 +115,7 @@ class ExamplePoint:
         return "(%s,%s)" % (self.x, self.y)
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and \
-            other.x == self.x and other.y == self.y
+        return isinstance(other, self.__class__) and other.x == self.x and other.y == self.y
 
 
 class PythonOnlyUDT(UserDefinedType):
@@ -122,12 +124,12 @@ class PythonOnlyUDT(UserDefinedType):
     """
 
     @classmethod
-    def sqlType(self):
+    def sqlType(cls):
         return ArrayType(DoubleType(), False)
 
     @classmethod
     def module(cls):
-        return '__main__'
+        return "__main__"
 
     def serialize(self, obj):
         return [obj.x, obj.y]
@@ -148,16 +150,17 @@ class PythonOnlyPoint(ExamplePoint):
     """
     An example class to demonstrate UDT in only Python
     """
-    __UDT__ = PythonOnlyUDT()
+
+    __UDT__ = PythonOnlyUDT()  # type: ignore
 
 
-class MyObject(object):
+class MyObject:
     def __init__(self, key, value):
         self.key = key
         self.value = value
 
 
-class SQLTestUtils(object):
+class SQLTestUtils:
     """
     This util assumes the instance of this to have 'spark' attribute, having a spark session.
     It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
@@ -243,6 +246,12 @@ class SQLTestUtils(object):
         finally:
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+
+    @staticmethod
+    def assert_close(a, b):
+        c = [j[0] for j in b]
+        diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
+        return sum(diff) == len(a)
 
 
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):

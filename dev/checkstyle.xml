@@ -24,11 +24,11 @@
     Checkstyle configuration based on the Google coding conventions from:
 
     -  Google Java Style
-       https://google-styleguide.googlecode.com/svn-history/r130/trunk/javaguide.html
+       https://google.github.io/styleguide/javaguide.html
 
     with Spark-specific changes from:
 
-    http://spark.apache.org/contributing.html#code-style-guide
+    https://spark.apache.org/contributing.html#code-style-guide
 
     Checkstyle is very configurable. Be sure to read the documentation at
     http://checkstyle.sf.net (or in your downloaded distribution).
@@ -64,6 +64,11 @@
         <property name="message" value="No trailing whitespace allowed."/>
     </module>
 
+    <module name="LineLength">
+        <property name="max" value="100"/>
+        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+    </module>
+
     <module name="NewlineAtEndOfFile"/>
 
     <module name="TreeWalker">
@@ -90,10 +95,6 @@
             <property name="allowEscapesForControlCharacters" value="true"/>
             <property name="allowByTailComment" value="true"/>
             <property name="allowNonPrintableEscapes" value="true"/>
-        </module>
-        <module name="LineLength">
-            <property name="max" value="100"/>
-            <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
         </module>
         <module name="NoLineWrap"/>
         <module name="EmptyBlock">
@@ -141,25 +142,6 @@
              <message key="ws.notPreceded"
              value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
         </module>
-        <!-- TODO: 11/09/15 disabled - indentation is currently inconsistent -->
-        <!--
-        <module name="Indentation">
-            <property name="basicOffset" value="4"/>
-            <property name="braceAdjustment" value="0"/>
-            <property name="caseIndent" value="4"/>
-            <property name="throwsIndent" value="4"/>
-            <property name="lineWrappingIndentation" value="4"/>
-            <property name="arrayInitIndent" value="4"/>
-        </module>
-        -->
-        <!-- TODO: 11/09/15 disabled - order is currently wrong in many places -->
-        <!--
-        <module name="ImportOrder">
-            <property name="separated" value="true"/>
-            <property name="ordered" value="true"/>
-            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
-        </module>
-        -->
         <module name="MethodParamPad"/>
         <module name="AnnotationLocation">
             <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
@@ -184,6 +166,22 @@
             <property name="format" value="throw new \w+Error\("/>
             <property name="message" value="Avoid throwing error in application code."/>
         </module>
-
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Objects\.toStringHelper"/>
+            <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
+            <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.createTempDir\("/>
+            <property name="message"
+              value="Avoid using com.google.common.io.Files.createTempDir() due to CVE-2020-8908.
+                Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="org.apache.log4j" />
+        </module>
     </module>
 </module>

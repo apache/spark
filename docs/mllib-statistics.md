@@ -48,12 +48,12 @@ available in `Statistics`.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`colStats()`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) returns an instance of
-[`MultivariateStatisticalSummary`](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
+[`colStats()`](api/scala/org/apache/spark/mllib/stat/Statistics$.html) returns an instance of
+[`MultivariateStatisticalSummary`](api/scala/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
-Refer to the [`MultivariateStatisticalSummary` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary) for details on the API.
+Refer to the [`MultivariateStatisticalSummary` Scala docs](api/scala/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/SummaryStatisticsExample.scala %}
 </div>
@@ -71,12 +71,12 @@ Refer to the [`MultivariateStatisticalSummary` Java docs](api/java/org/apache/sp
 </div>
 
 <div data-lang="python" markdown="1">
-[`colStats()`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics.colStats) returns an instance of
-[`MultivariateStatisticalSummary`](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary),
+[`colStats()`](api/python/reference/api/pyspark.mllib.stat.Statistics.html#pyspark.mllib.stat.Statistics.colStats) returns an instance of
+[`MultivariateStatisticalSummary`](api/python/reference/api/pyspark.mllib.stat.MultivariateStatisticalSummary.html),
 which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
 total count.
 
-Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary) for more details on the API.
+Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/reference/api/pyspark.mllib.stat.MultivariateStatisticalSummary.html) for more details on the API.
 
 {% include_example python/mllib/summary_statistics_example.py %}
 </div>
@@ -91,11 +91,11 @@ correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/scala/org/apache/spark/mllib/stat/Statistics$.html) provides methods to
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/org/apache/spark/mllib/stat/Statistics$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/CorrelationsExample.scala %}
 </div>
@@ -111,11 +111,11 @@ Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Stati
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) provides methods to
+[`Statistics`](api/python/reference/api/pyspark.mllib.stat.Statistics.html) provides methods to
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
-Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+Refer to the [`Statistics` Python docs](api/python/reference/api/pyspark.mllib.stat.Statistics.html) for more details on the API.
 
 {% include_example python/mllib/correlations_example.py %}
 </div>
@@ -137,7 +137,7 @@ python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`sampleByKeyExact()`](api/scala/index.html#org.apache.spark.rdd.PairRDDFunctions) allows users to
+[`sampleByKeyExact()`](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) allows users to
 sample exactly $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the desired
 fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the set of
 keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample
@@ -156,7 +156,7 @@ size, whereas sampling with replacement requires two additional passes.
 {% include_example java/org/apache/spark/examples/mllib/JavaStratifiedSamplingExample.java %}
 </div>
 <div data-lang="python" markdown="1">
-[`sampleByKey()`](api/python/pyspark.html#pyspark.RDD.sampleByKey) allows users to
+[`sampleByKey()`](api/python/reference/api/pyspark.RDD.sampleByKey.html#pyspark.RDD.sampleByKey) allows users to
 sample approximately $\lceil f_k \cdot n_k \rceil \, \forall k \in K$ items, where $f_k$ is the
 desired fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K$ is the
 set of keys.
@@ -181,7 +181,7 @@ independence tests.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/scala/org/apache/spark/mllib/stat/Statistics$.html) provides methods to
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret
 hypothesis tests.
 
@@ -199,11 +199,11 @@ Refer to the [`ChiSqTestResult` Java docs](api/java/org/apache/spark/mllib/stat/
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/index.html#pyspark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/python/reference/api/pyspark.mllib.stat.Statistics.html) provides methods to
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret
 hypothesis tests.
 
-Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+Refer to the [`Statistics` Python docs](api/python/reference/api/pyspark.mllib.stat.Statistics.html) for more details on the API.
 
 {% include_example python/mllib/hypothesis_testing_example.py %}
 </div>
@@ -221,11 +221,11 @@ message.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Statistics`](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) provides methods to
+[`Statistics`](api/scala/org/apache/spark/mllib/stat/Statistics$.html) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/org/apache/spark/mllib/stat/Statistics$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
 </div>
@@ -241,11 +241,11 @@ Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Stati
 </div>
 
 <div data-lang="python" markdown="1">
-[`Statistics`](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) provides methods to
+[`Statistics`](api/python/reference/api/pyspark.mllib.stat.Statistics.html) provides methods to
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
-Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
+Refer to the [`Statistics` Python docs](api/python/reference/api/pyspark.mllib.stat.Statistics.html) for more details on the API.
 
 {% include_example python/mllib/hypothesis_testing_kolmogorov_smirnov_test_example.py %}
 </div>
@@ -269,7 +269,7 @@ all prior batches.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`StreamingTest`](api/scala/index.html#org.apache.spark.mllib.stat.test.StreamingTest)
+[`StreamingTest`](api/scala/org/apache/spark/mllib/stat/test/StreamingTest.html)
 provides streaming hypothesis testing.
 
 {% include_example scala/org/apache/spark/examples/mllib/StreamingTestExample.scala %}
@@ -292,12 +292,12 @@ uniform, standard normal, or Poisson.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`RandomRDDs`](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) provides factory
+[`RandomRDDs`](api/scala/org/apache/spark/mllib/random/RandomRDDs$.html) provides factory
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
-Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) for details on the API.
+Refer to the [`RandomRDDs` Scala docs](api/scala/org/apache/spark/mllib/random/RandomRDDs$.html) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -337,12 +337,12 @@ JavaDoubleRDD v = u.mapToDouble(x -> 1.0 + 2.0 * x);
 </div>
 
 <div data-lang="python" markdown="1">
-[`RandomRDDs`](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) provides factory
+[`RandomRDDs`](api/python/reference/api/pyspark.mllib.random.RandomRDDs.html) provides factory
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
-Refer to the [`RandomRDDs` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) for more details on the API.
+Refer to the [`RandomRDDs` Python docs](api/python/reference/api/pyspark.mllib.random.RandomRDDs.html) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.random import RandomRDDs
@@ -370,11 +370,11 @@ mean of PDFs of normal distributions centered around each of the samples.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-[`KernelDensity`](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) provides methods
+[`KernelDensity`](api/scala/org/apache/spark/mllib/stat/KernelDensity.html) provides methods
 to compute kernel density estimates from an RDD of samples. The following example demonstrates how
 to do so.
 
-Refer to the [`KernelDensity` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) for details on the API.
+Refer to the [`KernelDensity` Scala docs](api/scala/org/apache/spark/mllib/stat/KernelDensity.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/KernelDensityEstimationExample.scala %}
 </div>
@@ -390,11 +390,11 @@ Refer to the [`KernelDensity` Java docs](api/java/org/apache/spark/mllib/stat/Ke
 </div>
 
 <div data-lang="python" markdown="1">
-[`KernelDensity`](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) provides methods
+[`KernelDensity`](api/python/reference/api/pyspark.mllib.stat.KernelDensity.html) provides methods
 to compute kernel density estimates from an RDD of samples. The following example demonstrates how
 to do so.
 
-Refer to the [`KernelDensity` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) for more details on the API.
+Refer to the [`KernelDensity` Python docs](api/python/reference/api/pyspark.mllib.stat.KernelDensity.html) for more details on the API.
 
 {% include_example python/mllib/kernel_density_estimation_example.py %}
 </div>

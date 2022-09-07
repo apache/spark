@@ -68,5 +68,17 @@ class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
     check(
       df.hint("REPARTITION", 100),
       UnresolvedHint("REPARTITION", Seq(100), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION", 10, $"id".expr),
+      UnresolvedHint("REPARTITION", Seq(10, $"id".expr), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION_BY_RANGE", $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq($"id".expr), df.logicalPlan))
+
+    check(
+      df.hint("REPARTITION_BY_RANGE", 10, $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(10, $"id".expr), df.logicalPlan))
   }
 }

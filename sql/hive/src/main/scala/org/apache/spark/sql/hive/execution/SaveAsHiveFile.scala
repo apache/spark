@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -31,8 +31,10 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -41,7 +43,7 @@ import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
 
 // Base trait from which all hive insert statement physical execution extends.
-private[hive] trait SaveAsHiveFile extends DataWritingCommand {
+private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1WritesHiveUtils {
 
   var createdTempDir: Option[Path] = None
 
@@ -52,7 +54,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
-      partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
+      partitionAttributes: Seq[Attribute] = Nil,
+      bucketSpec: Option[BucketSpec] = None): Set[String] = {
 
     val isCompressed =
       fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
@@ -83,6 +86,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    val options = getOptionsWithHiveBucketWrite(bucketSpec)
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
@@ -92,9 +97,9 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = Map.empty)
+      options = options)
   }
 
   protected def getExternalTmpPath(
@@ -175,7 +180,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dirPath)
     } catch {
       case e: IOException =>
-        throw new RuntimeException("Cannot create staging directory: " + dirPath.toString, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(dirPath.toString, e)
     }
     dirPath
   }
@@ -187,7 +192,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir: String): Path = {
     val extURI: URI = path.toUri
     if (extURI.getScheme == "viewfs") {
-      getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir)
+      getExtTmpPathRelTo(path, hadoopConf, stagingDir)
     } else {
       new Path(getExternalScratchDir(extURI, hadoopConf, stagingDir), "-ext-10000")
     }
@@ -246,8 +251,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fs.deleteOnExit(dir)
     } catch {
       case e: IOException =>
-        throw new RuntimeException(
-          "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
+        throw QueryExecutionErrors.cannotCreateStagingDirError(
+          s"'${dir.toString}': ${e.getMessage}", e)
     }
     dir
   }

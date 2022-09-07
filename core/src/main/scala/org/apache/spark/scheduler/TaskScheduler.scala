@@ -45,8 +45,8 @@ private[spark] trait TaskScheduler {
 
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
-  // wait for slave registrations, etc.
-  def postStartHook() { }
+  // wait for executor registrations, etc.
+  def postStartHook(): Unit = { }
 
   // Disconnect from the cluster.
   def stop(): Unit
@@ -72,7 +72,7 @@ private[spark] trait TaskScheduler {
 
   // Notify the corresponding `TaskSetManager`s of the stage, that a partition has already completed
   // and they can skip running tasks for it.
-  def notifyPartitionCompletion(stageId: Int, partitionId: Int)
+  def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
@@ -97,6 +97,16 @@ private[spark] trait TaskScheduler {
    * @return An application ID
    */
   def applicationId(): String = appId
+
+  /**
+   * Process a decommissioning executor.
+   */
+  def executorDecommission(executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit
+
+  /**
+   * If an executor is decommissioned, return its corresponding decommission info
+   */
+  def getExecutorDecommissionState(executorId: String): Option[ExecutorDecommissionState]
 
   /**
    * Process a lost executor

@@ -17,21 +17,20 @@
 
 package org.apache.spark.broadcast
 
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
-import org.apache.commons.collections.map.{AbstractReferenceMap, ReferenceMap}
+import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
+import org.apache.commons.collections4.map.ReferenceMap
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
-    val isDriver: Boolean,
-    conf: SparkConf,
-    securityManager: SecurityManager)
-  extends Logging {
+    val isDriver: Boolean, conf: SparkConf) extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
@@ -39,27 +38,32 @@ private[spark] class BroadcastManager(
   initialize()
 
   // Called by SparkContext or Executor before using Broadcast
-  private def initialize() {
+  private def initialize(): Unit = {
     synchronized {
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
-        broadcastFactory.initialize(isDriver, conf, securityManager)
+        broadcastFactory.initialize(isDriver, conf)
         initialized = true
       }
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     broadcastFactory.stop()
   }
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  private[broadcast] val cachedValues = {
-    new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
-  }
+  private[broadcast] val cachedValues =
+    Collections.synchronizedMap(
+      new ReferenceMap(ReferenceStrength.HARD, ReferenceStrength.WEAK)
+        .asInstanceOf[java.util.Map[Any, Any]]
+    )
 
-  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
+  def newBroadcast[T: ClassTag](
+      value_ : T,
+      isLocal: Boolean,
+      serializedOnly: Boolean = false): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()
     value_ match {
       case pb: PythonBroadcast =>
@@ -71,10 +75,10 @@ private[spark] class BroadcastManager(
 
       case _ => // do nothing
     }
-    broadcastFactory.newBroadcast[T](value_, isLocal, bid)
+    broadcastFactory.newBroadcast[T](value_, isLocal, bid, serializedOnly)
   }
 
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
 }

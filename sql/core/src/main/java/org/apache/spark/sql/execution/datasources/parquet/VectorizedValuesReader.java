@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.nio.ByteBuffer;
+
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
@@ -28,6 +30,7 @@ import org.apache.parquet.io.api.Binary;
 public interface VectorizedValuesReader {
   boolean readBoolean();
   byte readByte();
+  short readShort();
   int readInteger();
   long readLong();
   float readFloat();
@@ -39,9 +42,64 @@ public interface VectorizedValuesReader {
    */
   void readBooleans(int total, WritableColumnVector c, int rowId);
   void readBytes(int total, WritableColumnVector c, int rowId);
+  void readShorts(int total, WritableColumnVector c, int rowId);
   void readIntegers(int total, WritableColumnVector c, int rowId);
+  void readIntegersWithRebase(int total, WritableColumnVector c, int rowId, boolean failIfRebase);
+  void readUnsignedIntegers(int total, WritableColumnVector c, int rowId);
+  void readUnsignedLongs(int total, WritableColumnVector c, int rowId);
   void readLongs(int total, WritableColumnVector c, int rowId);
+  void readLongsWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
+
+   /*
+    * Skips `total` values
+    */
+   void skipBooleans(int total);
+   void skipBytes(int total);
+   void skipShorts(int total);
+   void skipIntegers(int total);
+   void skipLongs(int total);
+   void skipFloats(int total);
+   void skipDoubles(int total);
+   void skipBinary(int total);
+   void skipFixedLenByteArray(int total, int len);
+
+  /**
+   * A functional interface to write integer values to columnar output
+   */
+  @FunctionalInterface
+  interface IntegerOutputWriter {
+
+    /**
+     * A functional interface that writes a long value to a specified row in an output column
+     * vector
+     *
+     * @param outputColumnVector the vector to write to
+     * @param rowId the row to write to
+     * @param val value to write
+     */
+    void write(WritableColumnVector outputColumnVector, int rowId, long val);
+  }
+
+  @FunctionalInterface
+  interface ByteBufferOutputWriter {
+    void write(WritableColumnVector c, int rowId, ByteBuffer val, int length);
+
+    static void writeArrayByteBuffer(WritableColumnVector c, int rowId, ByteBuffer val,
+        int length) {
+      c.putByteArray(rowId,
+          val.array(),
+          val.arrayOffset() + val.position(),
+          length);
+    }
+
+    static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) { }
+  }
 }

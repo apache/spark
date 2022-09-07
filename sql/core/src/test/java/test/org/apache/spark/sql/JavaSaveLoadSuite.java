@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -43,10 +42,7 @@ public class JavaSaveLoadSuite {
   Dataset<Row> df;
 
   private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
+    QueryTest$.MODULE$.checkAnswer(actual, expected);
   }
 
   @Before

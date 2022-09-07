@@ -176,4 +176,113 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
       (weight0 * f2measure0 + weight1 * f2measure1 + weight2 * f2measure2) relTol delta)
     assert(metrics.labels === labels)
   }
+
+  test("MulticlassMetrics supports binary class log-loss") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     from sklearn.metrics import log_loss
+     labels = [1, 0, 0, 1]
+     probabilities = [[.1, .9], [.9, .1], [.8, .2], [.35, .65]]
+     weights = [1.5, 2.0, 1.0, 0.5]
+
+     >>> log_loss(y_true=labels, y_pred=probabilities, sample_weight=weights)
+     0.16145936283256573
+     >>> log_loss(y_true=labels, y_pred=probabilities)
+     0.21616187468057912
+    */
+
+    val labels = Seq(1.0, 0.0, 0.0, 1.0)
+    val probabilities = Seq(
+      Array(0.1, 0.9),
+      Array(0.9, 0.1),
+      Array(0.8, 0.2),
+      Array(0.35, 0.65))
+    val weights = Seq(1.5, 2.0, 1.0, 0.5)
+
+    val rdd = sc.parallelize(labels.zip(weights).zip(probabilities)).map {
+      case ((label, weight), probability) =>
+        val prediction = probability.indexOf(probability.max).toDouble
+        (prediction, label, weight, probability)
+    }
+    val metrics = new MulticlassMetrics(rdd)
+    assert(metrics.logLoss() ~== 0.16145936283256573 relTol delta)
+
+    val rdd2 = rdd.map {
+      case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
+        (prediction, label, 1.0, probability)
+    }
+    val metrics2 = new MulticlassMetrics(rdd2)
+    assert(metrics2.logLoss() ~== 0.21616187468057912 relTol delta)
+  }
+
+  test("MulticlassMetrics supports multi-class log-loss") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     from sklearn.metrics import log_loss
+     labels = [1, 2, 0, 1]
+     probabilities = [[.1, .8, .1], [.9, .05, .05], [.8, .2, .0], [.3, .65, .05]]
+     weights = [1.5, 2.0, 1.0, 0.5]
+
+     >>> log_loss(y_true=labels, y_pred=probabilities, sample_weight=weights)
+     1.3529429766879466
+     >>> log_loss(y_true=labels, y_pred=probabilities)
+     0.9682005730687164
+    */
+
+    val labels = Seq(1.0, 2.0, 0.0, 1.0)
+    val probabilities = Seq(
+      Array(0.1, 0.8, 0.1),
+      Array(0.9, 0.05, 0.05),
+      Array(0.8, 0.2, 0.0),
+      Array(0.3, 0.65, 0.05))
+    val weights = Seq(1.5, 2.0, 1.0, 0.5)
+
+    val rdd = sc.parallelize(labels.zip(weights).zip(probabilities)).map {
+      case ((label, weight), probability) =>
+        val prediction = probability.indexOf(probability.max).toDouble
+        (prediction, label, weight, probability)
+    }
+    val metrics = new MulticlassMetrics(rdd)
+    assert(metrics.logLoss() ~== 1.3529429766879466 relTol delta)
+
+    val rdd2 = rdd.map {
+      case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
+        (prediction, label, 1.0, probability)
+    }
+    val metrics2 = new MulticlassMetrics(rdd2)
+    assert(metrics2.logLoss() ~== 0.9682005730687164 relTol delta)
+  }
+
+  test("MulticlassMetrics supports hammingLoss") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     from sklearn.metrics import hamming_loss
+     y_true = [2, 2, 3, 4]
+     y_pred = [1, 2, 3, 4]
+     weights = [1.5, 2.0, 1.0, 0.5]
+
+     >>> hamming_loss(y_true, y_pred)
+     0.25
+     >>> hamming_loss(y_true, y_pred, sample_weight=weights)
+     0.3
+    */
+
+    val preds = Seq(1.0, 2.0, 3.0, 4.0)
+    val labels = Seq(2.0, 2.0, 3.0, 4.0)
+    val weights = Seq(1.5, 2.0, 1.0, 0.5)
+
+    val rdd = sc.parallelize(preds.zip(labels))
+    val metrics = new MulticlassMetrics(rdd)
+    assert(metrics.hammingLoss ~== 0.25 relTol delta)
+
+    val rdd2 = sc.parallelize(preds.zip(labels).zip(weights))
+      .map { case ((pred, label), weight) =>
+        (pred, label, weight)
+      }
+    val metrics2 = new MulticlassMetrics(rdd2)
+    assert(metrics2.hammingLoss ~== 0.3 relTol delta)
+  }
 }

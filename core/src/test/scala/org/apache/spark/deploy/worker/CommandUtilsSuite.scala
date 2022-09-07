@@ -17,7 +17,9 @@
 
 package org.apache.spark.deploy.worker
 
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
@@ -38,7 +40,7 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("auth secret shouldn't appear in java opts") {
-    val buildLocalCommand = PrivateMethod[Command]('buildLocalCommand)
+    val buildLocalCommand = PrivateMethod[Command](Symbol("buildLocalCommand"))
     val conf = new SparkConf
     val secret = "This is the secret sauce"
     // set auth secret

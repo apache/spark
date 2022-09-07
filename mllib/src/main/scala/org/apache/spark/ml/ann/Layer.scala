@@ -480,7 +480,7 @@ private[ml] class FeedForwardModel private(
   val layers = topology.layers
   val layerModels = new Array[LayerModel](layers.length)
   private var offset = 0
-  for (i <- 0 until layers.length) {
+  for (i <- layers.indices) {
     layerModels(i) = layers(i).createModel(
       new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
     offset += layers(i).weightSize
@@ -495,7 +495,7 @@ private[ml] class FeedForwardModel private(
     if (outputs == null || outputs(0).cols != currentBatchSize) {
       outputs = new Array[BDM[Double]](layers.length)
       var inputSize = data.rows
-      for (i <- 0 until layers.length) {
+      for (i <- layers.indices) {
         if (layers(i).inPlace) {
           outputs(i) = outputs(i - 1)
         } else {
@@ -542,7 +542,7 @@ private[ml] class FeedForwardModel private(
     }
     val cumGradientArray = cumGradient.toArray
     var offset = 0
-    for (i <- 0 until layerModels.length) {
+    for (i <- layerModels.indices) {
       val input = if (i == 0) data else outputs(i - 1)
       layerModels(i).grad(deltas(i), input,
         new BDV[Double](cumGradientArray, offset, 1, layers(i).weightSize))
@@ -601,7 +601,7 @@ private[ann] object FeedForwardModel {
     val weights = BDV.zeros[Double](topology.layers.map(_.weightSize).sum)
     var offset = 0
     val random = new XORShiftRandom(seed)
-    for (i <- 0 until layers.length) {
+    for (i <- layers.indices) {
       layerModels(i) = layers(i).
         initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
       offset += layers(i).weightSize
@@ -838,7 +838,7 @@ private[ml] class FeedForwardTrainer(
    * @param data RDD of input and output vector pairs
    * @return model
    */
-  def train(data: RDD[(Vector, Vector)]): TopologyModel = {
+  def train(data: RDD[(Vector, Vector)]): (TopologyModel, Array[Double]) = {
     val w = if (getWeights == null) {
       // TODO: will make a copy if vector is a subvector of BDV (see Vectors code)
       topology.model(_seed).weights
@@ -851,9 +851,14 @@ private[ml] class FeedForwardTrainer(
     }
     val handlePersistence = trainData.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) trainData.persist(StorageLevel.MEMORY_AND_DISK)
-    val newWeights = optimizer.optimize(trainData, w)
+    val (newWeights, lossHistory) = optimizer match {
+      case lbfgs: LBFGS => lbfgs.optimizeWithLossReturned(trainData, w)
+      case sgd: GradientDescent => sgd.optimizeWithLossReturned(trainData, w)
+      case other => throw new UnsupportedOperationException(
+        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
+    }
     if (handlePersistence) trainData.unpersist()
-    topology.model(newWeights)
+    (topology.model(newWeights), lossHistory)
   }
 
 }

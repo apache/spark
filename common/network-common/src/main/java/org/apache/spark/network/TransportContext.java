@@ -44,6 +44,7 @@ import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.NettyLogger;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
@@ -64,6 +65,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
 public class TransportContext implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
+  private static final NettyLogger nettyLogger = new NettyLogger();
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
@@ -123,7 +125,7 @@ public class TransportContext implements Closeable {
 
     if (conf.getModuleName() != null &&
         conf.getModuleName().equalsIgnoreCase("shuffle") &&
-        !isClientOnly) {
+        !isClientOnly && conf.separateChunkFetchRequest()) {
       chunkFetchWorkers = NettyUtils.createEventLoop(
           IOMode.valueOf(conf.ioMode()),
           conf.chunkFetchHandlerThreads(),
@@ -187,9 +189,11 @@ public class TransportContext implements Closeable {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      ChunkFetchRequestHandler chunkFetchHandler =
-        createChunkFetchHandler(channelHandler, channelRpcHandler);
-      ChannelPipeline pipeline = channel.pipeline()
+      ChannelPipeline pipeline = channel.pipeline();
+      if (nettyLogger.getLoggingHandler() != null) {
+        pipeline.addLast("loggingHandler", nettyLogger.getLoggingHandler());
+      }
+      pipeline
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
@@ -200,6 +204,9 @@ public class TransportContext implements Closeable {
         .addLast("handler", channelHandler);
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
       if (chunkFetchWorkers != null) {
+        ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
+          channelHandler.getClient(), rpcHandler.getStreamManager(),
+          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
@@ -217,19 +224,17 @@ public class TransportContext implements Closeable {
   private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
+    boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
+    ChunkFetchRequestHandler chunkFetchRequestHandler = null;
+    if (!separateChunkFetchRequest) {
+      chunkFetchRequestHandler = new ChunkFetchRequestHandler(
+        client, rpcHandler.getStreamManager(),
+        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
+    }
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler, conf.maxChunksBeingTransferred());
+      rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections, this);
-  }
-
-  /**
-   * Creates the dedicated ChannelHandler for ChunkFetchRequest messages.
-   */
-  private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
-      RpcHandler rpcHandler) {
-    return new ChunkFetchRequestHandler(channelHandler.getClient(),
-      rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
+      conf.connectionTimeoutMs(), separateChunkFetchRequest, closeIdleConnections, this);
   }
 
   public TransportConf getConf() { return conf; }
@@ -238,6 +243,7 @@ public class TransportContext implements Closeable {
     return registeredConnections;
   }
 
+  @Override
   public void close() {
     if (chunkFetchWorkers != null) {
       chunkFetchWorkers.shutdownGracefully();

@@ -178,4 +178,14 @@ class UnsafeRowSuite extends SparkFunSuite {
     // Makes sure hashCode on unsafe array won't crash
     unsafeRow.getArray(0).hashCode()
   }
+
+  test("SPARK-32018: setDecimal with overflowed value") {
+    val d1 = new Decimal().set(BigDecimal("10000000000000000000")).toPrecision(38, 18)
+    val row = InternalRow.apply(d1)
+    val unsafeRow = UnsafeProjection.create(Array[DataType](DecimalType(38, 18))).apply(row)
+    assert(unsafeRow.getDecimal(0, 38, 18) === d1)
+    val d2 = (d1 * Decimal(10)).toPrecision(39, 18)
+    unsafeRow.setDecimal(0, d2, 38)
+    assert(unsafeRow.getDecimal(0, 38, 18) === null)
+  }
 }

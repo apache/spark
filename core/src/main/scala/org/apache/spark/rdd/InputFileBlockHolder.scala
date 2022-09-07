@@ -34,7 +34,7 @@ private[spark] object InputFileBlockHolder {
    * @param length size of the block, in bytes, or -1 if not available.
    */
   private class FileBlock(val filePath: UTF8String, val startOffset: Long, val length: Long) {
-    def this() {
+    def this() = {
       this(UTF8String.fromString(""), -1, -1)
     }
   }
@@ -76,7 +76,7 @@ private[spark] object InputFileBlockHolder {
   def set(filePath: String, startOffset: Long, length: Long): Unit = {
     require(filePath != null, "filePath cannot be null")
     require(startOffset >= 0, s"startOffset ($startOffset) cannot be negative")
-    require(length >= 0, s"length ($length) cannot be negative")
+    require(length >= -1, s"length ($length) cannot be smaller than -1")
     inputBlock.get().set(new FileBlock(UTF8String.fromString(filePath), startOffset, length))
   }
 

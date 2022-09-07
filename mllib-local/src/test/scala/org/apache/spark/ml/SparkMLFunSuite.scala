@@ -18,13 +18,14 @@
 package org.apache.spark.ml
 
 // scalastyle:off
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
 private[spark] abstract class SparkMLFunSuite
-  extends FunSuite
+  extends AnyFunSuite
   with BeforeAndAfterAll {
   // scalastyle:on
 }

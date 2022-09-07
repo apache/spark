@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -37,6 +39,8 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * </p>
  */
 public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
+
+  private static final Logger LOG = Logger.getLogger(SparkLauncher.class.getName());
 
   /** The Spark master. */
   public static final String SPARK_MASTER = "spark.master";
@@ -87,8 +91,18 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   /**
    * Maximum time (in ms) to wait for a child process to connect back to the launcher server
    * when using @link{#start()}.
+   *
+   * @deprecated use `CHILD_CONNECTION_TIMEOUT`
+   * @since 1.6.0
    */
-  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConectionTimeout";
+  public static final String DEPRECATED_CHILD_CONNECTION_TIMEOUT =
+    "spark.launcher.childConectionTimeout";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConnectionTimeout";
 
   /** Used internally to create unique logger names. */
   private static final AtomicInteger COUNTER = new AtomicInteger();
@@ -363,6 +377,9 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
     String loggerName = getLoggerName();
     ProcessBuilder pb = createBuilder();
+    if (LOG.isLoggable(Level.FINE)) {
+      LOG.fine(String.format("Launching Spark application:%n%s", join(" ", pb.command())));
+    }
 
     boolean outputToLog = outputStream == null;
     boolean errorToLog = !redirectErrorStream && errorStream == null;

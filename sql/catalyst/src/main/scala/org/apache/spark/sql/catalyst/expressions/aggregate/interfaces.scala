@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 /** The mode of an [[AggregateFunction]]. */
 sealed trait AggregateMode
@@ -61,37 +66,51 @@ case object Complete extends AggregateMode
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
  */
-case object NoOp extends Expression with Unevaluable {
+case object NoOp extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
-  override def children: Seq[Expression] = Nil
 }
 
 object AggregateExpression {
   def apply(
       aggregateFunction: AggregateFunction,
       mode: AggregateMode,
-      isDistinct: Boolean): AggregateExpression = {
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
     AggregateExpression(
       aggregateFunction,
       mode,
       isDistinct,
+      filter,
       NamedExpression.newExprId)
+  }
+
+  def containsAggregate(expr: Expression): Boolean = {
+    expr.exists(isAggregate)
+  }
+
+  def isAggregate(expr: Expression): Boolean = {
+    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
   }
 }
 
 /**
  * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
- * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
+ * (`isDistinct`) indicating if DISTINCT keyword is specified for this function and
+ * a field (`filter`) indicating if filter clause is specified for this function.
  */
 case class AggregateExpression(
     aggregateFunction: AggregateFunction,
     mode: AggregateMode,
     isDistinct: Boolean,
+    filter: Option[Expression],
     resultId: ExprId)
   extends Expression
   with Unevaluable {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
+
+  @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
     AttributeReference(
       aggregateFunction.toString,
@@ -101,11 +120,13 @@ case class AggregateExpression(
     // This is a bit of a hack.  Really we should not be constructing this container and reasoning
     // about datatypes / aggregation mode until after we have finished analysis and made it to
     // planning.
-    UnresolvedAttribute(aggregateFunction.toString)
+    UnresolvedAttribute.quoted(aggregateFunction.toString)
   }
 
+  def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
+
   // We compute the same thing regardless of our final result.
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
       // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
@@ -116,23 +137,25 @@ case class AggregateExpression(
     }
 
     AggregateExpression(
-      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.preCanonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
+      filter.map(_.preCanonicalized),
       ExprId(0))
   }
 
-  override def children: Seq[Expression] = aggregateFunction :: Nil
+  override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
+
   override def dataType: DataType = aggregateFunction.dataType
-  override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   @transient
   override lazy val references: AttributeSet = {
-    mode match {
+    val aggAttributes = mode match {
       case Partial | Complete => aggregateFunction.references
-      case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
+      case PartialMerge | Final => AttributeSet(aggregateFunction.inputAggBufferAttributes)
     }
+    aggAttributes ++ filterAttributes
   }
 
   override def toString: String = {
@@ -141,10 +164,30 @@ case class AggregateExpression(
       case PartialMerge => "merge_"
       case Final | Complete => ""
     }
-    prefix + aggregateFunction.toAggString(isDistinct)
+    val aggFuncStr = prefix + aggregateFunction.toAggString(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE $predicate)"
+      case _ => aggFuncStr
+    }
   }
 
-  override def sql: String = aggregateFunction.sql(isDistinct)
+  override def sql: String = {
+    val aggFuncStr = aggregateFunction.sql(isDistinct)
+    filter match {
+      case Some(predicate) => s"$aggFuncStr FILTER (WHERE ${predicate.sql})"
+      case _ => aggFuncStr
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): AggregateExpression =
+    if (filter.isDefined) {
+      copy(
+        aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction],
+        filter = Some(newChildren(1)))
+    } else {
+      copy(aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction])
+    }
 }
 
 /**
@@ -183,8 +226,7 @@ abstract class AggregateFunction extends Expression {
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Result of the aggregate function when the input is empty. This is currently only used for the
-   * proper rewriting of distinct aggregate functions.
+   * Result of the aggregate function when the input is empty.
    */
   def defaultResult: Option[Literal] = None
 
@@ -203,8 +245,14 @@ abstract class AggregateFunction extends Expression {
    * An [[AggregateFunction]] should not be used without being wrapped in
    * an [[AggregateExpression]].
    */
-  def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
-    AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  def toAggregateExpression(
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
+    AggregateExpression(
+      aggregateFunction = this,
+      mode = Complete,
+      isDistinct = isDistinct,
+      filter = filter)
   }
 
   def sql(isDistinct: Boolean): String = {
@@ -348,8 +396,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  */
 abstract class DeclarativeAggregate
   extends AggregateFunction
-  with Serializable
-  with Unevaluable {
+  with Serializable {
 
   /**
    * Expressions for initializing empty aggregation buffers.
@@ -378,7 +425,7 @@ abstract class DeclarativeAggregate
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
   final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+  lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
   /**
@@ -395,6 +442,12 @@ abstract class DeclarativeAggregate
     /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
+
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 
@@ -546,7 +599,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   private[this] val anyObjectType = ObjectType(classOf[AnyRef])
   private def getBufferObject(bufferRow: InternalRow): T = {
-    bufferRow.get(mutableAggBufferOffset, anyObjectType).asInstanceOf[T]
+    getBufferObject(bufferRow, mutableAggBufferOffset)
   }
 
   final override lazy val aggBufferAttributes: Seq[AttributeReference] = {
@@ -569,5 +622,86 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
    */
   final def serializeAggregateBufferInPlace(buffer: InternalRow): Unit = {
     buffer(mutableAggBufferOffset) = serialize(getBufferObject(buffer))
+  }
+
+  /**
+   * Merge an input buffer into the aggregation buffer, where both buffers contain the deserialized
+   * java object. This function is used by aggregating accumulators.
+   *
+   * @param buffer the aggregation buffer that is updated.
+   * @param inputBuffer the buffer that is merged into the aggregation buffer.
+   */
+  final def mergeBuffersObjects(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
+    val bufferObject = getBufferObject(buffer)
+    val inputObject = getBufferObject(inputBuffer, inputAggBufferOffset)
+    buffer(mutableAggBufferOffset) = merge(bufferObject, inputObject)
+  }
+
+  private def getBufferObject(buffer: InternalRow, offset: Int): T = {
+    buffer.get(offset, anyObjectType).asInstanceOf[T]
+  }
+}
+
+/**
+ * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
+ * aggregation buffer.
+ */
+abstract class TypedAggregateWithHashMapAsBuffer
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[AnyRef, Long]()
+  }
+
+  protected def child: Expression
+
+  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+
+  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      // Write pairs in counts map to byte buffer.
+      obj.foreach { case (key, count) =>
+        val row = InternalRow.apply(key, count)
+        val unsafeRow = projection.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
+    }
+  }
+
+  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      val counts = new OpenHashMap[AnyRef, Long]
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType)
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        counts.update(key, count)
+        sizeOfNextRow = ins.readInt()
+      }
+
+      counts
+    } finally {
+      ins.close()
+      bis.close()
+    }
   }
 }

@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  * Serialization benchmark for VectorUDT.
  * To run this benchmark:
  * {{{
- * 1. without sbt: bin/spark-submit --class <this class> <spark mllib test jar>
- * 2. build/sbt "mllib/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
+ * 1. without sbt:
+ *    bin/spark-submit --class <this class>
+ *      --jars <spark core test jar> <spark mllib test jar>
+ * 2. build/sbt "mllib/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/Test/runMain <this class>"
  *    Results will be written to "benchmarks/UDTSerializationBenchmark-results.txt".
  * }}}
  */
@@ -38,12 +40,14 @@ object UDTSerializationBenchmark extends BenchmarkBase {
       val iters = 1e2.toInt
       val numRows = 1e3.toInt
 
-      val encoder = ExpressionEncoder[Vector].resolveAndBind()
+      val encoder = ExpressionEncoder[Vector]().resolveAndBind()
+      val toRow = encoder.createSerializer()
+      val fromRow = encoder.createDeserializer()
 
       val vectors = (1 to numRows).map { i =>
         Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
       }.toArray
-      val rows = vectors.map(encoder.toRow)
+      val rows = vectors.map(toRow)
 
       val benchmark = new Benchmark("VectorUDT de/serialization", numRows, iters, output = output)
 
@@ -51,7 +55,7 @@ object UDTSerializationBenchmark extends BenchmarkBase {
         var sum = 0
         var i = 0
         while (i < numRows) {
-          sum += encoder.toRow(vectors(i)).numFields
+          sum += toRow(vectors(i)).numFields
           i += 1
         }
       }
@@ -60,7 +64,7 @@ object UDTSerializationBenchmark extends BenchmarkBase {
         var sum = 0
         var i = 0
         while (i < numRows) {
-          sum += encoder.fromRow(rows(i)).numActives
+          sum += fromRow(rows(i)).numActives
           i += 1
         }
       }

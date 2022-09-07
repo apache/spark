@@ -99,6 +99,34 @@ createOrReplaceTempView(df, "table")
 df <- sql("SELECT * FROM table")
 # $example off:run_sql$
 
+# Ignore corrupt files
+# $example on:ignore_corrupt_files$
+# enable ignore corrupt files via the data source option
+# dir1/file3.json is corrupt from parquet's view
+testCorruptDF0 <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"), ignoreCorruptFiles = "true")
+head(testCorruptDF0)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+
+# enable ignore corrupt files via the configuration
+sql("set spark.sql.files.ignoreCorruptFiles=true")
+# dir1/file3.json is corrupt from parquet's view
+testCorruptDF1 <- read.parquet(c("examples/src/main/resources/dir1/", "examples/src/main/resources/dir1/dir2/"))
+head(testCorruptDF1)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+# $example off:ignore_corrupt_files$
+
+# $example on:recursive_file_lookup$
+recursiveLoadedDF <- read.df("examples/src/main/resources/dir1", "parquet", recursiveFileLookup = "true")
+head(recursiveLoadedDF)
+#            file
+# 1 file1.parquet
+# 2 file2.parquet
+# $example off:recursive_file_lookup$
+sql("set spark.sql.files.ignoreCorruptFiles=false")
 
 # $example on:generic_load_save_functions$
 df <- read.df("examples/src/main/resources/users.parquet")
@@ -119,13 +147,28 @@ namesAndAges <- select(df, "name", "age")
 # $example off:manual_load_options_csv$
 
 # $example on:load_with_path_glob_filter$
-df <- read.df("examples/src/main/resources/partitioned_users.orc", "orc", pathGlobFilter = "*.orc")
+df <- read.df("examples/src/main/resources/dir1", "parquet", pathGlobFilter = "*.parquet")
+#            file
+# 1 file1.parquet
 # $example off:load_with_path_glob_filter$
+
+# $example on:load_with_modified_time_filter$
+beforeDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedBefore= "2020-07-01T05:30:00")
+#            file
+# 1 file1.parquet
+afterDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedAfter = "2020-06-01T05:30:00")
+#            file
+# $example off:load_with_modified_time_filter$
 
 # $example on:manual_save_options_orc$
 df <- read.df("examples/src/main/resources/users.orc", "orc")
 write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
 # $example off:manual_save_options_orc$
+
+# $example on:manual_save_options_parquet$
+df <- read.df("examples/src/main/resources/users.parquet", "parquet")
+write.parquet(df, "users_with_options.parquet", parquet.bloom.filter.enabled#favorite_color = true, parquet.bloom.filter.expected.ndv#favorite_color = 1000000, parquet.enable.dictionary = true, parquet.page.write-checksum.enabled = false)
+# $example off:manual_save_options_parquet$
 
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")

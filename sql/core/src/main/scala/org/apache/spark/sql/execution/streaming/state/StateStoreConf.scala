@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
-class StateStoreConf(@transient private val sqlConf: SQLConf)
+class StateStoreConf(
+    @transient private val sqlConf: SQLConf,
+    extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
   def this() = this(new SQLConf)
@@ -43,14 +45,42 @@ class StateStoreConf(@transient private val sqlConf: SQLConf)
    */
   val providerClass: String = sqlConf.stateStoreProviderClass
 
+  /** Whether validate the underlying format or not. */
+  val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
+
+  /**
+   * Whether to validate the value side. This config is applied to both validators as below:
+   *
+   * - whether to validate the value format when the format validation is enabled.
+   * - whether to validate the value schema when the state schema check is enabled.
+   */
+  val formatValidationCheckValue: Boolean =
+    extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
+
+  /** Whether to skip null values for hash based stream-stream joins. */
+  val skipNullsForStreamStreamJoins: Boolean = sqlConf.stateStoreSkipNullsForStreamStreamJoins
+
+  /** The compression codec used to compress delta and snapshot files. */
+  val compressionCodec: String = sqlConf.stateStoreCompressionCodec
+
+  /** whether to validate state schema during query run. */
+  val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
+
+  /** The interval of maintenance tasks. */
+  val maintenanceInterval = sqlConf.streamingMaintenanceInterval
+
   /**
    * Additional configurations related to state store. This will capture all configs in
-   * SQLConf that start with `spark.sql.streaming.stateStore.` */
+   * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific
+   * operator.
+   */
   val confs: Map[String, String] =
-    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))
+    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore.")) ++ extraOptions
 }
 
 object StateStoreConf {
+  val FORMAT_VALIDATION_CHECK_VALUE_CONFIG = "formatValidationCheckValue"
+
   val empty = new StateStoreConf()
 
   def apply(conf: SQLConf): StateStoreConf = new StateStoreConf(conf)

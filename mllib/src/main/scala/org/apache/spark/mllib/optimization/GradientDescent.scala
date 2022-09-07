@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -124,15 +123,26 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   }
 
   /**
-   * :: DeveloperApi ::
    * Runs gradient descent on the given training data.
    * @param data training data
    * @param initialWeights initial weights
    * @return solution vector
    */
-  @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = GradientDescent.runMiniBatchSGD(
+    val (weights, _) = optimizeWithLossReturned(data, initialWeights)
+    weights
+  }
+
+  /**
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector and loss value in an array
+   */
+  def optimizeWithLossReturned(
+      data: RDD[(Double, Vector)],
+      initialWeights: Vector): (Vector, Array[Double]) = {
+    GradientDescent.runMiniBatchSGD(
       data,
       gradient,
       updater,
@@ -142,16 +152,13 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
       miniBatchFraction,
       initialWeights,
       convergenceTol)
-    weights
   }
 
 }
 
 /**
- * :: DeveloperApi ::
  * Top-level method to run gradient descent.
  */
-@DeveloperApi
 object GradientDescent extends Logging {
   /**
    * Run stochastic gradient descent (SGD) in parallel using mini batches.
@@ -200,7 +207,7 @@ object GradientDescent extends Logging {
         s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
     }
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations + 1)
     // Record previous weight and current one to calculate solution vector difference
 
     var previousWeights: Option[Vector] = None
@@ -231,20 +238,35 @@ object GradientDescent extends Logging {
 
     var converged = false // indicates whether converged based on convergenceTol
     var i = 1
-    while (!converged && i <= numIterations) {
+    while (!converged && (i <= numIterations + 1)) {
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
+        .treeAggregate((null.asInstanceOf[BDV[Double]], 0.0, 0L))(
           seqOp = (c, v) => {
             // c: (grad, loss, count), v: (label, features)
-            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
-            (c._1, c._2 + l, c._3 + 1)
+            val vec =
+              if (c._1 == null) {
+                BDV.zeros[Double](n)
+              } else {
+                c._1
+              }
+            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(vec))
+            (vec, c._2 + l, c._3 + 1)
           },
           combOp = (c1, c2) => {
             // c: (grad, loss, count)
-            (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
+            val vec =
+              if (c1._1 == null) {
+                c2._1
+              } else if (c2._1 == null) {
+                c1._1
+              } else {
+                c1._1 += c2._1
+                c1._1
+              }
+            (vec, c1._2 + c2._2, c1._3 + c2._3)
           })
       bcWeights.destroy()
 
@@ -254,17 +276,19 @@ object GradientDescent extends Logging {
          * and regVal is the regularization value computed in the previous iteration as well.
          */
         stochasticLossHistory += lossSum / miniBatchSize + regVal
-        val update = updater.compute(
-          weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
-          stepSize, i, regParam)
-        weights = update._1
-        regVal = update._2
+        if (i != (numIterations + 1)) {
+          val update = updater.compute(
+            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
+            stepSize, i, regParam)
+          weights = update._1
+          regVal = update._2
 
-        previousWeights = currentWeights
-        currentWeights = Some(weights)
-        if (previousWeights != None && currentWeights != None) {
-          converged = isConverged(previousWeights.get,
-            currentWeights.get, convergenceTol)
+          previousWeights = currentWeights
+          currentWeights = Some(weights)
+          if (previousWeights != None && currentWeights != None) {
+            converged = isConverged(previousWeights.get,
+              currentWeights.get, convergenceTol)
+          }
         }
       } else {
         logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
@@ -276,7 +300,6 @@ object GradientDescent extends Logging {
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights, stochasticLossHistory.toArray)
-
   }
 
   /**
@@ -292,7 +315,7 @@ object GradientDescent extends Logging {
       miniBatchFraction: Double,
       initialWeights: Vector): (Vector, Array[Double]) =
     GradientDescent.runMiniBatchSGD(data, gradient, updater, stepSize, numIterations,
-                                    regParam, miniBatchFraction, initialWeights, 0.001)
+      regParam, miniBatchFraction, initialWeights, 0.001)
 
 
   private def isConverged(

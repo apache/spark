@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.Date
-
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -111,7 +109,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         first("value").over(
           window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         first("value").over(
@@ -226,7 +224,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         sum("value").over(window.
           rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         sum("value").over(window.

@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import scala.collection.JavaConverters._
 
 import K8SSparkSubmitOperation.getGracePeriod
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodList}
+import io.fabric8.kubernetes.api.model.{Pod, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
 
@@ -33,7 +33,7 @@ import org.apache.spark.util.{CommandLineLoggingUtils, Utils}
 
 private sealed trait K8sSubmitOp extends CommandLineLoggingUtils {
   type NON_NAMESPACED_PODS =
-    NonNamespaceOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
+    NonNamespaceOperation[Pod, PodList, PodResource[Pod]]
   def executeOnPod(pName: String, namespace: Option[String], sparkConf: SparkConf)
       (implicit client: KubernetesClient): Unit
   def executeOnGlob(pods: List[Pod], ns: Option[String], sparkConf: SparkConf)

@@ -18,9 +18,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 
 class RuleExecutorSuite extends SparkFunSuite {
@@ -67,7 +65,7 @@ class RuleExecutorSuite extends SparkFunSuite {
       val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       ToFixedPoint.execute(Literal(100))
     }.getMessage
     assert(message.contains("Max iterations (10) reached for batch fixedPoint"))
@@ -75,7 +73,9 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker - verify initial input") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(expr: Expression): Boolean = expr match {
+      override protected def isPlanIntegral(
+          previousPlan: Expression,
+          currentPlan: Expression): Boolean = currentPlan match {
         case IntegerLiteral(_) => true
         case _ => false
       }
@@ -84,7 +84,7 @@ class RuleExecutorSuite extends SparkFunSuite {
 
     assert(WithSIChecker.execute(Literal(10)) === Literal(9))
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       // The input is already invalid as determined by WithSIChecker.isPlanIntegral
       WithSIChecker.execute(Literal(10.1))
     }.getMessage
@@ -93,7 +93,9 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker - verify rule execution result") {
     object WithSICheckerForPositiveLiteral extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(expr: Expression): Boolean = expr match {
+      override protected def isPlanIntegral(
+          previousPlan: Expression,
+          currentPlan: Expression): Boolean = currentPlan match {
         case IntegerLiteral(i) if i > 0 => true
         case _ => false
       }
@@ -102,7 +104,7 @@ class RuleExecutorSuite extends SparkFunSuite {
 
     assert(WithSICheckerForPositiveLiteral.execute(Literal(2)) === Literal(1))
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       WithSICheckerForPositiveLiteral.execute(Literal(1))
     }.getMessage
     assert(message.contains("the structural integrity of the plan is broken"))

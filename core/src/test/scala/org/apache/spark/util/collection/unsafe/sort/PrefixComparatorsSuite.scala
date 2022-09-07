@@ -20,12 +20,12 @@ package org.apache.spark.util.collection.unsafe.sort
 import java.nio.charset.StandardCharsets
 
 import com.google.common.primitives.UnsignedBytes
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.unsafe.types.UTF8String
 
-class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
+class PrefixComparatorsSuite extends SparkFunSuite with ScalaCheckPropertyChecks {
 
   test("String prefix comparator") {
 
@@ -62,7 +62,7 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
   test("Binary prefix comparator") {
 
      def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-      for (i <- 0 until x.length; if i < y.length) {
+      for (i <- x.indices; if i < y.length) {
         val v1 = x(i) & 0xff
         val v2 = y(i) & 0xff
         val res = v1 - v2

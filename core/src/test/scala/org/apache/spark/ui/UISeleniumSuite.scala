@@ -17,23 +17,24 @@
 
 package org.apache.spark.ui
 
-import java.net.{HttpURLConnection, URL}
+import java.net.URL
 import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
 
+import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
-import org.w3c.css.sac.CSSParseException
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -44,27 +45,32 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
-  private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+  /**
+   * Some libraries have warn/error messages that are too noisy for the tests; exclude them from
+   * normal error handling to avoid logging these.
+   */
+  private val cssExcludeList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
 
-  private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
+  private def isInExcludeList(uri: String): Boolean = cssExcludeList.exists(uri.endsWith)
 
   override def warning(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.warning(e)
     }
   }
 
   override def fatalError(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.fatalError(e)
     }
   }
 
   override def error(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.error(e)
     }
   }
@@ -73,7 +79,7 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
   implicit val formats = DefaultFormats
@@ -102,6 +108,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
    */
   private def newSparkContext(
       killEnabled: Boolean = true,
+      timelineEnabled: Boolean = true,
       master: String = "local",
       additionalConfs: Map[String, String] = Map.empty): SparkContext = {
     val conf = new SparkConf()
@@ -110,11 +117,33 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
       .set(UI_KILL_ENABLED, killEnabled)
+      .set(UI_TIMELINE_ENABLED, timelineEnabled)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
+  }
+
+  test("all jobs page should be rendered even though we configure the scheduling mode to fair") {
+    // Regression test for SPARK-33991
+    val conf = Map("spark.scheduler.mode" -> "fair")
+    withSpark(newSparkContext(additionalConfs = conf)) { sc =>
+      val rdd = sc.parallelize(0 to 100, 100).repartition(10).cache()
+      rdd.count()
+
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        // The completed jobs table should have one row. The first row will be the most recent job:
+        val firstRow = find(cssSelector("tbody tr")).get.underlying
+        val firstRowColumns = firstRow.findElements(By.tagName("td"))
+        // if first row can get the id 0, then the page is rendered and the scheduling mode is
+        // displayed with no error when we visit http://localhost:4040/jobs/ even though
+        // we configure the scheduling mode like spark.scheduler.mode=fair
+        // instead of spark.scheculer.mode=FAIR
+        firstRowColumns.get(0).getText should be ("0")
+      }
+    }
   }
 
   test("effects of unpersist() / persist() should be reflected") {
@@ -233,7 +262,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("spark.ui.killEnabled should properly control kill button display") {
     def hasKillLink: Boolean = find(className("kill-link")).isDefined
-    def runSlowJob(sc: SparkContext) {
+    def runSlowJob(sc: SparkContext): Unit = {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }
 
@@ -316,10 +345,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
-          val mapId = 0
+          val mapId = 0L
+          val mapIndex = 0
           val reduceId = taskContext.partitionId()
           val message = "Simulated fetch failure"
-          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, message)
+          throw new FetchFailedException(
+            bmAddress, shuffleId, mapId, mapIndex, reduceId, message)
         } else {
           x
         }
@@ -680,34 +711,34 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       rdd.count()
 
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val stage0 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
+        val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
           "label=&quot;Stage 0&quot;;\n    subgraph "))
         assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
-          "0 [label=&quot;ParallelCollectionRDD [0]"))
+          "0 [labelType=&quot;html&quot; label=&quot;ParallelCollectionRDD [0]"))
         assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
-          "1 [label=&quot;MapPartitionsRDD [1]"))
+          "1 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [1]"))
         assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "2 [label=&quot;MapPartitionsRDD [2]"))
+          "2 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [2]"))
 
-        val stage1 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
+        val stage1 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=1&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
           "label=&quot;Stage 1&quot;;\n    subgraph "))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "3 [label=&quot;ShuffledRDD [3]"))
+          "3 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [3]"))
         assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
-          "4 [label=&quot;MapPartitionsRDD [4]"))
+          "4 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "5 [label=&quot;MapPartitionsRDD [5]"))
+          "5 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [5]"))
 
-        val stage2 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
+        val stage2 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=2&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
           "label=&quot;Stage 2&quot;;\n    subgraph "))
         assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "6 [label=&quot;ShuffledRDD [6]"))
+          "6 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
       }
     }
   }
@@ -750,6 +781,40 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         }
       } finally {
         f.cancel()
+      }
+    }
+  }
+
+  test("description for empty jobs") {
+    withSpark(newSparkContext()) { sc =>
+      sc.emptyRDD[Int].collect
+      val description = "This is my job"
+      sc.setJobDescription(description)
+      sc.emptyRDD[Int].collect
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        val descriptions = findAll(className("description-input")).toArray
+        descriptions(0).text should be (description)
+        descriptions(1).text should include ("collect")
+      }
+    }
+  }
+
+  test("Support disable event timeline") {
+    Seq(true, false).foreach { timelineEnabled =>
+      withSpark(newSparkContext(timelineEnabled = timelineEnabled)) { sc =>
+        sc.range(1, 3).collect()
+        eventually(timeout(10.seconds), interval(50.milliseconds)) {
+          goToUi(sc, "/jobs")
+          assert(findAll(className("expand-application-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/jobs/job/?id=0")
+          assert(findAll(className("expand-job-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/stages/stage/?id=0&attempt=0")
+          assert(findAll(className("expand-task-assignment-timeline")).nonEmpty === timelineEnabled)
+        }
       }
     }
   }

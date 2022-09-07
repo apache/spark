@@ -27,11 +27,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.Utils
 
 /**
  * Holds a user defined rule that can be used to inject columnar implementations of various
@@ -50,6 +51,13 @@ class ColumnarRule {
 }
 
 /**
+ * A trait that is used as a tag to indicate a transition from columns to rows. This allows plugins
+ * to replace the current [[ColumnarToRowExec]] with an optimized version and still have operations
+ * that walk a spark plan looking for this type of transition properly match it.
+ */
+trait ColumnarToRowTransition extends UnaryExecNode
+
+/**
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -57,8 +65,9 @@ class ColumnarRule {
  * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
-case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
-  assert(child.supportsColumnar)
+case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
+  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
+  assert(Utils.isInRunningSparkTask || child.supportsColumnar)
 
   override def output: Seq[Attribute] = child.output
 
@@ -195,6 +204,9 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     Seq(child.executeColumnar().asInstanceOf[RDD[InternalRow]]) // Hack because of type erasure
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarToRowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -246,23 +258,23 @@ private object RowToColumnConverter {
 
   private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter = {
     val core = dataType match {
+      case BinaryType => BinaryConverter
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
-      case IntegerType | DateType => IntConverter
+      case IntegerType | DateType | _: YearMonthIntervalType => IntConverter
       case FloatType => FloatConverter
-      case LongType | TimestampType => LongConverter
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
       case CalendarIntervalType => CalendarConverter
-      case at: ArrayType => new ArrayConverter(getConverterForType(at.elementType, nullable))
+      case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
       case dt: DecimalType => new DecimalConverter(dt)
-      case mt: MapType => new MapConverter(getConverterForType(mt.keyType, nullable),
-        getConverterForType(mt.valueType, nullable))
-      case unknown => throw new UnsupportedOperationException(
-        s"Type $unknown not supported")
+      case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
+        getConverterForType(mt.valueType, mt.valueContainsNull))
+      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown.toString)
     }
 
     if (nullable) {
@@ -273,6 +285,13 @@ private object RowToColumnConverter {
       }
     } else {
       core
+    }
+  }
+
+  private object BinaryConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val bytes = row.getBinary(column)
+      cv.appendByteArray(bytes, 0, bytes.length)
     }
   }
 
@@ -323,7 +342,8 @@ private object RowToColumnConverter {
       val c = row.getInterval(column)
       cv.appendStruct(false)
       cv.getChild(0).appendInt(c.months)
-      cv.getChild(1).appendLong(c.microseconds)
+      cv.getChild(1).appendInt(c.days)
+      cv.getChild(2).appendLong(c.microseconds)
     }
   }
 
@@ -343,7 +363,7 @@ private object RowToColumnConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
       cv.appendStruct(false)
       val data = row.getStruct(column, childConverters.length)
-      for (i <- 0 until childConverters.length) {
+      for (i <- childConverters.indices) {
         childConverters(i).append(data, i, cv.getChild(i))
       }
     }
@@ -385,6 +405,13 @@ private object RowToColumnConverter {
 }
 
 /**
+ * A trait that is used as a tag to indicate a transition from rows to columns. This allows plugins
+ * to replace the current [[RowToColumnarExec]] with an optimized version and still have operations
+ * that walk a spark plan looking for this type of transition properly match it.
+ */
+trait RowToColumnarTransition extends UnaryExecNode
+
+/**
  * Provides a common executor to translate an [[RDD]] of [[InternalRow]] into an [[RDD]] of
  * [[ColumnarBatch]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -401,7 +428,7 @@ private object RowToColumnConverter {
  * populate with [[RowToColumnConverter]], but the performance requirements are different and it
  * would only be to reduce code.
  */
-case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
+case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -424,7 +451,7 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val enableOffHeapColumnVector = sqlContext.conf.offHeapColumnVectorEnabled
+    val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
     val numInputRows = longMetric("numInputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
@@ -454,6 +481,7 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
 
           override def next(): ColumnarBatch = {
             cb.setNumRows(0)
+            vectors.foreach(_.reset())
             var rowCount = 0
             while (rowCount < numRows && rowIterator.hasNext) {
               val row = rowIterator.next()
@@ -471,13 +499,21 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): RowToColumnarExec =
+    copy(child = newChild)
 }
 
 /**
  * Apply any user defined [[ColumnarRule]]s and find the correct place to insert transitions
  * to/from columnar formatted data.
+ *
+ * @param columnarRules custom columnar rules
+ * @param outputsColumnar whether or not the produced plan should output columnar format.
  */
-case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: Seq[ColumnarRule])
+case class ApplyColumnarRulesAndInsertTransitions(
+    columnarRules: Seq[ColumnarRule],
+    outputsColumnar: Boolean)
   extends Rule[SparkPlan] {
 
   /**
@@ -487,32 +523,36 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan))
-    } else {
+      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
+    } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan.withNewChildren(plan.children.map(insertRowToColumnar))
+    } else {
+      plan
     }
   }
 
   /**
    * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
    */
-  private def insertTransitions(plan: SparkPlan): SparkPlan = {
-    if (plan.supportsColumnar) {
-      // The tree feels kind of backwards
-      // This is the end of the columnar processing so go back to rows
+  private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
+    if (outputsColumnar) {
+      insertRowToColumnar(plan)
+    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
+      // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
     } else {
-      plan.withNewChildren(plan.children.map(insertTransitions))
+      plan
     }
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
-    columnarRules.foreach((r : ColumnarRule) =>
-      preInsertPlan = r.preColumnarTransitions(preInsertPlan))
-    var postInsertPlan = insertTransitions(preInsertPlan)
-    columnarRules.reverse.foreach((r : ColumnarRule) =>
-      postInsertPlan = r.postColumnarTransitions(postInsertPlan))
+    columnarRules.foreach(r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
+    var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
+    columnarRules.reverse.foreach(r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
   }
 }

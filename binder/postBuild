@@ -1,0 +1,44 @@
+#!/bin/bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# This file is used for Binder integration to install PySpark available in
+# Jupyter notebook.
+
+VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
+TAG=$(git describe --tags --exact-match 2>/dev/null)
+
+# If a commit is tagged, exactly specified version of pyspark should be installed to avoid
+# a kind of accident that an old version of pyspark is installed in the live notebook environment.
+# See SPARK-37170
+if [ -n "$TAG" ]; then
+  SPECIFIER="=="
+else
+  SPECIFIER="<="
+fi
+
+pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
+
+# Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
+echo "export PYARROW_IGNORE_TIMEZONE=1" >> ~/.profile
+
+# Surpress warnings from Spark jobs, and UI progress bar.
+mkdir -p ~/.ipython/profile_default/startup
+echo """from pyspark.sql import SparkSession
+SparkSession.builder.config('spark.ui.showConsoleProgress', 'false').getOrCreate().sparkContext.setLogLevel('FATAL')
+""" > ~/.ipython/profile_default/startup/00-init.py

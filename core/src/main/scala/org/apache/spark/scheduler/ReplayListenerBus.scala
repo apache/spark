@@ -19,11 +19,10 @@ package org.apache.spark.scheduler
 
 import java.io.{EOFException, InputStream, IOException}
 
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -48,13 +47,15 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    * @param eventsFilter Filter function to select JSON event strings in the log data stream that
    *        should be parsed and replayed. When not specified, all event strings in the log data
    *        are parsed and replayed.
+   * @return whether it succeeds to replay the log file entirely without error including
+   *         HaltReplayException. false otherwise.
    */
   def replay(
       logData: InputStream,
       sourceName: String,
       maybeTruncated: Boolean = false,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
-    val lines = Source.fromInputStream(logData).getLines()
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
+    val lines = Source.fromInputStream(logData)(Codec.UTF8).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
 
@@ -66,7 +67,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       lines: Iterator[String],
       sourceName: String,
       maybeTruncated: Boolean,
-      eventsFilter: ReplayEventsFilter): Unit = {
+      eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
     var lineNumber: Int = 0
     val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
@@ -84,7 +85,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
           currentLine = entry._1
           lineNumber = entry._2 + 1
 
-          postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+          postToAll(JsonProtocol.sparkEventFromJson(currentLine))
         } catch {
           case e: ClassNotFoundException =>
             // Ignore unknown events, parse through the event log file.
@@ -114,15 +115,18 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             }
         }
       }
+      true
     } catch {
       case e: HaltReplayException =>
         // Just stop replay.
-      case _: EOFException if maybeTruncated =>
+        false
+      case _: EOFException if maybeTruncated => false
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
         logError(s"Malformed line #$lineNumber: $currentLine\n")
+        false
     }
   }
 

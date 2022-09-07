@@ -26,6 +26,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
 /**
@@ -33,6 +34,7 @@ import org.apache.spark.util.Utils
  * with #spark.shuffle.service.db.enabled = true or false
  * Note that failures in this suite may arise when#spark.shuffle.service.db.enabled = false
  */
+@ExtendedLevelDBTest
 class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   val sortBlock0 = "Hello!"
   val sortBlock1 = "World!"
@@ -46,7 +48,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   var blockHandler: ExternalBlockHandler = _
   var blockResolver: ExternalShuffleBlockResolver = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     sparkConf = new SparkConf()
     sparkConf.set("spark.shuffle.service.enabled", "true")
@@ -63,7 +65,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     registerExecutor()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       dataContext.cleanup()
     } finally {

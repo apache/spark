@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.{joins, SparkPlan}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -31,23 +32,28 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
  * 2. Transforms [[Join]] which has one child relation already planned and executed as a
  *    [[BroadcastQueryStageExec]]. This is to prevent reversing a broadcast stage into a shuffle
  *    stage in case of the larger join child relation finishes before the smaller relation. Note
- *    that this rule needs to applied before regular join strategies.
+ *    that this rule needs to be applied before regular join strategies.
  */
-object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
+object LogicalQueryStageStrategy extends Strategy {
 
   private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, physicalPlan)
-        if BroadcastQueryStageExec.isBroadcastQueryStageExec(physicalPlan) =>
-      true
+    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => true
     case _ => false
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint)
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
+          left, right, hint)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
       Seq(BroadcastHashJoinExec(
-        leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+        leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
+        planLater(right)))
+
+    case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+        if isBroadcastStage(j.right) =>
+      Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+        None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>

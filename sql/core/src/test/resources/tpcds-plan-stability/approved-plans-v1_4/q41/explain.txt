@@ -1,0 +1,121 @@
+== Physical Plan ==
+TakeOrderedAndProject (20)
++- * HashAggregate (19)
+   +- Exchange (18)
+      +- * HashAggregate (17)
+         +- * Project (16)
+            +- * BroadcastHashJoin Inner BuildRight (15)
+               :- * Project (4)
+               :  +- * Filter (3)
+               :     +- * ColumnarToRow (2)
+               :        +- Scan parquet spark_catalog.default.item (1)
+               +- BroadcastExchange (14)
+                  +- * Project (13)
+                     +- * Filter (12)
+                        +- * HashAggregate (11)
+                           +- Exchange (10)
+                              +- * HashAggregate (9)
+                                 +- * Project (8)
+                                    +- * Filter (7)
+                                       +- * ColumnarToRow (6)
+                                          +- Scan parquet spark_catalog.default.item (5)
+
+
+(1) Scan parquet spark_catalog.default.item
+Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_manufact_id), GreaterThanOrEqual(i_manufact_id,738), LessThanOrEqual(i_manufact_id,778), IsNotNull(i_manufact)]
+ReadSchema: struct<i_manufact_id:int,i_manufact:string,i_product_name:string>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+
+(3) Filter [codegen id : 3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+Condition : (((isnotnull(i_manufact_id#1) AND (i_manufact_id#1 >= 738)) AND (i_manufact_id#1 <= 778)) AND isnotnull(i_manufact#2))
+
+(4) Project [codegen id : 3]
+Output [2]: [i_manufact#2, i_product_name#3]
+Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
+
+(5) Scan parquet spark_catalog.default.item
+Output [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [Or(Or(And(EqualTo(i_category,Women                                             ),Or(And(And(Or(EqualTo(i_color,powder              ),EqualTo(i_color,khaki               )),Or(EqualTo(i_units,Ounce     ),EqualTo(i_units,Oz        ))),Or(EqualTo(i_size,medium              ),EqualTo(i_size,extra large         ))),And(And(Or(EqualTo(i_color,brown               ),EqualTo(i_color,honeydew            )),Or(EqualTo(i_units,Bunch     ),EqualTo(i_units,Ton       ))),Or(EqualTo(i_size,N/A                 ),EqualTo(i_size,small               ))))),And(EqualTo(i_category,Men                                               ),Or(And(And(Or(EqualTo(i_color,floral              ),EqualTo(i_color,deep                )),Or(EqualTo(i_units,N/A       ),EqualTo(i_units,Dozen     ))),Or(EqualTo(i_size,petite              ),EqualTo(i_size,large               ))),And(And(Or(EqualTo(i_color,light               ),EqualTo(i_color,cornflower          )),Or(EqualTo(i_units,Box       ),EqualTo(i_units,Pound     ))),Or(EqualTo(i_size,medium              ),EqualTo(i_size,extra large         )))))),Or(And(EqualTo(i_category,Women                                             ),Or(And(And(Or(EqualTo(i_color,midnight            ),EqualTo(i_color,snow                )),Or(EqualTo(i_units,Pallet    ),EqualTo(i_units,Gross     ))),Or(EqualTo(i_size,medium              ),EqualTo(i_size,extra large         ))),And(And(Or(EqualTo(i_color,cyan                ),EqualTo(i_color,papaya              )),Or(EqualTo(i_units,Cup       ),EqualTo(i_units,Dram      ))),Or(EqualTo(i_size,N/A                 ),EqualTo(i_size,small               ))))),And(EqualTo(i_category,Men                                               ),Or(And(And(Or(EqualTo(i_color,orange              ),EqualTo(i_color,frosted             )),Or(EqualTo(i_units,Each      ),EqualTo(i_units,Tbl       ))),Or(EqualTo(i_size,petite              ),EqualTo(i_size,large               ))),And(And(Or(EqualTo(i_color,forest              ),EqualTo(i_color,ghost               )),Or(EqualTo(i_units,Lb        ),EqualTo(i_units,Bundle    ))),Or(EqualTo(i_size,medium              ),EqualTo(i_size,extra large         ))))))), IsNotNull(i_manufact)]
+ReadSchema: struct<i_category:string,i_manufact:string,i_size:string,i_color:string,i_units:string>
+
+(6) ColumnarToRow [codegen id : 1]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+
+(7) Filter [codegen id : 1]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+Condition : (((((i_category#4 = Women                                             ) AND (((((i_color#7 = powder              ) OR (i_color#7 = khaki               )) AND ((i_units#8 = Ounce     ) OR (i_units#8 = Oz        ))) AND ((i_size#6 = medium              ) OR (i_size#6 = extra large         ))) OR ((((i_color#7 = brown               ) OR (i_color#7 = honeydew            )) AND ((i_units#8 = Bunch     ) OR (i_units#8 = Ton       ))) AND ((i_size#6 = N/A                 ) OR (i_size#6 = small               ))))) OR ((i_category#4 = Men                                               ) AND (((((i_color#7 = floral              ) OR (i_color#7 = deep                )) AND ((i_units#8 = N/A       ) OR (i_units#8 = Dozen     ))) AND ((i_size#6 = petite              ) OR (i_size#6 = large               ))) OR ((((i_color#7 = light               ) OR (i_color#7 = cornflower          )) AND ((i_units#8 = Box       ) OR (i_units#8 = Pound     ))) AND ((i_size#6 = medium              ) OR (i_size#6 = extra large         )))))) OR (((i_category#4 = Women                                             ) AND (((((i_color#7 = midnight            ) OR (i_color#7 = snow                )) AND ((i_units#8 = Pallet    ) OR (i_units#8 = Gross     ))) AND ((i_size#6 = medium              ) OR (i_size#6 = extra large         ))) OR ((((i_color#7 = cyan                ) OR (i_color#7 = papaya              )) AND ((i_units#8 = Cup       ) OR (i_units#8 = Dram      ))) AND ((i_size#6 = N/A                 ) OR (i_size#6 = small               ))))) OR ((i_category#4 = Men                                               ) AND (((((i_color#7 = orange              ) OR (i_color#7 = frosted             )) AND ((i_units#8 = Each      ) OR (i_units#8 = Tbl       ))) AND ((i_size#6 = petite              ) OR (i_size#6 = large               ))) OR ((((i_color#7 = forest              ) OR (i_color#7 = ghost               )) AND ((i_units#8 = Lb        ) OR (i_units#8 = Bundle    ))) AND ((i_size#6 = medium              ) OR (i_size#6 = extra large         ))))))) AND isnotnull(i_manufact#5))
+
+(8) Project [codegen id : 1]
+Output [1]: [i_manufact#5]
+Input [5]: [i_category#4, i_manufact#5, i_size#6, i_color#7, i_units#8]
+
+(9) HashAggregate [codegen id : 1]
+Input [1]: [i_manufact#5]
+Keys [1]: [i_manufact#5]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#9]
+Results [2]: [i_manufact#5, count#10]
+
+(10) Exchange
+Input [2]: [i_manufact#5, count#10]
+Arguments: hashpartitioning(i_manufact#5, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+
+(11) HashAggregate [codegen id : 2]
+Input [2]: [i_manufact#5, count#10]
+Keys [1]: [i_manufact#5]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#11]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#5]
+
+(12) Filter [codegen id : 2]
+Input [2]: [item_cnt#12, i_manufact#5]
+Condition : (item_cnt#12 > 0)
+
+(13) Project [codegen id : 2]
+Output [1]: [i_manufact#5]
+Input [2]: [item_cnt#12, i_manufact#5]
+
+(14) BroadcastExchange
+Input [1]: [i_manufact#5]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [plan_id=2]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [i_manufact#2]
+Right keys [1]: [i_manufact#5]
+Join type: Inner
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [1]: [i_product_name#3]
+Input [3]: [i_manufact#2, i_product_name#3, i_manufact#5]
+
+(17) HashAggregate [codegen id : 3]
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(18) Exchange
+Input [1]: [i_product_name#3]
+Arguments: hashpartitioning(i_product_name#3, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(19) HashAggregate [codegen id : 4]
+Input [1]: [i_product_name#3]
+Keys [1]: [i_product_name#3]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [i_product_name#3]
+
+(20) TakeOrderedAndProject
+Input [1]: [i_product_name#3]
+Arguments: 100, [i_product_name#3 ASC NULLS FIRST], [i_product_name#3]
+

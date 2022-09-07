@@ -53,7 +53,7 @@ class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
     write(tmpRand, "1 6 4 5 2 7 8")
 
     // Get the logs. All log types other than "stderr" or "stdout" will be rejected
-    val getLog = PrivateMethod[(String, Long, Long, Long)]('getLog)
+    val getLog = PrivateMethod[(String, Long, Long, Long)](Symbol("getLog"))
     val (stdout, _, _, _) =
       logPage invokePrivate getLog(workDir.getAbsolutePath, "stdout", None, 100)
     val (stderr, _, _, _) =

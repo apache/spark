@@ -63,7 +63,7 @@ public class JavaVectorSlicerSuite extends SharedSparkSession {
 
     for (Row r : output.select("userFeatures", "features").takeAsList(2)) {
       Vector features = r.getAs(1);
-      Assert.assertEquals(features.size(), 2);
+      Assert.assertEquals(2, features.size());
     }
   }
 }

@@ -65,6 +65,14 @@ object HiveSerDe {
         outputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"),
         serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
 
+  // `HiveSerDe` in `serdeMap` should be distinct.
+  val serdeInverseMap: Map[HiveSerDe, String] = serdeMap.flatMap {
+    case ("sequencefile", _) => None
+    case ("rcfile", _) => None
+    case ("textfile", serde) => Some((serde, "text"))
+    case pair => Some(pair.swap)
+  }
+
   /**
    * Get the Hive SerDe information from the data source abbreviation string or classname.
    *
@@ -87,6 +95,14 @@ object HiveSerDe {
 
     serdeMap.get(key)
   }
+
+  /**
+   * Get the Spark data source name from the Hive SerDe information.
+   *
+   * @param serde Hive SerDe information.
+   * @return Spark data source name associated with the specified Hive Serde.
+   */
+  def serdeToSource(serde: HiveSerDe): Option[String] = serdeInverseMap.get(serde)
 
   def getDefaultStorage(conf: SQLConf): CatalogStorageFormat = {
     // To respect hive-site.xml, it peeks Hadoop configuration from existing Spark session,

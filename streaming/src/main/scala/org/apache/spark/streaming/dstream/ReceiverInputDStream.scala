@@ -60,9 +60,9 @@ abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
   def getReceiver(): Receiver[T]
 
   // Nothing to start or stop as both taken care of by the ReceiverTracker.
-  def start() {}
+  def start(): Unit = {}
 
-  def stop() {}
+  def stop(): Unit = {}
 
   /**
    * Generates RDDs with blocks received by the receiver of this stream. */

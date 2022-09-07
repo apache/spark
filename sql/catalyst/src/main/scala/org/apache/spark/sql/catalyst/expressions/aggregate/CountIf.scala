@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, LongType}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal, NullIf, RuntimeReplaceableAggregate}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
 
 @ExpressionDescription(
   usage = """
@@ -32,24 +32,16 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
       > SELECT _FUNC_(col IS NULL) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
        1
   """,
+  group = "agg_funcs",
   since = "3.0.0")
-case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes {
-  override def prettyName: String = "count_if"
-
-  override def children: Seq[Expression] = Seq(predicate)
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = LongType
-
+case class CountIf(child: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with UnaryLike[Expression] {
+  override lazy val replacement: Expression = Count(new NullIf(child, Literal.FalseLiteral))
+  override def nodeName: String = "count_if"
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
-    case BooleanType =>
-      TypeCheckResult.TypeCheckSuccess
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
-      )
-  }
+  override protected def withNewChildInternal(newChild: Expression): CountIf =
+    copy(child = newChild)
 }

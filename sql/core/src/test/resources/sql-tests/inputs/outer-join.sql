@@ -1,7 +1,14 @@
--- List of configuration the test suite is run against:
---SET spark.sql.autoBroadcastJoinThreshold=10485760
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+-- There are 2 dimensions we want to test
+--  1. run with broadcast hash join, sort merge join or shuffle hash join.
+--  2. run with whole-stage-codegen, operator codegen or no codegen.
+
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=10485760
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.forceApplyShuffledHashJoin=true
+
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
 -- SPARK-17099: Incorrect result when HAVING clause is added to group by query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
@@ -29,9 +36,6 @@ CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (97) as t1(int_col1)
 
 CREATE OR REPLACE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (0) as t2(int_col1);
 
--- Set the cross join enabled flag for the LEFT JOIN test since there's no join condition.
--- Ultimately the join should be optimized away.
-set spark.sql.crossJoin.enabled = true;
 SELECT *
 FROM (
 SELECT
@@ -39,6 +43,3 @@ SELECT
     FROM t1
     LEFT JOIN t2 ON false
 ) t where (t.int_col) is not null;
-set spark.sql.crossJoin.enabled = false;
-
-

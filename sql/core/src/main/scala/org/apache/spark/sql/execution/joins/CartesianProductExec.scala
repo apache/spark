@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark._
 import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, Predicate, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 
@@ -35,7 +35,6 @@ import org.apache.spark.util.CompletionIterator
 class UnsafeCartesianRDD(
     left : RDD[UnsafeRow],
     right : RDD[UnsafeRow],
-    numFieldsOfRight: Int,
     inMemoryBufferThreshold: Int,
     spillThreshold: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
@@ -61,22 +60,16 @@ class UnsafeCartesianRDD(
 case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryExecNode {
+    condition: Option[Expression]) extends BaseJoinExec {
+
+  override def joinType: JoinType = Inner
+  override def leftKeys: Seq[Expression] = Nil
+  override def rightKeys: Seq[Expression] = Nil
+
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
-
-  override def verboseStringWithOperatorId(): String = {
-    val joinCondStr = if (condition.isDefined) {
-      s"${condition.get}"
-    } else "None"
-
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |Join condition: ${joinCondStr}
-     """.stripMargin
-  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -87,13 +80,12 @@ case class CartesianProductExec(
     val pair = new UnsafeCartesianRDD(
       leftResults,
       rightResults,
-      right.output.size,
-      sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
-      sqlContext.conf.cartesianProductExecBufferSpillThreshold)
+      conf.cartesianProductExecBufferInMemoryThreshold,
+      conf.cartesianProductExecBufferSpillThreshold)
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
-        val boundCondition = newPredicate(condition.get, left.output ++ right.output)
+        val boundCondition = Predicate.create(condition.get, left.output ++ right.output)
         boundCondition.initialize(index)
         val joined = new JoinedRow
 
@@ -109,4 +101,8 @@ case class CartesianProductExec(
       }
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): CartesianProductExec =
+    copy(left = newLeft, right = newRight)
 }

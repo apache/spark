@@ -23,6 +23,7 @@ import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -147,9 +148,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
       count($"value"))
     val maxKey = nullableData.map(_._1).filter(_ != null).max
-    val countKey = nullableData.map(_._1).filter(_ != null).size
+    val countKey = nullableData.map(_._1).count(_ != null)
     val maxValue = nullableData.map(_._2).filter(_ != null).max
-    val countValue = nullableData.map(_._2).filter(_ != null).size
+    val countValue = nullableData.map(_._2).count(_ != null)
     val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
     checkAnswer(query, expected)
   }
@@ -232,8 +233,8 @@ object TypedImperativeAggregateSuite {
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
-
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
 
     override def createAggregationBuffer(): MaxValue = {
       // Returns Int.MinValue if all inputs are null
@@ -270,8 +271,6 @@ object TypedImperativeAggregateSuite {
 
     override lazy val deterministic: Boolean = true
 
-    override def children: Seq[Expression] = Seq(child)
-
     override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
 
     override def dataType: DataType = IntegerType
@@ -297,6 +296,9 @@ object TypedImperativeAggregateSuite {
       val value = stream.readInt()
       new MaxValue(value, isValueSet)
     }
+
+    override protected def withNewChildInternal(newChild: Expression): TypedMax =
+      copy(child = newChild)
   }
 
   private class MaxValue(var value: Int, var isValueSet: Boolean = false)

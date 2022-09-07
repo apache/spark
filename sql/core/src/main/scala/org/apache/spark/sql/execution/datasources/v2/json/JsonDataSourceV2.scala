@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.json
 
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
-import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -31,14 +31,16 @@ class JsonDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    JsonTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    JsonTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    JsonTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    JsonTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }
 

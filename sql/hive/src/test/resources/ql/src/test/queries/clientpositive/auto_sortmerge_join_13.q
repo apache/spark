@@ -19,7 +19,7 @@ set hive.optimize.bucketmapjoin = true;
 set hive.optimize.bucketmapjoin.sortedmerge = true;
 set hive.auto.convert.join=true;
 
--- A SMB join followed by a mutli-insert
+-- A SMB join followed by a multi-insert
 explain 
 from (
   SELECT a.key key1, a.value value1, b.key key2, b.value value2 
@@ -41,7 +41,7 @@ select * from dest2 order by k1, k2;
 set hive.auto.convert.join.noconditionaltask=true;
 set hive.auto.convert.join.noconditionaltask.size=200;
 
--- A SMB join followed by a mutli-insert
+-- A SMB join followed by a multi-insert
 explain 
 from (
   SELECT a.key key1, a.value value1, b.key key2, b.value value2 
@@ -61,7 +61,7 @@ select * from dest1 order by k1, k2;
 select * from dest2 order by k1, k2;
 
 set hive.auto.convert.sortmerge.join.to.mapjoin=true;
--- A SMB join followed by a mutli-insert
+-- A SMB join followed by a multi-insert
 explain 
 from (
   SELECT a.key key1, a.value value1, b.key key2, b.value value2 

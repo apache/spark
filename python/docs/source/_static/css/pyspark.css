@@ -1,0 +1,94 @@
+/*
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements.  See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ */
+
+/* PySpark style CSS overwrite */
+
+/* Lato font (from its parent) does not make any difference when it's bold. Defaults to 'Source Sans Pro' */
+body {
+    font-family:"Source Sans Pro",sans-serif!important;
+}
+
+h1,h2 {
+    color:#1B5162!important;
+}
+
+h3 {
+    color: #555555
+}
+
+/* Top menu */
+#navbar-main {
+    background: #1B5162!important;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.11);
+}
+
+#navbar-main-elements li.nav-item a {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+#navbar-main-elements li.active a {
+    font-weight: 600;
+    color: #FFFFFF!important;
+}
+
+.col-9 {
+    flex: 0 0 80%;
+    max-width: 80%;
+}
+
+/* Left panel size */
+@media (min-width: 768px) {
+    .col-md-3 {
+        flex: 0 0 20%;
+        max-width: 20%;
+    }
+}
+
+/* Top menu right button */
+.navbar-toggler {
+    color:rgba(255,255,255,.5)!important;
+    border-color:rgba(255,255,255,.5)!important;
+}
+
+.navbar-toggler-icon {
+    background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath stroke='rgba(255,255,255,.5)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E")!important;
+}
+
+/* Left bar list colors */
+.bd-sidebar .nav>.active>a {
+    color: #1B5162!important;
+}
+
+.bd-sidebar .nav>li>a:hover {
+    color: #1B5162!important;
+}
+
+.bd-sidebar .nav>.active:hover>a,.bd-sidebar .nav>.active>a {
+    color: #1B5162!important;
+}
+
+u.bd-sidebar .nav>li>ul>.active:hover>a,.bd-sidebar .nav>li>ul>.active>a {
+    color: #1B5162!important;
+}
+
+/* Right bar list colors */
+.toc-entry>.nav-link.active {
+    color: #1B5162!important;
+    border-left: 2px solid #1B5162!important;
+}
+

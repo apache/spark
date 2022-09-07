@@ -24,21 +24,26 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
  * The hint error handler that logs warnings for each hint error.
  */
 object HintErrorLogger extends HintErrorHandler with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def hintNotRecognized(name: String, parameters: Seq[Any]): Unit = {
     logWarning(s"Unrecognized hint: ${hintToPrettyString(name, parameters)}")
   }
 
   override def hintRelationsNotFound(
-      name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit = {
-    invalidRelations.foreach { n =>
-      logWarning(s"Count not find relation '$n' specified in hint " +
+      name: String, parameters: Seq[Any], invalidRelations: Set[Seq[String]]): Unit = {
+    invalidRelations.foreach { ident =>
+      logWarning(s"Count not find relation '${ident.quoted}' specified in hint " +
         s"'${hintToPrettyString(name, parameters)}'.")
     }
   }
 
   override def joinNotFoundForJoinHint(hint: HintInfo): Unit = {
     logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
+  }
+
+  override def joinHintNotSupported(hint: HintInfo, reason: String): Unit = {
+    logWarning(s"Hint $hint is not supported in the query: $reason.")
   }
 
   override def hintOverridden(hint: HintInfo): Unit = {

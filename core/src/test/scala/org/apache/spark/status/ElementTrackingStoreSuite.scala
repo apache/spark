@@ -20,8 +20,8 @@ package org.apache.spark.status
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.mockito.Mockito._
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Status._
@@ -35,8 +35,8 @@ class ElementTrackingStoreSuite extends SparkFunSuite with Eventually {
     val tracking = new ElementTrackingStore(store, new SparkConf()
       .set(ASYNC_TRACKING_ENABLED, true))
 
-    var done = new AtomicBoolean(false)
-    var type1 = new AtomicInteger(0)
+    val done = new AtomicBoolean(false)
+    val type1 = new AtomicInteger(0)
     var queued0: WriteQueueResult = null
     var queued1: WriteQueueResult = null
     var queued2: WriteQueueResult = null

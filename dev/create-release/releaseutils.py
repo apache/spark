@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,8 @@ import sys
 from subprocess import Popen, PIPE
 
 try:
-    from jira.client import JIRA
+    from jira.client import JIRA  # noqa: F401
+
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -31,26 +32,17 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
-    from github import Github
+    from github import Github  # noqa: F401
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")
     print("Install using 'sudo pip install PyGithub'")
     sys.exit(-1)
 
-try:
-    import unidecode
-except ImportError:
-    print("This tool requires the unidecode library to decode obscure github usernames")
-    print("Install using 'sudo pip install unidecode'")
-    sys.exit(-1)
-
-if sys.version < '3':
-    input = raw_input  # noqa
 
 # Contributors list file name
 contributors_file_name = "contributors.txt"
@@ -66,11 +58,11 @@ def yesOrNoPrompt(msg):
 
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd):
-    return Popen(cmd, stdout=PIPE).communicate()[0]
+    return Popen(cmd, stdout=PIPE).communicate()[0].decode("utf8")
 
 
 def run_cmd_error(cmd):
-    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1]
+    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1].decode("utf8")
 
 
 def get_date(commit_hash):
@@ -112,7 +104,7 @@ class Commit:
 # Under the hood, this runs a `git log` on that tag and parses the fields
 # from the command output to construct a list of Commit objects. Note that
 # because certain fields reside in the commit description and cannot be parsed
-# through the Github API itself, we need to do some intelligent regex parsing
+# through the GitHub API itself, we need to do some intelligent regex parsing
 # to extract those fields.
 #
 # This is written using Git 1.8.5.
@@ -120,11 +112,16 @@ def get_commits(tag):
     commit_start_marker = "|=== COMMIT START MARKER ===|"
     commit_end_marker = "|=== COMMIT END MARKER ===|"
     field_end_marker = "|=== COMMIT FIELD END MARKER ===|"
-    log_format =\
-        commit_start_marker + "%h" +\
-        field_end_marker + "%an" +\
-        field_end_marker + "%s" +\
-        commit_end_marker + "%b"
+    log_format = (
+        commit_start_marker
+        + "%h"
+        + field_end_marker
+        + "%an"
+        + field_end_marker
+        + "%s"
+        + commit_end_marker
+        + "%b"
+    )
     output = run_cmd(["git", "log", "--quiet", "--pretty=format:" + log_format, tag])
     commits = []
     raw_commits = [c for c in output.split(commit_start_marker) if c]
@@ -142,7 +139,7 @@ def get_commits(tag):
             sys.exit("Unexpected format in commit: %s" % commit_digest)
         [_hash, author, title] = commit_digest.split(field_end_marker)
         # The PR number and github username is in the commit message
-        # itself and cannot be accessed through any Github API
+        # itself and cannot be accessed through any GitHub API
         pr_number = None
         match = re.search("Closes #([0-9]+) from ([^/\\s]+)/", commit_body)
         if match:
@@ -151,15 +148,11 @@ def get_commits(tag):
             # username so we can translate it properly later
             if not is_valid_author(author):
                 author = github_username
-        # Guard against special characters
-        try:               # Python 2
-            author = unicode(author, "UTF-8")
-        except NameError:  # Python 3
-            author = str(author)
-        author = unidecode.unidecode(author).strip()
+        author = author.strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
     return commits
+
 
 # Maintain a mapping for translating issue types to contributions in the release notes
 # This serves an additional function of warning the user against unknown issue types
@@ -175,7 +168,7 @@ known_issue_types = {
     "documentation": "documentation",
     "test": "test",
     "task": "improvement",
-    "sub-task": "improvement"
+    "sub-task": "improvement",
 }
 
 # Maintain a mapping for translating component names when creating the release notes
@@ -206,7 +199,7 @@ known_components = {
     "streaming": "Streaming",
     "web ui": "Web UI",
     "windows": "Windows",
-    "yarn": "YARN"
+    "yarn": "YARN",
 }
 
 
@@ -217,7 +210,7 @@ def translate_issue_type(issue_type, issue_id, warnings):
     if issue_type in known_issue_types:
         return known_issue_types[issue_type]
     else:
-        warnings.append("Unknown issue type \"%s\" (see %s)" % (issue_type, issue_id))
+        warnings.append('Unknown issue type "%s" (see %s)' % (issue_type, issue_id))
         return issue_type
 
 
@@ -228,7 +221,7 @@ def translate_component(component, commit_hash, warnings):
     if component in known_components:
         return known_components[component]
     else:
-        warnings.append("Unknown component \"%s\" (see %s)" % (component, commit_hash))
+        warnings.append('Unknown component "%s" (see %s)' % (component, commit_hash))
         return component
 
 
@@ -236,8 +229,9 @@ def translate_component(component, commit_hash, warnings):
 # The returned components are already filtered and translated
 def find_components(commit, commit_hash):
     components = re.findall(r"\[\w*\]", commit.lower())
-    components = [translate_component(c, commit_hash, [])
-                  for c in components if c in known_components]
+    components = [
+        translate_component(c, commit_hash, []) for c in components if c in known_components
+    ]
     return components
 
 
@@ -257,7 +251,7 @@ def nice_join(str_list):
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
 
 
-# Return the full name of the specified user on Github
+# Return the full name of the specified user on GitHub
 # If the user doesn't exist, return None
 def get_github_name(author, github_client):
     if github_client:

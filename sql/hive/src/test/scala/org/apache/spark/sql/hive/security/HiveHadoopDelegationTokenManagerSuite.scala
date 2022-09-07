@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.security
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.Assertions._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -51,8 +52,8 @@ class HiveHadoopDelegationTokenManagerSuite extends SparkFunSuite {
           throw new ClassNotFoundException(name)
         }
 
-        val prefixBlacklist = Seq("java", "scala", "com.sun.", "sun.")
-        if (prefixBlacklist.exists(name.startsWith(_))) {
+        val prefixExcludeList = Seq("java", "scala", "com.sun.", "sun.", "jdk.")
+        if (prefixExcludeList.exists(name.startsWith(_))) {
           return currentLoader.loadClass(name)
         }
 

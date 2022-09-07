@@ -80,6 +80,12 @@ public final class MutableColumnarRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof StructType) {
+          row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
+        } else if (dt instanceof ArrayType) {
+          row.update(i, getArray(i).copy());
+        } else if (dt instanceof MapType) {
+          row.update(i, getMap(i).copy());
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -212,6 +218,8 @@ public final class MutableColumnarRow extends InternalRow {
         DecimalType t = (DecimalType) dt;
         Decimal d = Decimal.apply((BigDecimal) value, t.precision(), t.scale());
         setDecimal(ordinal, d, t.precision());
+      } else if (dt instanceof CalendarIntervalType) {
+        setInterval(ordinal, (CalendarInterval) value);
       } else {
         throw new UnsupportedOperationException("Datatype not supported " + dt);
       }
@@ -269,5 +277,11 @@ public final class MutableColumnarRow extends InternalRow {
   public void setDecimal(int ordinal, Decimal value, int precision) {
     columns[ordinal].putNotNull(rowId);
     columns[ordinal].putDecimal(rowId, value, precision);
+  }
+
+  @Override
+  public void setInterval(int ordinal, CalendarInterval value) {
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putInterval(rowId, value);
   }
 }

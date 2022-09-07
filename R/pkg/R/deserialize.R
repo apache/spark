@@ -57,7 +57,7 @@ readTypedObject <- function(con, type) {
     "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop(paste("Unsupported type for deserialization", type)))
+    stop("Unsupported type for deserialization ", type))
 }
 
 readStringData <- function(con, len) {
@@ -232,29 +232,14 @@ readMultipleObjectsWithKeys <- function(inputCon) {
 }
 
 readDeserializeInArrow <- function(inputCon) {
-  # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
-  requireNamespace1 <- requireNamespace
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    RecordBatchStreamReader <- get(
-      "RecordBatchStreamReader", envir = asNamespace("arrow"), inherits = FALSE)
-    # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
-    useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
-
-
+  if (requireNamespace("arrow", quietly = TRUE)) {
     # Currently, there looks no way to read batch by batch by socket connection in R side,
     # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
     # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
-    batches <- RecordBatchStreamReader(arrowData)$batches()
-
-    if (useAsTibble) {
-      as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
-      # Read all groupped batches. Tibble -> data.frame is cheap.
-      lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
-    } else {
-      lapply(batches, function(batch) as.data.frame(batch))
-    }
+    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
+    lapply(batches, function(batch) as.data.frame(batch))
   } else {
     stop("'arrow' package should be installed.")
   }
@@ -265,7 +250,7 @@ readDeserializeWithKeysInArrow <- function(inputCon) {
 
   keys <- readMultipleObjects(inputCon)
 
-  # Read keys to map with each groupped batch later.
+  # Read keys to map with each grouped batch later.
   list(keys = keys, data = data)
 }
 

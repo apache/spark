@@ -18,11 +18,13 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
@@ -33,7 +35,12 @@ public class ExecutorShuffleInfo implements Encodable {
   public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
   public final int subDirsPerLocalDir;
-  /** Shuffle manager (SortShuffleManager) that the executor is using. */
+  /**
+   * Shuffle manager (SortShuffleManager) that the executor is using.
+   * If this string contains semicolon, it will also include the meta information
+   * for push based shuffle in JSON format. Example of the string with semicolon would be:
+   * SortShuffleManager:{"mergeDir": "mergeDirectory_1", "attemptId": 1}
+   */
   public final String shuffleManager;
 
   @JsonCreator
@@ -48,25 +55,25 @@ public class ExecutorShuffleInfo implements Encodable {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs);
+    return Objects.hash(subDirsPerLocalDir, shuffleManager) * 41 + Arrays.hashCode(localDirs);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("localDirs", Arrays.toString(localDirs))
-      .add("subDirsPerLocalDir", subDirsPerLocalDir)
-      .add("shuffleManager", shuffleManager)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("localDirs", Arrays.toString(localDirs))
+      .append("subDirsPerLocalDir", subDirsPerLocalDir)
+      .append("shuffleManager", shuffleManager)
       .toString();
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof ExecutorShuffleInfo) {
+    if (other instanceof ExecutorShuffleInfo) {
       ExecutorShuffleInfo o = (ExecutorShuffleInfo) other;
       return Arrays.equals(localDirs, o.localDirs)
-        && Objects.equal(subDirsPerLocalDir, o.subDirsPerLocalDir)
-        && Objects.equal(shuffleManager, o.shuffleManager);
+        && subDirsPerLocalDir == o.subDirsPerLocalDir
+        && Objects.equals(shuffleManager, o.shuffleManager);
     }
     return false;
   }

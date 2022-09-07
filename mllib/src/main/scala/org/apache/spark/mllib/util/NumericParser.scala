@@ -85,10 +85,10 @@ private[mllib] object NumericParser {
     while (parsing && tokenizer.hasMoreTokens()) {
       token = tokenizer.nextToken()
       if (token == "(") {
-        items.append(parseTuple(tokenizer))
+        items += parseTuple(tokenizer)
         allowComma = true
       } else if (token == "[") {
-        items.append(parseArray(tokenizer))
+        items += parseArray(tokenizer)
         allowComma = true
       } else if (token == ",") {
         if (allowComma) {
@@ -102,14 +102,14 @@ private[mllib] object NumericParser {
           // ignore whitespaces between delim chars, e.g. ", ["
       } else {
         // expecting a number
-        items.append(parseDouble(token))
+        items += parseDouble(token)
         allowComma = true
       }
     }
     if (parsing) {
       throw new SparkException(s"A tuple must end with ')'.")
     }
-    items
+    items.toSeq
   }
 
   private def parseDouble(s: String): Double = {

@@ -17,10 +17,14 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
-import java.nio.channels.FileChannel
+import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
+import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.nio.file.Files
+import java.util.zip.Checksum
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
@@ -62,7 +66,16 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     def manualClose(): Unit = {
-      super.close()
+      try {
+        super.close()
+      } catch {
+        // The output stream may have been closed when the task thread is interrupted, then we
+        // get IOException when flushing the buffered data. We should catch and log the exception
+        // to ensure the revertPartialWritesAndClose() function doesn't throw an exception.
+        case e: IOException =>
+          logError("Exception occurred while manually close the output stream to file "
+            + file + ", " + e.getMessage)
+      }
     }
   }
 
@@ -76,6 +89,11 @@ private[spark] class DiskBlockObjectWriter(
   private var initialized = false
   private var streamOpen = false
   private var hasBeenClosed = false
+
+  // checksum related
+  private var checksumEnabled = false
+  private var checksumOutputStream: MutableCheckedOutputStream = _
+  private var checksum: Checksum = _
 
   /**
    * Cursors used to represent positions in the file.
@@ -101,12 +119,35 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
+  /**
+   * Keep track the number of written records committed.
+   */
+  private var numRecordsCommitted = 0L
+
+  /**
+   * Set the checksum that the checksumOutputStream should use
+   */
+  def setChecksum(checksum: Checksum): Unit = {
+    if (checksumOutputStream == null) {
+      this.checksumEnabled = true
+      this.checksum = checksum
+    } else {
+      checksumOutputStream.setChecksum(checksum)
+    }
+  }
+
   private def initialize(): Unit = {
     fos = new FileOutputStream(file, true)
     channel = fos.getChannel()
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
+    if (checksumEnabled) {
+      assert(this.checksum != null, "Checksum is not set")
+      checksumOutputStream = new MutableCheckedOutputStream(ts)
+      checksumOutputStream.setChecksum(checksum)
+    }
     class ManualCloseBufferedOutputStream
-      extends BufferedOutputStream(ts, bufferSize) with ManualCloseOutputStream
+      extends BufferedOutputStream(if (checksumEnabled) checksumOutputStream else ts, bufferSize)
+        with ManualCloseOutputStream
     mcs = new ManualCloseBufferedOutputStream
   }
 
@@ -150,7 +191,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Commits any remaining partial writes and closes resources.
    */
-  override def close() {
+  override def close(): Unit = {
     if (initialized) {
       Utils.tryWithSafeFinally {
         commitAndGet()
@@ -188,6 +229,7 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
       reportedPosition = committedPosition
+      numRecordsCommitted += numRecordsWritten
       numRecordsWritten = 0
       fileSegment
     } else {
@@ -219,6 +261,12 @@ private[spark] class DiskBlockObjectWriter(
         truncateStream = new FileOutputStream(file, true)
         truncateStream.getChannel.truncate(committedPosition)
       } catch {
+        // ClosedByInterruptException is an excepted exception when kill task,
+        // don't log the exception stack trace to avoid confusing users.
+        // See: SPARK-28340
+        case ce: ClosedByInterruptException =>
+          logError("Exception occurred while reverting partial writes to file "
+            + file + ", " + ce.getMessage)
         case e: Exception =>
           logError("Uncaught exception while reverting partial writes to file " + file, e)
       } finally {
@@ -232,9 +280,28 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /**
+   * Reverts write metrics and delete the file held by current `DiskBlockObjectWriter`.
+   * Callers should invoke this function when there are runtime exceptions in file
+   * writing process and the file is no longer needed.
+   */
+  def closeAndDelete(): Unit = {
+    Utils.tryWithSafeFinally {
+      if (initialized) {
+        writeMetrics.decBytesWritten(reportedPosition)
+        writeMetrics.decRecordsWritten(numRecordsCommitted + numRecordsWritten)
+        closeResources()
+      }
+    } {
+      if (!Files.deleteIfExists(file.toPath)) {
+        logWarning(s"Error deleting $file")
+      }
+    }
+  }
+
+  /**
    * Writes a key-value pair.
    */
-  override def write(key: Any, value: Any) {
+  override def write(key: Any, value: Any): Unit = {
     if (!streamOpen) {
       open()
     }
@@ -244,7 +311,7 @@ private[spark] class DiskBlockObjectWriter(
     recordWritten()
   }
 
-  override def write(b: Int): Unit = throw new UnsupportedOperationException()
+  override def write(b: Int): Unit = throw SparkCoreErrors.unsupportedOperationError()
 
   override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
     if (!streamOpen) {
@@ -270,14 +337,14 @@ private[spark] class DiskBlockObjectWriter(
    * Report the number of bytes written in this writer's shuffle write metrics.
    * Note that this is only valid before the underlying streams are closed.
    */
-  private def updateBytesWritten() {
+  private def updateBytesWritten(): Unit = {
     val pos = channel.position()
     writeMetrics.incBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
 
   // For testing
-  private[spark] override def flush() {
+  override def flush(): Unit = {
     objOut.flush()
     bs.flush()
   }

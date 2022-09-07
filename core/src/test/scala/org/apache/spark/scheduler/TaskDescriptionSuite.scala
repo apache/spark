@@ -33,6 +33,10 @@ class TaskDescriptionSuite extends SparkFunSuite {
     originalFiles.put("fileUrl1", 1824)
     originalFiles.put("fileUrl2", 2)
 
+    val originalArchives = new HashMap[String, Long]()
+    originalArchives.put("archiveUrl1", 1824)
+    originalArchives.put("archiveUrl2", 2)
+
     val originalJars = new HashMap[String, Long]()
     originalJars.put("jar1", 3)
 
@@ -70,7 +74,9 @@ class TaskDescriptionSuite extends SparkFunSuite {
       partitionId = 1,
       originalFiles,
       originalJars,
+      originalArchives,
       originalProperties,
+      cpus = 2,
       originalResources,
       taskBuffer
     )
@@ -87,7 +93,9 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.partitionId === originalTaskDescription.partitionId)
     assert(decodedTaskDescription.addedFiles.equals(originalFiles))
     assert(decodedTaskDescription.addedJars.equals(originalJars))
+    assert(decodedTaskDescription.addedArchives.equals(originalArchives))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
+    assert(decodedTaskDescription.cpus.equals(originalTaskDescription.cpus))
     assert(equalResources(decodedTaskDescription.resources, originalTaskDescription.resources))
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
 

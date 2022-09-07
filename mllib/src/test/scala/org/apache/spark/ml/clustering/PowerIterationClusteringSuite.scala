@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
@@ -139,10 +139,10 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (0, 1, -1.0),
       (1, 0, -1.0)
     )).toDF("src", "dst", "weight")
-    val msg = intercept[SparkException] {
+    val msg = intercept[Exception] {
       pic.assignClusters(badData)
-    }.getCause.getMessage
-    assert(msg.contains("Similarity must be nonnegative"))
+    }.getMessage
+    assert(msg.contains("Weights MUST NOT be Negative or Infinity"))
   }
 
   test("check for invalid input types of weight") {
@@ -161,14 +161,14 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   }
 
   test("test default weight") {
-    val dataWithoutWeight = data.sample(0.5, 1L).select('src, 'dst)
+    val dataWithoutWeight = data.sample(0.5, 1L).select("src", "dst")
 
     val assignments = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
       .assignClusters(dataWithoutWeight)
     val localAssignments = assignments
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     val dataWithWeightOne = dataWithoutWeight.withColumn("weight", lit(1.0))
@@ -178,7 +178,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setMaxIter(40)
       .assignClusters(dataWithWeightOne)
     val localAssignments2 = assignments2
-      .select('id, 'cluster)
+      .select("id", "cluster")
       .as[(Long, Int)].collect().toSet
 
     assert(localAssignments === localAssignments2)
@@ -224,7 +224,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (3, 4)
     )).toDF("src", "dst").repartition(1)
 
-    var assignments2 = new PowerIterationClustering()
+    val assignments2 = new PowerIterationClustering()
       .setInitMode("random")
       .setK(2)
       .assignClusters(data2)
@@ -238,7 +238,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(Set(predictions2(0).size, predictions2(1).size) !== Set(2, 3))
 
 
-    var assignments3 = new PowerIterationClustering()
+    val assignments3 = new PowerIterationClustering()
       .setInitMode("degree")
       .setK(2)
       .assignClusters(data2)

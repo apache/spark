@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.vectorized
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar.ColumnAccessor
@@ -27,7 +25,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.types.UTF8String
 
-class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
+class ColumnVectorSuite extends SparkFunSuite {
   private def withVector(
       vector: WritableColumnVector)(
       block: WritableColumnVector => Unit): Unit = {
@@ -209,6 +207,44 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach {
+    dt =>
+      testVectors(dt.typeName,
+        10,
+        dt) { testVector =>
+        (0 until 10).foreach { i =>
+          testVector.appendInt(i)
+        }
+
+        val array = new ColumnarArray(testVector, 0, 10)
+        val arrayCopy = array.copy()
+
+        (0 until 10).foreach { i =>
+          assert(array.get(i, dt) === i)
+          assert(arrayCopy.get(i, dt) === i)
+        }
+      }
+  }
+
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach {
+    dt =>
+      testVectors(dt.typeName,
+        10,
+        dt) { testVector =>
+        (0 until 10).foreach { i =>
+          testVector.appendLong(i)
+        }
+
+        val array = new ColumnarArray(testVector, 0, 10)
+        val arrayCopy = array.copy()
+
+        (0 until 10).foreach { i =>
+          assert(array.get(i, dt) === i)
+          assert(arrayCopy.get(i, dt) === i)
+        }
+      }
+  }
+
   testVectors("mutable ColumnarRow", 10, IntegerType) { testVector =>
     val mutableRow = new MutableColumnarRow(Array(testVector))
     (0 until 10).foreach { i =>
@@ -241,6 +277,93 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(testVector.getArray(1).toIntArray() === Array(1, 2))
     assert(testVector.getArray(2).toIntArray() === Array.empty[Int])
     assert(testVector.getArray(3).toIntArray() === Array(3, 4, 5))
+  }
+
+  testVectors("SPARK-35898: array append", 1, arrayType) { testVector =>
+    // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
+    val data = testVector.arrayData()
+    testVector.appendArray(1)
+    data.appendInt(0)
+    testVector.appendArray(2)
+    data.appendInt(1)
+    data.appendInt(2)
+    testVector.appendArray(0)
+    testVector.appendArray(3)
+    data.appendInt(3)
+    data.appendInt(4)
+    data.appendInt(5)
+
+    assert(testVector.getArray(0).toIntArray === Array(0))
+    assert(testVector.getArray(1).toIntArray === Array(1, 2))
+    assert(testVector.getArray(2).toIntArray === Array.empty[Int])
+    assert(testVector.getArray(3).toIntArray === Array(3, 4, 5))
+  }
+
+  val mapType: MapType = MapType(IntegerType, StringType)
+  testVectors("SPARK-35898: map", 5, mapType) { testVector =>
+    val keys = testVector.getChild(0)
+    val values = testVector.getChild(1)
+    var i = 0
+    while (i < 6) {
+      keys.appendInt(i)
+      val utf8 = s"str$i".getBytes("utf8")
+      values.appendByteArray(utf8, 0, utf8.length)
+      i += 1
+    }
+
+    testVector.putArray(0, 0, 1)
+    testVector.putArray(1, 1, 2)
+    testVector.putArray(2, 3, 0)
+    testVector.putArray(3, 3, 3)
+
+    assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
+    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+      Array(UTF8String.fromString(s"str0")))
+    assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
+    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
+    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+      Array.empty[UTF8String])
+    assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
+    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
+  }
+
+  testVectors("SPARK-35898: map append", 1, mapType) { testVector =>
+    val keys = testVector.getChild(0)
+    val values = testVector.getChild(1)
+    def appendPair(i: Int): Unit = {
+      keys.appendInt(i)
+      val utf8 = s"str$i".getBytes("utf8")
+      values.appendByteArray(utf8, 0, utf8.length)
+    }
+
+    // Populate it with the maps [0 -> str0], [1 -> str1, 2 -> str2], [],
+    // [3 -> str3, 4 -> str4, 5 -> str5]
+    testVector.appendArray(1)
+    appendPair(0)
+    testVector.appendArray(2)
+    appendPair(1)
+    appendPair(2)
+    testVector.appendArray(0)
+    testVector.appendArray(3)
+    appendPair(3)
+    appendPair(4)
+    appendPair(5)
+
+    assert(testVector.getMap(0).keyArray().toIntArray === Array(0))
+    assert(testVector.getMap(0).valueArray().toArray[UTF8String](StringType) ===
+      Array(UTF8String.fromString(s"str0")))
+    assert(testVector.getMap(1).keyArray().toIntArray === Array(1, 2))
+    assert(testVector.getMap(1).valueArray().toArray[UTF8String](StringType) ===
+      (1 to 2).map(i => UTF8String.fromString(s"str$i")).toArray)
+    assert(testVector.getMap(2).keyArray().toIntArray === Array.empty[Int])
+    assert(testVector.getMap(2).valueArray().toArray[UTF8String](StringType) ===
+      Array.empty[UTF8String])
+    assert(testVector.getMap(3).keyArray().toIntArray === Array(3, 4, 5))
+    assert(testVector.getMap(3).valueArray().toArray[UTF8String](StringType) ===
+      (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
   }
 
   val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
@@ -446,6 +569,37 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)
+      }
+    }
+  }
+
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    val structType = new StructType().add(dt.typeName, dt)
+    testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
+      val column = v.getChild(0)
+      (0 until 10).foreach { i =>
+        column.putInt(i, i)
+      }
+      (0 until 10).foreach { i =>
+        val row = v.getStruct(i)
+        val rowCopy = row.copy()
+        assert(row.get(0, dt) === i)
+        assert(rowCopy.get(0, dt) === i)
+      }
+    }
+  }
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    val structType = new StructType().add(dt.typeName, dt)
+    testVectors("ColumnarRow " + dt.typeName, 10, structType) { v =>
+      val column = v.getChild(0)
+      (0 until 10).foreach { i =>
+        column.putLong(i, i)
+      }
+      (0 until 10).foreach { i =>
+        val row = v.getStruct(i)
+        val rowCopy = row.copy()
+        assert(row.get(0, dt) === i)
+        assert(rowCopy.get(0, dt) === i)
       }
     }
   }

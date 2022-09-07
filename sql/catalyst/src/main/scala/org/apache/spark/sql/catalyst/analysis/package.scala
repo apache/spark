@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
@@ -36,7 +39,7 @@ package object analysis {
   val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
   val caseSensitiveResolution = (a: String, b: String) => a == b
 
-  implicit class AnalysisErrorAt(t: TreeNode[_]) {
+  implicit class AnalysisErrorAt(t: TreeNode[_]) extends QueryErrorsBase {
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(msg: String): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
@@ -45,6 +48,21 @@ package object analysis {
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
+    }
+
+    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
+      throw new AnalysisException(
+        errorClass = "DATATYPE_MISMATCH",
+        errorSubClass = mismatch.errorSubClass,
+        messageParameters = toSQLExpr(expr) +: mismatch.messageParameters,
+        origin = t.origin)
     }
   }
 

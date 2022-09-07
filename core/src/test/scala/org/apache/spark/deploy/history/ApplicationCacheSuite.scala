@@ -27,8 +27,9 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.Matchers
-import org.scalatest.mockito.MockitoSugar
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -36,7 +37,7 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, Ap
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ManualClock
 
-class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
+class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matchers {
 
   /**
    * Stub cache operations.
@@ -54,7 +55,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     var getAppUICount = 0L
     var attachCount = 0L
     var detachCount = 0L
-    var updateProbeCount = 0L
+    val updateProbeCount = 0L
 
     override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
       logDebug(s"getAppUI($appId, $attemptId)")

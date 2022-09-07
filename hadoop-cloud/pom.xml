@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -51,6 +51,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
@@ -58,9 +65,14 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>${hadoop-client-api.artifact}</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <version>${hadoop.version}</version>
     </dependency>
     <!--
       the AWS module pulls in jackson; its transitive dependencies can create
@@ -79,14 +91,6 @@
         <exclusion>
           <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
@@ -128,6 +132,18 @@
         <exclusion>
           <groupId>org.mockito</groupId>
           <artifactId>mockito-all</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.cloud.bigdataoss</groupId>
+      <artifactId>gcs-connector</artifactId>
+      <version>${gcs-connector.version}</version>
+      <classifier>shaded</classifier>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -180,10 +196,6 @@
           <artifactId>hadoop-common</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-core</artifactId>
         </exclusion>
@@ -196,45 +208,74 @@
   </dependencies>
 
   <profiles>
-
+    <!--
+     hadoop-3 profile is activated by default so hadoop-2 profile
+     also needs to be declared here for building with -Phadoop-2.
+    -->
+    <profile>
+      <id>hadoop-2</id>
+    </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <properties>
-        <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
-        <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
+        <extra.java.source.dir>src/hadoop-3/main/java</extra.java.source.dir>
+        <extra.java.testsource.dir>src/hadoop-3/test/java</extra.java.testsource.dir>
+        <extra.scala.source.dir>src/hadoop-3/main/scala</extra.scala.source.dir>
+        <extra.scala.testsource.dir>src/hadoop-3/test/scala</extra.scala.testsource.dir>
       </properties>
 
       <build>
         <plugins>
           <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <tagsToExclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToExclude>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>
             <executions>
               <execution>
-                <id>add-scala-sources</id>
+                <id>add-extra-sources</id>
                 <phase>generate-sources</phase>
                 <goals>
                   <goal>add-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.source.dir}</source>
+                    <source>${extra.java.source.dir}</source>
+                    <source>${extra.scala.source.dir}</source>
                   </sources>
                 </configuration>
               </execution>
               <execution>
-                <id>add-scala-test-sources</id>
+                <id>add-extra-test-sources</id>
                 <phase>generate-test-sources</phase>
                 <goals>
                   <goal>add-test-source</goal>
                 </goals>
                 <configuration>
                   <sources>
-                    <source>${extra.testsource.dir}</source>
+                    <source>${extra.java.testsource.dir}</source>
+                    <source>${extra.scala.testsource.dir}</source>
                   </sources>
                 </configuration>
               </execution>
@@ -258,16 +299,19 @@
               <artifactId>hadoop-common</artifactId>
             </exclusion>
             <exclusion>
-              <groupId>org.codehaus.jackson</groupId>
-              <artifactId>jackson-mapper-asl</artifactId>
-            </exclusion>
-            <exclusion>
               <groupId>com.fasterxml.jackson.core</groupId>
               <artifactId>jackson-core</artifactId>
             </exclusion>
             <exclusion>
               <groupId>com.google.guava</groupId>
               <artifactId>guava</artifactId>
+            </exclusion>
+            <exclusion>
+              <!--
+              This is a code coverage library introduced by aliyun-java-sdk-core, only for testing
+              -->
+              <groupId>org.jacoco</groupId>
+              <artifactId>org.jacoco.agent</artifactId>
             </exclusion>
           </exclusions>
         </dependency>
@@ -292,6 +336,30 @@
       </dependencies>
     </profile>
 
+    <profile>
+      <id>integration-test</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <tagsToExclude>None</tagsToExclude>
+                  <tagsToInclude>org.apache.spark.internal.io.cloud.IntegrationTestSuite</tagsToInclude>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 
 </project>

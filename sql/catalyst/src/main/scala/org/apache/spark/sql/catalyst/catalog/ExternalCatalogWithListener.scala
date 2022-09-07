@@ -154,6 +154,10 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     delegate.listTables(db, pattern)
   }
 
+  override def listViews(db: String, pattern: String): Seq[String] = {
+    delegate.listViews(db, pattern)
+  }
+
   override def loadTable(
       db: String,
       table: String,

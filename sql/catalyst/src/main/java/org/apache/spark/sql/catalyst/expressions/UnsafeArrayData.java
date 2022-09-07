@@ -72,12 +72,6 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     return 8 + ((numFields + 63)/ 64) * 8;
   }
 
-  public static long calculateSizeOfUnderlyingByteArray(long numFields, int elementSize) {
-    long size = UnsafeArrayData.calculateHeaderPortionInBytes(numFields) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(numFields * elementSize);
-    return size;
-  }
-
   private Object baseObject;
   private long baseOffset;
 
@@ -104,6 +98,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
   }
 
+  @Override
   public Object[] array() {
     throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
   }
@@ -230,9 +225,10 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+    final int months = Platform.getInt(baseObject, baseOffset + offset);
+    final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   @Override

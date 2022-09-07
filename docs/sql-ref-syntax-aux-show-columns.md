@@ -19,4 +19,79 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+Returns the list of columns in a table. If the table does not exist, an exception is thrown.
+
+### Syntax
+
+```sql
+SHOW COLUMNS table_identifier [ database ]
+```
+
+### Parameters
+
+* **table_identifier**
+
+    Specifies the table name of an existing table. The table may be optionally qualified
+    with a database name.
+
+    **Syntax:** `{ IN | FROM } [ database_name . ] table_name`
+
+    **Note:** Keywords `IN` and `FROM` are interchangeable.
+
+* **database**
+
+    Specifies an optional database name. The table is resolved from this database when it
+    is specified. When this parameter is specified then table
+    name should not be qualified with a different database name. 
+
+    **Syntax:** `{ IN | FROM } database_name`
+
+    **Note:** Keywords `IN` and `FROM` are interchangeable.
+
+### Examples
+
+```sql
+-- Create `customer` table in `salesdb` database;
+USE salesdb;
+CREATE TABLE customer(
+    cust_cd INT,
+    name VARCHAR(100),
+    cust_addr STRING);
+
+-- List the columns of `customer` table in current database.
+SHOW COLUMNS IN customer;
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
+
+-- List the columns of `customer` table in `salesdb` database.
+SHOW COLUMNS IN salesdb.customer;
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
+
+-- List the columns of `customer` table in `salesdb` database
+SHOW COLUMNS IN customer IN salesdb;
++---------+
+| col_name|
++---------+
+|  cust_cd|
+|     name|
+|cust_addr|
++---------+
+```
+
+### Related Statements
+
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [SHOW TABLE](sql-ref-syntax-aux-show-table.html)

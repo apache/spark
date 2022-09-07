@@ -31,55 +31,55 @@ class ErrorParserSuite extends AnalysisTest {
     assert(parsePlan(sqlCommand) == plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
-
-  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-                messages: String*): Unit = {
+  private def interceptImpl(sql: String, messages: String*)(
+      line: Option[Int] = None,
+      startPosition: Option[Int] = None,
+      stopPosition: Option[Int] = None,
+      errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-
-    // Check position.
-    assert(e.line.isDefined)
-    assert(e.line.get === line)
-    assert(e.startPosition.isDefined)
-    assert(e.startPosition.get === startPosition)
-    assert(e.stop.startPosition.isDefined)
-    assert(e.stop.startPosition.get === stopPosition)
 
     // Check messages.
     val error = e.getMessage
     messages.foreach { message =>
       assert(error.contains(message))
     }
+
+    // Check position.
+    if (line.isDefined) {
+      assert(line.isDefined && startPosition.isDefined && stopPosition.isDefined)
+      assert(e.line.isDefined)
+      assert(e.line.get === line.get)
+      assert(e.startPosition.isDefined)
+      assert(e.startPosition.get === startPosition.get)
+      assert(e.stop.startPosition.isDefined)
+      assert(e.stop.startPosition.get === stopPosition.get)
+    }
+
+    // Check error class.
+    if (errorClass.isDefined) {
+      assert(e.getErrorClass == errorClass.get)
+    }
   }
 
-  test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16,
-      "no viable alternative at input", "----------------^^^")
+  def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit = {
+    interceptImpl(sqlCommand, messages: _*)(errorClass = errorClass)
   }
 
-  test("extraneous input") {
-    intercept("select 1 1", 1, 9, 10, "extraneous input '1' expecting", "---------^^^")
-    intercept("select *\nfrom r as q t", 2, 12, 13, "extraneous input", "------------^^^")
+  def intercept(
+      sql: String, line: Int, startPosition: Int, stopPosition: Int, messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))
   }
 
-  test("mismatched input") {
-    intercept("select * from r order by q from t", 1, 27, 31,
-      "mismatched input",
-      "---------------------------^^^")
-    intercept("select *\nfrom r\norder by q\nfrom t", 4, 0, 4, "mismatched input", "^^^")
+  def intercept(sql: String, errorClass: String, line: Int, startPosition: Int, stopPosition: Int,
+      messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(
+      Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
   test("semantic errors") {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
-  }
-
-  test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left joinn b on a.id = b.id", "missing 'JOIN' at 'joinn'")
-    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
-    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
   }
 
   test("hyphen in identifier - DDL tests") {
@@ -95,9 +95,30 @@ class ErrorParserSuite extends AnalysisTest {
       """
         |ALTER TABLE t
         |CHANGE COLUMN
-        |test-col BIGINT
+        |test-col TYPE BIGINT
+      """.stripMargin, 4, 4, 5, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |RENAME COLUMN
+        |test-col TO test
+      """.stripMargin, 4, 4, 5, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |RENAME COLUMN
+        |test TO test-col
+      """.stripMargin, 4, 12, 13, msg + " test-col")
+    intercept(
+      """
+        |ALTER TABLE t
+        |DROP COLUMN
+        |test-col, test
       """.stripMargin, 4, 4, 5, msg + " test-col")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute")
+    intercept("CREATE FUNCTION test-func as org.test.func", 1, 20, 21, msg + " test-func")
+    intercept("DROP FUNCTION test-func as org.test.func", 1, 18, 19, msg + " test-func")
+    intercept("SHOW FUNCTIONS LIKE test-func", 1, 24, 25, msg + " test-func")
     intercept(
       """
         |CREATE TABLE IF NOT EXISTS mydb.page-view
@@ -106,6 +127,11 @@ class ErrorParserSuite extends AnalysisTest {
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg + " page-view")
+    intercept(
+      """
+        |CREATE TABLE IF NOT EXISTS tab
+        |USING test-provider
+        |AS SELECT * FROM src""".stripMargin, 3, 10, 11, msg + " test-provider")
     intercept("SHOW TABLES IN hyphen-database", 1, 21, 22, msg + " hyphen-database")
     intercept("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\"", 1, 29, 30, msg + " hyphen-db")
     intercept("SHOW COLUMNS IN t FROM test-db", 1, 27, 28, msg + " test-db")
@@ -155,9 +181,9 @@ class ErrorParserSuite extends AnalysisTest {
         |ORDER BY c
       """.stripMargin,
       table("t")
-        .where('a - 'b > 10)
-        .groupBy('fake - 'breaker)('a, 'b)
-        .orderBy('c.asc))
+        .where($"a" - $"b" > 10)
+        .groupBy($"fake" - $"breaker")($"a", $"b")
+        .orderBy($"c".asc))
     intercept(
       """
         |SELECT * FROM tab
@@ -181,5 +207,18 @@ class ErrorParserSuite extends AnalysisTest {
         |SELECT a
         |SELECT b
       """.stripMargin, 2, 9, 10, msg + " test-table")
+  }
+
+  test("datatype not supported") {
+    // general bad types
+    intercept("SELECT cast(1 as badtype)", 1, 17, 17, "DataType badtype is not supported.")
+
+    // special handling on char and varchar
+    intercept("SELECT cast('a' as CHAR)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType char requires a length parameter")
+    intercept("SELECT cast('a' as Varchar)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType varchar requires a length parameter")
+    intercept("SELECT cast('a' as Character)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType character requires a length parameter")
   }
 }

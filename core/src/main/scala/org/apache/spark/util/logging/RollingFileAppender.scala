@@ -36,25 +36,27 @@ import org.apache.spark.internal.config
  * @param rollingPolicy           Policy based on which files will be rolled over.
  * @param conf                    SparkConf that is used to pass on extra configurations
  * @param bufferSize              Optional buffer size. Used mainly for testing.
+ * @param closeStreams            Option flag: whether to close the inputStream at the end.
  */
 private[spark] class RollingFileAppender(
     inputStream: InputStream,
     activeFile: File,
     val rollingPolicy: RollingPolicy,
     conf: SparkConf,
-    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
-  ) extends FileAppender(inputStream, activeFile, bufferSize) {
+    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE,
+    closeStreams: Boolean = false
+  ) extends FileAppender(inputStream, activeFile, bufferSize, closeStreams) {
 
   private val maxRetainedFiles = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES)
   private val enableCompression = conf.get(config.EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION)
 
   /** Stop the appender */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
   }
 
   /** Append bytes to file after rolling over is necessary */
-  override protected def appendToFile(bytes: Array[Byte], len: Int) {
+  override protected def appendToFile(bytes: Array[Byte], len: Int): Unit = {
     if (rollingPolicy.shouldRollover(len)) {
       rollover()
       rollingPolicy.rolledOver()
@@ -64,7 +66,7 @@ private[spark] class RollingFileAppender(
   }
 
   /** Rollover the file, by closing the output stream and moving it over */
-  private def rollover() {
+  private def rollover(): Unit = {
     try {
       closeFile()
       moveFile()
@@ -106,7 +108,7 @@ private[spark] class RollingFileAppender(
   }
 
   /** Move the active log file to a new rollover file */
-  private def moveFile() {
+  private def moveFile(): Unit = {
     val rolloverSuffix = rollingPolicy.generateRolledOverFileSuffix()
     val rolloverFile = new File(
       activeFile.getParentFile, activeFile.getName + rolloverSuffix).getAbsoluteFile
@@ -138,7 +140,7 @@ private[spark] class RollingFileAppender(
   }
 
   /** Retain only last few files */
-  private[util] def deleteOldFiles() {
+  private[util] def deleteOldFiles(): Unit = {
     try {
       val rolledoverFiles = activeFile.getParentFile.listFiles(new FileFilter {
         def accept(f: File): Boolean = {

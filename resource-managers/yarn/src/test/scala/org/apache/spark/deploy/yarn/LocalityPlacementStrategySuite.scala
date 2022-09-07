@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
+import java.io.{PrintWriter, StringWriter}
+
 import scala.collection.mutable.{HashMap, HashSet, Set}
 
 import org.apache.hadoop.yarn.api.records._
@@ -25,13 +26,14 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.resource.ResourceProfile
 
 class LocalityPlacementStrategySuite extends SparkFunSuite {
 
   test("handle large number of containers and tasks (SPARK-18750)") {
     // Run the test in a thread with a small stack size, since the original issue
     // surfaced as a StackOverflowError.
-    var error: Throwable = null
+    @volatile var error: Throwable = null
 
     val runnable = new Runnable() {
       override def run(): Unit = try {
@@ -41,11 +43,23 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       }
     }
 
-    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 32 * 1024)
+    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 256 * 1024)
+    thread.setDaemon(true)
     thread.start()
-    thread.join()
+    val secondsToWait = 30
+    thread.join(secondsToWait * 1000)
+    if (thread.isAlive()) {
+      error = new RuntimeException(
+        "Timeout at waiting for thread to stop (its stack trace is added to the exception)")
+      error.setStackTrace(thread.getStackTrace)
+      thread.interrupt()
+    }
 
-    assert(error === null)
+    if (error != null) {
+      val errors = new StringWriter()
+      error.printStackTrace(new PrintWriter(errors))
+      fail(s"Failed with an exception or a timeout at thread join:\n\n$errors")
+    }
   }
 
   private def runTest(): Unit = {
@@ -56,9 +70,8 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     // goal is to create enough requests for localized containers (so there should be many
     // tasks on several hosts that have no allocated containers).
 
-    val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
-      yarnConf, resource, new MockResolver())
+      yarnConf, new MockResolver())
 
     val totalTasks = 32 * 1024
     val totalContainers = totalTasks / 16
@@ -75,9 +88,10 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       containers.drop(count * i).take(i).foreach { c => hostContainers += c }
       hostToContainerMap(host) = hostContainers
     }
+    val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
     strategy.localityOfRequestedContainers(containers.size * 2, totalTasks, hosts,
-      hostToContainerMap, Nil)
+      hostToContainerMap, Nil, rp)
   }
 
 }

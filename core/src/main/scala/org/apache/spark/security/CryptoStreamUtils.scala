@@ -167,7 +167,7 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * SPARK-25535. The commons-cryto library will throw InternalError if something goes
+   * SPARK-25535. The commons-crypto library will throw InternalError if something goes
    * wrong, and leave bad state behind in the Java wrappers, so it's not safe to use them
    * afterwards. This wrapper detects that situation and avoids further calls into the
    * commons-crypto code, while still allowing the underlying streams to be closed.

@@ -24,12 +24,9 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -60,6 +57,8 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 
   /** @group getParam */
   def getMax: Double = $(max)
+
+  setDefault(min -> 0.0, max -> 1.0)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -96,8 +95,6 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
-  setDefault(min -> 0.0, max -> 1.0)
-
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -117,12 +114,13 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min.compressed,
-      summary.max.compressed).setParent(this))
+
+    val Row(max: Vector, min: Vector) = dataset
+      .select(Summarizer.metrics("max", "min").summary(col($(inputCol))).as("summary"))
+      .select("summary.max", "summary.min")
+      .first()
+
+    copyValues(new MinMaxScalerModel(uid, min.compressed, max.compressed).setParent(this))
   }
 
   @Since("1.5.0")
@@ -146,8 +144,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * @param originalMin min value for each original column during fitting
  * @param originalMax max value for each original column during fitting
- *
- * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (
@@ -176,7 +172,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val numFeatures = originalMax.size
     val scale = $(max) - $(min)
@@ -212,12 +208,18 @@ class MinMaxScalerModel private[ml] (
       Vectors.dense(values).compressed
     }
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), originalMin.size)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")
@@ -228,6 +230,12 @@ class MinMaxScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new MinMaxScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MinMaxScalerModel: uid=$uid, numFeatures=${originalMin.size}, min=${$(min)}, " +
+      s"max=${$(max)}"
+  }
 }
 
 @Since("1.6.0")

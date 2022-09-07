@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
+import org.apache.spark.{ContextAwareIterator, TaskContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
 object EvaluatePython {
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
-    case DateType | TimestampType => true
+    case DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -45,7 +46,7 @@ object EvaluatePython {
   }
 
   /**
-   * Helper for converting from Catalyst type to java type suitable for Pyrolite.
+   * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
   def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null
@@ -137,11 +138,12 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType => (obj: Any) => nullSafeConvert(obj) {
-      case c: Long => c
-      // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
-      case c: Int => c.toLong
-    }
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
+      nullSafeConvert(obj) {
+        case c: Long => c
+        // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+        case c: Int => c.toLong
+      }
 
     case StringType => (obj: Any) => nullSafeConvert(obj) {
       case _ => UTF8String.fromString(obj.toString)
@@ -175,7 +177,7 @@ object EvaluatePython {
       }
 
     case StructType(fields) =>
-      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType)).toArray
+      val fieldsFromJava = fields.map(f => makeFromJava(f.dataType))
 
       (obj: Any) => nullSafeConvert(obj) {
         case c if c.getClass.isArray =>
@@ -198,7 +200,7 @@ object EvaluatePython {
 
     case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
 
-    case other => (obj: Any) => nullSafeConvert(other)(PartialFunction.empty)
+    case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
   }
 
   private def nullSafeConvert(input: Any)(f: PartialFunction[Any, Any]): Any = {
@@ -300,7 +302,7 @@ object EvaluatePython {
   def javaToPython(rdd: RDD[Any]): RDD[Array[Byte]] = {
     rdd.mapPartitions { iter =>
       registerPicklers()  // let it called in executor
-      new SerDeUtil.AutoBatchedPickler(iter)
+      new SerDeUtil.AutoBatchedPickler(new ContextAwareIterator(TaskContext.get, iter))
     }
   }
 }

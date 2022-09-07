@@ -47,9 +47,9 @@ public class JavaVectorIndexerSuite extends SharedSparkSession {
       .setOutputCol("indexed")
       .setMaxCategories(2);
     VectorIndexerModel model = indexer.fit(data);
-    Assert.assertEquals(model.numFeatures(), 2);
+    Assert.assertEquals(2, model.numFeatures());
     Map<Integer, Map<Double, Integer>> categoryMaps = model.javaCategoryMaps();
-    Assert.assertEquals(categoryMaps.size(), 1);
+    Assert.assertEquals(1, categoryMaps.size());
     Dataset<Row> indexedData = model.transform(data);
   }
 }

@@ -36,7 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * doing a single iteration of the standard k-means algorithm.
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
- * generalized to incorporate forgetfullness (i.e. decay).
+ * generalized to incorporate forgetfulness (i.e. decay).
  * The update rule (for each cluster) is:
  *
  * <blockquote>
@@ -82,20 +82,28 @@ class StreamingKMeansModel @Since("1.2.0") (
     val closest = data.map(point => (this.predict(point), (point, 1L)))
 
     // get sums and counts for updating each cluster
-    val mergeContribs: ((Vector, Long), (Vector, Long)) => (Vector, Long) = (p1, p2) => {
-      BLAS.axpy(1.0, p2._1, p1._1)
-      (p1._1, p1._2 + p2._2)
+    def mergeContribs(p1: (Vector, Long), p2: (Vector, Long)): (Vector, Long) = {
+      val sum =
+        if (p1._1 == null) {
+          p2._1
+        } else if (p2._1 == null) {
+          p1._1
+        } else {
+          BLAS.axpy(1.0, p2._1, p1._1)
+          p1._1
+        }
+      (sum, p1._2 + p2._2)
     }
     val dim = clusterCenters(0).size
 
     val pointStats: Array[(Int, (Vector, Long))] = closest
-      .aggregateByKey((Vectors.zeros(dim), 0L))(mergeContribs, mergeContribs)
+      .aggregateByKey((null.asInstanceOf[Vector], 0L))(mergeContribs, mergeContribs)
       .collect()
 
     val discount = timeUnit match {
       case StreamingKMeans.BATCHES => decayFactor
       case StreamingKMeans.POINTS =>
-        val numNewPoints = pointStats.view.map { case (_, (_, n)) =>
+        val numNewPoints = pointStats.iterator.map { case (_, (_, n)) =>
           n
         }.sum
         math.pow(decayFactor, numNewPoints)
@@ -125,9 +133,8 @@ class StreamingKMeansModel @Since("1.2.0") (
     }
 
     // Check whether the smallest cluster is dying. If so, split the largest cluster.
-    val weightsWithIndex = clusterWeights.view.zipWithIndex
-    val (maxWeight, largest) = weightsWithIndex.maxBy(_._1)
-    val (minWeight, smallest) = weightsWithIndex.minBy(_._1)
+    val (maxWeight, largest) = clusterWeights.iterator.zipWithIndex.maxBy(_._1)
+    val (minWeight, smallest) = clusterWeights.iterator.zipWithIndex.minBy(_._1)
     if (minWeight < 1e-8 * maxWeight) {
       logInfo(s"Cluster $smallest is dying. Split the largest cluster $largest into two.")
       val weight = (maxWeight + minWeight) / 2.0
@@ -269,7 +276,7 @@ class StreamingKMeans @Since("1.2.0") (
    * @param data DStream containing vector data
    */
   @Since("1.2.0")
-  def trainOn(data: DStream[Vector]) {
+  def trainOn(data: DStream[Vector]): Unit = {
     assertInitialized()
     data.foreachRDD { (rdd, time) =>
       model = model.update(rdd, decayFactor, timeUnit)

@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import scala.collection.mutable.WrappedArray;
+import scala.collection.mutable.Seq;
 
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 // col("...") is preferable to df.col("...")
-import static org.apache.spark.sql.functions.callUDF;
+import static org.apache.spark.sql.functions.call_udf;
 import static org.apache.spark.sql.functions.col;
 // $example off$
 
@@ -69,16 +69,16 @@ public class JavaTokenizerExample {
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
     spark.udf().register(
-      "countTokens", (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
+      "countTokens", (Seq<?> words) -> words.size(), DataTypes.IntegerType);
 
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
     tokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .withColumn("tokens", call_udf("countTokens", col("words")))
         .show(false);
 
     Dataset<Row> regexTokenized = regexTokenizer.transform(sentenceDataFrame);
     regexTokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .withColumn("tokens", call_udf("countTokens", col("words")))
         .show(false);
     // $example off$
 

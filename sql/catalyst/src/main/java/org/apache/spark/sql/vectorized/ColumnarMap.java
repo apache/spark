@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
@@ -47,7 +48,7 @@ public final class ColumnarMap extends MapData {
   }
 
   @Override
-  public ColumnarMap copy() {
-    throw new UnsupportedOperationException();
+  public MapData copy() {
+    return new ArrayBasedMapData(keys.copy(), values.copy());
   }
 }

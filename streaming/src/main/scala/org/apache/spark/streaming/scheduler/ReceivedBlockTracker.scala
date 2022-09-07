@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -116,7 +115,9 @@ private[streaming] class ReceivedBlockTracker(
       // a few thousand elements.  So we explicitly allocate a collection for serialization which
       // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-        (streamId, mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
+        val blocks = mutable.ArrayBuffer[ReceivedBlockInfo]()
+        blocks ++= getReceivedBlockQueue(streamId).clone()
+        (streamId, blocks.toSeq)
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
@@ -182,7 +183,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Stop the block tracker. */
-  def stop() {
+  def stop(): Unit = {
     writeAheadLogOption.foreach { _.close() }
   }
 
@@ -192,7 +193,7 @@ private[streaming] class ReceivedBlockTracker(
    */
   private def recoverPastEvents(): Unit = synchronized {
     // Insert the recovered block information
-    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
+    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo): Unit = {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
       receivedBlockInfo.setBlockIdInvalid()
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
@@ -200,7 +201,7 @@ private[streaming] class ReceivedBlockTracker(
 
     // Insert the recovered block-to-batch allocations and removes them from queue of
     // received blocks.
-    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
+    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks): Unit = {
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       allocatedBlocks.streamIdToAllocatedBlocks.foreach {
@@ -212,7 +213,7 @@ private[streaming] class ReceivedBlockTracker(
     }
 
     // Cleanup the batch allocations
-    def cleanupBatches(batchTimes: Seq[Time]) {
+    def cleanupBatches(batchTimes: Seq[Time]): Unit = {
       logTrace(s"Recovery: Cleaning up batches $batchTimes")
       timeToAllocatedBlocks --= batchTimes
     }

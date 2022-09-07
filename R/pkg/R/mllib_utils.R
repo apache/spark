@@ -18,7 +18,7 @@
 # mllib_utils.R: Utilities for MLlib integration
 
 # Integration with R's standard functions.
-# Most of MLlib's argorithms are provided in two flavours:
+# Most of MLlib's algorithms are provided in two flavours:
 # - a specialization of the default R methods (glm). These methods try to respect
 #   the inputs and the outputs of R's method to the largest extent, but some small differences
 #   may exist.
@@ -123,6 +123,12 @@ read.ml <- function(path) {
     new("LinearSVCModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.FPGrowthWrapper")) {
     new("FPGrowthModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.FMClassifierWrapper")) {
+    new("FMClassificationModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LinearRegressionWrapper")) {
+    new("LinearRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.FMRegressorWrapper")) {
+    new("FMRegressionModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

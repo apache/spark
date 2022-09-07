@@ -27,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 trait LeaderElectionAgent {
   val masterInstance: LeaderElectable
-  def stop() {} // to avoid noops in implementations.
+  def stop(): Unit = {} // to avoid noops in implementations.
 }
 
 @DeveloperApi

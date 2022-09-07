@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import org.scalatest.prop.TableDrivenPropertyChecks._
+
 import org.apache.spark.SparkFunSuite
 
 class CSVExprUtilsSuite extends SparkFunSuite {
@@ -27,7 +29,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\f""") === '\f')
     assert(CSVExprUtils.toChar("""\"""") === '\"')
     assert(CSVExprUtils.toChar("""\'""") === '\'')
-    assert(CSVExprUtils.toChar("""\u0000""") === '\u0000')
+    assert(CSVExprUtils.toChar("\u0000") === '\u0000')
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
@@ -57,5 +59,41 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       CSVExprUtils.toChar("")
     }
     assert(exception.getMessage.contains("Delimiter cannot be empty string"))
+  }
+
+  val testCases = Table(
+    ("input", "separatorStr", "expectedErrorMsg"),
+    // normal tab
+    ("""\t""", Some("\t"), None),
+    // backslash, then tab
+    ("""\\t""", Some("""\t"""), None),
+    // invalid special character (dot)
+    ("""\.""", None, Some("Unsupported special character for delimiter")),
+    // backslash, then dot
+    ("""\\.""", Some("""\."""), None),
+    // nothing special, just straight conversion
+    ("""foo""", Some("foo"), None),
+    // tab in the middle of some other letters
+    ("""ba\tr""", Some("ba\tr"), None),
+    // null character, expressed in Unicode literal syntax
+    ("\u0000", Some("\u0000"), None),
+    // and specified directly
+    ("\u0000", Some("\u0000"), None)
+  )
+
+  test("should correctly produce separator strings, or exceptions, from input") {
+    forAll(testCases) { (input, separatorStr, expectedErrorMsg) =>
+      try {
+        val separator = CSVExprUtils.toDelimiterStr(input)
+        assert(separatorStr.isDefined)
+        assert(expectedErrorMsg.isEmpty)
+        assert(separator.equals(separatorStr.get))
+      } catch {
+        case e: IllegalArgumentException =>
+          assert(separatorStr.isEmpty)
+          assert(expectedErrorMsg.isDefined)
+          assert(e.getMessage.contains(expectedErrorMsg.get))
+      }
+    }
   }
 }

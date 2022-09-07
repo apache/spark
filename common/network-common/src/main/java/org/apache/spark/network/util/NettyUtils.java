@@ -52,6 +52,10 @@ public class NettyUtils {
   private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
       new PooledByteBufAllocator[2];
 
+  public static long freeDirectMemory() {
+    return PlatformDependent.maxDirectMemory() - PlatformDependent.usedDirectMemory();
+  }
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
@@ -156,13 +160,20 @@ public class NettyUtils {
     if (numCores == 0) {
       numCores = Runtime.getRuntime().availableProcessors();
     }
+    // SPARK-38541: After upgrade to Netty 4.1.75, there are 2 behavior changes of this method:
+    // 1. `PooledByteBufAllocator.defaultMaxOrder()` change from 11 to 9, this means the default
+    //    `PooledByteBufAllocator` chunk size reduce from 16 MiB to 4 MiB, we need use
+    //    `-Dio.netty.allocator.maxOrder=11` to keep the chunk size of PooledByteBufAllocator
+    //    to 16m.
+    // 2. `PooledByteBufAllocator.defaultUseCacheForAllThreads()` change from true to false, we need
+    //    to use `-Dio.netty.allocator.useCacheForAllThreads=true` to
+    //    enable `useCacheForAllThreads`.
     return new PooledByteBufAllocator(
       allowDirectBufs && PlatformDependent.directBufferPreferred(),
       Math.min(PooledByteBufAllocator.defaultNumHeapArena(), numCores),
       Math.min(PooledByteBufAllocator.defaultNumDirectArena(), allowDirectBufs ? numCores : 0),
       PooledByteBufAllocator.defaultPageSize(),
       PooledByteBufAllocator.defaultMaxOrder(),
-      allowCache ? PooledByteBufAllocator.defaultTinyCacheSize() : 0,
       allowCache ? PooledByteBufAllocator.defaultSmallCacheSize() : 0,
       allowCache ? PooledByteBufAllocator.defaultNormalCacheSize() : 0,
       allowCache ? PooledByteBufAllocator.defaultUseCacheForAllThreads() : false

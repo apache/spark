@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * Companion object for ArrayType.
@@ -52,11 +53,12 @@ object ArrayType extends AbstractDataType {
  * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
- * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
- * array elements. The field of `containsNull` is used to specify if the array has `null` values.
+ * `containsNull: Boolean`.
+ * The field of `elementType` is used to specify the type of array elements.
+ * The field of `containsNull` is used to specify if the array can have `null` values.
  *
  * @param elementType The data type of values.
- * @param containsNull Indicates if values have `null` values
+ * @param containsNull Indicates if the array can have `null` values
  *
  * @since 1.3.0
  */
@@ -66,10 +68,15 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   /** No-arg constructor for kryo. */
   protected def this() = this(null, false)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(
-      s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
-    DataType.buildFormattedString(elementType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      stringConcat.append(
+        s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
+      DataType.buildFormattedString(elementType, s"$prefix    |", stringConcat, maxDepth)
+    }
   }
 
   override private[sql] def jsonValue =
@@ -133,11 +140,11 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
         i += 1
       }
       if (leftArray.numElements() < rightArray.numElements()) {
-        return -1
+        -1
       } else if (leftArray.numElements() > rightArray.numElements()) {
-        return 1
+        1
       } else {
-        return 0
+        0
       }
     }
   }

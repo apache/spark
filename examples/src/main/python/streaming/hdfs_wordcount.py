@@ -25,8 +25,6 @@
 
  Then create a text file in `localdir` and the words in the file will get counted.
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext
@@ -43,7 +41,7 @@ if __name__ == "__main__":
     lines = ssc.textFileStream(sys.argv[1])
     counts = lines.flatMap(lambda line: line.split(" "))\
                   .map(lambda x: (x, 1))\
-                  .reduceByKey(lambda a, b: a+b)
+                  .reduceByKey(lambda a, b: a + b)
     counts.pprint()
 
     ssc.start()

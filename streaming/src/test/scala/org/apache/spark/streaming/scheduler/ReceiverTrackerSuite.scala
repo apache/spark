@@ -203,11 +203,11 @@ private[streaming] object RateTestReceiver {
  */
 class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
 
-  var receivingThreadOption: Option[Thread] = None
+  val receivingThreadOption: Option[Thread] = None
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         while (!StoppableReceiver.shouldStop) {
           Thread.sleep(10)
         }
@@ -217,7 +217,7 @@ class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
     thread.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     StoppableReceiver.shouldStop = true
     receivingThreadOption.foreach(_.join())
     // Reset it so as to restart it

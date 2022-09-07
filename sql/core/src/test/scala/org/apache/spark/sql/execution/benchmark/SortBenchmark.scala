@@ -30,15 +30,17 @@ import org.apache.spark.util.random.XORShiftRandom
  * Benchmark to measure performance for aggregate primitives.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/<this class>-results.txt".
  * }}}
  */
 object SortBenchmark extends BenchmarkBase {
 
-  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
+  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int,
+      refCmp: PrefixComparator): Unit = {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(buf, lo, hi,
       (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
@@ -47,7 +49,7 @@ object SortBenchmark extends BenchmarkBase {
 
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](size * 2) { i => rand }
-    val extended = ref ++ Array.fill[Long](size * 2)(0)
+    val extended = ref ++ Array.ofDim[Long](size * 2)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }

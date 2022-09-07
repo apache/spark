@@ -43,9 +43,10 @@ class PartiallySerializedBlockSuite
   private val memoryStore = Mockito.mock(classOf[MemoryStore], Mockito.RETURNS_SMART_NULLS)
   private val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
 
-  private val getSerializationStream = PrivateMethod[SerializationStream]('serializationStream)
+  private val getSerializationStream =
+    PrivateMethod[SerializationStream](Symbol("serializationStream"))
   private val getRedirectableOutputStream =
-    PrivateMethod[RedirectableOutputStream]('redirectableOutputStream)
+    PrivateMethod[RedirectableOutputStream](Symbol("redirectableOutputStream"))
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

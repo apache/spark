@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{QueryTest, Row}
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
+
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -103,6 +106,65 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
         sql(s"CREATE TABLE $targetTable STORED AS PARQUET AS SELECT m FROM p")
         checkAnswer(sql(s"SELECT m FROM $targetTable"),
           Row(Map(1 -> "a")) :: Row(Map.empty[Int, String]) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33323: Add query resolved check before convert hive relation") {
+    withTable("t") {
+      val ex = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t STORED AS PARQUET AS
+             |SELECT * FROM (
+             | SELECT c3 FROM (
+             |  SELECT c1, c2 from values(1,2) t(c1, c2)
+             |  )
+             |)
+          """.stripMargin)
+      }
+      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(ex.messageParameters.head == "`c3`")
+    }
+  }
+
+  test("SPARK-36948: Create a table with ANSI intervals using Hive external catalog") {
+    val tbl = "tbl_with_ansi_intervals"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (ym INTERVAL YEAR TO MONTH, dt INTERVAL DAY TO SECOND) USING PARQUET")
+      sql(
+        s"""INSERT INTO $tbl VALUES (
+           |  INTERVAL '1-1' YEAR TO MONTH,
+           |  INTERVAL '1 02:03:04.123456' DAY TO SECOND)""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT * FROM $tbl"),
+        Row(
+          Period.ofYears(1).plusMonths(1),
+          Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
+            .plus(123456, ChronoUnit.MICROS)))
+    }
+  }
+
+  test("SPARK-37098: Alter table properties should invalidate cache") {
+    // specify the compression in case we change it in future
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")
+          // cache table metadata
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t SET TBLPROPERTIES('parquet.compression'='zstd')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files1 = dir.listFiles().filter(_.getName.endsWith("zstd.parquet"))
+          assert(files1.length == 1)
+
+          // cache table metadata again
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t UNSET TBLPROPERTIES('parquet.compression')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files2 = dir.listFiles().filter(_.getName.endsWith("snappy.parquet"))
+          assert(files2.length == 1)
+        }
       }
     }
   }

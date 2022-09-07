@@ -28,10 +28,11 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/UDFBenchmark-results.txt".
  * }}}
  */
@@ -42,8 +43,9 @@ object UDFBenchmark extends SqlBasedBenchmark {
     val nullableIntCol = when(
       idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
     val stringCol = idCol.cast(StringType)
-    spark.range(cardinality).select(
-      udf(idCol, nullableIntCol, stringCol)).write.format("noop").save()
+    spark.range(cardinality)
+      .select(udf(idCol, nullableIntCol, stringCol))
+      .noop()
   }
 
   private def doRunBenchmarkWithPrimitiveTypes(
@@ -51,7 +53,9 @@ object UDFBenchmark extends SqlBasedBenchmark {
     val idCol = col("id")
     val nullableIntCol = when(
       idCol % 2 === 0, idCol.cast(IntegerType)).otherwise(Literal(null, IntegerType))
-    spark.range(cardinality).select(udf(idCol, nullableIntCol)).write.format("noop").save()
+    spark.range(cardinality)
+      .select(udf(idCol, nullableIntCol))
+      .noop()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -104,16 +108,19 @@ object UDFBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("UDF identity overhead", cardinality, output = output)
 
       benchmark.addCase(s"Baseline", numIters = 5) { _ =>
-        spark.range(cardinality).select(
-          col("id"), col("id") * 2, col("id") * 3).write.format("noop").save()
+        spark.range(cardinality)
+          .select(col("id"), col("id") * 2, col("id") * 3)
+          .noop()
       }
 
       val identityUDF = udf { x: Long => x }
       benchmark.addCase(s"With identity UDF", numIters = 5) { _ =>
-        spark.range(cardinality).select(
-          identityUDF(col("id")),
-          identityUDF(col("id") * 2),
-          identityUDF(col("id") * 3)).write.format("noop").save()
+        spark.range(cardinality)
+          .select(
+            identityUDF(col("id")),
+            identityUDF(col("id") * 2),
+            identityUDF(col("id") * 3))
+          .noop()
       }
 
       benchmark.run()

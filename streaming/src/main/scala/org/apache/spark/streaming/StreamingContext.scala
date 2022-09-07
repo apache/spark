@@ -26,7 +26,6 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -42,6 +41,7 @@ import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingConf.STOP_GRACEFULLY_ON_SHUTDOWN
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
@@ -222,7 +222,7 @@ class StreamingContext private[streaming] (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Duration) {
+  def remember(duration: Duration): Unit = {
     graph.remember(duration)
   }
 
@@ -232,7 +232,7 @@ class StreamingContext private[streaming] (
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
    *                  Note that this must be a fault-tolerant file system like HDFS.
    */
-  def checkpoint(directory: String) {
+  def checkpoint(directory: String): Unit = {
     if (directory != null) {
       val path = new Path(directory)
       val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
@@ -275,7 +275,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at https://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
   def receiverStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
@@ -505,7 +505,7 @@ class StreamingContext private[streaming] (
    * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
    * receiving system events related to streaming.
    */
-  def addStreamingListener(streamingListener: StreamingListener) {
+  def addStreamingListener(streamingListener: StreamingListener): Unit = {
     scheduler.listenerBus.addListener(streamingListener)
   }
 
@@ -513,7 +513,7 @@ class StreamingContext private[streaming] (
     scheduler.listenerBus.removeListener(streamingListener)
   }
 
-  private def validate() {
+  private def validate(): Unit = {
     assert(graph != null, "Graph is null")
     graph.validate()
 
@@ -586,7 +586,7 @@ class StreamingContext private[streaming] (
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
-              savedProperties.set(SerializationUtils.clone(sparkContext.localProperties.get()))
+              savedProperties.set(Utils.cloneProperties(sparkContext.localProperties.get()))
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
@@ -621,7 +621,7 @@ class StreamingContext private[streaming] (
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def awaitTermination() {
+  def awaitTermination(): Unit = {
     waiter.waitForStopOrError()
   }
 
@@ -718,7 +718,7 @@ class StreamingContext private[streaming] (
   }
 
   private def stopOnShutdown(): Unit = {
-    val stopGracefully = conf.getBoolean("spark.streaming.stopGracefullyOnShutdown", false)
+    val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
     logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)

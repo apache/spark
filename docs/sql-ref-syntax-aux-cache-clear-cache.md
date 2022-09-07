@@ -19,4 +19,26 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+`CLEAR CACHE` removes the entries and associated data from the in-memory and/or on-disk cache for all cached tables and views.
+
+### Syntax
+
+```sql
+CLEAR CACHE
+```
+
+### Examples
+
+```sql
+CLEAR CACHE;
+```
+
+### Related Statements
+
+* [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+* [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
+* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

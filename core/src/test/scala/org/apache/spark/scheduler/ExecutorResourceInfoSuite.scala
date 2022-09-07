@@ -26,7 +26,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Track Executor Resource information") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"), 1)
     assert(info.availableAddrs.sorted sameElements Seq("0", "1", "2", "3"))
     assert(info.assignedAddrs.isEmpty)
 
@@ -43,7 +43,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Don't allow acquire address that is not available") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"), 1)
     // Acquire some addresses.
     info.acquire(Seq("0", "1"))
     assert(!info.availableAddrs.contains("1"))
@@ -56,7 +56,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Don't allow acquire address that doesn't exist") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"), 1)
     assert(!info.availableAddrs.contains("4"))
     // Acquire an address that doesn't exist
     val e = intercept[SparkException] {
@@ -67,7 +67,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Don't allow release address that is not assigned") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"), 1)
     // Acquire addresses
     info.acquire(Array("0", "1"))
     assert(!info.assignedAddrs.contains("2"))
@@ -80,12 +80,36 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Don't allow release address that doesn't exist") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"), 1)
     assert(!info.assignedAddrs.contains("4"))
     // Release an address that doesn't exist
     val e = intercept[SparkException] {
       info.release(Array("4"))
     }
     assert(e.getMessage.contains("Try to release an address that doesn't exist."))
+  }
+
+  test("Ensure that we can acquire the same fractions of a resource from an executor") {
+    val slotSeq = Seq(10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+    val addresses = ArrayBuffer("0", "1", "2", "3")
+    slotSeq.foreach { slots =>
+      val info = new ExecutorResourceInfo(GPU, addresses.toSeq, slots)
+      for (_ <- 0 until slots) {
+        addresses.foreach(addr => info.acquire(Seq(addr)))
+      }
+
+      // assert that each address was assigned `slots` times
+      info.assignedAddrs
+        .groupBy(identity)
+        .mapValues(_.size)
+        .foreach(x => assert(x._2 == slots))
+
+      addresses.foreach { addr =>
+        assertThrows[SparkException] {
+          info.acquire(Seq(addr))
+        }
+        assert(!info.availableAddrs.contains(addr))
+      }
+    }
   }
 }

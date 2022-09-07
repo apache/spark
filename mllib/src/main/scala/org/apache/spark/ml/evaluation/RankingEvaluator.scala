@@ -33,11 +33,12 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 @Since("3.0.0")
-class RankingEvaluator (override val uid: String)
+class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   import RankingEvaluator.supportedMetricNames
 
+  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("rankEval"))
 
   /**
@@ -45,6 +46,7 @@ class RankingEvaluator (override val uid: String)
    * `"meanAveragePrecisionAtK"`, `"precisionAtK"`, `"ndcgAtK"`, `"recallAtK"`)
    * @group param
    */
+  @Since("3.0.0")
   final val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(supportedMetricNames)
     new Param(this, "metricName", "metric name in evaluation " +
@@ -52,13 +54,19 @@ class RankingEvaluator (override val uid: String)
   }
 
   /** @group getParam */
+  @Since("3.0.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
+  @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "meanAveragePrecision")
-
+  /**
+   * param for ranking position value used in `"meanAveragePrecisionAtK"`, `"precisionAtK"`,
+   * `"ndcgAtK"`, `"recallAtK"`. Must be &gt; 0. The default value is 10.
+   * @group param
+   */
+  @Since("3.0.0")
   final val k = new IntParam(this, "k",
     "The ranking position value used in " +
       s"${supportedMetricNames.filter(_.endsWith("AtK")).mkString("(", "|", ")")}  " +
@@ -66,21 +74,44 @@ class RankingEvaluator (override val uid: String)
     ParamValidators.gt(0))
 
   /** @group getParam */
+  @Since("3.0.0")
   def getK: Int = $(k)
 
   /** @group setParam */
+  @Since("3.0.0")
   def setK(value: Int): this.type = set(k, value)
 
-  setDefault(k -> 10)
-
   /** @group setParam */
+  @Since("3.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("3.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  setDefault(k -> 10, metricName -> "meanAveragePrecision")
 
+  @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    $(metricName) match {
+      case "meanAveragePrecision" => metrics.meanAveragePrecision
+      case "meanAveragePrecisionAtK" => metrics.meanAveragePrecisionAt($(k))
+      case "precisionAtK" => metrics.precisionAt($(k))
+      case "ndcgAtK" => metrics.ndcgAt($(k))
+      case "recallAtK" => metrics.recallAt($(k))
+    }
+  }
+
+  /**
+   * Get a RankingMetrics, which can be used to get ranking metrics
+   * such as meanAveragePrecision, meanAveragePrecisionAtK, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return RankingMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): RankingMetrics[Double] = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(predictionCol),
       Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
@@ -92,19 +123,19 @@ class RankingEvaluator (override val uid: String)
         .rdd.map { row =>
         (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
       }
-    val metrics = new RankingMetrics[Double](predictionAndLabels)
-    $(metricName) match {
-      case "meanAveragePrecision" => metrics.meanAveragePrecision
-      case "meanAveragePrecisionAtK" => metrics.meanAveragePrecisionAt($(k))
-      case "precisionAtK" => metrics.precisionAt($(k))
-      case "ndcgAtK" => metrics.ndcgAt($(k))
-      case "recallAtK" => metrics.recallAt($(k))
-    }
+    new RankingMetrics[Double](predictionAndLabels)
   }
 
+  @Since("3.0.0")
   override def isLargerBetter: Boolean = true
 
+  @Since("3.0.0")
   override def copy(extra: ParamMap): RankingEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RankingEvaluator: uid=$uid, metricName=${$(metricName)}, k=${$(k)}"
+  }
 }
 
 
@@ -114,5 +145,6 @@ object RankingEvaluator extends DefaultParamsReadable[RankingEvaluator] {
   private val supportedMetricNames = Array("meanAveragePrecision",
     "meanAveragePrecisionAtK", "precisionAtK", "ndcgAtK", "recallAtK")
 
+  @Since("3.0.0")
   override def load(path: String): RankingEvaluator = super.load(path)
 }

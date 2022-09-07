@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{FunSpec, Matchers}
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 
-class RowTest extends FunSpec with Matchers {
+class RowTest extends AnyFunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::

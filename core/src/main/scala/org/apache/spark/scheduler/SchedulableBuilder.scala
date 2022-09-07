@@ -17,13 +17,15 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{FileInputStream, InputStream}
+import java.io.InputStream
 import java.util.{Locale, NoSuchElementException, Properties}
 
 import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -45,19 +47,19 @@ private[spark] trait SchedulableBuilder {
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
   extends SchedulableBuilder with Logging {
 
-  override def buildPools() {
+  override def buildPools(): Unit = {
     // nothing
   }
 
-  override def addTaskSetManager(manager: Schedulable, properties: Properties) {
+  override def addTaskSetManager(manager: Schedulable, properties: Properties): Unit = {
     rootPool.addSchedulable(manager)
   }
 }
 
-private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
+private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext)
   extends SchedulableBuilder with Logging {
 
-  val schedulerAllocFile = conf.get(SCHEDULER_ALLOCATION_FILE)
+  val schedulerAllocFile = sc.conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
   val DEFAULT_POOL_NAME = "default"
@@ -70,11 +72,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val DEFAULT_MINIMUM_SHARE = 0
   val DEFAULT_WEIGHT = 1
 
-  override def buildPools() {
+  override def buildPools(): Unit = {
     var fileData: Option[(InputStream, String)] = None
     try {
       fileData = schedulerAllocFile.map { f =>
-        val fis = new FileInputStream(f)
+        val filePath = new Path(f)
+        val fis = filePath.getFileSystem(sc.hadoopConfiguration).open(filePath)
         logInfo(s"Creating Fair Scheduler pools from $f")
         Some((fis, f))
       }.getOrElse {
@@ -106,7 +109,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     buildDefaultPool()
   }
 
-  private def buildDefaultPool() {
+  private def buildDefaultPool(): Unit = {
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
@@ -116,7 +119,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  private def buildFairSchedulerPool(is: InputStream, fileName: String) {
+  private def buildFairSchedulerPool(is: InputStream, fileName: String): Unit = {
     val xml = XML.load(is)
     for (poolNode <- (xml \\ POOLS_PROPERTY)) {
 
@@ -180,7 +183,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     }
   }
 
-  override def addTaskSetManager(manager: Schedulable, properties: Properties) {
+  override def addTaskSetManager(manager: Schedulable, properties: Properties): Unit = {
     val poolName = if (properties != null) {
         properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
       } else {

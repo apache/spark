@@ -17,18 +17,20 @@
 
 package org.apache.spark.rdd
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.FileNotFoundException
 import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, CHECKPOINT_COMPRESS}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -76,20 +78,44 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     // Fail fast if input files are invalid
     inputFiles.zipWithIndex.foreach { case (path, i) =>
       if (path.getName != ReliableCheckpointRDD.checkpointFileName(i)) {
-        throw new SparkException(s"Invalid checkpoint file: $path")
+        throw SparkCoreErrors.invalidCheckpointFileError(path)
       }
     }
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
   }
 
-  /**
-   * Return the locations of the checkpoint file associated with the given partition.
-   */
-  protected override def getPreferredLocations(split: Partition): Seq[String] = {
+  // Cache of preferred locations of checkpointed files.
+  @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
+    .expireAfterWrite(
+      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
+      TimeUnit.MINUTES)
+    .build(
+      new CacheLoader[Partition, Seq[String]]() {
+        override def load(split: Partition): Seq[String] = {
+          getPartitionBlockLocations(split)
+        }
+      })
+
+  // Returns the block locations of given partition on file system.
+  private def getPartitionBlockLocations(split: Partition): Seq[String] = {
     val status = fs.getFileStatus(
       new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
     val locations = fs.getFileBlockLocations(status, 0, status.getLen)
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
+  }
+
+  private lazy val cachedExpireTime =
+    SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME)
+
+  /**
+   * Return the locations of the checkpoint file associated with the given partition.
+   */
+  protected override def getPreferredLocations(split: Partition): Seq[String] = {
+    if (cachedExpireTime.isDefined && cachedExpireTime.get > 0) {
+      cachedPreferredLocations.get(split)
+    } else {
+      getPartitionBlockLocations(split)
+    }
   }
 
   /**
@@ -130,7 +156,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val checkpointDirPath = new Path(checkpointDir)
     val fs = checkpointDirPath.getFileSystem(sc.hadoopConfiguration)
     if (!fs.mkdirs(checkpointDirPath)) {
-      throw new SparkException(s"Failed to create checkpoint path $checkpointDirPath")
+      throw SparkCoreErrors.failToCreateCheckpointPathError(checkpointDirPath)
     }
 
     // Save to file, and reload it as an RDD
@@ -151,11 +177,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val newRDD = new ReliableCheckpointRDD[T](
       sc, checkpointDirPath.toString, originalRDD.partitioner)
     if (newRDD.partitions.length != originalRDD.partitions.length) {
-      throw new SparkException(
-        "Checkpoint RDD has a different number of partitions from original RDD. Original " +
-          s"RDD [ID: ${originalRDD.id}, num of partitions: ${originalRDD.partitions.length}]; " +
-          s"Checkpoint RDD [ID: ${newRDD.id}, num of partitions: " +
-          s"${newRDD.partitions.length}].")
+      throw SparkCoreErrors.checkpointRDDHasDifferentNumberOfPartitionsFromOriginalRDDError(
+        originalRDD.id, originalRDD.partitions.length, newRDD.id, newRDD.partitions.length)
     }
     newRDD
   }
@@ -166,15 +189,14 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   def writePartitionToCheckpointFile[T: ClassTag](
       path: String,
       broadcastedConf: Broadcast[SerializableConfiguration],
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]): Unit = {
     val env = SparkEnv.get
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)
 
     val finalOutputName = ReliableCheckpointRDD.checkpointFileName(ctx.partitionId())
     val finalOutputPath = new Path(outputDir, finalOutputName)
-    val tempOutputPath =
-      new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
+    val tempOutputPath = new Path(outputDir, s".$finalOutputName-attempt-${ctx.taskAttemptId()}")
 
     val bufferSize = env.conf.get(BUFFER_SIZE)
 
@@ -192,18 +214,22 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
-    Utils.tryWithSafeFinally {
+    Utils.tryWithSafeFinallyAndFailureCallbacks {
       serializeStream.writeAll(iterator)
-    } {
+    } (catchBlock = {
+      val deleted = fs.delete(tempOutputPath, false)
+      if (!deleted) {
+        logInfo(s"Failed to delete tempOutputPath $tempOutputPath.")
+      }
+    }, finallyBlock = {
       serializeStream.close()
-    }
+    })
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {
         logInfo(s"Deleting tempOutputPath $tempOutputPath")
         fs.delete(tempOutputPath, false)
-        throw new IOException("Checkpoint failed: failed to save output of task: " +
-          s"${ctx.attemptNumber()} and final output path does not exist: $finalOutputPath")
+        throw SparkCoreErrors.checkpointFailedToSaveError(ctx.attemptNumber(), finalOutputPath)
       } else {
         // Some other copy of this task must've finished before us and renamed it
         logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")

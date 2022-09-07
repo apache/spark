@@ -55,3 +55,22 @@ FROM   t1
 WHERE  t1.v >= (SELECT   min(t2.v)
                 FROM     t2
                 WHERE    t2.k = t1.k);
+
+-- SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes
+CREATE OR REPLACE TEMPORARY VIEW t3 AS VALUES (decimal(1)) tbl(v);
+SELECT t.v FROM (
+  SELECT v FROM t3
+  EXCEPT
+  SELECT v + v AS v FROM t3
+) t;
+
+SELECT SUM(t.v) FROM (
+  SELECT v FROM t3
+  EXCEPT
+  SELECT v + v AS v FROM t3
+) t;
+
+-- Clean-up
+DROP VIEW IF EXISTS t1;
+DROP VIEW IF EXISTS t2;
+DROP VIEW IF EXISTS t3;

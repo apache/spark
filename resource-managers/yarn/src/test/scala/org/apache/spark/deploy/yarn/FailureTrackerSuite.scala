@@ -16,7 +16,8 @@
  */
 package org.apache.spark.deploy.yarn
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.ManualClock

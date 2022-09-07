@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.{StandardScalerModel => NewStandardScalerModel}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -55,12 +55,11 @@ class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) exten
   @Since("1.1.0")
   def fit(data: RDD[Vector]): StandardScalerModel = {
     // TODO: skip computation if both withMean and withStd are false
-    val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
-      (aggregator, data) => aggregator.add(data),
-      (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    val summary = Statistics.colStats(data.map((_, 1.0)), Seq("mean", "std"))
+
     new StandardScalerModel(
-      Vectors.dense(summary.variance.toArray.map(v => math.sqrt(v))),
-      summary.mean,
+      Vectors.fromML(summary.std),
+      Vectors.fromML(summary.mean),
       withStd,
       withMean)
   }
@@ -84,7 +83,7 @@ class StandardScalerModel @Since("1.3.0") (
   /**
    */
   @Since("1.3.0")
-  def this(std: Vector, mean: Vector) {
+  def this(std: Vector, mean: Vector) = {
     this(std, mean, withStd = std != null, withMean = mean != null)
     require(this.withStd || this.withMean,
       "at least one of std or mean vectors must be provided")
@@ -97,22 +96,14 @@ class StandardScalerModel @Since("1.3.0") (
   @Since("1.3.0")
   def this(std: Vector) = this(std, null)
 
-  /**
-   * :: DeveloperApi ::
-   */
   @Since("1.3.0")
-  @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
     require(!(withMean && this.mean == null), "cannot set withMean to true while mean is null")
     this.withMean = withMean
     this
   }
 
-  /**
-   * :: DeveloperApi ::
-   */
   @Since("1.3.0")
-  @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {
     require(!(withStd && this.std == null),
       "cannot set withStd to true while std is null")
@@ -176,6 +167,8 @@ class StandardScalerModel @Since("1.3.0") (
             val newValues = NewStandardScalerModel
               .transformSparseWithScale(localScale, indices, values.clone())
             Vectors.sparse(size, indices, newValues)
+          case v =>
+            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
 
       case _ => vector

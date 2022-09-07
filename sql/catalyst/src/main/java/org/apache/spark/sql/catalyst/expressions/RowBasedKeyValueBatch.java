@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
-  protected final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+  protected static final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
 
@@ -79,13 +79,11 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
     boolean allFixedLength = true;
     // checking if there is any variable length fields
     // there is probably a more succinct impl of this
-    for (String name : keySchema.fieldNames()) {
-      allFixedLength = allFixedLength
-              && UnsafeRow.isFixedLength(keySchema.apply(name).dataType());
+    for (StructField field : keySchema.fields()) {
+      allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
-    for (String name : valueSchema.fieldNames()) {
-      allFixedLength = allFixedLength
-              && UnsafeRow.isFixedLength(valueSchema.apply(name).dataType());
+    for (StructField field : valueSchema.fields()) {
+      allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
 
     if (allFixedLength) {
@@ -97,7 +95,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
 
   protected RowBasedKeyValueBatch(StructType keySchema, StructType valueSchema, int maxRows,
                                 TaskMemoryManager manager) {
-    super(manager, manager.pageSizeBytes(), manager.getTungstenMemoryMode());
+    super(manager, manager.getTungstenMemoryMode());
 
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -117,6 +115,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
 
   public final int numRows() { return numRows; }
 
+  @Override
   public final void close() {
     if (page != null) {
       freePage(page);
@@ -171,6 +170,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
    * space for new consumers. For RowBasedKeyValueBatch, we do not actually spill and return 0.
    * We should not throw OutOfMemory exception here because other associated consumers might spill
    */
+  @Override
   public final long spill(long size, MemoryConsumer trigger) throws IOException {
     logger.warn("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
     return 0;

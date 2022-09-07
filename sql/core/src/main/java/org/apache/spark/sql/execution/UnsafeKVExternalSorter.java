@@ -29,12 +29,13 @@ import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
+import org.apache.spark.sql.catalyst.expressions.BaseOrdering;
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -141,9 +142,10 @@ public final class UnsafeKVExternalSorter {
 
         // Get encoded memory address
         // baseObject + baseOffset point to the beginning of the key data in the map, but that
-        // the KV-pair's length data is stored in the word immediately before that address
+        // the KV-pair's length data is stored at 2 * uaoSize bytes immediately before that address
         MemoryBlock page = loc.getMemoryPage();
-        long address = taskMemoryManager.encodePageNumberAndOffset(page, baseOffset - 8);
+        long address = taskMemoryManager.encodePageNumberAndOffset(page,
+            baseOffset - 2L * UnsafeAlignedOffset.getUaoSize());
 
         // Compute prefix
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
@@ -163,7 +165,8 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
-        inMemSorter);
+        inMemSorter,
+        map.getTotalMemoryConsumption());
 
       // reset the map, so we can re-use it to insert new records. the inMemSorter will not used
       // anymore, so the underline array could be used by map again.
@@ -262,10 +265,11 @@ public final class UnsafeKVExternalSorter {
         Object baseObj2,
         long baseOff2,
         int baseLen2) {
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
       // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
-      row1.pointTo(baseObj1, baseOff1 + 4, 0);
-      row2.pointTo(baseObj2, baseOff2 + 4, 0);
+      row1.pointTo(baseObj1, baseOff1 + uaoSize, 0);
+      row2.pointTo(baseObj2, baseOff2 + uaoSize, 0);
       return ordering.compare(row1, row2);
     }
   }
@@ -289,11 +293,12 @@ public final class UnsafeKVExternalSorter {
           long recordOffset = underlying.getBaseOffset();
           int recordLen = underlying.getRecordLength();
 
-          // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
+          // Note that recordLen = keyLen + valueLen + uaoSize (for the keyLen itself)
+          int uaoSize = UnsafeAlignedOffset.getUaoSize();
           int keyLen = Platform.getInt(baseObj, recordOffset);
-          int valueLen = recordLen - keyLen - 4;
-          key.pointTo(baseObj, recordOffset + 4, keyLen);
-          value.pointTo(baseObj, recordOffset + 4 + keyLen, valueLen);
+          int valueLen = recordLen - keyLen - uaoSize;
+          key.pointTo(baseObj, recordOffset + uaoSize, keyLen);
+          value.pointTo(baseObj, recordOffset + uaoSize + keyLen, valueLen);
 
           return true;
         } else {

@@ -233,9 +233,9 @@ public class ExternalShuffleIntegrationSuite {
     exec0Fetch.releaseBuffers();
   }
 
-  @Test (expected = RuntimeException.class)
-  public void testRegisterInvalidExecutor() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
+  @Test
+  public void testRegisterWithCustomShuffleManager() throws Exception {
+    registerExecutor("exec-1", dataContext0.createExecutorInfo("custom shuffle manager"));
   }
 
   @Test

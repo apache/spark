@@ -18,16 +18,18 @@
 package org.apache.spark.scheduler
 
 import java.io._
-import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.EventLogFileReader
+import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
 import org.apache.spark.util.{JsonProtocol, JsonProtocolSuite, Utils}
 
@@ -50,19 +52,20 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Simple replay") {
     val logFilePath = getFilePath(testDir, "events.txt")
     val fstream = fileSystem.create(logFilePath)
+    val fwriter = new OutputStreamWriter(fstream, StandardCharsets.UTF_8)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+    Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
-    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val conf = getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -71,8 +74,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       logData.close()
     }
     assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
   }
 
   /**
@@ -85,16 +88,17 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Replay compressed inprogress log file succeeding on partial read") {
     val buffered = new ByteArrayOutputStream
     val codec = new LZ4CompressionCodec(new SparkConf())
-    val compstream = codec.compressedOutputStream(buffered)
-    Utils.tryWithResource(new PrintWriter(compstream)) { writer =>
+    val compstream = codec.compressedContinuousOutputStream(buffered)
+    val cwriter = new OutputStreamWriter(compstream, StandardCharsets.UTF_8)
+    Utils.tryWithResource(new PrintWriter(cwriter)) { writer =>
 
       val applicationStart = SparkListenerApplicationStart("AppStarts", None,
         125L, "Mickey", None)
       val applicationEnd = SparkListenerApplicationEnd(1000L)
 
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
@@ -105,14 +109,14 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     }
 
     // Read the compressed .inprogress file and verify only first event was parsed.
-    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val conf = getLoggingConf(logFilePath)
     val replayer = new ReplayListenerBus()
 
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventBufferingListener
     replayer.addListener(eventMonster)
 
     // Verify the replay returns the events given the input maybe truncated.
-    val logData = EventLoggingListener.openEventLog(logFilePath, fileSystem)
+    val logData = EventLogFileReader.openEventLog(logFilePath, fileSystem)
     Utils.tryWithResource(new EarlyEOFInputStream(logData, buffered.size - 10)) { failingStream =>
       replayer.replay(failingStream, logFilePath.toString, true)
 
@@ -121,7 +125,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     }
 
     // Verify the replay throws the EOF exception since the input may not be truncated.
-    val logData2 = EventLoggingListener.openEventLog(logFilePath, fileSystem)
+    val logData2 = EventLogFileReader.openEventLog(logFilePath, fileSystem)
     Utils.tryWithResource(new EarlyEOFInputStream(logData2, buffered.size - 10)) { failingStream2 =>
       intercept[EOFException] {
         replayer.replay(failingStream2, logFilePath.toString, false)
@@ -132,20 +136,21 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Replay incompatible event log") {
     val logFilePath = getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
+    val fwriter = new OutputStreamWriter(fstream, StandardCharsets.UTF_8)
     val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
       125L, "UserUsingIncompatibleVersion", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+    Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
       writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
-    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val conf = getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -154,8 +159,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       logData.close()
     }
     assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
   }
 
   // This assumes the correctness of EventLoggingListener
@@ -182,14 +187,14 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    * event to the corresponding event replayed from the event logs. This test makes the
    * assumption that the event logging behavior is correct (tested in a separate suite).
    */
-  private def testApplicationReplay(codecName: Option[String] = None) {
+  private def testApplicationReplay(codecName: Option[String] = None): Unit = {
     val logDir = new File(testDir.getAbsolutePath, "test-replay")
     // Here, it creates `Path` from the URI instead of the absolute path for the explicit file
     // scheme so that the string representation of this `Path` has leading file scheme correctly.
     val logDirPath = new Path(logDir.toURI)
     fileSystem.mkdirs(logDirPath)
 
-    val conf = EventLoggingListenerSuite.getLoggingConf(logDirPath, codecName)
+    val conf = getLoggingConf(logDirPath, codecName)
     sc = new SparkContext("local-cluster[2,1,1024]", "Test replay", conf)
 
     // Run a few jobs
@@ -206,8 +211,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(!eventLog.isDirectory)
 
     // Replay events
-    val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
-    val eventMonster = new EventMonster(conf)
+    val logData = EventLogFileReader.openEventLog(eventLog.getPath(), fileSystem)
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -219,11 +224,11 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
     val originalEvents = sc.eventLogger.get.loggedEvents
+      .map(JsonProtocol.sparkEventFromJson)
     val replayedEvents = eventMonster.loggedEvents
+      .map(JsonProtocol.sparkEventFromJson)
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
-      // Don't compare the JSON here because accumulators in StageInfo may be out of order
-      JsonProtocolSuite.assertEquals(
-        JsonProtocol.sparkEventFromJson(e1), JsonProtocol.sparkEventFromJson(e2))
+      JsonProtocolSuite.assertEquals(e1, e1)
     }
   }
 
@@ -235,26 +240,20 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
   /**
    * A simple listener that buffers all the events it receives.
-   *
-   * The event buffering functionality must be implemented within EventLoggingListener itself.
-   * This is because of the following race condition: the event may be mutated between being
-   * processed by one listener and being processed by another. Thus, in order to establish
-   * a fair comparison between the original events and the replayed events, both functionalities
-   * must be implemented within one listener (i.e. the EventLoggingListener).
-   *
-   * This child listener inherits only the event buffering functionality, but does not actually
-   * log the events.
    */
-  private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
+  private class EventBufferingListener extends SparkFirehoseListener {
 
-    override def start() { }
+    private[scheduler] val loggedEvents = new ArrayBuffer[String]
 
+    override def onEvent(event: SparkListenerEvent): Unit = {
+      val eventJson = JsonProtocol.sparkEventToJsonString(event)
+      loggedEvents += eventJson
+    }
   }
 
   /*
    * This is a dummy input stream that wraps another input stream but ends prematurely when
-   * reading at the specified position, throwing an EOFExeption.
+   * reading at the specified position, throwing an EOFException.
    */
   private class EarlyEOFInputStream(in: InputStream, failAtPos: Int) extends InputStream {
     private val countDown = new AtomicInteger(failAtPos)

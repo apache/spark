@@ -113,10 +113,8 @@ object FrequentItems extends Logging {
     val justItems = freqItems.map(m => m.baseMap.keys.toArray)
     val resultRow = Row(justItems : _*)
 
-    val originalSchema = df.schema
     val outputCols = cols.map { name =>
-      val index = originalSchema.fieldIndex(name)
-      val originalField = originalSchema.fields(index)
+      val originalField = df.resolve(name)
 
       // append frequent Items to the column name for easy debugging
       StructField(name + "_freqItems", ArrayType(originalField.dataType, originalField.nullable))

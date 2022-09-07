@@ -93,7 +93,8 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashProbe: SQLMetric)
+    avgHashProbe: SQLMetric,
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -249,9 +250,9 @@ class TungstenAggregationIterator(
     // Basically the value of the KVIterator returned by externalSorter
     // will be just aggregation buffer, so we rewrite the aggregateExpressions to reflect it.
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }
@@ -277,6 +278,7 @@ class TungstenAggregationIterator(
 
     // Step 7: set sortBased to true.
     sortBased = true
+    numTasksFallBacked += 1
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -387,7 +389,7 @@ class TungstenAggregationIterator(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Updating average hashmap probe
-    avgHashProbe.set(hashMap.getAvgHashProbeBucketListIterations)
+    avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
   })
 
   ///////////////////////////////////////////////////////////////////////////

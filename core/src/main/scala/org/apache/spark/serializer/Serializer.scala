@@ -173,7 +173,7 @@ abstract class DeserializationStream extends Closeable {
       }
     }
 
-    override protected def close() {
+    override protected def close(): Unit = {
       DeserializationStream.this.close()
     }
   }
@@ -193,7 +193,7 @@ abstract class DeserializationStream extends Closeable {
       }
     }
 
-    override protected def close() {
+    override protected def close(): Unit = {
       DeserializationStream.this.close()
     }
   }

@@ -1,0 +1,233 @@
+== Physical Plan ==
+* Sort (35)
++- Exchange (34)
+   +- * Project (33)
+      +- * SortMergeJoin Inner (32)
+         :- * Sort (26)
+         :  +- Exchange (25)
+         :     +- * Filter (24)
+         :        +- * HashAggregate (23)
+         :           +- Exchange (22)
+         :              +- * HashAggregate (21)
+         :                 +- * Project (20)
+         :                    +- * BroadcastHashJoin Inner BuildRight (19)
+         :                       :- * Project (13)
+         :                       :  +- * BroadcastHashJoin Inner BuildRight (12)
+         :                       :     :- * Project (6)
+         :                       :     :  +- * BroadcastHashJoin Inner BuildRight (5)
+         :                       :     :     :- * Filter (3)
+         :                       :     :     :  +- * ColumnarToRow (2)
+         :                       :     :     :     +- Scan parquet spark_catalog.default.store_sales (1)
+         :                       :     :     +- ReusedExchange (4)
+         :                       :     +- BroadcastExchange (11)
+         :                       :        +- * Project (10)
+         :                       :           +- * Filter (9)
+         :                       :              +- * ColumnarToRow (8)
+         :                       :                 +- Scan parquet spark_catalog.default.store (7)
+         :                       +- BroadcastExchange (18)
+         :                          +- * Project (17)
+         :                             +- * Filter (16)
+         :                                +- * ColumnarToRow (15)
+         :                                   +- Scan parquet spark_catalog.default.household_demographics (14)
+         +- * Sort (31)
+            +- Exchange (30)
+               +- * Filter (29)
+                  +- * ColumnarToRow (28)
+                     +- Scan parquet spark_catalog.default.customer (27)
+
+
+(1) Scan parquet spark_catalog.default.store_sales
+Output [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#5), dynamicpruningexpression(ss_sold_date_sk#5 IN dynamicpruning#6)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_customer_sk)]
+ReadSchema: struct<ss_customer_sk:int,ss_hdemo_sk:int,ss_store_sk:int,ss_ticket_number:int>
+
+(2) ColumnarToRow [codegen id : 4]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+
+(3) Filter [codegen id : 4]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
+Condition : ((isnotnull(ss_store_sk#3) AND isnotnull(ss_hdemo_sk#2)) AND isnotnull(ss_customer_sk#1))
+
+(4) ReusedExchange [Reuses operator id: 40]
+Output [1]: [d_date_sk#7]
+
+(5) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_sold_date_sk#5]
+Right keys [1]: [d_date_sk#7]
+Join type: Inner
+Join condition: None
+
+(6) Project [codegen id : 4]
+Output [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4]
+Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#7]
+
+(7) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#8, s_county#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_county), EqualTo(s_county,Williamson County), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_county:string>
+
+(8) ColumnarToRow [codegen id : 2]
+Input [2]: [s_store_sk#8, s_county#9]
+
+(9) Filter [codegen id : 2]
+Input [2]: [s_store_sk#8, s_county#9]
+Condition : ((isnotnull(s_county#9) AND (s_county#9 = Williamson County)) AND isnotnull(s_store_sk#8))
+
+(10) Project [codegen id : 2]
+Output [1]: [s_store_sk#8]
+Input [2]: [s_store_sk#8, s_county#9]
+
+(11) BroadcastExchange
+Input [1]: [s_store_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(12) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#8]
+Join type: Inner
+Join condition: None
+
+(13) Project [codegen id : 4]
+Output [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, s_store_sk#8]
+
+(14) Scan parquet spark_catalog.default.household_demographics
+Output [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_vehicle_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
+
+(15) ColumnarToRow [codegen id : 3]
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+
+(16) Filter [codegen id : 3]
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+Condition : ((((isnotnull(hd_vehicle_count#13) AND ((hd_buy_potential#11 = >10000         ) OR (hd_buy_potential#11 = unknown        ))) AND (hd_vehicle_count#13 > 0)) AND CASE WHEN (hd_vehicle_count#13 > 0) THEN ((cast(hd_dep_count#12 as double) / cast(hd_vehicle_count#13 as double)) > 1.2) END) AND isnotnull(hd_demo_sk#10))
+
+(17) Project [codegen id : 3]
+Output [1]: [hd_demo_sk#10]
+Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+
+(18) BroadcastExchange
+Input [1]: [hd_demo_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(19) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#10]
+Join type: Inner
+Join condition: None
+
+(20) Project [codegen id : 4]
+Output [2]: [ss_customer_sk#1, ss_ticket_number#4]
+Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, hd_demo_sk#10]
+
+(21) HashAggregate [codegen id : 4]
+Input [2]: [ss_customer_sk#1, ss_ticket_number#4]
+Keys [2]: [ss_ticket_number#4, ss_customer_sk#1]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#14]
+Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
+
+(22) Exchange
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
+Arguments: hashpartitioning(ss_ticket_number#4, ss_customer_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(23) HashAggregate [codegen id : 5]
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, count#15]
+Keys [2]: [ss_ticket_number#4, ss_customer_sk#1]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#16]
+Results [3]: [ss_ticket_number#4, ss_customer_sk#1, count(1)#16 AS cnt#17]
+
+(24) Filter [codegen id : 5]
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17]
+Condition : ((cnt#17 >= 15) AND (cnt#17 <= 20))
+
+(25) Exchange
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17]
+Arguments: hashpartitioning(ss_customer_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+
+(26) Sort [codegen id : 6]
+Input [3]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17]
+Arguments: [ss_customer_sk#1 ASC NULLS FIRST], false, 0
+
+(27) Scan parquet spark_catalog.default.customer
+Output [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk)]
+ReadSchema: struct<c_customer_sk:int,c_salutation:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string>
+
+(28) ColumnarToRow [codegen id : 7]
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+
+(29) Filter [codegen id : 7]
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Condition : isnotnull(c_customer_sk#18)
+
+(30) Exchange
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Arguments: hashpartitioning(c_customer_sk#18, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(31) Sort [codegen id : 8]
+Input [5]: [c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+Arguments: [c_customer_sk#18 ASC NULLS FIRST], false, 0
+
+(32) SortMergeJoin [codegen id : 9]
+Left keys [1]: [ss_customer_sk#1]
+Right keys [1]: [c_customer_sk#18]
+Join type: Inner
+Join condition: None
+
+(33) Project [codegen id : 9]
+Output [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Input [8]: [ss_ticket_number#4, ss_customer_sk#1, cnt#17, c_customer_sk#18, c_salutation#19, c_first_name#20, c_last_name#21, c_preferred_cust_flag#22]
+
+(34) Exchange
+Input [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Arguments: rangepartitioning(c_last_name#21 ASC NULLS FIRST, c_first_name#20 ASC NULLS FIRST, c_salutation#19 ASC NULLS FIRST, c_preferred_cust_flag#22 DESC NULLS LAST, ss_ticket_number#4 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+
+(35) Sort [codegen id : 10]
+Input [6]: [c_last_name#21, c_first_name#20, c_salutation#19, c_preferred_cust_flag#22, ss_ticket_number#4, cnt#17]
+Arguments: [c_last_name#21 ASC NULLS FIRST, c_first_name#20 ASC NULLS FIRST, c_salutation#19 ASC NULLS FIRST, c_preferred_cust_flag#22 DESC NULLS LAST, ss_ticket_number#4 ASC NULLS FIRST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#5 IN dynamicpruning#6
+BroadcastExchange (40)
++- * Project (39)
+   +- * Filter (38)
+      +- * ColumnarToRow (37)
+         +- Scan parquet spark_catalog.default.date_dim (36)
+
+
+(36) Scan parquet spark_catalog.default.date_dim
+Output [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [Or(And(GreaterThanOrEqual(d_dom,1),LessThanOrEqual(d_dom,3)),And(GreaterThanOrEqual(d_dom,25),LessThanOrEqual(d_dom,28))), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
+
+(37) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+
+(38) Filter [codegen id : 1]
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+Condition : (((((d_dom#24 >= 1) AND (d_dom#24 <= 3)) OR ((d_dom#24 >= 25) AND (d_dom#24 <= 28))) AND d_year#23 IN (1999,2000,2001)) AND isnotnull(d_date_sk#7))
+
+(39) Project [codegen id : 1]
+Output [1]: [d_date_sk#7]
+Input [3]: [d_date_sk#7, d_year#23, d_dom#24]
+
+(40) BroadcastExchange
+Input [1]: [d_date_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+
+

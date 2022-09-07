@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.Locale
+
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.{ModifiedAfterFilter, ModifiedBeforeFilter}
 import org.apache.spark.util.Utils
 
 /**
@@ -29,6 +32,16 @@ import org.apache.spark.util.Utils
 class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  checkDisallowedOptions()
+
+  private def checkDisallowedOptions(): Unit = {
+    Seq(ModifiedBeforeFilter.PARAM_NAME, ModifiedAfterFilter.PARAM_NAME).foreach { param =>
+      if (parameters.contains(param)) {
+        throw new IllegalArgumentException(s"option '$param' is not allowed in file stream sources")
+      }
+    }
+  }
 
   val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
@@ -74,6 +87,30 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
    */
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
+  /**
+   * The archive directory to move completed files. The option will be only effective when
+   * "cleanSource" is set to "archive".
+   *
+   * Note that the completed file will be moved to this archive directory with respecting to
+   * its own path.
+   *
+   * For example, if the path of source file is "/a/b/dataset.txt", and the path of archive
+   * directory is "/archived/here", file will be moved to "/archived/here/a/b/dataset.txt".
+   */
+  val sourceArchiveDir: Option[String] = parameters.get("sourceArchiveDir")
+
+  /**
+   * Defines how to clean up completed files. Available options are "archive", "delete", "off".
+   */
+  val cleanSource: CleanSourceMode.Value = {
+    val matchedMode = CleanSourceMode.fromString(parameters.get("cleanSource"))
+    if (matchedMode == CleanSourceMode.ARCHIVE && sourceArchiveDir.isEmpty) {
+      throw new IllegalArgumentException("Archive mode must be used with 'sourceArchiveDir' " +
+        "option.")
+    }
+    matchedMode
+  }
+
   private def withBooleanParameter(name: String, default: Boolean) = {
     parameters.get(name).map { str =>
       try {
@@ -85,4 +122,15 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
       }
     }.getOrElse(default)
   }
+}
+
+object CleanSourceMode extends Enumeration {
+  val ARCHIVE, DELETE, OFF = Value
+
+  def fromString(value: Option[String]): CleanSourceMode.Value = value.map { v =>
+    CleanSourceMode.values.find(_.toString == v.toUpperCase(Locale.ROOT))
+      .getOrElse(throw new IllegalArgumentException(
+        s"Invalid mode for clean source option $value." +
+        s" Must be one of ${CleanSourceMode.values.mkString(",")}"))
+  }.getOrElse(OFF)
 }

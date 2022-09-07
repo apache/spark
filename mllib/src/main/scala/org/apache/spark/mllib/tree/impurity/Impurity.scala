@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree.impurity
 
 import java.util.Locale
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 
 /**
  * Trait for calculating information gain.
@@ -31,18 +31,15 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 trait Impurity extends Serializable {
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
-  @DeveloperApi
   def calculate(counts: Array[Double], totalCount: Double): Double
 
   /**
-   * :: DeveloperApi ::
    * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
@@ -50,7 +47,6 @@ trait Impurity extends Serializable {
    * @return information value, or 0 if count = 0
    */
   @Since("1.0.0")
-  @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
 }
 

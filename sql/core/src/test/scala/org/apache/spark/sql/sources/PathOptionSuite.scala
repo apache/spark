@@ -19,8 +19,6 @@ package org.apache.spark.sql.sources
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
@@ -123,7 +121,8 @@ class PathOptionSuite extends DataSourceTest with SharedSparkSession {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path2")))
+      assert(getPathOption("src") ==
+        Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
     }
 
     withTable("src", "src2") {

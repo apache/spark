@@ -34,12 +34,13 @@ import org.apache.spark.sql.types._
  */
 @Since("3.0.0")
 @Experimental
-class MultilabelClassificationEvaluator (override val uid: String)
+class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol
     with DefaultParamsWritable {
 
   import MultilabelClassificationEvaluator.supportedMetricNames
 
+  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("mlcEval"))
 
   /**
@@ -49,6 +50,7 @@ class MultilabelClassificationEvaluator (override val uid: String)
    * `"microF1Measure"`)
    * @group param
    */
+  @Since("3.0.0")
   final val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(supportedMetricNames)
     new Param(this, "metricName", "metric name in evaluation " +
@@ -56,13 +58,19 @@ class MultilabelClassificationEvaluator (override val uid: String)
   }
 
   /** @group getParam */
+  @Since("3.0.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
+  @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "f1Measure")
-
+  /**
+   * param for the class whose metric will be computed in `"precisionByLabel"`, `"recallByLabel"`,
+   * `"f1MeasureByLabel"`.
+   * @group param
+   */
+  @Since("3.0.0")
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
     "The class whose metric will be computed in " +
       s"${supportedMetricNames.filter(_.endsWith("ByLabel")).mkString("(", "|", ")")}. " +
@@ -70,33 +78,25 @@ class MultilabelClassificationEvaluator (override val uid: String)
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
+  @Since("3.0.0")
   def getMetricLabel: Double = $(metricLabel)
 
   /** @group setParam */
   def setMetricLabel(value: Double): this.type = set(metricLabel, value)
 
-  setDefault(metricLabel -> 0.0)
-
   /** @group setParam */
+  @Since("3.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("3.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  setDefault(metricLabel -> 0.0, metricName -> "f1Measure")
 
+  @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
-      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
-    SchemaUtils.checkColumnTypes(schema, $(labelCol),
-      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
-
-    val predictionAndLabels =
-      dataset.select(col($(predictionCol)), col($(labelCol)))
-        .rdd.map { row =>
-        (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
-      }
-    val metrics = new MultilabelMetrics(predictionAndLabels)
+    val metrics = getMetrics(dataset)
     $(metricName) match {
       case "subsetAccuracy" => metrics.subsetAccuracy
       case "accuracy" => metrics.accuracy
@@ -113,6 +113,30 @@ class MultilabelClassificationEvaluator (override val uid: String)
     }
   }
 
+  /**
+   * Get a MultilabelMetrics, which can be used to get multilabel classification
+   * metrics such as accuracy, precision, precisionByLabel, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return MultilabelMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): MultilabelMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+    SchemaUtils.checkColumnTypes(schema, $(labelCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)))
+        .rdd.map { row =>
+        (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
+      }
+    new MultilabelMetrics(predictionAndLabels)
+  }
+
+  @Since("3.0.0")
   override def isLargerBetter: Boolean = {
     $(metricName) match {
       case "hammingLoss" => false
@@ -120,7 +144,14 @@ class MultilabelClassificationEvaluator (override val uid: String)
     }
   }
 
+  @Since("3.0.0")
   override def copy(extra: ParamMap): MultilabelClassificationEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MultilabelClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"metricLabel=${$(metricLabel)}"
+  }
 }
 
 
@@ -133,5 +164,6 @@ object MultilabelClassificationEvaluator
     "precisionByLabel", "recallByLabel", "f1MeasureByLabel",
     "microPrecision", "microRecall", "microF1Measure")
 
+  @Since("3.0.0")
   override def load(path: String): MultilabelClassificationEvaluator = super.load(path)
 }

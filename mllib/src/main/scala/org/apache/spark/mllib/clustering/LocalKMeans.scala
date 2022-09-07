@@ -82,7 +82,7 @@ private[mllib] object LocalKMeans extends Logging {
     var moved = true
     while (moved && iteration < maxIterations) {
       moved = false
-      val counts = Array.fill(k)(0.0)
+      val counts = Array.ofDim[Double](k)
       val sums = Array.fill(k)(Vectors.zeros(dimensions))
       var i = 0
       while (i < points.length) {

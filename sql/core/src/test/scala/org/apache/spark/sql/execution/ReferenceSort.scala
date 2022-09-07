@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -39,9 +38,9 @@ case class ReferenceSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
+  protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
+      val ordering = RowOrdering.create(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
         TaskContext.get(), ordering = Some(ordering))
       sorter.insertAll(iterator.map(r => (r.copy(), null)))
@@ -59,4 +58,7 @@ case class ReferenceSort(
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ReferenceSort =
+    copy(child = newChild)
 }

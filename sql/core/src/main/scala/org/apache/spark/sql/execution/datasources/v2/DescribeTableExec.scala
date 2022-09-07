@@ -20,64 +20,105 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table, TableCatalog}
+import org.apache.spark.sql.connector.expressions.IdentityTransform
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends LeafExecNode {
-
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
-
-  override protected def doExecute(): RDD[InternalRow] = {
+    isExtended: Boolean) extends LeafV2CommandExec {
+  override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
+    addPartitioning(rows)
 
     if (isExtended) {
-      addPartitioning(rows)
-      addProperties(rows)
+      addMetadataColumns(rows)
+      addTableDetails(rows)
     }
-    sparkContext.parallelize(rows)
+    rows.toSeq
+  }
+
+  private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+    rows += emptyRow()
+    rows += toCatalystRow("# Detailed Table Information", "", "")
+    rows += toCatalystRow("Name", table.name(), "")
+
+    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+      CatalogTableType.EXTERNAL.name
+    } else {
+      CatalogTableType.MANAGED.name
+    }
+    rows += toCatalystRow("Type", tableType, "")
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES
+      .filterNot(_ == TableCatalog.PROP_EXTERNAL)
+      .foreach(propKey => {
+        if (table.properties.containsKey(propKey)) {
+          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+        }
+      })
+    val properties =
+      conf.redactOptions(table.properties.asScala.toMap).toList
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
+    rows += toCatalystRow("Table Properties", properties, "")
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.schema.map{ column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
+        column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+      rows += emptyRow()
+      rows += toCatalystRow("# Metadata Columns", "", "")
+      rows ++= hasMeta.metadataColumns.map { column =>
+        toCatalystRow(
+          column.name,
+          column.dataType.simpleString,
+          Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
+  }
+
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow(" Partitioning", "", "")
-    rows += toCatalystRow("--------------", "", "")
-    if (table.partitioning.isEmpty) {
-      rows += toCatalystRow("Not partitioned", "", "")
-    } else {
-      rows ++= table.partitioning.zipWithIndex.map {
-        case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+    if (table.partitioning.nonEmpty) {
+      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      if (partitionColumnsOnly) {
+        rows += toCatalystRow("# Partition Information", "", "")
+        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        rows ++= table.partitioning
+          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
+          .map { fieldNames =>
+            val nestedField = table.schema.findNestedField(fieldNames)
+            assert(nestedField.isDefined,
+              s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
+              s"in the table schema ${table.schema().catalogString}.")
+            nestedField.get
+          }.map { case (path, field) =>
+            toCatalystRow(
+              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
+              field.dataType.simpleString,
+              field.getComment().orNull)
+          }
+      } else {
+        rows += emptyRow()
+        rows += toCatalystRow("# Partitioning", "", "")
+        rows ++= table.partitioning.zipWithIndex.map {
+          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        }
       }
     }
   }
 
-  private def addProperties(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow(" Table Property", " Value", "")
-    rows += toCatalystRow("----------------", "-------", "")
-    rows ++= table.properties.asScala.toList.sortBy(_._1).map {
-      case (key, value) => toCatalystRow(key, value, "")
-    }
-  }
-
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
-  }
 }

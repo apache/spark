@@ -19,22 +19,43 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveSessionCatalog
 import org.apache.spark.util.Utils
 
-trait CreateHiveTableAsSelectBase extends DataWritingCommand {
+trait CreateHiveTableAsSelectBase extends V1WriteCommand with V1WritesHiveUtils {
   val tableDesc: CatalogTable
   val query: LogicalPlan
   val outputColumnNames: Seq[String]
   val mode: SaveMode
 
   protected val tableIdentifier = tableDesc.identifier
+
+  override lazy val partitionColumns: Seq[Attribute] = {
+    // If the table does not exist the schema should always be empty.
+    val table = if (tableDesc.schema.isEmpty) {
+      val tableSchema = CharVarcharUtils.getRawSchema(outputColumns.toStructType, conf)
+      tableDesc.copy(schema = tableSchema)
+    } else {
+      tableDesc
+    }
+    // For CTAS, there is no static partition values to insert.
+    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+    getDynamicPartitionColumns(table, partition, query)
+  }
+
+  override def requiredOrdering: Seq[SortOrder] = {
+    val options = getOptionsWithHiveBucketWrite(tableDesc.bucketSpec)
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, tableDesc.bucketSpec, options)
+  }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -45,7 +66,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw new AnalysisException(s"$tableIdentifier already exists.")
+        throw QueryCompilationErrors.tableIdentifierExistsError(tableIdentifier)
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.
@@ -54,19 +75,26 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
 
       val command = getWritingCommand(catalog, tableDesc, tableExists = true)
       command.run(sparkSession, child)
+      DataWritingCommand.propogateMetrics(sparkSession.sparkContext, command, metrics)
     } else {
+        tableDesc.storage.locationUri.foreach { p =>
+          DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+        }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
+      val tableSchema = CharVarcharUtils.getRawSchema(
+        outputColumns.toStructType, sparkSession.sessionState.conf)
       assert(tableDesc.schema.isEmpty)
       catalog.createTable(
-        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
+        tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
         val command = getWritingCommand(catalog, createdTableMeta, tableExists = false)
         command.run(sparkSession, child)
+        DataWritingCommand.propogateMetrics(sparkSession.sparkContext, command, metrics)
       } catch {
         case NonFatal(e) =>
           // drop the created table.
@@ -126,6 +154,9 @@ case class CreateHiveTableAsSelectCommand(
 
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHiveTable])
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): CreateHiveTableAsSelectCommand = copy(query = newChild)
 }
 
 /**
@@ -150,10 +181,10 @@ case class OptimizedCreateHiveTableAsSelectCommand(
     val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
     val hiveTable = DDLUtils.readHiveTable(tableDesc)
 
-    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
+    val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
       case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
-      case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
-        "HadoopFsRelation.")
+      case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
+        tableIdentifier)
     }
 
     InsertIntoHadoopFsRelationCommand(
@@ -173,4 +204,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
 
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): OptimizedCreateHiveTableAsSelectCommand = copy(query = newChild)
 }

@@ -16,15 +16,20 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, HasMetadata, Pod, PodList}
-import io.fabric8.kubernetes.client.{Watch, Watcher}
-import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, PersistentVolumeClaim, PersistentVolumeClaimList, Pod, PodList}
+import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, Resource}
 
 object Fabric8Aliases {
-  type PODS = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
-  type LABELED_PODS = FilterWatchListDeletable[
-    Pod, PodList, java.lang.Boolean, Watch, Watcher[Pod]]
-  type SINGLE_POD = PodResource[Pod, DoneablePod]
+  type PODS = MixedOperation[Pod, PodList, PodResource[Pod]]
+  type CONFIG_MAPS = MixedOperation[
+    ConfigMap, ConfigMapList, Resource[ConfigMap]]
+  type LABELED_PODS = FilterWatchListDeletable[Pod, PodList]
+  type LABELED_CONFIG_MAPS = FilterWatchListDeletable[ConfigMap, ConfigMapList]
+  type SINGLE_POD = PodResource[Pod]
   type RESOURCE_LIST = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
-    HasMetadata, Boolean]
+    HasMetadata]
+  type PERSISTENT_VOLUME_CLAIMS = MixedOperation[PersistentVolumeClaim, PersistentVolumeClaimList,
+    Resource[PersistentVolumeClaim]]
+  type LABELED_PERSISTENT_VOLUME_CLAIMS =
+    FilterWatchListDeletable[PersistentVolumeClaim, PersistentVolumeClaimList]
 }

@@ -28,9 +28,10 @@ import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
@@ -46,6 +47,8 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def dataType: NullType = NullType
   override lazy val resolved = true
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
@@ -58,6 +61,8 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
@@ -66,6 +71,9 @@ case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class JsonTestTreeNode(arg: Any) extends LeafNode {
@@ -86,6 +94,8 @@ case class FakeLeafPlan(child: LogicalPlan)
   extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = child.output
 }
+
+case class FakeCurryingProduct(x: Expression)(val y: Int)
 
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   test("top node changed") {
@@ -236,6 +246,44 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
     expected = None
     assert(expected === actual)
+  }
+
+  test("exists") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Check the top node.
+    var exists = expression.exists {
+      case _: Add => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check the first children.
+    exists = expression.exists {
+      case Literal(1, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check an internal node (Subtract).
+    exists = expression.exists {
+      case _: Subtract => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check a leaf node.
+    exists = expression.exists {
+      case Literal(3, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check not exists.
+    exists = expression.exists {
+      case Literal(100, IntegerType) => true
+      case _ => false
+    }
+    assert(!exists)
   }
 
   test("collectFirst") {
@@ -431,6 +479,30 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         "product-class" -> JString(classOf[FunctionIdentifier].getName),
           "funcName" -> "function"))
 
+    // Converts AliasIdentifier to JSON
+    assertJSON(
+      AliasIdentifier("alias", Seq("ns1", "ns2")),
+      JObject(
+        "product-class" -> JString(classOf[AliasIdentifier].getName),
+          "name" -> "alias",
+          "qualifier" -> "[ns1, ns2]"))
+
+    // Converts SubqueryAlias to JSON
+    assertJSON(
+      SubqueryAlias("t1", JsonTestTreeNode("0")),
+      List(
+        JObject(
+          "class" -> classOf[SubqueryAlias].getName,
+          "num-children" -> 1,
+          "identifier" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
+            "name" -> "t1",
+            "qualifier" -> JArray(Nil)),
+          "child" -> 0),
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "0")))
+
     // Converts BucketSpec to JSON
     assertJSON(
       BucketSpec(1, Seq("bucket"), Seq("sort")),
@@ -558,7 +630,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[Union].getName,
           "num-children" -> 2,
-          "children" -> List(0, 1)),
+          "children" -> List(0, 1),
+          "byName" -> JBool(false),
+          "allowMissingCol" -> JBool(false)),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
@@ -567,10 +641,47 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,
           "arg" -> "1")))
+
+    // Convert Seq of Product contains TreeNode to JSON.
+    assertJSON(
+      Seq(("a", JsonTestTreeNode("0")), ("b", JsonTestTreeNode("1"))),
+      List(
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "a",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "0"
+          ))),
+        JObject(
+          "product-class" -> "scala.Tuple2",
+          "_1" -> "b",
+          "_2" -> List(JObject(
+            "class" -> classOf[JsonTestTreeNode].getName,
+            "num-children" -> 0,
+            "arg" -> "1"
+          )))))
+
+    // Convert currying product contains TreeNode to JSON.
+    assertJSON(
+      FakeCurryingProduct(Literal(1))(1),
+      JObject(
+        "product-class" -> classOf[FakeCurryingProduct].getName,
+        "x" -> List(
+          JObject(
+            "class" -> JString(classOf[Literal].getName),
+            "num-children" -> 0,
+            "value" -> "1",
+            "dataType" -> "integer")),
+        "y" -> 1
+      )
+    )
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr), false :: Nil)
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr),
+      Option(ExpressionEncoder[String]()) :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
   }
@@ -680,12 +791,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("clone") {
-    def assertDifferentInstance(before: AnyRef, after: AnyRef): Unit = {
+    def assertDifferentInstance[T <: TreeNode[T]](before: TreeNode[T], after: TreeNode[T]): Unit = {
       assert(before.ne(after) && before == after)
-      before.asInstanceOf[TreeNode[_]].children.zip(
-          after.asInstanceOf[TreeNode[_]].children).foreach {
-        case (beforeChild: AnyRef, afterChild: AnyRef) =>
-          assertDifferentInstance(beforeChild, afterChild)
+      before.children.zip(after.children).foreach { case (beforeChild, afterChild) =>
+        assertDifferentInstance(
+          beforeChild.asInstanceOf[TreeNode[T]],
+          afterChild.asInstanceOf[TreeNode[T]])
       }
     }
 
@@ -707,5 +818,119 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val leafCloned = leaf.clone()
     assertDifferentInstance(leaf, leafCloned)
     assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
+  }
+
+  object MalformedClassObject extends Serializable {
+    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
+      override protected def withNewChildInternal(newChild: Expression): Expression =
+        copy(child = newChild)
+    }
+  }
+
+  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
+    val testTriggersExpectedError = try {
+      classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
+      false
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        true
+      case ex: Throwable => throw ex
+    }
+    // This test case only applies on older JDK versions (e.g. JDK8u), and doesn't trigger the
+    // issue on newer JDK versions (e.g. JDK11u).
+    assume(testTriggersExpectedError, "the test case didn't trigger malformed class name error")
+
+    val expr = MalformedClassObject.MalformedNameExpression(Literal(1))
+    try {
+      expr.nodeName
+    } catch {
+      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
+        fail("TreeNode.nodeName should not throw malformed class name error")
+    }
+  }
+
+  test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
+    case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LeafNode {
+      val output: Seq[Attribute] = Nil
+    }
+    val node = Node(Set("second", "first"), Seq(Set(3, 1), Set(2, 1)))
+    assert(node.argString(10) == "{first, second}, [{1, 3}, {1, 2}]")
+  }
+
+  test("SPARK-38676: truncate before/after sql text if too long") {
+    val text =
+      """
+        |
+        |SELECT
+        |1234567890 + 1234567890 + 1234567890, cast('a'
+        |as /* comment */
+        |int), 1234567890 + 1234567890 + 1234567890
+        |as foo
+        |""".stripMargin
+    val origin = Origin(
+      line = Some(3),
+      startPosition = Some(38),
+      startIndex = Some(47),
+      stopIndex = Some(77),
+      sqlText = Some(text),
+      objectType = Some("VIEW"),
+      objectName = Some("some_view"))
+    val expectedSummary =
+      """== SQL of VIEW some_view(line 3, position 39) ==
+        |...7890 + 1234567890 + 1234567890, cast('a'
+        |                                   ^^^^^^^^
+        |as /* comment */
+        |^^^^^^^^^^^^^^^^
+        |int), 1234567890 + 1234567890 + 12345...
+        |^^^^^
+        |""".stripMargin
+
+    val expectedFragment =
+      """cast('a'
+        |as /* comment */
+        |int),""".stripMargin
+    assert(origin.context.summary == expectedSummary)
+    assert(origin.context.startIndex == origin.startIndex.get)
+    assert(origin.context.stopIndex == origin.stopIndex.get)
+    assert(origin.context.objectType == origin.objectType.get)
+    assert(origin.context.objectName == origin.objectName.get)
+    assert(origin.context.fragment == expectedFragment)
+  }
+
+  test("SPARK-39046: Return an empty context string if TreeNode.origin is wrongly set") {
+    val text = Some("select a + b")
+    // missing start index
+    val origin1 = Origin(
+      startIndex = Some(7),
+      stopIndex = None,
+      sqlText = text)
+    // missing stop index
+    val origin2 = Origin(
+      startIndex = None,
+      stopIndex = Some(11),
+      sqlText = text)
+    // missing text
+    val origin3 = Origin(
+      startIndex = Some(7),
+      stopIndex = Some(11),
+      sqlText = None)
+    // negative start index
+    val origin4 = Origin(
+      startIndex = Some(-1),
+      stopIndex = Some(11),
+      sqlText = text)
+    // stop index >= text.length
+    val origin5 = Origin(
+      startIndex = Some(-1),
+      stopIndex = Some(text.get.length),
+      sqlText = text)
+    // start index > stop index
+    val origin6 = Origin(
+      startIndex = Some(2),
+      stopIndex = Some(1),
+      sqlText = text)
+    Seq(origin1, origin2, origin3, origin4, origin5, origin6).foreach { origin =>
+      assert(origin.context.summary.isEmpty)
+    }
   }
 }

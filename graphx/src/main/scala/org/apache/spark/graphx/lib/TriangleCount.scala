@@ -81,11 +81,11 @@ object TriangleCount {
 
     // join the sets with the graph
     val setGraph: Graph[VertexSet, ED] = graph.outerJoinVertices(nbrSets) {
-      (vid, _, optSet) => optSet.getOrElse(null)
+      (vid, _, optSet) => optSet.orNull
     }
 
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]) {
+    def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]): Unit = {
       val (smallSet, largeSet) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
         (ctx.srcAttr, ctx.dstAttr)
       } else {

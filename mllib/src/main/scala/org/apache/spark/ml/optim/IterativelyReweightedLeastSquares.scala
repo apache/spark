@@ -66,7 +66,8 @@ private[ml] class IterativelyReweightedLeastSquares(
   def fit(
       instances: RDD[OffsetInstance],
       instr: OptionalInstrumentation = OptionalInstrumentation.create(
-        classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
+        classOf[IterativelyReweightedLeastSquares]),
+      depth: Int = 2): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -87,7 +88,7 @@ private[ml] class IterativelyReweightedLeastSquares(
       // Estimate new model
       model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false)
-        .fit(newInstances, instr = instr)
+        .fit(newInstances, instr = instr, depth = depth)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients

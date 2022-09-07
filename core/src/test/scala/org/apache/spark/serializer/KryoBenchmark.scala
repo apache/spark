@@ -31,10 +31,10 @@ import org.apache.spark.serializer.KryoTest._
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
+ *      bin/spark-submit --class <this class> <spark core test jar>
+ *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/KryoBenchmark-results.txt".
  * }}}
  */
@@ -125,7 +125,7 @@ object KryoBenchmark extends BenchmarkBase {
   def createSerializer(useUnsafe: Boolean): SerializerInstance = {
     val conf = new SparkConf()
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_UNSAFE, useUnsafe)
 
     new KryoSerializer(conf).newInstance()

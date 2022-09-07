@@ -20,25 +20,28 @@ license: |
 
 To build SparkR on Windows, the following steps are required
 
-1. Install R (>= 3.1) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
-include Rtools and R in `PATH`. Note that support for R prior to version 3.4 is deprecated as of Spark 3.0.0.
+1. Make sure `bash` is available and in `PATH` if you already have a built-in `bash` on Windows. If you do not have, install [Cygwin](https://www.cygwin.com/).
 
-2. Install
-[JDK8](https://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html) and set
-`JAVA_HOME` in the system environment variables.
+2. Install R (>= 3.5) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
+include Rtools and R in `PATH`.
 
-3. Download and install [Maven](https://maven.apache.org/download.html). Also include the `bin`
+3. Install JDK that SparkR supports (see `R/pkg/DESCRIPTION`), and set `JAVA_HOME` in the system environment variables.
+
+4. Download and install [Maven](https://maven.apache.org/download.html). Also include the `bin`
 directory in Maven in `PATH`.
 
-4. Set `MAVEN_OPTS` as described in [Building Spark](https://spark.apache.org/docs/latest/building-spark.html).
+5. Set `MAVEN_OPTS` as described in [Building Spark](https://spark.apache.org/docs/latest/building-spark.html).
 
-5. Open a command shell (`cmd`) in the Spark directory and build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+6. Open a command shell (`cmd`) in the Spark directory and build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
     ```bash
     mvn.cmd -DskipTests -Psparkr package
     ```
 
-    `.\build\mvn` is a shell script so `mvn.cmd` should be used directly on Windows.
+    Note that `.\build\mvn` is a shell script so `mvn.cmd` on the system should be used directly on Windows.
+    Make sure your Maven version is matched to `maven.version` in `./pom.xml`.
+
+Note that it is a workaround for SparkR developers on Windows. Apache Spark does not officially support to _build_ on Windows yet whereas it supports to _run_ on Windows.
 
 ##  Unit tests
 

@@ -26,7 +26,7 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 
 object AssociationRulesExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("AssociationRulesExample")
     val sc = new SparkContext(conf)
 

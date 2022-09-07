@@ -1,15 +1,15 @@
 --This test file was converted from window.sql.
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
-(null, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
-(1, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
-(1, 2L, 2.5D, date("2017-08-02"), timestamp(1502000000), "a"),
-(2, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "a"),
-(1, null, 1.0D, date("2017-08-01"), timestamp(1501545600), "b"),
-(2, 3L, 3.3D, date("2017-08-03"), timestamp(1503000000), "b"),
-(3, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "b"),
+(null, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+(1, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+(1, 2L, 2.5D, date("2017-08-02"), timestamp_seconds(1502000000), "a"),
+(2, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "a"),
+(1, null, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "b"),
+(2, 3L, 3.3D, date("2017-08-03"), timestamp_seconds(1503000000), "b"),
+(3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
-(3, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), null)
+(3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
 AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
 -- RowsBetween
@@ -66,6 +66,9 @@ stddev(udf(val)) OVER w AS stddev,
 first_value(udf(val)) OVER w AS first_value,
 first_value(udf(val), true) OVER w AS first_value_ignore_null,
 first_value(udf(val), false) OVER w AS first_value_contain_null,
+any_value(udf(val)) OVER w AS any_value,
+any_value(udf(val), true) OVER w AS any_value_ignore_null,
+any_value(udf(val), false) OVER w AS any_value_contain_null,
 last_value(udf(val)) OVER w AS last_value,
 last_value(udf(val), true) OVER w AS last_value_ignore_null,
 last_value(udf(val), false) OVER w AS last_value_contain_null,
@@ -99,11 +102,14 @@ SELECT udf(val), cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER 
 -- Over clause is empty
 SELECT udf(val), cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
 
--- first_value()/last_value() over ()
+-- first_value()/last_value()/any_value() over ()
 SELECT udf(val), cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null

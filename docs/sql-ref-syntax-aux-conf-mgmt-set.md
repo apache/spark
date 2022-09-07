@@ -19,4 +19,53 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+The SET command sets a property, returns the value of an existing property or returns all SQLConf properties with value and meaning.
+
+### Syntax
+
+```sql
+SET
+SET [ -v ]
+SET property_key[ = property_value ]
+```
+
+### Parameters
+
+* **-v**
+
+    Outputs the key, value and meaning of existing SQLConf properties.
+
+* **property_key**
+
+    Returns the value of specified property key.
+
+* **property_key=property_value**
+
+     Sets the value for a given property key. If an old value exists for a given property key, then it gets overridden by the new value.
+
+### Examples
+
+```sql
+-- Set a property.
+SET spark.sql.variable.substitute=false;
+
+-- List all SQLConf properties with value and meaning.
+SET -v;
+
+-- List all SQLConf properties with value for current session.
+SET;
+
+-- List the value of specified property key.
+SET spark.sql.variable.substitute;
++-----------------------------+-----+
+|                          key|value|
++-----------------------------+-----+
+|spark.sql.variable.substitute|false|
++-----------------------------+-----+
+```
+
+### Related Statements
+
+* [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)

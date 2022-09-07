@@ -20,14 +20,19 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.ScroogeLikeExample
+import org.apache.spark.TestUtils.withListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -43,13 +48,17 @@ object TestForTypeAlias {
   type TwoInt = (Int, Int)
   type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+  type IntArray = Array[Int]
 
   def tupleTypeAlias: TwoInt = (1, 1)
   def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+  def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
-class DatasetSuite extends QueryTest with SharedSparkSession {
+class DatasetSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -71,7 +80,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("toDS should compare map with byte array keys correctly") {
     // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
     // will not incidentally put equal keys together.
-    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.mkString).toArray
     arrays(0)(1) = 1.toByte
     arrays(1)(1) = 2.toByte
     arrays(2)(1) = 2.toByte
@@ -194,6 +203,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
   }
 
+  test("as case class - tail") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.tail(2) === Array(ClassData("b", 2), ClassData("c", 3)))
+  }
+
   test("as seq of case class - reorder fields by name") {
     val df = spark.range(3).select(array(struct($"id".cast("int").as("b"), lit("a").as("a"))))
     val ds = df.as[Seq[ClassData]]
@@ -310,23 +324,25 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       var e = intercept[AnalysisException] {
         ds.select(expr("`(_1)?+.+`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1)?+.+`'"))
+      }
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.head == "`(_1)?+.+`")
 
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      }
+      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+      assert(e.messageParameters.head == "`(_1|_2)`")
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1|_2)`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1|_2)`\""))
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -518,42 +534,42 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
+    val aggregated = grouped.mapGroups { (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.flatMapGroups { case (g, iter) =>
+    val aggregated = grouped.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       "a", "30", "b", "3", "c", "1")
   }
 
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
-    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    val aggregated = keyValue.mapGroups { (g, iter) => (g, iter.sum) }
+    checkDataset(aggregated, ("a", 30), ("b", 3), ("c", 1))
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
-    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
+    val aggregated1 = keyValue1.mapGroups { (g, iter) => (g._1, iter.map(_._1).sum) }
+    checkDataset(aggregated1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
+    val aggregated = ds.groupByKey(_.length).reduceGroups(_ + _)
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       3 -> "abcxyz", 5 -> "hello")
   }
 
@@ -689,6 +705,70 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDatasetUnorderly(
       cogrouped,
       1 -> "a", 2 -> "bc", 3 -> "d")
+  }
+
+  test("SPARK-34806: observation on datasets") {
+    val namedObservation = Observation("named")
+    val unnamedObservation = Observation()
+
+    val df = spark.range(100)
+    val observed_df = df
+      .observe(
+        namedObservation,
+        min($"id").as("min_val"),
+        max($"id").as("max_val"),
+        sum($"id").as("sum_val"),
+        count(when($"id" % 2 === 0, 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg($"id").cast("int").as("avg_val")
+      )
+
+    def checkMetrics(namedMetric: Observation, unnamedMetric: Observation): Unit = {
+      assert(namedMetric.get === Map(
+        "min_val" -> 0L, "max_val" -> 99L, "sum_val" -> 4950L, "num_even" -> 50L)
+      )
+      assert(unnamedMetric.get === Map("avg_val" -> 49))
+    }
+
+    observed_df.collect()
+    // we can get the result multiple times
+    checkMetrics(namedObservation, unnamedObservation)
+    checkMetrics(namedObservation, unnamedObservation)
+
+    // an observation can be used only once
+    val err = intercept[IllegalArgumentException] {
+      df.observe(namedObservation, sum($"id").as("sum_val"))
+    }
+    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
+
+    // streaming datasets are not supported
+    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamObservation = Observation("stream")
+    val streamErr = intercept[IllegalArgumentException] {
+      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
+    }
+    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
+
+    // an observation cannot have an empty name
+    val err2 = intercept[IllegalArgumentException] {
+      Observation("")
+    }
+    assert(err2.getMessage.contains("Name must not be empty"))
+  }
+
+  test("SPARK-37203: Fix NotSerializableException when observe with TypedImperativeAggregate") {
+    def observe[T](df: Dataset[T], expected: Map[String, _]): Unit = {
+      val namedObservation = Observation("named")
+      val observed_df = df.observe(
+        namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+      observed_df.collect()
+      assert(namedObservation.get === expected)
+    }
+
+    observe(spark.range(100), Map("percentile_approx_val" -> 49))
+    observe(spark.range(0), Map("percentile_approx_val" -> null))
   }
 
   test("sample with replacement") {
@@ -854,7 +934,8 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
+    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
   }
 
   test("runtime nullability check") {
@@ -904,11 +985,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
-    val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
-      case (key, values) => key.a + values.map(_.b).sum
+    val aggregated = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
+      (key, values) => key.a + values.map(_.b).sum
     }
 
-    checkDataset(agged, "a3")
+    checkDataset(aggregated, "a3")
   }
 
   test("cogroup's left and right side has field with same name") {
@@ -919,24 +1000,6 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     }
 
     checkDataset(cogrouped, "a13", "b24")
-  }
-
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -978,7 +1041,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ($"id" + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
@@ -1000,7 +1063,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       .select("user", "item")
       .as[(Int, Int)]
       .groupByKey(_._1)
-      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .mapGroups { (src, ids) => (src, ids.map(_._2).toArray) }
       .toDF("id", "actual")
 
     dataset.join(actual, dataset("user") === actual("id")).collect()
@@ -1106,8 +1169,8 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       """+--------+
         ||       f|
         |+--------+
-        ||[foo, 1]|
-        ||[bar, 2]|
+        ||{foo, 1}|
+        ||{bar, 2}|
         |+--------+
         |""".stripMargin
 
@@ -1212,14 +1275,6 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
-  }
-
   test("Dataset should support flat input object to be null") {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
@@ -1267,10 +1322,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
     checkDataset(
       df.withColumn("b", lit(0)).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
     checkDataset(
       df.withColumn("b", expr("0")).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+        .groupByKey(_.a).flatMapGroups { (_, _) => List[Int]() })
   }
 
   test("SPARK-18125: Spark generated code causes CompileException") {
@@ -1284,7 +1339,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       Route("b", "c", 6))
     val ds = sparkContext.parallelize(data).toDF.as[Route]
 
-    val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
+    val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
       .reduceGroups { (g1: GroupedRoutes, g2: GroupedRoutes) =>
         GroupedRoutes(g1.src, g1.dest, g1.routes ++ g2.routes)
@@ -1301,7 +1356,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] =
       (x: GroupedRoutes, y: GroupedRoutes) => x.toString.compareTo(y.toString)
 
-    checkDatasetUnorderly(grped, expected: _*)
+    checkDatasetUnorderly(grouped, expected: _*)
   }
 
   test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
@@ -1381,15 +1436,36 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
               }
             }
           } else {
-            // Local checkpoints dont require checkpoint_dir
+            // Local checkpoints don't require checkpoint_dir
             f
           }
         }
       }
 
       testCheckpointing("basic") {
-        val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
-        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+        val ds = spark
+          .range(10)
+          // Num partitions is set to 1 to avoid a RangePartitioner in the orderBy below
+          .repartition(1, $"id" % 2)
+          .filter($"id" > 5)
+          .orderBy($"id".desc)
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        var cp = ds
+        withListener(spark.sparkContext, listener) { _ =>
+          // AQE adds a job per shuffle. The expression above does multiple shuffles and
+          // that screws up the job counting
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+            cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+          }
+        }
+        if (eager) {
+          assert(jobCounter === 1)
+        }
 
         val logicalRDD = cp.logicalPlan match {
           case plan: LogicalRDD => plan
@@ -1423,10 +1499,10 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
       }
 
       testCheckpointing("should preserve partitioning information") {
-        val ds = spark.range(10).repartition('id % 2)
+        val ds = spark.range(10).repartition($"id" % 2)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
 
-        val agg = cp.groupBy('id % 2).agg(count('id))
+        val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
           case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
@@ -1438,7 +1514,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
           )
         }
 
-        checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
+        checkAnswer(agg, ds.groupBy($"id" % 2).agg(count($"id")))
       }
     }
   }
@@ -1472,7 +1548,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-18717: code generation works for both scala.collection.Map" +
-    " and scala.collection.imutable.Map") {
+    " and scala.collection.immutable.Map") {
     val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
     checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
 
@@ -1536,11 +1612,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.sort("id"), expected)
     checkAnswer(df.sort(col("id")), expected)
     checkAnswer(df.sort($"id"), expected)
-    checkAnswer(df.sort('id), expected)
     checkAnswer(df.orderBy("id"), expected)
     checkAnswer(df.orderBy(col("id")), expected)
     checkAnswer(df.orderBy($"id"), expected)
-    checkAnswer(df.orderBy('id), expected)
   }
 
   test("SPARK-21567: Dataset should work with type alias") {
@@ -1555,6 +1629,12 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
+  }
+
+  test("SPARK-38042: Dataset should work with a product containing an aliased array type") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.aliasedArrayInTuple)),
+      ("", (1, Array(1))))
   }
 
   test("Check RelationalGroupedDataset toString: Single data") {
@@ -1693,9 +1773,36 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
 
+  test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {
+    val saveModeSeq =
+      Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists, SaveMode.Ignore, null)
+    assert(saveModeSeq.toDS().collect().toSeq === saveModeSeq)
+    assert(saveModeSeq.toDS().schema === new StructType().add("value", StringType, nullable = true))
+
+    val saveModeCaseSeq = saveModeSeq.map(SaveModeCase.apply)
+    assert(saveModeCaseSeq.toDS().collect().toSet === saveModeCaseSeq.toSet)
+    assert(saveModeCaseSeq.toDS().schema ===
+      new StructType().add("mode", StringType, nullable = true))
+
+    val saveModeArrayCaseSeq =
+      Seq(SaveModeArrayCase(Array()), SaveModeArrayCase(saveModeSeq.toArray))
+    val collected = saveModeArrayCaseSeq.toDS().collect()
+    assert(collected.length === 2)
+    val sortedByLength = collected.sortBy(_.modes.length)
+    assert(sortedByLength(0).modes === Array())
+    assert(sortedByLength(1).modes === saveModeSeq.toArray)
+    assert(saveModeArrayCaseSeq.toDS().schema ===
+      new StructType().add("modes", ArrayType(StringType, containsNull = true), nullable = true))
+
+    // Enum is stored as string, so it is possible to convert to/from string
+    val stringSeq = saveModeSeq.map(Option.apply).map(_.map(_.toString).orNull)
+    assert(stringSeq.toDS().as[SaveMode].collect().toSet === saveModeSeq.toSet)
+    assert(saveModeSeq.toDS().as[String].collect().toSet === stringSeq.toSet)
+  }
+
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
-    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(df.where($"city" === 'X'), Seq(Row("X")))
     checkAnswer(
       df.where($"city".contains(java.lang.Character.valueOf('A'))),
       Seq(Row("Amsterdam")))
@@ -1826,7 +1933,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+    assert(thrownException.message.contains("""Cannot up cast id from "BIGINT" to "TINYINT""""))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {
@@ -1841,7 +1948,198 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
     assert(spark.range(1).map { _ => instant }.head === instant)
   }
+
+  val dotColumnTestModes = Table(
+    ("caseSensitive", "colName"),
+    ("true", "field.1"),
+    ("false", "Field.1")
+  )
+
+  test("SPARK-25153: Improve error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val errorMsg = intercept[AnalysisException] {
+          ds(colName)
+        }
+        assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
+      }
+    }
+  }
+
+  test("groupBy.as") {
+    val df1 = Seq(DoubleData(1, "one"), DoubleData(2, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+    val df2 = Seq(DoubleData(5, "one"), DoubleData(1, "two"), DoubleData(3, "three")).toDS()
+      .repartition($"id").sortWithinPartitions("id")
+
+    val df3 = df1.groupBy("id").as[Int, DoubleData]
+      .cogroup(df2.groupBy("id").as[Int, DoubleData]) { case (key, data1, data2) =>
+        if (key == 1) {
+          Iterator(DoubleData(key, (data1 ++ data2).foldLeft("")((cur, next) => cur + next.val1)))
+        } else Iterator.empty
+      }
+    checkDataset(df3, DoubleData(1, "onetwo"))
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = collect(df3.queryExecution.executedPlan) {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
+  }
+
+  test("tail with different numbers") {
+    Seq(0, 2, 5, 10, 50, 100, 1000).foreach { n =>
+      assert(spark.range(n).tail(6) === (math.max(n - 6, 0) until n))
+    }
+  }
+
+  test("tail should not accept minus value") {
+    val e = intercept[AnalysisException](spark.range(1).tail(-1))
+    e.getMessage.contains("tail expression must be equal to or greater than 0")
+  }
+
+  test("SparkSession.active should be the same instance after dataset operations") {
+    val active = SparkSession.getActiveSession.get
+    val clone = active.cloneSession()
+    val ds = new Dataset(clone, spark.range(10).queryExecution.logical, Encoders.INT)
+
+    ds.queryExecution.analyzed
+
+    assert(active eq SparkSession.getActiveSession.get)
+  }
+
+  test("SPARK-30791: sameSemantics and semanticHash work") {
+    val df1 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df2 = Seq((1, 2), (4, 5)).toDF("col1", "col2")
+    val df3 = Seq((0, 2), (4, 5)).toDF("col1", "col2")
+    val df4 = Seq((0, 2), (4, 5)).toDF("col0", "col2")
+
+    assert(df1.sameSemantics(df2) === true)
+    assert(df1.sameSemantics(df3) === false)
+    assert(df3.sameSemantics(df4) === true)
+
+    assert(df1.semanticHash === df2.semanticHash)
+    assert(df1.semanticHash !== df3.semanticHash)
+    assert(df3.semanticHash === df4.semanticHash)
+  }
+
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    checkDataset(
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+
+    // test null
+    checkDataset(
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    checkAnswer(df.where($"zoo" === Array('a', 'a')), Seq(Row("aa")))
+    checkAnswer(
+      df.where($"zoo".contains(Array('a', 'b'))),
+      Seq(Row("abc")))
+  }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val df = Seq(1).toDF("c")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+      assert(timezone == "Asia/Shanghai")
+    }
+  }
+
+  test("SPARK-34002: Fix broken Option input/output in UDF") {
+    def f1(bar: Bar): Option[Bar] = {
+      None
+    }
+
+    def f2(bar: Option[Bar]): Option[Bar] = {
+      bar
+    }
+
+    val udf1 = udf(f1 _).withName("f1")
+    val udf2 = udf(f2 _).withName("f2")
+
+    val df = (1 to 2).map(i => Tuple1(Bar(1))).toDF("c0")
+    val withUDF = df
+      .withColumn("c1", udf1(col("c0")))
+      .withColumn("c2", udf2(col("c1")))
+
+    assert(withUDF.schema == StructType(
+      StructField("c0", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c1", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c2", StructType(StructField("a", IntegerType, false) :: Nil)) :: Nil))
+
+    checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
+  }
+
+  test("SPARK-35664: implicit encoder for java.time.LocalDateTime") {
+    val localDateTime = java.time.LocalDateTime.parse("2021-06-08T12:31:58.999999")
+    assert(Seq(localDateTime).toDS().head() === localDateTime)
+  }
+
+  test("SPARK-34605: implicit encoder for java.time.Duration") {
+    val duration = java.time.Duration.ofMinutes(10)
+    assert(spark.range(1).map { _ => duration }.head === duration)
+  }
+
+  test("SPARK-34615: implicit encoder for java.time.Period") {
+    val period = java.time.Period.ofYears(9999).withMonths(11)
+    assert(spark.range(1).map { _ => period }.head === period)
+  }
+
+  test("SPARK-35652: joinWith on two table generated from same one performing a cartesian join," +
+    " which should be inner join") {
+    val df = Seq(1, 2, 3).toDS()
+
+    val joined = df.joinWith(df, df("value") === df("value"), "inner")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2", IntegerType, nullable = false)
+    ))
+
+    assert(joined.schema === expectedSchema)
+
+    checkDataset(
+      joined,
+      (1, 1), (2, 2), (3, 3))
+  }
+
+  test("SPARK-36210: withColumns preserve insertion ordering") {
+    val df = Seq(1, 2, 3).toDS()
+
+    val colNames = (1 to 10).map(i => s"value${i}")
+    val cols = (1 to 10).map(i => col("value") + i)
+
+    val inserted = df.withColumns(colNames, cols)
+
+    assert(inserted.columns === "value" +: colNames)
+
+    checkDataset(
+      inserted.as[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)],
+      (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+      (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+      (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+  }
 }
+
+case class Bar(a: Int)
 
 object AssertExecutionId {
   def apply(id: Long): Long = {
@@ -1880,8 +2178,6 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
-
-case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
@@ -1941,3 +2237,7 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+/** Used to test Java Enums from Scala code */
+case class SaveModeCase(mode: SaveMode)
+case class SaveModeArrayCase(modes: Array[SaveMode])

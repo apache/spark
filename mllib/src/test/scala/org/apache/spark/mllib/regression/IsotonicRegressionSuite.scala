@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext

@@ -24,9 +24,11 @@ import scala.reflect.ClassTag
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
@@ -192,7 +194,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
   /**
    * Serialize and deserialize an object. This is useful to verify the objects
    * contents after deserialization (e.g., the contents of an RDD split after
-   * it is sent to a slave along with a task)
+   * it is sent to an executor along with a task)
    */
   protected def serializeDeserialize[T](obj: T): T = {
     val bytes = Utils.serialize(obj)
@@ -584,7 +586,7 @@ object CheckpointSuite {
   }
 }
 
-class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
+class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("checkpoint compression") {
     withTempDir { checkpointDir =>
@@ -616,6 +618,54 @@ class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
 
       // Verify that the compressed content can be read back
       assert(rdd.collect().toSeq === (1 to 20))
+    }
+  }
+
+  test("cache checkpoint preferred location") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME.key, "10")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 1)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+      val checkpointedRDD = rdd.firstParent.asInstanceOf[ReliableCheckpointRDD[_]]
+      val partition = checkpointedRDD.partitions(0)
+      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
+
+      val preferredLoc = checkpointedRDD.preferredLocations(partition)
+      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
+      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partition))
+    }
+  }
+
+  test("SPARK-31484: checkpoint should not fail in retry") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local[1]", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 200, numSlices = 4).repartition(1).mapPartitions { iter =>
+        iter.map { i =>
+          if (i > 100 && TaskContext.get().stageAttemptNumber() == 0) {
+            // throw new SparkException("Make first attempt failed.")
+            // Throw FetchFailedException to explicitly trigger stage resubmission.
+            // A normal exception will only trigger task resubmission in the same stage.
+            throw new FetchFailedException(null, 0, 0L, 0, 0, "Fake")
+          } else {
+            i
+          }
+        }
+      }
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 200))
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
     }
   }
 }

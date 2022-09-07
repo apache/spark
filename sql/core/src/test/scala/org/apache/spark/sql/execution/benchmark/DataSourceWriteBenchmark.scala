@@ -66,7 +66,7 @@ trait DataSourceWriteBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def runDataSourceBenchmark(format: String): Unit = {
+  def runDataSourceBenchmark(format: String, extraInfo: Option[String] = None): Unit = {
     val tableInt = "tableInt"
     val tableDouble = "tableDouble"
     val tableIntString = "tableIntString"
@@ -75,7 +75,12 @@ trait DataSourceWriteBenchmark extends SqlBasedBenchmark {
     withTempTable(tempTable) {
       spark.range(numRows).createOrReplaceTempView(tempTable)
       withTable(tableInt, tableDouble, tableIntString, tablePartition, tableBucket) {
-        val benchmark = new Benchmark(s"$format writer benchmark", numRows, output = output)
+        val writerName = extraInfo match {
+          case Some(extra) => s"$format($extra)"
+          case _ => format
+        }
+        val benchmark =
+          new Benchmark(s"$writerName writer benchmark", numRows, output = output)
         writeNumeric(tableInt, format, benchmark, "Int")
         writeNumeric(tableDouble, format, benchmark, "Double")
         writeIntString(tableIntString, format, benchmark)

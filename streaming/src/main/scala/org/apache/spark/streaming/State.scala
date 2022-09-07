@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming
 
-import scala.language.implicitConversions
-
 import org.apache.spark.annotation.Experimental
 
 /**

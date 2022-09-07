@@ -1,0 +1,31 @@
+TakeOrderedAndProject [revenue,o_orderdate,l_orderkey,o_shippriority]
+  WholeStageCodegen (4)
+    HashAggregate [l_orderkey,o_orderdate,o_shippriority,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(l_extendedprice as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true)),revenue,sum,isEmpty]
+      InputAdapter
+        Exchange [l_orderkey,o_orderdate,o_shippriority] #1
+          WholeStageCodegen (3)
+            HashAggregate [l_orderkey,o_orderdate,o_shippriority,l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+              Project [o_orderdate,o_shippriority,l_orderkey,l_extendedprice,l_discount]
+                BroadcastHashJoin [o_orderkey,l_orderkey]
+                  Project [o_orderkey,o_orderdate,o_shippriority]
+                    BroadcastHashJoin [c_custkey,o_custkey]
+                      Project [c_custkey]
+                        Filter [c_mktsegment,c_custkey]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.customer [c_custkey,c_mktsegment]
+                      InputAdapter
+                        BroadcastExchange #2
+                          WholeStageCodegen (1)
+                            Filter [o_orderdate,o_custkey,o_orderkey]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.orders [o_orderkey,o_custkey,o_orderdate,o_shippriority]
+                  InputAdapter
+                    BroadcastExchange #3
+                      WholeStageCodegen (2)
+                        Project [l_orderkey,l_extendedprice,l_discount]
+                          Filter [l_shipdate,l_orderkey]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.lineitem [l_orderkey,l_extendedprice,l_discount,l_shipdate]

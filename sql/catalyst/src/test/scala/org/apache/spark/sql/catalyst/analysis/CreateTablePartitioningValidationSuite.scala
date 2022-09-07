@@ -17,24 +17,25 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.LogicalExpressions
+import java.util
+
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode}
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode, TableSpec}
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
-  import CreateTablePartitioningValidationSuite._
 
   test("CreateTableAsSelect: fail missing top-level column") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "does_not_exist") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -45,12 +46,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing top-level column nested reference") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist.z") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "does_not_exist.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -61,12 +63,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing nested column") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point.z") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "point.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -77,12 +80,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail with multiple errors") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "does_not_exist", "point.z") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "does_not_exist", "point.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -94,12 +98,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success with top-level column") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "id") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "id") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -107,12 +112,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using nested column") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point.x") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "point.x") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -120,12 +126,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using complex column") {
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
-      LogicalExpressions.bucket(4, "point") :: Nil,
+      UnresolvedIdentifier(Array("table_name")),
+      Expressions.bucket(4, "point") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -133,7 +140,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 }
 
-private object CreateTablePartitioningValidationSuite {
+private[sql] object CreateTablePartitioningValidationSuite {
   val catalog: TableCatalog = {
     val cat = new InMemoryTableCatalog()
     cat.initialize("test", CaseInsensitiveStringMap.empty())
@@ -146,9 +153,15 @@ private object CreateTablePartitioningValidationSuite {
       .add("point", new StructType().add("x", DoubleType).add("y", DoubleType))
 }
 
-private case object TestRelation2 extends LeafNode with NamedRelation {
+private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
   override def output: Seq[AttributeReference] =
     CreateTablePartitioningValidationSuite.schema.toAttributes
 }
 
+private[sql] case object TestTable2 extends Table {
+  override def name: String = "table_name"
+  override def schema: StructType = CreateTablePartitioningValidationSuite.schema
+  override def capabilities: util.Set[TableCapability] =
+    util.EnumSet.noneOf(classOf[TableCapability])
+}

@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.InputPartition
+import org.apache.spark.sql.connector.read.InputPartition
 
 /**
  * A collection of file blocks that should be read as a single task
@@ -80,7 +80,7 @@ object FilePartition extends Logging {
       currentFiles += file
     }
     closePartition()
-    partitions
+    partitions.toSeq
   }
 
   def maxSplitBytes(
@@ -88,9 +88,10 @@ object FilePartition extends Logging {
       selectedPartitions: Seq[PartitionDirectory]): Long = {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = sparkSession.sparkContext.defaultParallelism
+    val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
+      .getOrElse(sparkSession.leafNodeDefaultParallelism)
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val bytesPerCore = totalBytes / defaultParallelism
+    val bytesPerCore = totalBytes / minPartitionNum
 
     Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
   }

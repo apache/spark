@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.catalog.v2.TableCatalog
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
@@ -35,24 +33,24 @@ case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String])
-    extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = {
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+  override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(schema).resolveAndBind()
 
     val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += encoder
-          .toRow(
-            new GenericRowWithSchema(
-              Array(table.namespace().quoted, table.name()),
-              schema))
-          .copy()
+        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
       }
     }
 
-    sparkContext.parallelize(rows, 1)
+    rows.toSeq
+  }
+
+  private def isTempView(ident: Identifier): Boolean = {
+    catalog match {
+      case s: V2SessionCatalog => s.isTempView(ident)
+      case _ => false
+    }
   }
 }

@@ -71,7 +71,7 @@ private[spark] abstract class RestSubmissionServer(
   def start(): Int = {
     val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
     _server = Some(server)
-    logInfo(s"Started REST server for submitting applications on port $boundPort")
+    logInfo(s"Started REST server for submitting applications on $host with port $boundPort")
     boundPort
   }
 
@@ -317,8 +317,7 @@ private class ErrorServlet extends RestServlet {
           versionMismatch = true
           s"Unknown protocol version '$unknownVersion'."
         case _ =>
-          // never reached
-          s"Malformed path $path."
+          "Malformed path."
       }
     msg += s" Please submit requests through http://[host]:[port]/$serverVersion/submissions/..."
     val error = handleError(msg)

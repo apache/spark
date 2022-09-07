@@ -22,7 +22,7 @@
 # another branch and returning results to be published. More details can be
 # found at dev/run-tests-jenkins.
 #
-# Arg1: The Github Pull Request Actual Commit
+# Arg1: The GitHub Pull Request Actual Commit
 # known as `ghprbActualCommit` in `run-tests-jenkins`
 
 ghprbActualCommit="$1"

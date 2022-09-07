@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.SupportsDelete
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 
 case class DeleteFromTableExec(
-    table: SupportsDelete,
-    condition: Array[Filter]) extends LeafExecNode {
+    table: SupportsDeleteV2,
+    condition: Array[Predicate],
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
-    sparkContext.emptyRDD
+    refreshCache()
+    Seq.empty
   }
 
   override def output: Seq[Attribute] = Nil

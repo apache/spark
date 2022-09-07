@@ -22,9 +22,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
+class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   private final val EPSILON = 0.01
 
   // Serializes and deserializes a given `BloomFilter`, then checks whether the deserialized
@@ -99,9 +99,39 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
+  def testIntersectInPlace[T: ClassTag]
+  (typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+    test(s"intersectInPlace - $typeName") {
+      // use a fixed seed to make the test predictable.
+      val r = new Random(37)
+
+      val items1 = Array.fill(numItems / 2)(itemGen(r))
+      val items2 = Array.fill(numItems / 2)(itemGen(r))
+
+      val filter1 = BloomFilter.create(numItems / 2)
+      items1.foreach(filter1.put)
+
+      val filter2 = BloomFilter.create(numItems / 2)
+      items2.foreach(filter2.put)
+
+      filter1.intersectInPlace(filter2)
+
+      val common_items = items1.intersect(items2)
+      common_items.foreach(i => assert(filter1.mightContain(i)))
+
+      // After intersect, `filter1` still has `numItems/2` items
+      // which doesn't exceed `expectedNumItems`,
+      // so the `expectedFpp` should not be higher than the default one.
+      assert(filter1.expectedFpp() - BloomFilter.DEFAULT_FPP < EPSILON)
+
+      checkSerDe(filter1)
+    }
+  }
+
   def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     testAccuracy[T](typeName, numItems)(itemGen)
     testMergeInPlace[T](typeName, numItems)(itemGen)
+    testIntersectInPlace[T](typeName, numItems)(itemGen)
   }
 
   testItemType[Byte]("Byte", 160) { _.nextInt().toByte }

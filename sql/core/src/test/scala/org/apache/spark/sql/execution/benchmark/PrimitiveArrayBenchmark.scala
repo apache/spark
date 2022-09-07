@@ -17,24 +17,29 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.SparkSession
 
 /**
  * Benchmark primitive arrays via DataFrame and Dataset program using primitive arrays
  * To run this benchmark:
- * 1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- * 2. build/sbt "sql/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ * 1. without sbt:
+ *    bin/spark-submit --class <this class>
+ *      --jars <spark core test jar>,<spark catalyst test jar> < spark sql test jar>
+ * 2. build/sbt "sql/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *    Results will be written to "benchmarks/PrimitiveArrayBenchmark-results.txt".
  */
-object PrimitiveArrayBenchmark extends BenchmarkBase {
-  lazy val sparkSession = SparkSession.builder
-    .master("local[1]")
-    .appName("microbenchmark")
-    .config("spark.sql.shuffle.partitions", 1)
-    .config("spark.sql.autoBroadcastJoinThreshold", 1)
-    .getOrCreate()
+object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
+
+  override def getSparkSession: SparkSession = {
+    SparkSession.builder
+      .master("local[1]")
+      .appName("microbenchmark")
+      .config("spark.sql.shuffle.partitions", 1)
+      .config("spark.sql.autoBroadcastJoinThreshold", 1)
+      .getOrCreate()
+  }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Write primitive arrays in dataset") {
@@ -43,11 +48,11 @@ object PrimitiveArrayBenchmark extends BenchmarkBase {
   }
 
   def writeDatasetArray(iters: Int): Unit = {
-    import sparkSession.implicits._
+    import spark.implicits._
 
     val count = 1024 * 1024 * 2
 
-    val sc = sparkSession.sparkContext
+    val sc = spark.sparkContext
     val primitiveIntArray = Array.fill[Int](count)(65535)
     val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS
     dsInt.count  // force to build dataset
