@@ -1258,7 +1258,7 @@ class PlanResolutionSuite extends AnalysisTest {
             parseAndResolve(sql4)
           }
           assert(e2.getMessage.contains("Table `spark_catalog`.`default`.`v1Table` does not " +
-            "support ALTER COLUMN WITH QUALIFIED COLUMN."))
+            "support ALTER COLUMN with qualified column."))
         } else {
           parsed1 match {
             case AlterColumn(

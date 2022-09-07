@@ -547,7 +547,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "TABLE_OPERATION",
-      messageParameters = Array(toSQLId(nameParts), toSQLStmt(operation)))
+      messageParameters = Array(toSQLId(nameParts), operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
