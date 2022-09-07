@@ -28,7 +28,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
 RUN apt-get clean
 RUN apt-get update
-RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.8 python3.9
+RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.7 python3.8 python3.9
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
