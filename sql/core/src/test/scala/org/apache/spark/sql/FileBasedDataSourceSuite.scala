@@ -1048,8 +1048,10 @@ class FileBasedDataSourceSuite extends QueryTest
     Seq("orc", "parquet").foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").
-            write.parquet(dir.getCanonicalPath)
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b")
+            .write
+            .format(format)
+            .save(dir.getCanonicalPath)
 
           val df = spark.read.format(format).load(dir.getCanonicalPath)
           checkPushedFilters(format, df.filter("b = 1"),
