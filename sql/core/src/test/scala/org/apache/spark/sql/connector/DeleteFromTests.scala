@@ -111,8 +111,13 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
         sql(s"DELETE FROM $v1Table WHERE i = 2")
       }
 
-      assert(exc.getMessage.contains("Table `spark_catalog`.`default`.`tbl` does not " +
-        "support DELETE"))
+      checkError(
+        exception = exc,
+        errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = "TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
+          "operation" -> "DELETE"))
     }
   }
 

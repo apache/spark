@@ -190,8 +190,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t ALTER COLUMN i FIRST")
       }
-      assert(e.message.contains("Table `spark_catalog`.`default`.`t` does not support " +
-        "ALTER COLUMN ... FIRST | ALTER"))
+      checkError(
+        exception = e,
+        errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = "TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN ... FIRST | ALTER"))
     }
   }
 

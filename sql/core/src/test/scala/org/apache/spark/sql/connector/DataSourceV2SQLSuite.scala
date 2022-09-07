@@ -1535,8 +1535,13 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
     }
-    assert(e.message.contains("Table `spark_catalog`.`default`.`tbl` does not support " +
-      "REPLACE TABLE"))
+    checkError(
+      exception = e,
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
+        "operation" -> "REPLACE TABLE"))
   }
 
   test("DeleteFrom: - delete with invalid predicate") {
