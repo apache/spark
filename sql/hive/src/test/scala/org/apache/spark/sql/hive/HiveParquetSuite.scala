@@ -123,8 +123,13 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
              |)
           """.stripMargin)
       }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      checkError(
+        exception = ex,
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map("objectName" -> "`c3`",
+          "proposal" -> ("`__auto_generated_subquery_name`.`c1`, " +
+            "`__auto_generated_subquery_name`.`c2`")))
     }
   }
 

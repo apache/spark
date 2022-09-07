@@ -322,19 +322,27 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1)?+.+`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map(
+          "objectName" -> "`(_1)?+.+`",
+          "proposal" -> "`_1`, `_2`"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1|_2)`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map(
+          "objectName" -> "`(_1|_2)`",
+          "proposal" -> "`_1`, `_2`"))
+
       var e = intercept[AnalysisException] {
-        ds.select(expr("`(_1)?+.+`").as[Int])
-      }
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.head == "`(_1)?+.+`")
-
-      e = intercept[AnalysisException] {
-        ds.select(expr("`(_1|_2)`").as[Int])
-      }
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.head == "`(_1|_2)`")
-
-      e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
       }
       assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
@@ -931,11 +939,13 @@ class DatasetSuite extends QueryTest
 
   test("verify mismatching field names fail with a good error") {
     val ds = Seq(ClassData("a", 1)).toDS()
-    val e = intercept[AnalysisException] {
-      ds.as[ClassData2]
-    }
-    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`c`", "`a`, `b`")))
+    checkError(
+      exception = intercept[AnalysisException] (ds.as[ClassData2]),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map(
+        "objectName" -> "`c`",
+        "proposal" -> "`a`, `b`"))
   }
 
   test("runtime nullability check") {

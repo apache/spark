@@ -151,10 +151,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`",
-    "objectList" : "`one`"
+    "proposal" : "`one`"
   }
 }
 

@@ -121,6 +121,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assertAnalysisErrorClass(
         s"DESCRIBE $t invalid_col",
         "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
         Array("`invalid_col`", "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"))
     }
   }
@@ -992,11 +993,12 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       sql("USE testcat.ns1.ns2")
       check("tbl")
 
-      val ex = intercept[AnalysisException] {
-        sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`ns1`.`ns2`.`ns3`.`tbl`.`id`")
+      assertAnalysisErrorClass(
+        s"SELECT ns1.ns2.ns3.tbl.id from $t",
+        "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
+        Array("`ns1`.`ns2`.`ns3`.`tbl`.`id`",
+          "`testcat`.`ns1`.`ns2`.`tbl`.`id`, `testcat`.`ns1`.`ns2`.`tbl`.`point`"))
     }
   }
 
@@ -1568,6 +1570,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assertAnalysisErrorClass(
         s"UPDATE $t SET dummy='abc'",
         "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
         Array(
           "`dummy`",
           "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
@@ -1575,9 +1578,11 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
       assertAnalysisErrorClass(
         s"UPDATE $t SET name='abc' WHERE dummy=1",
         "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
         Array(
           "`dummy`",
-          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
+          "`testcat`.`ns1`.`ns2`.`tbl`.`p`, " +
+            "`testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
             "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`"))
 
       // UPDATE is not implemented yet.
@@ -2416,11 +2421,13 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   private def assertAnalysisErrorClass(
       sqlStatement: String,
       expectedErrorClass: String,
+      expectedErrorSubClass: String,
       expectedErrorMessageParameters: Array[String]): Unit = {
     val ex = intercept[AnalysisException] {
       sql(sqlStatement)
     }
     assert(ex.getErrorClass == expectedErrorClass)
+    assert(ex.getErrorSubClass == expectedErrorSubClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
   }
 
