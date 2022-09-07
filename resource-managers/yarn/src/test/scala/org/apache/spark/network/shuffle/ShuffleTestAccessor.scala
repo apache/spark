@@ -26,7 +26,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
-import org.apache.spark.network.shuffledb.{DB, DBBackend}
+import org.apache.spark.network.shuffledb.DB
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
