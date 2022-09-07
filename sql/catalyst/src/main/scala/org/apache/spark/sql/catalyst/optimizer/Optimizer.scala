@@ -1075,6 +1075,16 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     case _ => false
   }
 
+  def isCheap(e: Expression): Boolean = e match {
+    case _: Attribute | _: OuterReference => true
+    case _ if e.foldable => true
+    // PythonUDF is handled by the rule ExtractPythonUDFs
+    case _: PythonUDF => true
+    // Alias and ExtractValue are very cheap.
+    case _: Alias | _: ExtractValue => e.children.forall(isCheap)
+    case _ => false
+  }
+
   /**
    * Return all the references of the given expression without deduplication, which is different
    * from `Expression.references`.
