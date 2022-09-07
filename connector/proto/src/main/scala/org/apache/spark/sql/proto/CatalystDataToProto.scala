@@ -33,16 +33,8 @@ private[proto] case class CatalystDataToProto(
   @transient private lazy val serializer = new ProtoSerializer(child.dataType, protoType, child.nullable)
 
   override def nullSafeEval(input: Any): Any = {
-
-    var ret: Array[Byte] = Array.empty
-
-    try {
-      val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
-      ret = dynamicMessage.toByteArray
-    } catch {
-      case es: Exception => println("=-=-=-=Exception caught ", es.printStackTrace())
-    }
-    ret
+    val dynamicMessage = serializer.serialize(input).asInstanceOf[DynamicMessage]
+    dynamicMessage.toByteArray
   }
 
   override def prettyName: String = "to_proto"
