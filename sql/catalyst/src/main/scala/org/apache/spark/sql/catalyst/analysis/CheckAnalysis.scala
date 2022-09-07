@@ -211,6 +211,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
+              case checkRes: TypeCheckResult.DataTypeMismatch =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
@@ -694,7 +697,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
             e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) =>
+            case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
               issueFixedIfAnsiOff = false
           }
 

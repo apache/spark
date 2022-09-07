@@ -2663,13 +2663,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
         sql("CREATE TABLE S(C struct<F:int>) USING parquet")
         checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val m = intercept[AnalysisException] {
-          sql("SELECT * FROM t, S WHERE c = C")
-        }.message
-        assert(
-          m.contains(
-            "cannot resolve '(spark_catalog.default.t.c = " +
-            "spark_catalog.default.S.C)' due to data type mismatch"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT * FROM t, S WHERE c = C")
+          },
+          errorClass = "DATATYPE_MISMATCH",
+          errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+          parameters = Map(
+            "sqlExpr" -> "\"(c = C)\"",
+            "left" -> "\"STRUCT<f: INT>\"",
+            "right" -> "\"STRUCT<F: INT>\""))
       }
     }
   }

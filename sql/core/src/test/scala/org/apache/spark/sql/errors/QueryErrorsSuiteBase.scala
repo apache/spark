@@ -18,24 +18,9 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait QueryErrorsSuiteBase extends SharedSparkSession {
-
-  def validateParsingError(
-      sqlText: String,
-      errorClass: String,
-      errorSubClass: Option[String] = None,
-      sqlState: String,
-      parameters: Map[String, String] = Map.empty): Unit = {
-    checkError(
-      exception = intercept[ParseException](sql(sqlText)),
-      errorClass = errorClass,
-      errorSubClass = errorSubClass,
-      sqlState = Some(sqlState),
-      parameters = parameters)
-  }
 
   case class ExpectedContext(
       objectType: String,
