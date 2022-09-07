@@ -48,7 +48,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     testFunc(_.toLong)
     testFunc(_.toFloat)
     testFunc(_.toDouble)
-    testFunc(Decimal(_))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        testFunc(Decimal(_))
+      }
+    }
   }
 
   test("+ (Add)") {
@@ -227,7 +231,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   private def testDecimalAndDoubleType(testFunc: (Int => Any) => Unit): Unit = {
     testFunc(_.toDouble)
-    testFunc(Decimal(_))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        testFunc(Decimal(_))
+      }
+    }
   }
 
   test("/ (Divide) basic") {
@@ -271,7 +279,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
     testFunc(_.toLong)
-    testFunc(Decimal(_))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        testFunc(Decimal(_))
+      }
+    }
   }
 
   test("/ (Divide) for Long and Decimal type") {
@@ -447,7 +459,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
-    checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
+      }
+    }
     checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
@@ -488,11 +504,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Least(Seq(Literal(1.toShort), Literal(2.toByte.toShort))), 1.toShort, InternalRow.empty)
     checkEvaluation(Least(Seq(Literal("abc"), Literal("aaaa"))), "aaaa", InternalRow.empty)
     checkEvaluation(Least(Seq(Literal(true), Literal(false))), false, InternalRow.empty)
-    checkEvaluation(
-      Least(Seq(
-        Literal(BigDecimal("1234567890987654321123456")),
-        Literal(BigDecimal("1234567890987654321123458")))),
-      BigDecimal("1234567890987654321123456"), InternalRow.empty)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(
+          Least(Seq(
+            Literal(BigDecimal("1234567890987654321123456")),
+            Literal(BigDecimal("1234567890987654321123458")))),
+          BigDecimal("1234567890987654321123456"), InternalRow.empty)
+      }
+    }
     checkEvaluation(
       Least(Seq(Literal(Date.valueOf("2015-01-01")), Literal(Date.valueOf("2015-07-01")))),
       Date.valueOf("2015-01-01"), InternalRow.empty)
@@ -546,11 +566,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Greatest(Seq(Literal(1.toShort), Literal(2.toByte.toShort))), 2.toShort, InternalRow.empty)
     checkEvaluation(Greatest(Seq(Literal("abc"), Literal("aaaa"))), "abc", InternalRow.empty)
     checkEvaluation(Greatest(Seq(Literal(true), Literal(false))), true, InternalRow.empty)
-    checkEvaluation(
-      Greatest(Seq(
-        Literal(BigDecimal("1234567890987654321123456")),
-        Literal(BigDecimal("1234567890987654321123458")))),
-      BigDecimal("1234567890987654321123458"), InternalRow.empty)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(
+          Greatest(Seq(
+            Literal(BigDecimal("1234567890987654321123456")),
+            Literal(BigDecimal("1234567890987654321123458")))),
+          BigDecimal("1234567890987654321123458"), InternalRow.empty)
+      }
+    }
     checkEvaluation(Greatest(
       Seq(Literal(Date.valueOf("2015-01-01")), Literal(Date.valueOf("2015-07-01")))),
       Date.valueOf("2015-07-01"), InternalRow.empty)
@@ -597,26 +621,44 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-28322: IntegralDivide supports decimal type") {
-    checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
-    checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), 2L)
-    checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkEvaluation(
-        IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null) // mod by 0
-    }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkExceptionInExpression[ArithmeticException](
-        IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
-    }
-    // overflows long and so returns a wrong result
-    checkEvaluation(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
-      687399551400672280L)
-    // overflow during promote precision
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkEvaluation(IntegralDivide(
-        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
-        null)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
+        checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), 2L)
+        checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          checkEvaluation(
+            IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null) // mod by 0
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkExceptionInExpression[ArithmeticException](
+            IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
+        }
+        if (implementation.equals("JDKBigDecimal")) {
+          // overflows long and so returns a wrong result
+          checkEvaluation(IntegralDivide(
+            Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+            687399551400672280L)
+        } else {
+          checkExceptionInExpression[ArithmeticException](
+            IntegralDivide(
+              Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+            "Decimal overflow: Decimal128 division.")
+        }
+        // overflow during promote precision
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          if (implementation.equals("JDKBigDecimal")) {
+            checkEvaluation(IntegralDivide(
+              Literal(Decimal("99999999999999999999999999999999999999")),
+              Literal(Decimal(0.00001))), null)
+          } else {
+            checkExceptionInExpression[ArithmeticException](
+              IntegralDivide(
+                Literal(Decimal("99999999999999999999999999999999999999")),
+                Literal(Decimal(0.00001))), "Decimal overflow: Decimal128 division.")
+          }
+        }
+      }
     }
   }
 

@@ -75,6 +75,12 @@ final class Decimal(
     jdkDecimalOperation.scale
   }
 
+  def lessThanZero: Boolean = if (decimal128Enabled) {
+    this < ZERO128
+  } else {
+    this < ZERO
+  }
+
   /**
    * Set this Decimal to the given Long. Will have precision 20 and scale 0.
    */
@@ -449,7 +455,7 @@ final class Decimal(
     decimal
   }
 
-  def abs: Decimal = if (this < Decimal.ZERO) this.unary_- else this
+  def abs: Decimal = if (this.lessThanZero) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -550,13 +551,20 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("long", LongType)
       .add("float", FloatType)
       .add("double", DoubleType)
-      .add("bigDecimal", DecimalType.SYSTEM_DEFAULT)
-      .add("smallDecimal", DecimalType.USER_DEFAULT)
       .add("string", StringType)
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
       .add("udt", new ExamplePointUDT))
+
+  Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+    withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      testHash(
+        new StructType()
+          .add(s"bigDecimalWith$implementation", DecimalType.SYSTEM_DEFAULT)
+          .add(s"smallDecimalWith$implementation", DecimalType.USER_DEFAULT))
+    }
+  }
 
   testHash(
     new StructType()
@@ -581,12 +589,16 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         scale: Int,
         expected: Long): Unit = {
       val decimalType = DataTypes.createDecimalType(precision, scale)
-      val decimal = {
-        val value = Decimal.apply(new java.math.BigDecimal(input))
-        if (value.changePrecision(precision, scale)) value else null
-      }
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          val decimal = {
+            val value = Decimal.apply(new java.math.BigDecimal(input))
+            if (value.changePrecision(precision, scale)) value else null
+          }
 
-      checkHiveHash(decimal, decimalType, expected)
+          checkHiveHash(decimal, decimalType, expected)
+        }
+      }
     }
 
     checkHiveHashForDecimal("18", 38, 0, 558)

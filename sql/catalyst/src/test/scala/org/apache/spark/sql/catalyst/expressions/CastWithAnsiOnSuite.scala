@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -44,7 +45,12 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
     Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
-      checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkExceptionInExpression[ArithmeticException](
+            cast(Decimal(value.toString), dt), "overflow")
+        }
+      }
       checkExceptionInExpression[ArithmeticException](
         cast(Literal(value * 1.5f, FloatType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
@@ -54,13 +60,19 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   private def testLongMaxAndMin(dt: DataType): Unit = {
     assert(Seq(LongType, IntegerType).contains(dt))
-    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
-      checkExceptionInExpression[ArithmeticException](
-        cast(value, dt), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast((value * Decimal(1.1)).toFloat, dt), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast((value * Decimal(1.1)).toDouble, dt), "overflow")
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        Seq(
+          Decimal(Long.MaxValue) + Decimal(1),
+          Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
+          checkExceptionInExpression[ArithmeticException](
+            cast(value, dt), "overflow")
+          checkExceptionInExpression[ArithmeticException](
+            cast((value * Decimal(1.1)).toFloat, dt), "overflow")
+          checkExceptionInExpression[ArithmeticException](
+            cast((value * Decimal(1.1)).toDouble, dt), "overflow")
+        }
+      }
     }
   }
 
@@ -77,7 +89,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
       checkEvaluation(cast(value, ByteType), value)
       checkEvaluation(cast(value.toString, ByteType), value)
-      checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+        }
+      }
       checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
       checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
     }
@@ -96,7 +112,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
       checkEvaluation(cast(value, ShortType), value)
       checkEvaluation(cast(value.toString, ShortType), value)
-      checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+        }
+      }
       checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
       checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
     }
@@ -109,7 +129,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
       checkEvaluation(cast(value, IntegerType), value)
       checkEvaluation(cast(value.toString, IntegerType), value)
-      checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+        }
+      }
       checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
     }
     checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
@@ -122,7 +146,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
       checkEvaluation(cast(value, LongType), value)
       checkEvaluation(cast(value.toString, LongType), value)
-      checkEvaluation(cast(Decimal(value.toString), LongType), value)
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          checkEvaluation(cast(Decimal(value.toString), LongType), value)
+        }
+      }
     }
     checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
     checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
@@ -131,12 +159,16 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   }
 
   test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
-    checkExceptionInExpression[ArithmeticException](
-      cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
-    checkExceptionInExpression[ArithmeticException](
-      cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
-    checkExceptionInExpression[ArithmeticException](
-      cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+      }
+    }
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
@@ -240,36 +272,40 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   }
 
   test("Fast fail for cast string type to decimal type in ansi mode") {
-    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
-      Decimal("12345678901234567890123456789012345678"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
-      "out of decimal type range")
-    checkExceptionInExpression[ArithmeticException](
-      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
-      "cannot be represented as Decimal(38, 1)")
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+          Decimal("12345678901234567890123456789012345678"))
+        checkExceptionInExpression[ArithmeticException](
+          cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+          "out of decimal type range")
+        checkExceptionInExpression[ArithmeticException](
+          cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+          "cannot be represented as Decimal(38, 1)")
 
-    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
-      Decimal("0"))
-    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
-      Decimal("0"))
-    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
-      Decimal("0E-18"))
-    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
-      Decimal("0"))
+        checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+          Decimal("0"))
+        checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+          Decimal("0"))
+        checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+          Decimal("0E-18"))
+        checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+          Decimal("0"))
 
-    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
-      Decimal("60000000000000000000000000000000000000"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("6E+38", DecimalType(38, 0)),
-      "out of decimal type range")
-    checkExceptionInExpression[ArithmeticException](
-      cast("6E+37", DecimalType(38, 1)),
-      "cannot be represented as Decimal(38, 1)")
+        checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+          Decimal("60000000000000000000000000000000000000"))
+        checkExceptionInExpression[ArithmeticException](
+          cast("6E+38", DecimalType(38, 0)),
+          "out of decimal type range")
+        checkExceptionInExpression[ArithmeticException](
+          cast("6E+37", DecimalType(38, 1)),
+          "cannot be represented as Decimal(38, 1)")
 
-    checkExceptionInExpression[NumberFormatException](
-      cast("abcd", DecimalType(38, 1)),
-      castErrMsg("abcd", DecimalType(38, 1)))
+        checkExceptionInExpression[NumberFormatException](
+          cast("abcd", DecimalType(38, 1)),
+          castErrMsg("abcd", DecimalType(38, 1)))
+      }
+    }
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {

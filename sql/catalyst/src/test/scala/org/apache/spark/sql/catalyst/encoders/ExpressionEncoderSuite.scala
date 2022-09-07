@@ -165,7 +165,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
   encodeDecodeTest(BigInt("23134123123"), "scala biginteger")
   encodeDecodeTest(new BigInteger("23134123123"), "java BigInteger")
-  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
+  encodeDecodeTestForDecimal("32131413.211321313", "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
@@ -639,81 +639,99 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     }
   }
 
+  private def doEncodeDecodeTest[T : ExpressionEncoder](input: T): Unit = {
+    val encoder = implicitly[ExpressionEncoder[T]]
+
+    // Make sure encoder is serializable.
+    ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+
+    val row = encoder.createSerializer().apply(input)
+    val schema = encoder.schema.toAttributes
+    val boundEncoder = encoder.resolveAndBind()
+    val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
+      case e: Exception =>
+        fail(
+          s"""Exception thrown while decoding
+             |Converted: $row
+             |Schema: ${schema.mkString(",")}
+             |${encoder.schema.treeString}
+             |
+             |Encoder:
+             |$boundEncoder
+             |
+            """.stripMargin, e)
+    }
+
+    // Test the correct resolution of serialization / deserialization.
+    val attr = AttributeReference("obj", encoder.deserializer.dataType)()
+    val plan = LocalRelation(attr).serialize[T].deserialize[T]
+    assertAnalysisSuccess(plan)
+
+    val isCorrect = (input, convertedBack) match {
+      case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
+      case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
+      case (b1: Array[_], b2: Array[_]) =>
+        Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+      case (left: Comparable[_], right: Comparable[_]) =>
+        left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
+      case _ => input == convertedBack
+    }
+
+    if (!isCorrect) {
+      val types = convertedBack match {
+        case c: Product =>
+          c.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
+        case other => other.getClass.getName
+      }
+
+      val encodedData = try {
+        row.toSeq(encoder.schema).zip(schema).map {
+          case (a: ArrayData, AttributeReference(_, ArrayType(et, _), _, _)) =>
+            a.toArray[Any](et).toSeq
+          case (other, _) =>
+            other
+        }.mkString("[", ",", "]")
+      } catch {
+        case e: Throwable => s"Failed to toSeq: $e"
+      }
+
+      fail(
+        s"""Encoded/Decoded data does not match input data
+           |
+           |in:  $input
+           |out: $convertedBack
+           |types: $types
+           |
+           |Encoded Data: $encodedData
+           |Schema: ${schema.mkString(",")}
+           |${encoder.schema.treeString}
+           |
+           |fromRow Expressions:
+           |${boundEncoder.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  private def encodeDecodeTestForDecimal(
+      input: String,
+      testName: String,
+      useFallback: Boolean = false): Unit = {
+    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input", useFallback) {
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          val newInput = Decimal(input)
+          doEncodeDecodeTest(newInput)
+        }
+      }
+    }
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String,
       useFallback: Boolean = false): Unit = {
     testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input", useFallback) {
-      val encoder = implicitly[ExpressionEncoder[T]]
-
-      // Make sure encoder is serializable.
-      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
-
-      val row = encoder.createSerializer().apply(input)
-      val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.resolveAndBind()
-      val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
-        case e: Exception =>
-          fail(
-           s"""Exception thrown while decoding
-              |Converted: $row
-              |Schema: ${schema.mkString(",")}
-              |${encoder.schema.treeString}
-              |
-              |Encoder:
-              |$boundEncoder
-              |
-            """.stripMargin, e)
-      }
-
-      // Test the correct resolution of serialization / deserialization.
-      val attr = AttributeReference("obj", encoder.deserializer.dataType)()
-      val plan = LocalRelation(attr).serialize[T].deserialize[T]
-      assertAnalysisSuccess(plan)
-
-      val isCorrect = (input, convertedBack) match {
-        case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
-        case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
-        case (b1: Array[_], b2: Array[_]) =>
-          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
-        case (left: Comparable[_], right: Comparable[_]) =>
-          left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
-        case _ => input == convertedBack
-      }
-
-      if (!isCorrect) {
-        val types = convertedBack match {
-          case c: Product =>
-            c.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
-          case other => other.getClass.getName
-        }
-
-        val encodedData = try {
-          row.toSeq(encoder.schema).zip(schema).map {
-            case (a: ArrayData, AttributeReference(_, ArrayType(et, _), _, _)) =>
-              a.toArray[Any](et).toSeq
-            case (other, _) =>
-              other
-          }.mkString("[", ",", "]")
-        } catch {
-          case e: Throwable => s"Failed to toSeq: $e"
-        }
-
-        fail(
-          s"""Encoded/Decoded data does not match input data
-             |
-             |in:  $input
-             |out: $convertedBack
-             |types: $types
-             |
-             |Encoded Data: $encodedData
-             |Schema: ${schema.mkString(",")}
-             |${encoder.schema.treeString}
-             |
-             |fromRow Expressions:
-             |${boundEncoder.deserializer.treeString}
-         """.stripMargin)
-      }
+      doEncodeDecodeTest(input)
     }
   }
 

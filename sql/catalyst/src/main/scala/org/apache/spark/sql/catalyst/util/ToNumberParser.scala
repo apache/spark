@@ -669,25 +669,25 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           result.append(DOLLAR_SIGN)
         case _: OptionalPlusOrMinusSign =>
           stripTrailingLoneDecimalPoint(result)
-          if (input < Decimal.ZERO) {
+          if (input.lessThanZero) {
             addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
           } else {
             addCharacterCheckingTrailingSpaces(result, PLUS_SIGN)
           }
         case _: OptionalMinusSign =>
-          if (input < Decimal.ZERO) {
+          if (input.lessThanZero) {
             stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
           } else {
             result.append(SPACE)
           }
         case OpeningAngleBracket() =>
-          if (input < Decimal.ZERO) {
+          if (input.lessThanZero) {
             result.append(ANGLE_BRACKET_OPEN)
           }
         case ClosingAngleBracket() =>
           stripTrailingLoneDecimalPoint(result)
-          if (input < Decimal.ZERO) {
+          if (input.lessThanZero) {
             addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
           } else {
             result.append(SPACE)

@@ -21,9 +21,11 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, StructField, StructType}
 
-class UnsafeRowUtilsSuite extends SparkFunSuite {
+class UnsafeRowUtilsSuite extends SparkFunSuite with SQLHelper {
 
   val testKeys: Seq[String] = Seq("key1", "key2")
   val testValues: Seq[String] = Seq("sum(key1)", "sum(key2)")
@@ -56,29 +58,35 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
   }
 
   test("Handle special case for null variable-length Decimal") {
-    val schema = StructType(StructField("d", DecimalType(19, 0), nullable = true) :: Nil)
-    val unsafeRowProjection = UnsafeProjection.create(schema)
-    val row = unsafeRowProjection(new SpecificInternalRow(schema))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        val schema = StructType(StructField("d", DecimalType(19, 0), nullable = true) :: Nil)
+        val unsafeRowProjection = UnsafeProjection.create(schema)
+        val row = unsafeRowProjection(new SpecificInternalRow(schema))
 
-    // row is empty at this point
-    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+        // row is empty at this point
+        assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
+        assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
 
-    // set Decimal field to precision-overflowed value
-    val bigDecimalVal = Decimal(new JavaBigDecimal("12345678901234567890")) // precision=20, scale=0
-    row.setDecimal(0, bigDecimalVal, 19) // should overflow and become null
-    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+        // set Decimal field to precision-overflowed value
+        // precision=20, scale=0
+        val bigDecimalVal = Decimal(new JavaBigDecimal("12345678901234567890"))
+        row.setDecimal(0, bigDecimalVal, 19) // should overflow and become null
+        assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
+        assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
 
-    // set Decimal field to valid non-null value
-    val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789")) // precision=19, scale=0
-    row.setDecimal(0, bigDecimalVal2, 19) // should succeed
-    assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+        // set Decimal field to valid non-null value
+        // precision=19, scale=0
+        val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789"))
+        row.setDecimal(0, bigDecimalVal2, 19) // should succeed
+        assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
+        assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
 
-    // set Decimal field to null explicitly, after which this field no longer supports updating
-    row.setNullAt(0)
-    assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (0, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+        // set Decimal field to null explicitly, after which this field no longer supports updating
+        row.setNullAt(0)
+        assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (0, 0))
+        assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+      }
+    }
   }
 }

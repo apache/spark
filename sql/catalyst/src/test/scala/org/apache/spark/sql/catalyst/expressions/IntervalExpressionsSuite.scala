@@ -103,18 +103,23 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("seconds") {
-    checkEvaluation(ExtractIntervalSeconds("0 second"), Decimal(0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds("1 second"), Decimal(1.0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds("-1 second"), Decimal(-1.0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds("1 minute 59 second"), Decimal(59.0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalSeconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds(largeInterval), Decimal(59.999999, 8, 6))
-    checkEvaluation(
-      ExtractIntervalSeconds("10 seconds 1 milliseconds 1 microseconds"),
-      Decimal(10001001, 8, 6))
-    checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        checkEvaluation(ExtractIntervalSeconds("0 second"), Decimal(0, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds("1 second"), Decimal(1.0, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds("-1 second"), Decimal(-1.0, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds("1 minute 59 second"), Decimal(59.0, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
+        // Years and months must not be taken into account
+        checkEvaluation(
+          ExtractIntervalSeconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds(largeInterval), Decimal(59.999999, 8, 6))
+        checkEvaluation(
+          ExtractIntervalSeconds("10 seconds 1 milliseconds 1 microseconds"),
+          Decimal(10001001, 8, 6))
+        checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
+      }
+    }
   }
 
   test("multiply") {

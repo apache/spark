@@ -104,12 +104,13 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("long", LongType)
       .add("float", FloatType)
       .add("double", DoubleType)
-      .add("decimal", DecimalType.SYSTEM_DEFAULT)
       .add("string", StringType)
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
       .add("udt", new ExamplePointUDT))
+
+  encodeDecodeTestForDecimal(new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT))
 
   encodeDecodeTest(
     new StructType()
@@ -142,42 +143,54 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("structOfUDT", structOfUDT))
 
   test("encode/decode decimal type") {
-    val schema = new StructType()
-      .add("int", IntegerType)
-      .add("string", StringType)
-      .add("double", DoubleType)
-      .add("java_decimal", DecimalType.SYSTEM_DEFAULT)
-      .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
-      .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        val schema = new StructType()
+          .add("int", IntegerType)
+          .add("string", StringType)
+          .add("double", DoubleType)
+          .add("java_decimal", DecimalType.SYSTEM_DEFAULT)
+          .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
+          .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
 
-    val encoder = RowEncoder(schema).resolveAndBind()
+        val encoder = RowEncoder(schema).resolveAndBind()
 
-    val javaDecimal = new java.math.BigDecimal("1234.5678")
-    val scalaDecimal = BigDecimal("1234.5678")
-    val catalystDecimal = Decimal("1234.5678")
+        val javaDecimal = new java.math.BigDecimal("1234.5678")
+        val scalaDecimal = BigDecimal("1234.5678")
+        val catalystDecimal = Decimal("1234.5678")
 
-    val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
-    val convertedBack = roundTrip(encoder, input)
-    // Decimal will be converted back to Java BigDecimal when decoding.
-    assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
-    assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
-    assert(convertedBack.getDecimal(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
+        val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
+        val convertedBack = roundTrip(encoder, input)
+        // Decimal will be converted back to Java BigDecimal when decoding.
+        assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
+        assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
+        assert(convertedBack.getDecimal(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
+      }
+    }
   }
 
   test("RowEncoder should preserve decimal precision and scale") {
-    val schema = new StructType().add("decimal", DecimalType(10, 5), false)
-    val encoder = RowEncoder(schema).resolveAndBind()
-    val decimal = Decimal("67123.45")
-    val input = Row(decimal)
-    val row = toRow(encoder, input)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        val schema = new StructType().add("decimal", DecimalType(10, 5), false)
+        val encoder = RowEncoder(schema).resolveAndBind()
+        val decimal = Decimal("67123.45")
+        val input = Row(decimal)
+        val row = toRow(encoder, input)
 
-    assert(row.toSeq(schema).head == decimal)
+        assert(row.toSeq(schema).head == decimal)
+      }
+    }
   }
 
   test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
-    val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
-    testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
-    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
+        testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
+        testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+      }
+    }
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
@@ -190,13 +203,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
           assert(e.getMessage.contains("cannot be represented as Decimal"))
         case e: RuntimeException =>
           assert(e.getCause.isInstanceOf[ArithmeticException])
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+          if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal") {
+            assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+          } else {
+            assert(e.getCause.getMessage.contains("BigInteger out of Int128 range"))
+          }
       }
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
-      assert(roundTrip(encoder, row).get(0) == null)
+      if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal") {
+        assert(roundTrip(encoder, row).get(0) == null)
+      } else {
+        intercept[Exception] {
+          roundTrip(encoder, row).get(0)
+        } match {
+          case e: RuntimeException =>
+            assert(e.getCause.isInstanceOf[ArithmeticException])
+            assert(e.getCause.getMessage.contains("BigInteger out of Int128 range"))
+        }
+      }
     }
   }
 
@@ -409,28 +436,42 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  private def doEncodeDecodeTest(schema: StructType): Unit = {
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
+
+    var input: Row = null
+    try {
+      for (_ <- 1 to 5) {
+        input = inputGenerator.apply().asInstanceOf[Row]
+        val convertedBack = roundTrip(encoder, input)
+        assert(input == convertedBack)
+      }
+    } catch {
+      case e: Exception =>
+        fail(
+          s"""
+             |schema: ${schema.simpleString}
+             |input: ${input}
+                 """.stripMargin, e)
+    }
+  }
+
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       Seq(false, true).foreach { java8Api =>
         withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
-          val encoder = RowEncoder(schema).resolveAndBind()
-          val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
+          doEncodeDecodeTest(schema)
+        }
+      }
+    }
+  }
 
-          var input: Row = null
-          try {
-            for (_ <- 1 to 5) {
-              input = inputGenerator.apply().asInstanceOf[Row]
-              val convertedBack = roundTrip(encoder, input)
-              assert(input == convertedBack)
-            }
-          } catch {
-            case e: Exception =>
-              fail(
-                s"""
-                   |schema: ${schema.simpleString}
-                   |input: ${input}
-                 """.stripMargin, e)
-          }
+  private def encodeDecodeTestForDecimal(schema: StructType): Unit = {
+    test(s"encode/decode: ${schema.simpleString}") {
+      Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          doEncodeDecodeTest(schema)
         }
       }
     }

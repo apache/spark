@@ -1166,7 +1166,7 @@ case class Pmod(
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {
     val r = a % n
-    if (r != null && r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
+    if (r != null && r.lessThanZero) {(r + n) % n} else r
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"

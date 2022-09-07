@@ -27,6 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -196,8 +197,12 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(createdFromNull.getDouble(7) === 0.0d)
     assert(createdFromNull.getUTF8String(8) === null)
     assert(createdFromNull.getBinary(9) === null)
-    assert(createdFromNull.getDecimal(10, 10, 0) === null)
-    assert(createdFromNull.getDecimal(11, 38, 18) === null)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        assert(createdFromNull.getDecimal(10, 10, 0) === null)
+        assert(createdFromNull.getDecimal(11, 38, 18) === null)
+      }
+    }
     // assert(createdFromNull.get(11) === null)
 
     // If we have an UnsafeRow with columns that are initially non-null and we null out those

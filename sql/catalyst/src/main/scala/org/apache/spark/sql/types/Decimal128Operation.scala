@@ -76,8 +76,14 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     if (roundMode == ROUND_CEILING || roundMode == ROUND_FLOOR) {
       set(newDecimalVal)
     } else {
-      val (newLeftHigh, newLeftLow) = Int128Math.rescale(this.int128.high, this.int128.low, rescale)
-      this.int128 = Int128(newLeftHigh, newLeftLow)
+      try {
+        val (newLeftHigh, newLeftLow) =
+          Int128Math.rescale(this.int128.high, this.int128.low, rescale)
+        this.int128 = Int128(newLeftHigh, newLeftLow)
+      } catch {
+        case _: IllegalArgumentException =>
+          set(newDecimalVal)
+      }
     }
 
     true
@@ -133,8 +139,7 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   }
 
   def multiply(that: Decimal128Operation): Decimal128Operation = {
-    val (newHigh, newLow) = Int128Math.multiply(this.int128.high, this.int128.low,
-      that.int128.high, that.int128.low)
+    val (newHigh, newLow) = Int128Math.multiply(this.high, this.low, that.high, that.low)
 
     checkOverflow(newHigh, newLow, "Decimal128 multiply.")
 
@@ -150,8 +155,7 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
       Math.min(Math.max(6, this._scale + that.precision + 1), DecimalType.MAX_PRECISION)
     val rescaleFactor = resultScale - this._scale + that.scale
     val (newHigh, newLow) = try {
-      Int128Math.divideRoundUp(
-        this.int128.high, this.int128.low, that.int128.high, that.int128.low, rescaleFactor, 0)
+      Int128Math.divideRoundUp(this.high, this.low, that.high, that.low, rescaleFactor, 0)
     } catch {
       case _: ArithmeticException =>
         throw overflowError("Decimal128 division.")
@@ -168,8 +172,8 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   def remainder(that: Decimal128Operation): Decimal128Operation = {
     val leftRescaleFactor = Int128Math.rescaleFactor(this._scale, that.scale)
     val rightRescaleFactor = Int128Math.rescaleFactor(that.scale, this._scale)
-    val (newHigh, newLow) = Int128Math.remainder(this.int128.high, this.int128.low,
-      that.int128.high, that.int128.low, leftRescaleFactor, rightRescaleFactor)
+    val (newHigh, newLow) = Int128Math.remainder(
+      this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor)
 
     checkOverflow(newHigh, newLow, "Decimal128 remainder.")
 
