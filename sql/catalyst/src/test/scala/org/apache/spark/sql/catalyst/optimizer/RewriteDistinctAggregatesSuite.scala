@@ -78,10 +78,10 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("eliminate multiple distinct groups due to superficial differences") {
     val input = testRelation
-      .groupBy('a)(
-        countDistinct('b + 'c).as('agg1),
-        countDistinct('c + 'b).as('agg2),
-        max('c).as('agg3))
+      .groupBy($"a")(
+        countDistinct($"b" + $"c").as("agg1"),
+        countDistinct($"c" + $"b").as("agg2"),
+        max($"c").as("agg3"))
       .analyze
 
     val rewrite = RewriteDistinctAggregates(input)
@@ -93,12 +93,12 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("reduce multiple distinct groups due to superficial differences") {
     val input = testRelation
-      .groupBy('a)(
-        countDistinct('b + 'c + 'd).as('agg1),
-        countDistinct('d + 'c + 'b).as('agg2),
-        countDistinct('b + 'c).as('agg4),
-        countDistinct('c + 'b).as('agg4),
-        max('c).as('agg5))
+      .groupBy($"a")(
+        countDistinct($"b" + $"c" + $"d").as("agg1"),
+        countDistinct($"d" + $"c" + $"b").as("agg2"),
+        countDistinct($"b" + $"c").as("agg3"),
+        countDistinct($"c" + $"b").as("agg4"),
+        max($"c").as("agg5"))
       .analyze
 
     val rewrite = RewriteDistinctAggregates(input)
