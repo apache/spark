@@ -195,7 +195,7 @@ private[sql] class ProtoSerializer(
 
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
-          s"schema is incompatible (sqlType = ${catalystType}, " +
+          s"schema is incompatible (sqlType = ${catalystType.sql}, " +
           s"protoType = ${protoType.getJavaType})")
     }
   }
