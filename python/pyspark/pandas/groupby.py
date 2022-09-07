@@ -582,18 +582,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         )
 
     # TODO: 'q' accepts list like type
-    def quantile(self, q: float = 0.5) -> FrameLike:
+    def quantile(self, q: float = 0.5, accuracy: int = 10000) -> FrameLike:
         """
         Return group values at the given quantile.
 
         .. note:: `quantile` in pandas-on-Spark are using distributed percentile approximation
-        algorithm unlike pandas, the result might different with pandas in accuracy, also
-        `interpolation` parameters are not supported yet.
+            algorithm unlike pandas, the result might different with pandas in accuracy, also
+            `interpolation` parameters are not supported yet.
 
         Parameters
         ----------
         q : float, default 0.5 (50% quantile)
             Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
 
             .. versionadded:: 3.4.0
 
@@ -627,9 +631,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             raise NotImplementedError("q doesn't support for list like type for now")
         if not is_number(q):
             raise TypeError("must be real number, not %s" % type(q).__name__)
-        if q < 0 or q > 1:
+        if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
-        return self._reduce_for_stat_function(lambda col: F.percentile_approx(col, q))
+        return self._reduce_for_stat_function(
+            lambda col: F.percentile_approx(col, q, accuracy),
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+        )
 
     def min(self, numeric_only: Optional[bool] = False) -> FrameLike:
         """
