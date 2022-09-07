@@ -365,7 +365,7 @@ object KeyGroupedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && transform.children.head.isInstanceOf[AttributeReference]
+      transform.children.size == 1 && isReference(transform.children.head)
     }
 
     @tailrec
