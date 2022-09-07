@@ -3327,6 +3327,22 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             psser.transform(lambda x: x + 1, axis=1)
 
+    def test_series_stat_fail(self):
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).mean()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).skew()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).kurtosis()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).std()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).var()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).median()
+        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+            ps.Series(["a", "b", "c"]).sem()
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401

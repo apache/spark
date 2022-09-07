@@ -151,6 +151,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
+    <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
@@ -170,8 +171,8 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.3</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.13.3</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.13.4</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.13.4</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.ludovic.dev.version>3.0.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -3503,6 +3504,7 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+        <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
         <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
         <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>

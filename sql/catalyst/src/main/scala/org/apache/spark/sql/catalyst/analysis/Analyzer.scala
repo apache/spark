@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -982,9 +982,11 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
       case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
-        p.copy(
+        val newProj = p.copy(
           projectList = p.metadataOutput ++ p.projectList,
           child = addMetadataCol(p.child))
+        newProj.copyTagsFrom(p)
+        newProj
       case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
   }
@@ -3438,9 +3440,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.userSpecifiedCols, "in the column list", resolver)
 
       i.userSpecifiedCols.map { col =>
-        i.table.resolve(Seq(col), resolver).getOrElse(
-          throw QueryCompilationErrors.unresolvedAttributeError(
-            "UNRESOLVED_COLUMN", col, i.table.output.map(_.name), i.origin))
+        i.table.resolve(Seq(col), resolver).getOrElse {
+          val candidates = i.table.output.map(_.name)
+          val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
+          throw QueryCompilationErrors
+            .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
+        }
       }
     }
 
@@ -3523,8 +3528,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
-        project.child.metadataOutput.filter(_.supportsQualifiedStar))
+      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
+        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
     project
   }
 

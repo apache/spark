@@ -166,10 +166,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`non_existing`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
   }
 }
 
@@ -217,10 +218,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`k`",
-    "objectList" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`testdata`.`a`, `testdata`.`b`"
   }
 }
 

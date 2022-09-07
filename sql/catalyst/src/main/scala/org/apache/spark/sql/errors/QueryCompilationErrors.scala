@@ -168,30 +168,43 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       colName: String,
       candidates: Seq[String],
       origin: Origin): Throwable = {
-    val candidateIds = candidates.map(candidate => toSQLId(candidate))
     new AnalysisException(
       errorClass = errorClass,
-      messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
-      origin = origin)
+      errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(colName)), if (candidates.isEmpty) {
+        Array.empty
+      } else {
+        Array(candidates.take(5).map(toSQLId).mkString(", "))
+      }),
+      origin = origin
+    )
   }
 
-  def unresolvedColumnError(
-      columnName: String,
-      proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
+  def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      messageParameters = Array(toSQLId(columnName), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(columnName)), if (proposal.isEmpty) {
+        Array.empty
+      } else {
+        Array(proposal.take(5).map(toSQLId).mkString(", "))
+      }))
   }
 
   def unresolvedFieldError(
       fieldName: String,
       columnPath: Seq[String],
       proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters =
+        Array.concat(Array(toSQLId(fieldName), toSQLId(columnPath)), if (proposal.isEmpty) {
+          Array.empty
+        } else {
+          Array(proposal.map(toSQLId).mkString(", "))
+        })
+    )
   }
 
   def dataTypeMismatchForDeserializerError(

@@ -362,6 +362,23 @@ abstract class SparkFunSuite
       context: QueryContext): Unit =
     checkError(exception, errorClass, None, None, parameters, false, Array(context))
 
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), None, Map.empty, false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
+      sqlState: String,
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), None, parameters, false, Array(context))
+
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
     private val _loggingEvents = new ArrayBuffer[LogEvent]()

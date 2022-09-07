@@ -75,6 +75,23 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "DATATYPE_MISMATCH" : {
+    "message" : [
+      "Cannot resolve <sqlExpr> due to data type mismatch:"
+    ],
+    "subClass" : {
+      "BINARY_OP_DIFF_TYPES" : {
+        "message" : [
+          "the left and right operands of the binary operator have incompatible types (<left> and <right>)."
+        ]
+      },
+      "BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "the binary operator requires the input type <inputType>, not <actualDataType>."
+        ]
+      }
+    }
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -431,20 +448,56 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved. Did you mean one of the following? [<objectList>]"
+      "A column or function parameter with name <objectName> cannot be resolved."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_FIELD" : {
     "message" : [
-      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>. Did you mean one of the following? [<proposal>]"
+      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Otherwise did you mean one of the following column(s)? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNSUPPORTED_DATATYPE" : {
