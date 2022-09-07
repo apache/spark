@@ -4435,8 +4435,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Returns a new :class:`DataFrame` by renaming multiple columns.
         This is a no-op if schema doesn't contain the given column names.
 
-        The colsMap is a map of existing column name and corresponding desired column names.
-
         .. versionadded:: 3.4.0
            Added support for multiple columns renaming
 
@@ -4450,6 +4448,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         -------
         :class:`DataFrame`
             DataFrame with renamed columns.
+
+        See Also
+        --------
+        :meth:`withColumnRenamed`
 
         Examples
         --------

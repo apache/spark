@@ -107,6 +107,11 @@ class DataFrameTests(ReusedSQLTestCase):
         renamed_df2 = df.withColumnsRenamed({"name": "naam", "address": "adres"})
         self.assertEqual(renamed_df2.columns, ["naam", "age"])
 
+        # negative test for incorrect type
+        type_error_msg = "colsMap must be dict of existing column name and new column name."
+        with self.assertRaisesRegex(TypeError, type_error_msg):
+            df.withColumnsRenamed(("name", "x"))
+
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
