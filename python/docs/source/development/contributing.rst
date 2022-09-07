@@ -186,6 +186,7 @@ Annotations should, when possible:
 
 * Be compatible with the current stable MyPy release.
 
+
 Complex supporting type definitions, should be placed in dedicated ``_typing.pyi`` stubs. See for example `pyspark.sql._typing.pyi <https://github.com/apache/spark/blob/master/python/pyspark/sql/_typing.pyi>`_.
 
 Annotations can be validated using ``dev/lint-python`` script or by invoking mypy directly:
