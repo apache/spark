@@ -197,12 +197,6 @@ class ArrowPythonRunnerWithState(
         // the range of data and give a view, say, "zero-copy". To help splitting the range for
         // data, we provide the "start offset" and the "number of data" in the state metadata.
         //
-        // FIXME: probably need to change this as "hard limit" when addressing scalability. Worth
-        //  noting that we may need to break down the data into chunks for a specific group
-        //  having "small" number of data, because we also do bin-packing as well. Maybe we could
-        //  concatenate these chunks in Python worker (serializer), with some hints e.g.
-        //  We can get the information - the number of data in the chunk before reading.
-        //
         // Pretty sure we don't bin-pack all groups into a single record batch. We have a soft
         // limit on the size - it's not a hard limit since we allow current group to write all
         // data even it's going to exceed the limit.
@@ -258,14 +252,6 @@ class ArrowPythonRunnerWithState(
           // Provide data rows
           while (dataIter.hasNext) {
             val dataRow = dataIter.next()
-            // TODO: if we think there will be non-small amount of data per grouping key,
-            //  we could probably try out "dictionary encoding" for the optimization
-            //  of storing same grouping keys multiple times. This may complicate the logic, as
-            //  in IPC streaming format, DictionaryBatch will be provided separately along with
-            //  RecordBatch, and I'm not sure whether the record batch can be directly converted
-            //  to Pandas DataFrame / Series if the record batch refers to the dictionary batch.
-            //  https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout
-            //  https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
             arrowWriterForData.write(dataRow)
             numRowsForCurGroup += 1
             totalNumRowsForBatch += 1
