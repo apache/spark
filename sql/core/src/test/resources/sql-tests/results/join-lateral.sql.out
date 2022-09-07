@@ -152,7 +152,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "LATERAL_NATURAL_JOIN",
-  "sqlState" : "0A000"
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 60,
+    "fragment" : "NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)"
+  } ]
 }
 
 
@@ -165,7 +172,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "UNSUPPORTED_FEATURE",
   "errorSubClass" : "LATERAL_JOIN_USING",
-  "sqlState" : "0A000"
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 63,
+    "fragment" : "JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)"
+  } ]
 }
 
 

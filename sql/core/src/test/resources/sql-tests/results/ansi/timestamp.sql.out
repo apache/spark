@@ -719,7 +719,15 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP))' due to data type mismatch: '(TIMESTAMP '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP))' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\"",
+    "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "actualDataType" : "\"TIMESTAMP\""
+  }
+}
 
 
 -- !query
@@ -728,7 +736,15 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS TIMESTAMP) + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP) + TIMESTAMP '2011-11-11 11:11:11')' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_WRONG_TYPE",
+  "messageParameters" : {
+    "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\"",
+    "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "actualDataType" : "\"TIMESTAMP\""
+  }
+}
 
 
 -- !query
@@ -737,7 +753,15 @@ select timestamp'2011-11-11 11:11:11' + null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' due to data type mismatch: differing types in '(TIMESTAMP '2011-11-11 11:11:11' + NULL)' (timestamp and void).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\"",
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"VOID\""
+  }
+}
 
 
 -- !query
@@ -746,7 +770,15 @@ select null + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(NULL + TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: differing types in '(NULL + TIMESTAMP '2011-11-11 11:11:11')' (void and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\"",
+    "left" : "\"VOID\"",
+    "right" : "\"TIMESTAMP\""
+  }
+}
 
 
 -- !query

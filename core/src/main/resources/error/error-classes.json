@@ -75,6 +75,23 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ]
   },
+  "DATATYPE_MISMATCH" : {
+    "message" : [
+      "Cannot resolve <sqlExpr> due to data type mismatch:"
+    ],
+    "subClass" : {
+      "BINARY_OP_DIFF_TYPES" : {
+        "message" : [
+          "the left and right operands of the binary operator have incompatible types (<left> and <right>)."
+        ]
+      },
+      "BINARY_OP_WRONG_TYPE" : {
+        "message" : [
+          "the binary operator requires the input type <inputType>, not <actualDataType>."
+        ]
+      }
+    }
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
