@@ -287,7 +287,7 @@ private[storage] class BlockManagerDecommissioner(
     val livePeerSet = bm.getPeers(false).toSet
     val currentPeerSet = migrationPeers.keys.toSet
     val deadPeers = currentPeerSet.diff(livePeerSet)
-    // Randomize the orders of the peers to avoid migrating data to same nodes
+    // Randomize the orders of the peers to avoid hotspot nodes.
     val newPeers = Utils.randomize(livePeerSet.diff(currentPeerSet))
     migrationPeers ++= newPeers.map { peer =>
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
