@@ -275,17 +275,18 @@ class ResourceProfile(
  */
 @Evolving
 @Since("3.4.0")
-class TaskResourceProfile (
+class TaskResourceProfile(
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
 
   override protected[spark] def getCustomExecutorResources()
-      :Map[String, ExecutorResourceRequest] = {
+      : Map[String, ExecutorResourceRequest] = {
     if (SparkEnv.get == null) {
-      throw new IllegalStateException("SparkEnv should not be empty.")
+      // This will be called in standalone master when dynamic allocation enabled.
+      return super.getCustomExecutorResources()
     }
-    val sparkConf = SparkEnv.get.conf
 
+    val sparkConf = SparkEnv.get.conf
     if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
       ResourceProfile.getOrCreateDefaultProfile(sparkConf)
         .getCustomExecutorResources()
