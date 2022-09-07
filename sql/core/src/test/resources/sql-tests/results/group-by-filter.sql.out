@@ -228,7 +228,13 @@ SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query
@@ -708,7 +714,13 @@ SELECT a + 2, COUNT(b) FILTER (WHERE b IN (1, 2)) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.a' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+{
+  "errorClass" : "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expression" : "\"a\""
+  }
+}
 
 
 -- !query

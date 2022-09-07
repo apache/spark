@@ -346,11 +346,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"if you don't care which value you get."
                 )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
-                failAnalysis(
-                  s"expression '${e.sql}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() (or first_value) if you don't care " +
-                    "which value you get.")
+                throw QueryCompilationErrors.columnNotInGroupByClauseError(e)
               case s: ScalarSubquery
                   if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
                 failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
