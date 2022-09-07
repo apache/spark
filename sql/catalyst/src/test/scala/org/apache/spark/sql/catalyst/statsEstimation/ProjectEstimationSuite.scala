@@ -173,6 +173,17 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(2),
       attributeStats = toAttributeMap(expectedColStats3, proj3))
     assert(proj3.stats == expectedStats3)
+
+    // non-nullable expression with zero row count
+    val proj4 = Project(Seq(ar1, Alias(Literal(10L, LongType), "v")()), child.copy(rowCount = 0))
+    val expectedColStats4 = Seq(
+      "key1" -> colStat1,
+      "v" -> ColumnStat(Some(0), Some(10L), Some(10L), Some(0), Some(8), Some(8), None, 2))
+    val expectedStats4 = Statistics(
+      sizeInBytes = 1, // output size will be 1 for zero row count
+      rowCount = Some(0),
+      attributeStats = toAttributeMap(expectedColStats4, proj4))
+    assert(proj4.stats == expectedStats4)
   }
 
   private def checkProjectStats(

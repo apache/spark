@@ -104,19 +104,25 @@ object EstimationUtils {
       // Create new stats for introduced constant columns
       case alias @ Alias(expr: Expression, _)
         if expr.foldable && expr.deterministic && EstimationUtils.supportsType(alias.dataType ) =>
-        val value = Option(expr.eval(EmptyRow))
-        val length = EstimationUtils.getConstantLen(expr)
+        val value = expr.eval(EmptyRow)
+        val length = EstimationUtils.getConstantLen(value, expr.dataType)
         // String and binary data do not get min or max
         val minMax = alias.dataType match {
           case StringType | BinaryType => None
-          case _ => value
+          case _ => Option(value)
         }
-        val columnStat = if (value.isDefined) {
-          ColumnStat(Some(1), minMax, minMax, Some(0), Some(length), Some(length))
-        } else {
-          ColumnStat(Some(0), minMax, minMax, Some(rowCount), Some(length), Some(length))
-        }
-        alias.toAttribute -> columnStat
+        // null value has a distinctCount of 0 and nullCount of 1.
+        val distinctCount = if (value != null && rowCount != 0) BigInt(1) else BigInt(0)
+        val nullCount = if (value != null || rowCount == 0) BigInt(0) else rowCount
+
+        alias.toAttribute ->
+          ColumnStat(
+            distinctCount = Some(distinctCount),
+            min = minMax,
+            max = minMax,
+            nullCount = Some(nullCount),
+            avgLen = Some(length),
+            maxLen = Some(length))
     }
   }
 
@@ -154,17 +160,17 @@ object EstimationUtils {
    * @param expr
    * @return the size in bytes
    */
-  def getConstantLen(expr: Expression): Long = {
-    expr.dataType match {
+  def getConstantLen(value: Any, dataType: DataType): Long = {
+    dataType match {
       case StringType =>
-        val res = expr.eval().asInstanceOf[UTF8String]
+        val res = value.asInstanceOf[UTF8String]
         val resLength = if (res == null) 1 else res.numBytes()
         // Only the actual content of the string is counted
         resLength
       case BinaryType =>
-        val res = expr.eval().asInstanceOf[Array[Byte]]
+        val res = value.asInstanceOf[Array[Byte]]
         if (res == null) 1 else res.size
-      case _ => expr.dataType.defaultSize
+      case _ => dataType.defaultSize
     }
   }
 
