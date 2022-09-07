@@ -533,7 +533,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             for data in iterator:
                 packaged_result = data[0]
 
-                pdf = packaged_result[0][0]
+                pdf_iter = packaged_result[0][0]
                 state = packaged_result[0][1]
                 # this won't change across batches
                 return_schema = packaged_result[1]
@@ -541,9 +541,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 # FIXME: arrow type to pandas type
                 # FIXME: probably also need to check columns to validate?
 
-                if len(pdf) > 0:
-                    pdf_data_cnt += len(pdf)
-                    pdfs.append(pdf)
+                for pdf in pdf_iter:
+                    # FIXME: probably need to reduce down the scope of record batch to this?
+                    if len(pdf) > 0:
+                        pdf_data_cnt += len(pdf)
+                        pdfs.append(pdf)
 
                 # pick up state for only last chunk as state should have been updated so far
                 state_properties = state.json().encode("utf-8")

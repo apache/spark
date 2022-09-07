@@ -67,7 +67,7 @@ class GroupedMapInPandasWithStateTests(ReusedSQLTestCase):
 
             state.update((total_len,))
             assert state.get[0] == 1
-            return pd.DataFrame({"key": [key[0]], "countAsString": [str(total_len)]})
+            yield pd.DataFrame({"key": [key[0]], "countAsString": [str(total_len)]})
 
         def check_results(batch_df, _):
             self.assertEqual(

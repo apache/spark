@@ -57,13 +57,11 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
       |        count += len(pdf)
       |        state.update((count,))
       |
-      |    ret = pd.DataFrame()
       |    if count >= 3:
       |        state.remove()
+      |        yield pd.DataFrame()
       |    else:
-      |        ret = pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'count': [count]})
-      |
-      |    return ret
+      |        yield pd.DataFrame({'key1': [key[0]], 'key2': [key[1]], 'count': [count]})
       |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)

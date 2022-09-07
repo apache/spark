@@ -64,13 +64,11 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |        count += len(pdf)
         |        state.update((count,))
         |
-        |    ret = pd.DataFrame()
         |    if count >= 3:
         |        state.remove()
+        |        yield pd.DataFrame()
         |    else:
-        |        ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
-        |
-        |    return ret
+        |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -125,23 +123,23 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |tpe = StructType([
         |    StructField("key", StringType()),
         |    StructField("value", IntegerType()),
-        |    StructField("countAsString", StringType())])
+        |    StructField("valueAsString", StringType()),
+        |    StructField("prevCountAsString", StringType())])
         |
         |def func(key, pdf_iter, state):
-        |    count = state.getOption
-        |    if count is None:
-        |        count = 0
+        |    prev_count = state.getOption
+        |    if prev_count is None:
+        |        prev_count = 0
         |    else:
-        |        count = count[0]
+        |        prev_count = prev_count[0]
         |
-        |    pdf_list = []
+        |    count = prev_count
         |    for pdf in pdf_iter:
         |        count += len(pdf)
-        |        pdf_list.append(pdf)
+        |        yield pdf.assign(valueAsString=lambda x: x.value.apply(str),
+        |                         prevCountAsString=str(prev_count))
         |
         |    state.update((count,))
-        |    pdf_concat = pd.concat(pdf_list)
-        |    return pdf_concat.assign(countAsString=str(count))
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -152,7 +150,8 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         Seq(
           StructField("key", StringType),
           StructField("value", IntegerType),
-          StructField("countAsString", StringType)))
+          StructField("valueAsString", StringType),
+          StructField("prevCountAsString", StringType)))
       val stateStructType = StructType(Seq(StructField("count", LongType)))
       val inputDataDS = inputData.toDS().selectExpr("_1 AS key", "_2 AS value")
       val result =
@@ -164,20 +163,23 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             stateStructType,
             "Update",
             "NoTimeout")
-          .select("key", "value", "countAsString")
+          .select("key", "value", "valueAsString", "prevCountAsString")
 
       testStream(result, Update)(
         AddData(inputData, ("a", 1)),
-        CheckNewAnswer(("a", 1, "1")),
+        CheckNewAnswer(("a", 1, "1", "0")),
         assertNumStateRows(total = 1, updated = 1),
         AddData(inputData, ("a", 2), ("a", 3), ("b", 1)),
-        CheckNewAnswer(("a", 2, "3"), ("a", 3, "3"), ("b", 1, "1")),
+        CheckNewAnswer(("a", 2, "2", "1"), ("a", 3, "3", "1"), ("b", 1, "1", "0")),
         assertNumStateRows(total = 2, updated = 2),
         StopStream,
         StartStream(),
         AddData(inputData, ("b", 2), ("c", 1), ("d", 1), ("e", 1)),
-        CheckNewAnswer(("b", 2, "2"), ("c", 1, "1"), ("d", 1, "1"), ("e", 1, "1")),
-        assertNumStateRows(total = 5, updated = 4)
+        CheckNewAnswer(("b", 2, "2", "1"), ("c", 1, "1", "0"), ("d", 1, "1", "0"),
+          ("e", 1, "1", "0")),
+        assertNumStateRows(total = 5, updated = 4),
+        AddData(inputData, ("a", 4)),
+        CheckNewAnswer(("a", 4, "4", "3"))
       )
     }
   }
@@ -211,11 +213,9 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    ret = pd.DataFrame()
         |    if count >= 3:
         |        state.remove()
-        |        ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
+        |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
         |    else:
-        |        ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
-        |
-        |    return ret
+        |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -282,9 +282,10 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |    except RuntimeError as e:
         |        assert "watermark" in str(e)
         |
+        |    ret = None
         |    if state.hasTimedOut:
         |        state.remove()
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
+        |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
         |    else:
         |        count = state.getOption
         |        if count is None:
@@ -297,7 +298,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         |
         |        state.update((count,))
         |        state.setTimeoutDuration(10000)
-        |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+        |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
         |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -387,7 +388,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           |    timeout_delay_sec = 5
           |    if state.hasTimedOut:
           |        state.remove()
-          |        return pd.DataFrame({'key': [key[0]], 'maxEventTimeSec': [-1]})
+          |        yield pd.DataFrame({'key': [key[0]], 'maxEventTimeSec': [-1]})
           |    else:
           |        m = state.getOption
           |        if m is None:
@@ -403,8 +404,8 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           |        state.update((max_event_time_sec,))
           |        timeout_timestamp_sec = max_event_time_sec + timeout_delay_sec
           |        state.setTimeoutTimestamp(timeout_timestamp_sec * 1000)
-          |        return pd.DataFrame({'key': [key[0]],
-          |                             'maxEventTimeSec': [max_event_time_sec]})
+          |        yield pd.DataFrame({'key': [key[0]],
+          |                            'maxEventTimeSec': [max_event_time_sec]})
           |""".stripMargin
       val pythonFunc = TestGroupedMapPandasUDFWithState(
         name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -472,7 +473,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             |def func(key, pdf_iter, state):
             |    if state.hasTimedOut:
             |        state.remove()
-            |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
+            |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(-1)]})
             |    else:
             |        count = state.getOption
             |        if count is None:
@@ -485,7 +486,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             |
             |        state.update((count,))
             |        state.setTimeoutDuration(10000)
-            |        return pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
+            |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
             |""".stripMargin
         val pythonFunc = TestGroupedMapPandasUDFWithState(
           name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
@@ -555,13 +556,11 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       |        count += len(pdf)
       |        state.update((count,))
       |
-      |    ret = pd.DataFrame()
       |    if count >= 3:
       |        state.remove()
+      |        yield pd.DataFrame()
       |    else:
-      |        ret = pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
-      |
-      |    return ret
+      |        yield pd.DataFrame({'key': [key[0]], 'countAsString': [str(count)]})
       |""".stripMargin
     val pythonFunc = TestGroupedMapPandasUDFWithState(
       name = "pandas_grouped_map_with_state", pythonScript = pythonScript)

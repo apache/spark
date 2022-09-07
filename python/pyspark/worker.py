@@ -222,25 +222,44 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
         else:
             values = (pd.concat(x, axis=1) for x in value_series_gen)
 
-        result = f(key, values, state)
+        result_iter = f(key, values, state)
 
-        if not isinstance(result, pd.DataFrame):
+        def verify_element(result):
+            if not isinstance(result, pd.DataFrame):
+                raise TypeError(
+                    "The type of element in return iterator of the user-defined function "
+                    "should be pandas.DataFrame, but is {}".format(type(result))
+                )
+            # the number of columns of result have to match the return type
+            # but it is fine for result to have no columns at all if it is empty
+            if not (
+                len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+            ):
+                raise RuntimeError(
+                    "Number of columns of the element (pandas.DataFrame) in return iterator "
+                    "doesn't match specified schema. "
+                    "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+                )
+
+            return result
+
+        if isinstance(result_iter, pd.DataFrame):
             raise TypeError(
                 "Return type of the user-defined function should be "
-                "pandas.DataFrame, but is {}".format(type(result))
-            )
-        # the number of columns of result have to match the return type
-        # but it is fine for result to have no columns at all if it is empty
-        if not (
-            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
-        ):
-            raise RuntimeError(
-                "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+                "iterable of pandas.DataFrame, but is {}".format(type(result_iter))
             )
 
-        return (result, state, )
+        try:
+            iter(result_iter)
+        except TypeError:
+            raise TypeError(
+                "Return type of the user-defined function should be "
+                "iterable, but is {}".format(type(result_iter))
+            )
+
+        result_iter_with_validation = (verify_element(x) for x in result_iter)
+
+        return (result_iter_with_validation, state, )
 
     return lambda k, v, s: [(wrapped(k, v, s), to_arrow_type(return_type))]
 

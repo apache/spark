@@ -257,7 +257,7 @@ PandasGroupedMapFunction = Union[
     Callable[[Tuple, DataFrameLike], DataFrameLike],
 ]
 
-PandasGroupedMapFunctionWithState = Callable[[Tuple, Iterable[DataFrameLike], GroupStateImpl], DataFrameLike]
+PandasGroupedMapFunctionWithState = Callable[[Tuple, Iterable[DataFrameLike], GroupStateImpl], Iterable[DataFrameLike]]
 
 class PandasVariadicGroupedAggFunction(Protocol):
     def __call__(self, *_: SeriesLike) -> LiteralType: ...
