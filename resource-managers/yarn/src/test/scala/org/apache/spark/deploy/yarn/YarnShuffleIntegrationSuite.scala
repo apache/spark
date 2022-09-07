@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -33,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
-import org.apache.spark.network.shuffledb.{DBBackend, StoreVersion}
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.ExtendedYarnTest
 
@@ -166,8 +165,8 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         logWarning(s"Use ${dbBackend.name()} as the implementation of " +
           s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
-        assert(!ShuffleTestAccessor.reloadRegisteredExecutors(
-          dbBackend, execStateCopy, new StoreVersion(1, 0), new ObjectMapper()).isEmpty)
+        assert(!ShuffleTestAccessor
+          .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)
       }
     } finally {
       sc.stop()
