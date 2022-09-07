@@ -279,8 +279,8 @@ class TaskResourceProfile (
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
 
-  override protected[spark] def getCustomExecutorResources():
-      Map[String, ExecutorResourceRequest] = {
+  override protected[spark] def getCustomExecutorResources()
+      :Map[String, ExecutorResourceRequest] = {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv should not be empty.")
     }
