@@ -78,7 +78,6 @@ trait BroadcastExchangeLike extends Exchange {
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
-  import BroadcastExchangeExec._
 
   override val runId: UUID = UUID.randomUUID
 
@@ -121,7 +120,7 @@ case class BroadcastExchangeExec(
       // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
       // here the limitation should not be over 341 million.
       (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-    case _ => 512000000
+    case _ => conf.maxBroadcastRows
   }
 
   @transient
@@ -158,9 +157,9 @@ case class BroadcastExchangeExec(
             }
 
             longMetric("dataSize") += dataSize
-            if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
+            if (dataSize >= conf.maxBroadcastTableBytes) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
-                MAX_BROADCAST_TABLE_BYTES, dataSize)
+                conf.maxBroadcastTableBytes, dataSize)
             }
 
             val beforeBroadcast = System.nanoTime()
@@ -223,7 +222,6 @@ case class BroadcastExchangeExec(
 }
 
 object BroadcastExchangeExec {
-  val MAX_BROADCAST_TABLE_BYTES = 8L << 30
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",

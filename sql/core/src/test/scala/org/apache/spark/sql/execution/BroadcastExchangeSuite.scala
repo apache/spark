@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.broadcast.TorrentBroadcast
@@ -33,7 +33,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 class BroadcastExchangeSuite extends SparkPlanTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
-
   import testImplicits._
 
   test("BroadcastExchange should cancel the job group if timeout") {
@@ -93,6 +92,35 @@ class BroadcastExchangeSuite extends SparkPlanTest
         joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
+    }
+  }
+
+  test("SPARK-40377 Allow customize maxBroadcastTableBytes and maxBroadcastRows") {
+    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "10MB") {
+      val exception = broadcastJoin()
+      assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
+    }
+
+
+    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "1GB") {
+      val exception = broadcastJoin()
+      assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
+    }
+
+    withSQLConf(SQLConf.MAX_BROADCAST_ROWS.key -> "1000") {
+      val exception = broadcastJoin()
+      assert(exception.getMessage.contains("Cannot broadcast the table over 1000 rows:"))
+    }
+
+    def broadcastJoin(): ExecutionException = {
+      val df = spark.range(50000000.toLong).toDF()
+      val joinDF = df.join(broadcast(df), "id")
+      val broadcastExchangeExec = collect(
+        joinDF.queryExecution.executedPlan) { case p : BroadcastExchangeExec => p }.head
+      val exception = intercept[ExecutionException] {
+        broadcastExchangeExec.executeBroadcast[HashedRelation]()
+      }
+      exception
     }
   }
 }

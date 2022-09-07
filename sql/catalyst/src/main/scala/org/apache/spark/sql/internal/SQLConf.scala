@@ -518,6 +518,24 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val MAX_BROADCAST_TABLE_BYTES =
+    buildConf("spark.sql.maxBroadcastTableBytes")
+      .doc("Configures the maximum size in bytes for a table when performing a broadcast join. " +
+        "The maximum allowed value is 8G.")
+      .version("3.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "maxBroadcastTableBytes must be positive")
+      .createWithDefaultString("8G")
+
+  val MAX_BROADCAST_ROWS =
+    buildConf("spark.sql.maxBroadcastRows")
+      .doc("Configures the maximum rows for a table when performing a broadcast join. The " +
+        "maximum allowed value is 512000000.")
+      .version("3.4.0")
+      .longConf
+      .checkValue(_ > 0, "maxBroadcastRows must be positive")
+      .createWithDefault(512000000)
+
   val SHUFFLE_HASH_JOIN_FACTOR = buildConf("spark.sql.shuffledHashJoinFactor")
     .doc("The shuffle hash join can be selected if the data size of small" +
       " side multiplied by this factor is still smaller than the large side.")
@@ -4325,6 +4343,10 @@ class SQLConf extends Serializable with Logging {
     getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def maxBroadcastTableBytes: Long = Math.min(getConf(MAX_BROADCAST_TABLE_BYTES), 8L << 30)
+
+  def maxBroadcastRows: Long = Math.min(getConf(MAX_BROADCAST_ROWS), 512000000)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 

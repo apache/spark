@@ -1788,8 +1788,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotBroadcastTableOverMaxTableBytesError(
       maxBroadcastTableBytes: Long, dataSize: Long): Throwable = {
-    new SparkException("Cannot broadcast the table that is larger than" +
-      s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
+    val maxBytes: Long = maxBroadcastTableBytes >> 30
+    val dataBytes: Long = dataSize >> 30
+    if (maxBytes == 0) {
+      new SparkException("Cannot broadcast the table that is larger than" +
+        s" ${maxBroadcastTableBytes} Byte: ${dataSize} Byte")
+    } else {
+      new SparkException("Cannot broadcast the table that is larger than" +
+        s" ${maxBytes}GB: ${dataBytes} GB")
+    }
   }
 
   def notEnoughMemoryToBuildAndBroadcastTableError(
