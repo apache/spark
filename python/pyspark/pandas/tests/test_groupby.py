@@ -1388,15 +1388,6 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(TypeError, "Unsupported type"):
             psdf.groupby("B").nth("x")
 
-        # in case there is no aggregation columns, the results should be the same
-        if LooseVersion("1.4.0") <= LooseVersion(pd.__version__) < LooseVersion("1.5.0"):
-            # a pandas bug: https://github.com/apache/spark/pull/37801#discussion_r962859128
-            for n in [-2, -1, 0, 1, 2]:
-                self.assert_eq(
-                    psdf.groupby(["A", "B", "C", "D"]).nth(n).sort_index(),
-                    pdf.groupby(["A", "B", "C", "D"]).nth(0).sort_index(),
-                )
-
     def test_cumcount(self):
         pdf = pd.DataFrame(
             {
