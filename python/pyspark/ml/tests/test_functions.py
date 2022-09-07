@@ -123,7 +123,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
         # scalar columns with input_names => dictionary of numpy arrays
         def dict_sum_fn():
             def predict(inputs):
-                result = inputs["a"].add(inputs["b"]).add(inputs["c"]).add(inputs["d"])
+                result = sum([inputs["a"], inputs["b"], inputs["c"], inputs["d"]])
                 return result
 
             return predict
@@ -137,7 +137,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
         # scalar columns with non-matching input_names => dictionary of numpy arrays with new names
         def dict_sum_fn():
             def predict(inputs):
-                result = inputs["a1"].add(inputs["b1"]).add(inputs["c1"]).add(inputs["d1"])
+                result = sum([inputs["a1"], inputs["b1"], inputs["c1"], inputs["d1"]])
                 return result
 
             return predict
@@ -170,40 +170,32 @@ class BatchInferUDFTests(SparkSessionTestCase):
         ):
             self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
-    def test_transform_tensor(self):
-        columns = self.df_tensor1.columns
+    def test_transform_single_tensor(self):
+        columns1 = self.df_tensor1.columns
 
-        # tensor column with no input_names or input_tensor_shapes => ERROR
         def array_sum_fn():
             def predict(inputs):
-                # just return sum of all columns
                 return np.sum(inputs, axis=1)
 
             return predict
 
+        # tensor column with no input_names or input_tensor_shapes => ERROR
         sum_cols = batch_infer_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
-        with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
-            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
+            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
-        # tensor column with input_names => ERROR
-        def dict_sum_fn():
-            def predict(inputs):
-                result = np.sum(inputs["dense_input"])
-                return result
-
-            return predict
-
+        # tensor column with only input_names => ERROR
         sum_cols = batch_infer_udf(
-            dict_sum_fn, return_type=DoubleType(), batch_size=5, input_names=["dense_input"]
+            array_sum_fn, return_type=DoubleType(), batch_size=5, input_names=["dense_input"]
         )
-        with self.assertRaisesRegex(Exception, "Tensor columns require an input_tensor_shape"):
-            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
+            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
-        # tensor column with tensor_input_shape => single numpy array
+        # tensor column with only tensor_input_shapes => single numpy array
         sum_cols = batch_infer_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
         )
-        preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
         # tensor column with multiple tensor_input_shapes => ERROR
@@ -216,7 +208,45 @@ class BatchInferUDFTests(SparkSessionTestCase):
         with self.assertRaisesRegex(
             Exception, "Multiple input_tensor_shapes require associated input_names"
         ):
-            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+            preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
+
+    def test_transform_multi_tensor(self):
+        columns = self.df_tensor2.columns
+
+        def multi_dict_sum_fn():
+            def predict(inputs):
+                result = np.sum(inputs["t1"], axis=1) + np.sum(inputs["t2"], axis=1)
+                return result
+
+            return predict
+
+        # multiple tensor columns with only tensor_input_shapes => ERROR
+        sum_cols = batch_infer_udf(
+            multi_dict_sum_fn,
+            return_type=DoubleType(),
+            batch_size=5,
+            input_tensor_shapes=[[-1, 4], [-1, 3]],
+        )
+        with self.assertRaisesRegex(
+            Exception, "Multiple input_tensor_shapes require associated input_names"
+        ):
+            preds = self.df_tensor2.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+
+        # multiple tensor columns with input_names and tensor_input_shapes => dict of numpy arrays
+        sum_cols = batch_infer_udf(
+            multi_dict_sum_fn,
+            return_type=DoubleType(),
+            batch_size=5,
+            input_names=["t1", "t2"],
+            input_tensor_shapes=[[-1, 4], [-1, 3]],
+        )
+        preds = self.df_tensor2.withColumn("preds", sum_cols(struct(*columns))).toPandas()
+        self.assertTrue(
+            np.array_equal(
+                np.sum(self.data, axis=1) + np.sum(self.data[:, 0:3], axis=1),
+                preds["preds"].to_numpy(),
+            )
+        )
 
 
 if __name__ == "__main__":

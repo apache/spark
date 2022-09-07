@@ -222,19 +222,18 @@ def batch_infer_udf(
                     if input_names != list(batch.columns):
                         batch.columns = input_names
 
-                    if has_tensors:
-                        raise ValueError("Tensor columns require an input_tensor_shape")
+                    if has_tensors and not input_tensor_shapes:
+                        raise ValueError("Tensor columns require input_tensor_shapes")
 
-                    # create a dictionary of named inputs
+                    # create a dictionary of named inputs => numpy arrays
                     inputs_dict = batch.to_dict(orient="series")
+                    inputs_dict = {k: v.to_numpy() for k, v in inputs_dict.items()}
 
-                    # reshape inputs, if needed
+                    # reshape tensor inputs, if needed
                     if input_tensor_shapes:
                         if len(input_tensor_shapes) == num_actual:
                             for i, (k, v) in enumerate(inputs_dict.items()):
-                                inputs_dict[k] = v.reshape(  # type: ignore[index]
-                                    input_tensor_shapes[i]
-                                )
+                                inputs_dict[k] = np.vstack(v).reshape(input_tensor_shapes[i])
                         else:
                             raise ValueError("input_tensor_shapes must match columns")
 
@@ -256,7 +255,7 @@ def batch_infer_udf(
                             raise ValueError(msg.format(input_tensor_shapes))
                     else:
                         if has_tensors:
-                            raise ValueError("Tensor columns require an input_tensor_shape")
+                            raise ValueError("Tensor columns require input_tensor_shapes")
                         inputs = batch.to_numpy()
 
                 # run model prediction function on transformed (numpy) inputs
