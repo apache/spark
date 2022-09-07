@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.TimeZone
 
+import junit.framework.TestCase.assertEquals
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Range}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
@@ -59,25 +61,26 @@ class CanonicalizeSuite extends SparkFunSuite {
     val expId = NamedExpression.newExprId
     val qualifier = Seq.empty[String]
     val structType = StructType(
-      StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
+      StructField("a", StructType(StructField("b", IntegerType, nullable = false) :: Nil),
+        nullable = false) :: Nil)
 
     // GetStructField with different names are semantically equal
     val fieldA1 = GetStructField(
-      AttributeReference("data1", structType, false)(expId, qualifier),
+      AttributeReference("data1", structType, nullable = false)(expId, qualifier),
       0, Some("a1"))
     val fieldA2 = GetStructField(
-      AttributeReference("data2", structType, false)(expId, qualifier),
+      AttributeReference("data2", structType, nullable = false)(expId, qualifier),
       0, Some("a2"))
     assert(fieldA1.semanticEquals(fieldA2))
 
     val fieldB1 = GetStructField(
       GetStructField(
-        AttributeReference("data1", structType, false)(expId, qualifier),
+        AttributeReference("data1", structType, nullable = false)(expId, qualifier),
         0, Some("a1")),
       0, Some("b1"))
     val fieldB2 = GetStructField(
       GetStructField(
-        AttributeReference("data2", structType, false)(expId, qualifier),
+        AttributeReference("data2", structType, nullable = false)(expId, qualifier),
         0, Some("a2")),
       0, Some("b2"))
     assert(fieldB1.semanticEquals(fieldB2))
@@ -182,5 +185,156 @@ class CanonicalizeSuite extends SparkFunSuite {
     assert(cast.resolved)
     // canonicalization should not converted resolved cast to unresolved
     assert(cast.canonicalized.resolved)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for add operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int)
+    val y = tr1.where('a.attr + 'c.attr > 10).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val addExpr = (fullCond match {
+      case GreaterThan(x: Add, _) => x
+      case LessThan(_, x: Add) => x
+    }).clone().asInstanceOf[Add]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newAddExpr = Add(addExpr.right, addExpr.left)
+    val builtCondnCanonicalized = GreaterThan(newAddExpr, Literal(10)).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for multiply operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int)
+    val y = tr1.where('a.attr * 'c.attr > 10).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val multiplyExpr = (fullCond match {
+      case GreaterThan(x: Multiply, _) => x
+      case LessThan(_, x: Multiply) => x
+    }).clone().asInstanceOf[Multiply]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newMultiplyExpr = Multiply(multiplyExpr.right, multiplyExpr.left)
+    val builtCondnCanonicalized = GreaterThan(newMultiplyExpr, Literal(10)).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for OR operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val attribA = tr1.output.find(_.name == "a").get
+    val y = tr1.where(('a.attr + 'c.attr > 10 || 'a.attr * 'c.attr < 35) ===
+      'a.attr + 1 > 6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val orExpr = (fullCond match {
+      case EqualTo(x: Or, _) => x
+      case EqualTo(_, x: Or) => x
+    }).clone().asInstanceOf[Or]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newOrExpr = Or(orExpr.right, orExpr.left)
+    val builtCondnCanonicalized = EqualTo(newOrExpr, attribA + 1 > 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for And operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val attribA = tr1.output.find(_.name == "a").get
+    val y = tr1.where(('a.attr + 'c.attr + 8 > 10 && 'a.attr * 'c.attr < 35) ===
+      'a.attr + 1 > 6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val andExpr = (fullCond match {
+      case EqualTo(x: And, _) => x
+      case EqualTo(_, x: And) => x
+    }).clone().asInstanceOf[And]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newAndExpr = And(andExpr.right, andExpr.left)
+    val builtCondnCanonicalized = EqualTo(newAndExpr, attribA + 1 > 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for bitwise OR operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val y = tr1.where(('c.attr + 5 | 'a.attr) ===
+     6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val orExpr = (fullCond match {
+      case EqualTo(x: BitwiseOr, _) => x
+      case EqualTo(_, x: BitwiseOr) => x
+    }).clone().asInstanceOf[BitwiseOr]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newOrExpr = BitwiseOr(orExpr.right, orExpr.left)
+    val builtCondnCanonicalized = EqualTo(newOrExpr, 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for bitwise And operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val y = tr1.where(('a.attr & ('c.attr * 90)  ) ===
+      6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val andExpr = (fullCond match {
+      case EqualTo(x: BitwiseAnd, _) => x
+      case EqualTo(_, x: BitwiseAnd) => x
+    }).clone().asInstanceOf[BitwiseAnd]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newAndExpr = BitwiseAnd(andExpr.right, andExpr.left)
+    val builtCondnCanonicalized = EqualTo(newAndExpr, 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for Bitwise Xor operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val y = tr1.where((('a.attr * 100) ^ ('a.attr * 210)) ===
+      6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val xorExpr = (fullCond match {
+      case EqualTo(x: BitwiseXor, _) => x
+      case EqualTo(_, x: BitwiseXor) => x
+    }).clone().asInstanceOf[BitwiseXor]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newXorExpr = BitwiseXor(xorExpr.right, xorExpr.left)
+    val builtCondnCanonicalized = EqualTo(newXorExpr, 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for Greatest operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val y = tr1.where(greatest('a.attr * 100, 'a.attr * 210) ===
+      6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val greatestExpr = (fullCond match {
+      case EqualTo(x: Greatest, _) => x
+      case EqualTo(_, x: Greatest) => x
+    }).clone().asInstanceOf[Greatest]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newGreatestExpr = greatest(greatestExpr.children(1), greatestExpr.children.head)
+    val builtCondnCanonicalized = EqualTo(newGreatestExpr, 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 commutative operators as subexpression breaks canonicalization" +
+    " for Least operator") {
+    val tr1 = LocalRelation('c.int, 'b.string, 'a.int).analyze
+
+    val y = tr1.where(least('a.attr * 200, 'a.attr * 110) ===
+      6).analyze
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+    val leastExpr = (fullCond match {
+      case EqualTo(x: Least, _) => x
+      case EqualTo(_, x: Least) => x
+    }).clone().asInstanceOf[Least]
+    val canonicalizedFullCond = fullCond.canonicalized
+    val newLeastExpr = least(leastExpr.children(1), leastExpr.children.head)
+    val builtCondnCanonicalized = EqualTo(newLeastExpr, 6).canonicalized
+    assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
   }
 }

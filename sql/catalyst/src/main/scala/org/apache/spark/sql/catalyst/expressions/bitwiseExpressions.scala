@@ -36,7 +36,8 @@ import org.apache.spark.sql.types._
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpresionCanonicalization {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -75,7 +76,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic with
+  CommutativeExpresionCanonicalization {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -114,7 +116,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpresionCanonicalization {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 

@@ -417,7 +417,8 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic
+  with CommutativeExpresionCanonicalization {
 
   def this(left: Expression, right: Expression) =
     this(left, right, EvalMode.fromSQLConf(SQLConf.get))
@@ -563,7 +564,8 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends BinaryArithmetic with
+    CommutativeExpresionCanonicalization {
 
   def this(left: Expression, right: Expression) =
     this(left, right, EvalMode.fromSQLConf(SQLConf.get))
@@ -1176,7 +1178,8 @@ case class Pmod(
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpresionCanonicalization {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1254,7 +1257,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpresionCanonicalization {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1317,4 +1321,15 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+}
+
+trait CommutativeExpresionCanonicalization {
+  this: Expression =>
+  override lazy val canonicalized: Expression = preCanonicalized
+  override lazy val preCanonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.preCanonicalized)
+    Canonicalize.reorderCommutativeOperators {
+      withNewChildren(canonicalizedChildren)
+    }
+  }
 }
