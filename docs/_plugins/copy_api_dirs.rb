@@ -120,7 +120,7 @@ if not (ENV['SKIP_API'] == '1')
     cd("..")
 
     puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("env SBT_OPTS=\"-server -Xms265M -Xmx1500M -Xss64M\" build/sbt clean package -Phive") || raise("PySpark doc generation failed")
+    system("build/sbt \"set parallelExecution := false\" clean package -Phive") || raise("PySpark doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
