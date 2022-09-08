@@ -69,7 +69,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     // serializability, because the type-level info with java.io.Serializable and
     // java.io.Externalizable marker interfaces are not strong guarantees.
     // This restriction can be relaxed in the future to expose more optimizations.
-    !dt.isInstanceOf[ObjectType]
+    !dt.existsRecursively(_.isInstanceOf[ObjectType])
   }
 
   /**
