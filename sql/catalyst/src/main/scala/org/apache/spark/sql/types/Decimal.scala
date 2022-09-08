@@ -49,12 +49,12 @@ final class Decimal(
 
   def this() = this(SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "Int128")
 
-  if (initEnabled) initDecimalOperation(decimal128Enabled)
-
-  def initDecimalOperation(flag: Boolean): Unit = if (flag) {
-    decimal128Operation = new Decimal128Operation()
-  } else {
-    jdkDecimalOperation = new JDKDecimalOperation()
+  if (initEnabled) {
+    if (decimal128Enabled) {
+      decimal128Operation = new Decimal128Operation()
+    } else {
+      jdkDecimalOperation = new JDKDecimalOperation()
+    }
   }
 
   def decimalOperation: DecimalOperation[_] = if (decimal128Enabled) {
