@@ -1139,7 +1139,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.3.0-SNAP3</version>
+        <version>3.2.13</version>
         <scope>test</scope>
       </dependency>
       <dependency>
