@@ -2660,7 +2660,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |STORED AS PARQUET
            |""".stripMargin)
       val df = sql("SELECT * FROM t")
-      df.collect()
+      checkAnswer(df, Seq.empty[Row])
     }
   }
 }
