@@ -151,7 +151,6 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <scope>test</scope>
    </dependency>
 
     <!--
