@@ -1417,15 +1417,23 @@ class DataFrame(Frame, Generic[T]):
 
     agg = aggregate
 
-    def corr(self, method: str = "pearson") -> "DataFrame":
+    def corr(self, method: str = "pearson", min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise correlation of columns, excluding NA/null values.
+
+        .. versionadded:: 3.3.0
 
         Parameters
         ----------
         method : {'pearson', 'spearman'}
             * pearson : standard correlation coefficient
             * spearman : Spearman rank correlation
+        min_periods : int, optional
+            Minimum number of observations required per pair of columns
+            to have a valid result. Currently only available for Pearson
+            correlation.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -1454,11 +1462,196 @@ class DataFrame(Frame, Generic[T]):
         There are behavior differences between pandas-on-Spark and pandas.
 
         * the `method` argument only accepts 'pearson', 'spearman'
-        * the data should not contain NaNs. pandas-on-Spark will return an error.
-        * pandas-on-Spark doesn't support the following argument(s).
-
-          * `min_periods` argument is not supported
+        * if the `method` is `spearman`, the data should not contain NaNs.
+        * if the `method` is `spearman`, `min_periods` argument is not supported.
         """
+        if method not in ["pearson", "spearman", "kendall"]:
+            raise ValueError(f"Invalid method {method}")
+        if method == "kendall":
+            raise NotImplementedError("method doesn't support kendall for now")
+        if min_periods is not None and not isinstance(min_periods, int):
+            raise TypeError(f"Invalid min_periods type {type(min_periods).__name__}")
+        if min_periods is not None and method == "spearman":
+            raise NotImplementedError("min_periods doesn't support spearman for now")
+
+        if method == "pearson":
+            min_periods = 1 if min_periods is None else min_periods
+            internal = self._internal.resolved_copy
+            numeric_labels = [
+                label
+                for label in internal.column_labels
+                if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
+            ]
+            numeric_scols: List[Column] = [
+                internal.spark_column_for(label).cast("double") for label in numeric_labels
+            ]
+            numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
+            num_scols = len(numeric_scols)
+
+            sdf = internal.spark_frame
+            tmp_index_1_col = verify_temp_column_name(sdf, "__tmp_index_1_col__")
+            tmp_index_2_col = verify_temp_column_name(sdf, "__tmp_index_2_col__")
+            tmp_value_1_col = verify_temp_column_name(sdf, "__tmp_value_1_col__")
+            tmp_value_2_col = verify_temp_column_name(sdf, "__tmp_value_2_col__")
+
+            # simple dataset
+            # +---+---+----+
+            # |  A|  B|   C|
+            # +---+---+----+
+            # |  1|  2| 3.0|
+            # |  4|  1|null|
+            # +---+---+----+
+
+            pair_scols: List[Column] = []
+            for i in range(0, num_scols):
+                for j in range(i, num_scols):
+                    pair_scols.append(
+                        F.struct(
+                            F.lit(i).alias(tmp_index_1_col),
+                            F.lit(j).alias(tmp_index_2_col),
+                            numeric_scols[i].alias(tmp_value_1_col),
+                            numeric_scols[j].alias(tmp_value_2_col),
+                        )
+                    )
+
+            # +-------------------+-------------------+-------------------+-------------------+
+            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_value_1_col__|__tmp_value_2_col__|
+            # +-------------------+-------------------+-------------------+-------------------+
+            # |                  0|                  0|                1.0|                1.0|
+            # |                  0|                  1|                1.0|                2.0|
+            # |                  0|                  2|                1.0|                3.0|
+            # |                  1|                  1|                2.0|                2.0|
+            # |                  1|                  2|                2.0|                3.0|
+            # |                  2|                  2|                3.0|                3.0|
+            # |                  0|                  0|                4.0|                4.0|
+            # |                  0|                  1|                4.0|                1.0|
+            # |                  0|                  2|                4.0|               null|
+            # |                  1|                  1|                1.0|                1.0|
+            # |                  1|                  2|                1.0|               null|
+            # |                  2|                  2|               null|               null|
+            # +-------------------+-------------------+-------------------+-------------------+
+            tmp_tuple_col = verify_temp_column_name(sdf, "__tmp_tuple_col__")
+            sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tmp_tuple_col)).select(
+                F.col(f"{tmp_tuple_col}.{tmp_index_1_col}").alias(tmp_index_1_col),
+                F.col(f"{tmp_tuple_col}.{tmp_index_2_col}").alias(tmp_index_2_col),
+                F.col(f"{tmp_tuple_col}.{tmp_value_1_col}").alias(tmp_value_1_col),
+                F.col(f"{tmp_tuple_col}.{tmp_value_2_col}").alias(tmp_value_2_col),
+            )
+
+            # +-------------------+-------------------+------------------------+-----------------+
+            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_pearson_corr_col__|__tmp_count_col__|
+            # +-------------------+-------------------+------------------------+-----------------+
+            # |                  2|                  2|                    null|                1|
+            # |                  1|                  2|                    null|                1|
+            # |                  1|                  1|                     1.0|                2|
+            # |                  0|                  0|                     1.0|                2|
+            # |                  0|                  1|                    -1.0|                2|
+            # |                  0|                  2|                    null|                1|
+            # +-------------------+-------------------+------------------------+-----------------+
+            tmp_corr_col = verify_temp_column_name(sdf, "__tmp_pearson_corr_col__")
+            tmp_count_col = verify_temp_column_name(sdf, "__tmp_count_col__")
+            sdf = sdf.groupby(tmp_index_1_col, tmp_index_2_col).agg(
+                F.corr(tmp_value_1_col, tmp_value_2_col).alias(tmp_corr_col),
+                F.count(
+                    F.when(
+                        F.col(tmp_value_1_col).isNotNull() & F.col(tmp_value_2_col).isNotNull(), 1
+                    )
+                ).alias(tmp_count_col),
+            )
+
+            # +-------------------+-------------------+------------------------+
+            # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_pearson_corr_col__|
+            # +-------------------+-------------------+------------------------+
+            # |                  2|                  2|                    null|
+            # |                  1|                  2|                    null|
+            # |                  2|                  1|                    null|
+            # |                  1|                  1|                     1.0|
+            # |                  0|                  0|                     1.0|
+            # |                  0|                  1|                    -1.0|
+            # |                  1|                  0|                    -1.0|
+            # |                  0|                  2|                    null|
+            # |                  2|                  0|                    null|
+            # +-------------------+-------------------+------------------------+
+            sdf = (
+                sdf.withColumn(
+                    tmp_corr_col,
+                    F.when(F.col(tmp_count_col) >= min_periods, F.col(tmp_corr_col)).otherwise(
+                        F.lit(None)
+                    ),
+                )
+                .withColumn(
+                    tmp_tuple_col,
+                    F.explode(
+                        F.when(
+                            F.col(tmp_index_1_col) == F.col(tmp_index_2_col),
+                            F.lit([0]),
+                        ).otherwise(F.lit([0, 1]))
+                    ),
+                )
+                .select(
+                    F.when(F.col(tmp_tuple_col) == 0, F.col(tmp_index_1_col))
+                    .otherwise(F.col(tmp_index_2_col))
+                    .alias(tmp_index_1_col),
+                    F.when(F.col(tmp_tuple_col) == 0, F.col(tmp_index_2_col))
+                    .otherwise(F.col(tmp_index_1_col))
+                    .alias(tmp_index_2_col),
+                    F.col(tmp_corr_col),
+                )
+            )
+
+            # +-------------------+--------------------+
+            # |__tmp_index_1_col__|   __tmp_array_col__|
+            # +-------------------+--------------------+
+            # |                  0|[{0, 1.0}, {1, -1...|
+            # |                  1|[{0, -1.0}, {1, 1...|
+            # |                  2|[{0, null}, {1, n...|
+            # +-------------------+--------------------+
+            tmp_array_col = verify_temp_column_name(sdf, "__tmp_array_col__")
+            sdf = (
+                sdf.groupby(tmp_index_1_col)
+                .agg(
+                    F.array_sort(
+                        F.collect_list(F.struct(F.col(tmp_index_2_col), F.col(tmp_corr_col)))
+                    ).alias(tmp_array_col)
+                )
+                .orderBy(tmp_index_1_col)
+            )
+
+            for i in range(0, num_scols):
+                sdf = sdf.withColumn(tmp_tuple_col, F.get(F.col(tmp_array_col), i)).withColumn(
+                    numeric_col_names[i],
+                    F.col(f"{tmp_tuple_col}.{tmp_corr_col}"),
+                )
+
+            index_col_names: List[str] = []
+            if internal.column_labels_level > 1:
+                for level in range(0, internal.column_labels_level):
+                    index_col_name = SPARK_INDEX_NAME_FORMAT(level)
+                    indices = [label[level] for label in numeric_labels]
+                    sdf = sdf.withColumn(
+                        index_col_name, F.get(F.lit(indices), F.col(tmp_index_1_col))
+                    )
+                    index_col_names.append(index_col_name)
+            else:
+                sdf = sdf.withColumn(
+                    SPARK_DEFAULT_INDEX_NAME,
+                    F.get(F.lit(numeric_col_names), F.col(tmp_index_1_col)),
+                )
+                index_col_names = [SPARK_DEFAULT_INDEX_NAME]
+
+            sdf = sdf.select(*index_col_names, *numeric_col_names)
+
+            return DataFrame(
+                InternalFrame(
+                    spark_frame=sdf,
+                    index_spark_columns=[
+                        scol_for(sdf, index_col_name) for index_col_name in index_col_names
+                    ],
+                    column_labels=numeric_labels,
+                    column_label_names=internal.column_label_names,
+                )
+            )
+
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
     # TODO: add axis parameter and support more methods
