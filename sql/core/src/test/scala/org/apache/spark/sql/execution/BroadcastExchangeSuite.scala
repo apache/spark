@@ -96,24 +96,24 @@ class BroadcastExchangeSuite extends SparkPlanTest
   }
 
   test("SPARK-40377 Allow customize maxBroadcastTableBytes and maxBroadcastRows") {
-    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "10MB") {
-      val exception = broadcastJoin()
+    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "100MB") {
+      val exception = broadcastJoin(10000000)
       assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
     }
 
 
     withSQLConf(SQLConf.MAX_BROADCAST_TABLE_BYTES.key -> "1GB") {
-      val exception = broadcastJoin()
+      val exception = broadcastJoin(30000000)
       assert(exception.getMessage.contains("Cannot broadcast the table that is larger than"))
     }
 
     withSQLConf(SQLConf.MAX_BROADCAST_ROWS.key -> "1000") {
-      val exception = broadcastJoin()
+      val exception = broadcastJoin(1000)
       assert(exception.getMessage.contains("Cannot broadcast the table over 1000 rows:"))
     }
 
-    def broadcastJoin(): ExecutionException = {
-      val df = spark.range(50000000.toLong).toDF()
+    def broadcastJoin(count: Int): ExecutionException = {
+      val df = spark.range(count.toLong).toDF()
       val joinDF = df.join(broadcast(df), "id")
       val broadcastExchangeExec = collect(
         joinDF.queryExecution.executedPlan) { case p : BroadcastExchangeExec => p }.head
