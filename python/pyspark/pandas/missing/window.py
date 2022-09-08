@@ -73,7 +73,7 @@ def _unsupported_property_exponential_moving(property_name, deprecated=False, re
 
 
 class MissingPandasLikeExpanding:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_expanding("agg")
@@ -92,7 +92,7 @@ class MissingPandasLikeExpanding:
 
 
 class MissingPandasLikeRolling:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_rolling("agg")
@@ -111,7 +111,7 @@ class MissingPandasLikeRolling:
 
 
 class MissingPandasLikeExpandingGroupby:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_expanding("agg")
@@ -130,7 +130,7 @@ class MissingPandasLikeExpandingGroupby:
 
 
 class MissingPandasLikeRollingGroupby:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     agg = _unsupported_function_rolling("agg")

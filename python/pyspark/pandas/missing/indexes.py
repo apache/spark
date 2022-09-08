@@ -36,7 +36,7 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
 
 
 class MissingPandasLikeIndex:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
@@ -80,7 +80,7 @@ class MissingPandasLikeIndex:
 
 
 class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
@@ -105,7 +105,7 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 
 
 class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
@@ -122,7 +122,7 @@ class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
 
 
 class MissingPandasLikeMultiIndex:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions

@@ -30,7 +30,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class _MissingPandasLikeDataFrame:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions

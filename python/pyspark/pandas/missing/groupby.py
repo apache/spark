@@ -37,7 +37,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class MissingPandasLikeDataFrameGroupBy:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
@@ -68,7 +68,7 @@ class MissingPandasLikeDataFrameGroupBy:
 
 
 class MissingPandasLikeSeriesGroupBy:
-    # NOTE: Please update the pandas-on-Spark reference toc when implementing the new API.
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
