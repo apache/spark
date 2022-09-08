@@ -83,11 +83,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def castingCauseOverflowError(t: Any, from: DataType, to: DataType): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CAST_OVERFLOW",
-      messageParameters = Array(
-        toSQLValue(t, from),
-        toSQLType(from),
-        toSQLType(to),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map(
+        "value" -> toSQLValue(t, from),
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
   }
@@ -98,10 +98,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       columnName: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
-      messageParameters = Array(
-        toSQLType(from),
-        toSQLType(to),
-        toSQLId(columnName)),
+      messageParameters = Map(
+        "sourceType" -> toSQLType(from),
+        "targetType" -> toSQLType(to),
+        "columnName" -> toSQLId(columnName)),
       context = Array.empty,
       summary = ""
     )
@@ -114,11 +114,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       context: SQLQueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
-      messageParameters = Array(
-        value.toPlainString,
-        decimalPrecision.toString,
-        decimalScale.toString,
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map(
+        "value" -> value.toPlainString,
+        "precision" -> decimalPrecision.toString,
+        "scale" -> decimalScale.toString,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -213,7 +213,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
-      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -221,7 +221,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def intervalDividedByZeroError(context: SQLQueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_DIVIDED_BY_ZERO",
-      messageParameters = Array.empty,
+      messageParameters = Map.empty,
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -395,9 +395,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def methodNotDeclaredError(name: String): Throwable = {
-    new SparkNoSuchMethodException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(
-        s"""A method named "$name" is not declared in any enclosing class nor any supertype"""))
+    SparkException.internalError(
+      s"""A method named "$name" is not declared in any enclosing class nor any supertype""")
   }
 
   def constructorNotFoundError(cls: String): Throwable = {
@@ -517,7 +516,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
-      messageParameters = Array(message, alternative, SQLConf.ANSI_ENABLED.key),
+      messageParameters = Map(
+        "message" -> message,
+        "alternative" -> alternative,
+        "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -541,7 +543,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     } else ""
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW",
-      messageParameters = Array(message, alternative),
+      messageParameters = Map(
+        "message" -> message,
+        "alternative" -> alternative),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -620,12 +624,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       errorSubClass = Some("READ_ANCIENT_DATETIME"),
-      messageParameters = Array(
-        format,
-        toSQLConf(config),
-        toDSOption(option),
-        toSQLConf(config),
-        toDSOption(option)),
+      messageParameters = Map(
+        "format" -> format,
+        "config" -> toSQLConf(config),
+        "option" -> toDSOption(option)),
       cause = null
     )
   }
@@ -634,10 +636,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
-      messageParameters = Array(
-        format,
-        toSQLConf(config),
-        toSQLConf(config)),
+      messageParameters = Map(
+        "format" -> format,
+        "config" -> toSQLConf(config)),
       cause = null
     )
   }
@@ -1061,9 +1062,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       errorSubClass = Some("PARSE_DATETIME_BY_NEW_PARSER"),
-      messageParameters = Array(
-        toSQLValue(s, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+      messageParameters = Map(
+        "datetime" -> toSQLValue(s, StringType),
+        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
       e)
   }
 
@@ -1071,9 +1072,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUpgradeException(
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       errorSubClass = Some("DATETIME_PATTERN_RECOGNITION"),
-      messageParameters = Array(
-        toSQLValue(pattern, StringType),
-        toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
+      messageParameters = Map(
+        "pattern" -> toSQLValue(pattern, StringType),
+        "config" -> toSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key)),
       e)
   }
 
@@ -2054,9 +2055,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Array(
-        s"add ${toSQLValue(amount, IntegerType)} $unit to " +
-        s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}"),
+      messageParameters = Map(
+        "operation" -> (s"add ${toSQLValue(amount, IntegerType)} $unit to " +
+          s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
       context = Array.empty,
       summary = "")
   }

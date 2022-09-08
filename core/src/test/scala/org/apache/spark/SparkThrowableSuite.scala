@@ -252,7 +252,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e = new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       errorSubClass = None,
-      messageParameters = Array("CONFIG"),
+      messageParameters = Map("config" -> "CONFIG"),
       context = Array(new TestQueryContext),
       summary = "Query summary")
 

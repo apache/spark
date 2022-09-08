@@ -128,13 +128,16 @@ private[spark] case class ExecutorDeadException(message: String)
 private[spark] class SparkUpgradeException(
     errorClass: String,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String],
+    messageParameters: Map[String, String],
     cause: Throwable)
-  extends RuntimeException(SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull,
-    messageParameters), cause)
-    with SparkThrowable {
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters), cause)
+  with SparkThrowable {
 
-  override def getMessageParameters: Array[String] = messageParameters
+  override def getMessageParameters: Array[String] = {
+    SparkThrowableHelper.getMessageParameters(errorClass, errorSubClass.orNull, messageParameters)
+  }
+
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull}
 
@@ -144,14 +147,17 @@ private[spark] class SparkUpgradeException(
 private[spark] class SparkArithmeticException(
     errorClass: String,
     errorSubClass: Option[String] = None,
-    messageParameters: Array[String],
+    messageParameters: Map[String, String],
     context: Array[QueryContext],
     summary: String)
   extends ArithmeticException(
     SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, summary))
-    with SparkThrowable {
+  with SparkThrowable {
 
-  override def getMessageParameters: Array[String] = messageParameters
+  override def getMessageParameters: Array[String] = {
+    SparkThrowableHelper.getMessageParameters(errorClass, errorSubClass.orNull, messageParameters)
+  }
+
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull
   override def getQueryContext: Array[QueryContext] = context
@@ -281,21 +287,6 @@ private[spark] class SparkNumberFormatException(
   override def getErrorSubClass: String = errorSubClass.orNull
   override def getQueryContext: Array[QueryContext] = context
 }
-
-/**
- * No such method exception thrown from Spark with an error class.
- */
-private[spark] class SparkNoSuchMethodException(
-    errorClass: String,
-    errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
-  extends NoSuchMethodException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
-    with SparkThrowable {
-
-  override def getMessageParameters: Array[String] = messageParameters
-  override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull}
 
 /**
  * Illegal argument exception thrown from Spark with an error class.
