@@ -2563,7 +2563,6 @@ class DataSourceV2SQLSuite
           s"""
              |SELECT id, data FROM $t1
              |where udfStrLen(data) = 1
-             |and trim(data) = 'a'
              |and id =2
              |""".stripMargin
         )
@@ -2572,18 +2571,16 @@ class DataSourceV2SQLSuite
           .head.asInstanceOf[FilterExec]
           .condition
         val expressionsBefore = splitConjunctivePredicates(conditionBefore)
-        assert(expressionsBefore.length == 4
+        assert(expressionsBefore.length == 3
           && expressionsBefore(0).toString.trim.startsWith("isnotnull(id")
           && expressionsBefore(1).toString.trim.startsWith("(id")
-          && expressionsBefore(2).toString.trim.startsWith("(udfStrLen(data")
-          && expressionsBefore(3).toString.trim.startsWith("(trim(data"))
+          && expressionsBefore(2).toString.trim.startsWith("(udfStrLen(data"))
 
         val filterAfter = spark.sql(
           s"""
              |SELECT id, data FROM $t1
              |where id =2
              |and udfStrLen(data) = 1
-             |and trim(data) = 'a'
              |""".stripMargin
         )
         val conditionAfter =
@@ -2591,11 +2588,10 @@ class DataSourceV2SQLSuite
           .head.asInstanceOf[FilterExec]
           .condition
         val expressionsAfter = splitConjunctivePredicates(conditionAfter)
-        assert(expressionsAfter.length == 4
+        assert(expressionsAfter.length == 3
           && expressionsAfter(0).toString.trim.startsWith("isnotnull(id")
           && expressionsAfter(1).toString.trim.startsWith("(id")
-          && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data")
-          && expressionsAfter(3).toString.trim.startsWith("(trim(data"))
+          && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data"))
       }
     }
   }
