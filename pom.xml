@@ -398,7 +398,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1144,8 +1144,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.3.0.0-SNAP3</version>
+        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1181,7 +1181,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.15.4</version>
+        <version>1.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
