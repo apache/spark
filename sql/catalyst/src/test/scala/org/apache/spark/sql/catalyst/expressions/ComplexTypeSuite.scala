@@ -517,4 +517,30 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(m1.semanticEquals(m2))
   }
+
+  test("SPARK-40315: Literals of ArrayBasedMapData should have deterministic hashCode.") {
+    val keys = new Array[UTF8String](1)
+    val values1 = new Array[UTF8String](1)
+    val values2 = new Array[UTF8String](1)
+
+    keys(0) = UTF8String.fromString("key")
+    values1(0) = UTF8String.fromString("value1")
+    values2(0) = UTF8String.fromString("value2")
+
+    val d1 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d2 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values1))
+    val d3 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values2))
+    val m1 = Literal.create(d1, MapType(StringType, StringType))
+    val m2 = Literal.create(d2, MapType(StringType, StringType))
+    val m3 = Literal.create(d3, MapType(StringType, StringType))
+
+    // If two Literals of ArrayBasedMapData have the same elements, we expect them to be equal and
+    // to have the same hashCode().
+    assert(m1 == m2)
+    assert(m1.hashCode() == m2.hashCode())
+    // If two Literals of ArrayBasedMapData have different elements, we expect them not to be equal
+    // and to have different hashCode().
+    assert(m1 != m3)
+    assert(m1.hashCode() != m3.hashCode())
+  }
 }

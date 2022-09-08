@@ -47,7 +47,15 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-RENAME COLUMN is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "`spark_catalog`.`default`.`test_change`",
+    "operation" : "RENAME COLUMN"
+  }
+}
 
 
 -- !query
@@ -85,7 +93,15 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "`spark_catalog`.`default`.`test_change`",
+    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+  }
+}
 
 
 -- !query
@@ -94,7 +110,15 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
+{
+  "errorClass" : "UNSUPPORTED_FEATURE",
+  "errorSubClass" : "TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "`spark_catalog`.`default`.`test_change`",
+    "operation" : "ALTER COLUMN ... FIRST | ALTER"
+  }
+}
 
 
 -- !query

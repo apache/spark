@@ -117,8 +117,18 @@ class AnalysisErrorSuite extends AnalysisTest {
       plan: LogicalPlan,
       errorClass: String,
       messageParameters: Array[String]): Unit = {
+    errorClassTest(name, plan, errorClass, null, messageParameters)
+  }
+
+  def errorClassTest(
+      name: String,
+      plan: LogicalPlan,
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Array[String]): Unit = {
     test(name) {
-      assertAnalysisErrorClass(plan, errorClass, messageParameters)
+      assertAnalysisErrorClass(plan, errorClass, errorSubClass, messageParameters,
+        caseSensitive = true)
     }
   }
 
@@ -292,6 +302,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved attributes",
     testRelation.select($"abcd"),
     "UNRESOLVED_COLUMN",
+    "WITH_SUGGESTION",
     Array("`abcd`", "`a`"))
 
   errorClassTest(
@@ -300,6 +311,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "UNRESOLVED_COLUMN",
+    "WITH_SUGGESTION",
     Array("`havingCondition`", "`max(b)`"))
 
   errorTest(
@@ -316,6 +328,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "UNRESOLVED_COLUMN",
+    "WITH_SUGGESTION",
     Array("`b`", "`a`, `c`, `a3`"))
 
   errorTest(
@@ -331,7 +344,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "'b'" :: "group by" :: Nil
+    "\"b\"" :: "COLUMN_NOT_IN_GROUP_BY_CLAUSE" :: Nil
   )
 
   errorTest(
@@ -410,6 +423,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN",
+    "WITH_SUGGESTION",
     Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
@@ -830,8 +844,9 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "SPARK-34920: error code to error message",
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "[UNRESOLVED_COLUMN] A column or function parameter with name `bad_column` cannot be " +
-      "resolved. Did you mean one of the following? [`a`, `b`, `c`, `d`, `e`]"
+    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
+      "`bad_column` cannot be resolved. Did you mean one of the following? " +
+      "[`a`, `b`, `c`, `d`, `e`]"
       :: Nil)
 
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
