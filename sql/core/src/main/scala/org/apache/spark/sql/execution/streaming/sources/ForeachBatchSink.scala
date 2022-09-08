@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
@@ -26,9 +27,10 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
   extends Sink {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val rdd = data.queryExecution.toRdd
+    val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
+      isStreaming = false)
     implicit val enc = encoder
-    val ds = data.sparkSession.internalCreateDataFrame(rdd, data.schema).as[T]
+    val ds = Dataset.ofRows(data.sparkSession, node).as[T]
     batchWriter(ds, batchId)
   }
 

@@ -258,6 +258,13 @@ NULL
 #'          into accumulator (the first argument).
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
+#' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
+#'          which is used to compare the elemnts of the array.
+#'          The comparator will take two
+#'          arguments representing two elements of the array. It returns a negative integer,
+#'          0, or a positive integer as the first element is less than, equal to,
+#'          or greater than the second element.
+#'          If the comparator function returns null, the function will fail and raise an error.
 #' @param ... additional argument(s).
 #'          \itemize{
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
@@ -292,6 +299,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
+#' head(select(tmp, array_sort(tmp$v1, function(x, y) coalesce(cast(y - x, "integer"), lit(0L)))))
 #' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' head(select(tmp, array_transform("v1", function(x) x * 10)))
 #' head(select(tmp, array_exists("v1", function(x) x > 120)))
@@ -3256,7 +3264,8 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
 #'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
 #'                   from_unix = from_unixtime(unix_timestamp(df$time)),
-#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'),
+#'                   timestamp_from_unix = timestamp_seconds(unix_timestamp(df$time)))
 #' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
@@ -4140,9 +4149,16 @@ setMethod("array_repeat",
 #' @note array_sort since 2.4.0
 setMethod("array_sort",
           signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
-            column(jc)
+          function(x, comparator = NULL) {
+            if (is.null(comparator)) {
+               column(callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc))
+            } else {
+              invoke_higher_order_function(
+                "ArraySort",
+                cols = list(x),
+                funs = list(comparator)
+              )
+            }
           })
 
 #' @details
@@ -4854,7 +4870,8 @@ setMethod("current_timestamp",
           })
 
 #' @details
-#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#' \code{timestamp_seconds}: Converts the number of seconds from the Unix epoch
+#' (1970-01-01T00:00:00Z) to a timestamp.
 #'
 #' @rdname column_datetime_functions
 #' @aliases timestamp_seconds timestamp_seconds,Column-method

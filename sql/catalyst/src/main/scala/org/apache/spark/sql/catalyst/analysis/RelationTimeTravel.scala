@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, Tr
 /**
  * A logical node used to time travel the child relation to the given `timestamp` or `version`.
  * The `child` must support time travel, e.g. a v2 source, and cannot be a view, subquery or stream.
- * The timestamp expression cannot refer to any columns and cannot contain subqueries.
+ * The timestamp expression cannot refer to any columns.
  */
 case class RelationTimeTravel(
     relation: LogicalPlan,

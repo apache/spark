@@ -92,7 +92,7 @@ package object dsl {
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
     def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
-    def in(list: Expression*): Expression = list match {
+    def in(list: Expression*): Predicate = list match {
       case Seq(l: ListQuery) => expr match {
           case c: CreateNamedStruct => InSubquery(c.valExprs, l)
           case other => InSubquery(Seq(other), l)
@@ -100,22 +100,22 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: Char = '\\'): Expression =
+    def like(other: Expression, escapeChar: Char = '\\'): Predicate =
       Like(expr, other, escapeChar)
     def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
       new ILike(expr, other, escapeChar)
-    def rlike(other: Expression): Expression = RLike(expr, other)
-    def likeAll(others: Expression*): Expression =
+    def rlike(other: Expression): Predicate = RLike(expr, other)
+    def likeAll(others: Expression*): Predicate =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAll(others: Expression*): Expression =
+    def notLikeAll(others: Expression*): Predicate =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def likeAny(others: Expression*): Expression =
+    def likeAny(others: Expression*): Predicate =
       LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAny(others: Expression*): Expression =
+    def notLikeAny(others: Expression*): Predicate =
       NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def contains(other: Expression): Expression = Contains(expr, other)
-    def startsWith(other: Expression): Expression = StartsWith(expr, other)
-    def endsWith(other: Expression): Expression = EndsWith(expr, other)
+    def contains(other: Expression): Predicate = Contains(expr, other)
+    def startsWith(other: Expression): Predicate = StartsWith(expr, other)
+    def endsWith(other: Expression): Predicate = EndsWith(expr, other)
     def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
@@ -151,6 +151,8 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
+    // TODO: Remove at Spark 4.0.0
+    @deprecated("Use as(alias: String)", "3.4.0")
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
@@ -461,7 +463,11 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
+      // TODO: Remove at Spark 4.0.0
+      @deprecated("Use subquery(alias: String)", "3.4.0")
       def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
+      def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
       def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
         Except(logicalPlan, otherPlan, isAll)
@@ -489,13 +495,14 @@ package object dsl {
           ifPartitionNotExists: Boolean = false): LogicalPlan =
         InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
-      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
-
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
+
+      def repartition(): LogicalPlan =
+        RepartitionByExpression(Seq.empty, logicalPlan, None)
 
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)

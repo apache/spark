@@ -97,11 +97,11 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
+    val query = x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
-      x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
+      x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
         .orderBy($"x".asc, $"b".desc))
 
     comparePlans(optimized, correctAnswer)
@@ -116,10 +116,10 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.limit(2).select($"a")
+    val unnecessaryReordered = LocalLimit(2, orderedPlan).select($"a")
       .sortBy($"a".asc, $"b".desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
-    val correctAnswer = orderedPlan.limit(2).select($"a").analyze
+    val correctAnswer = LocalLimit(2, orderedPlan).select($"a").analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -163,11 +163,11 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33183: limits should not affect order for local sort") {
+  test("SPARK-33183: local limits should not affect order for local sort") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc)
-    val filteredAndReordered = orderedPlan.limit(Literal(10)).sortBy($"a".asc, $"b".desc)
+    val filteredAndReordered = LocalLimit(10, orderedPlan).sortBy($"a".asc, $"b".desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    val correctAnswer = LocalLimit(10, orderedPlan).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -248,10 +248,10 @@ class EliminateSortsSuite extends AnalysisTest {
       testRelation.select($"b").where($"b" > Literal(0)).orderBy($"b".desc).analyze
     comparePlans(optimizedWithBoth, correctAnswerWithBoth)
 
-    val orderedThrice = orderedTwiceWithBoth.select(($"b" + 1).as(Symbol("c"))).orderBy($"c".asc)
+    val orderedThrice = orderedTwiceWithBoth.select(($"b" + 1).as("c")).orderBy($"c".asc)
     val optimizedThrice = Optimize.execute(orderedThrice.analyze)
     val correctAnswerThrice = testRelation.select($"b").where($"b" > Literal(0))
-      .select(($"b" + 1).as(Symbol("c"))).orderBy($"c".asc).analyze
+      .select(($"b" + 1).as("c")).orderBy($"c".asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 
@@ -363,7 +363,7 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("should not remove orderBy in left join clause if there is an outer limit") {
+  test("Remove orderBy in left join clause if there is an outer limit") {
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)
     val projectPlanB = testRelationB.select($"d")
@@ -371,7 +371,9 @@ class EliminateSortsSuite extends AnalysisTest {
       .join(projectPlanB, LeftOuter)
       .limit(10)
     val optimized = Optimize.execute(joinPlan.analyze)
-    val correctAnswer = PushDownOptimizer.execute(joinPlan.analyze)
+    val correctAnswer = LocalLimit(10, projectPlan)
+      .join(LocalLimit(10, projectPlanB), LeftOuter)
+      .limit(10).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -423,5 +425,57 @@ class EliminateSortsSuite extends AnalysisTest {
       val optimized = Optimize.execute(ordered.analyze)
       comparePlans(optimized, correctAnswer)
     }
+  }
+
+  test("SPARK-39835: Fix EliminateSorts remove global sort below the local sort") {
+    // global -> local
+    val plan = testRelation.orderBy($"a".asc).sortBy($"c".asc).analyze
+    val expect = RepartitionByExpression($"a".asc :: Nil, testRelation, None)
+      .sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan), expect)
+
+    // global -> global -> local
+    val plan2 = testRelation.orderBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
+    val expected2 = RepartitionByExpression($"b".asc :: Nil, testRelation, None)
+      .sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan2), expected2)
+
+    // local -> global -> local
+    val plan3 = testRelation.sortBy($"a".asc).orderBy($"b".asc).sortBy($"c".asc).analyze
+    val expected3 = RepartitionByExpression($"b".asc :: Nil, testRelation, None)
+      .sortBy($"c".asc).analyze
+    comparePlans(Optimize.execute(plan3), expected3)
+  }
+
+  test("SPARK-39867: Global limit should not inherit OrderPreservingUnaryNode") {
+    val plan = testRelation.sortBy($"a".asc).limit(2).sortBy($"a".asc).analyze
+    comparePlans(Optimize.execute(plan), plan)
+  }
+
+  test("SPARK-40050: Remove Sort if there is a LocalLimit between Join and Sort") {
+    val localLimitPlanA = LocalLimit(Literal(2), testRelation.orderBy($"a".asc))
+    val localLimitPlanB = LocalLimit(Literal(2), testRelationB.orderBy($"d".asc))
+
+    Seq(LeftOuter, RightOuter, Inner, Cross).foreach { joinType =>
+      val joinPlan = localLimitPlanA.join(localLimitPlanB, joinType)
+      val correctAnswer =
+        LocalLimit(Literal(2), testRelation).join(LocalLimit(Literal(2), testRelationB), joinType)
+      comparePlans(Optimize.execute(joinPlan.analyze), correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-40050: Remove Sort if there is a LocalLimit between Aggregate and Sort") {
+    val originalPlan =
+      LocalLimit(Literal(2), testRelation.orderBy($"a".asc)).groupBy($"a")(min($"b"))
+    val correctAnswer = LocalLimit(Literal(2), testRelation).groupBy($"a")(min($"b"))
+
+    comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-40050: Remove Sort if there is a LocalLimit between Sort and Sort") {
+    val originalPlan = LocalLimit(Literal(2), testRelation.orderBy($"a".asc)).orderBy($"b".asc)
+    val correctAnswer = LocalLimit(Literal(2), testRelation).orderBy($"b".asc)
+
+    comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
   }
 }

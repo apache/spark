@@ -31,11 +31,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
@@ -75,7 +76,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect extends Serializable with Logging{
+abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -221,10 +222,11 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
-  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     override def visitLiteral(literal: Literal[_]): String = {
-      compileValue(
-        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+      Option(literal.value()).map(v =>
+        compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
+        .getOrElse(super.visitLiteral(literal))
     }
 
     override def visitNamedReference(namedRef: NamedReference): String = {
@@ -240,7 +242,56 @@ abstract class JdbcDialect extends Serializable with Logging{
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
       s"CAST($l AS $databaseTypeDefinition)"
     }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
+      } else {
+        // The framework will catch the error and give up the push-down.
+        // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: $funcName")
+      }
+    }
+
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+      }
+    }
+
+    protected def dialectFunctionName(funcName: String): String = funcName
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      if (isSupportedFunction("OVERLAY")) {
+        super.visitOverlay(inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+      }
+    }
+
+    override def visitTrim(direction: String, inputs: Array[String]): String = {
+      if (isSupportedFunction("TRIM")) {
+        super.visitTrim(direction, inputs)
+      } else {
+        throw new UnsupportedOperationException(
+          s"${this.getClass.getSimpleName} does not support function: TRIM")
+      }
+    }
   }
+
+  /**
+   * Returns whether the database supports function.
+   * @param funcName Upper-cased function name
+   * @return True if the database supports function.
+   */
+  @Since("3.3.0")
+  def isSupportedFunction(funcName: String): Boolean = false
 
   /**
    * Converts V2 expression to String representing a SQL expression.
@@ -265,26 +316,14 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    aggFunction match {
-      case min: Min =>
-        compileExpression(min.column).map(v => s"MIN($v)")
-      case max: Max =>
-        compileExpression(max.column).map(v => s"MAX($v)")
-      case count: Count =>
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
-      case sum: Sum =>
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
-      case _: CountStar =>
-        Some("COUNT(*)")
-      case avg: Avg =>
-        val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
-      case _ => None
-    }
-  }
+  @deprecated("use org.apache.spark.sql.jdbc.JdbcDialect.compileExpression instead.", "3.4.0")
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = compileExpression(aggFunction)
+
+  /**
+   * List the user-defined functions in jdbc dialect.
+   * @return a sequence of tuple from function name to user-defined function.
+   */
+  def functions: Seq[(String, UnboundFunction)] = Nil
 
   /**
    * Create schema with an optional comment. Empty string means no comment.
@@ -435,7 +474,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
-   * @param tableName         the table on which index to be created
+   * @param tableIdent        the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
    * @param properties        the properties of the index to be created
@@ -443,7 +482,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def createIndex(
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
@@ -454,7 +493,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Checks whether an index exists
    *
    * @param indexName the name of the index
-   * @param tableName the table name on which index to be checked
+   * @param tableIdent the table on which index to be checked
    * @param options JDBCOptions of the table
    * @return true if the index with `indexName` exists in the table with `tableName`,
    *         false otherwise
@@ -462,7 +501,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   def indexExists(
       conn: Connection,
       indexName: String,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     throw new UnsupportedOperationException("indexExists is not supported")
   }
@@ -471,10 +510,10 @@ abstract class JdbcDialect extends Serializable with Logging{
    * Build a drop index SQL statement.
    *
    * @param indexName the name of the index to be dropped.
-   * @param tableName the table name on which index to be dropped.
+   * @param tableIdent the table on which index to be dropped.
   * @return the SQL statement to use for dropping the index.
    */
-  def dropIndex(indexName: String, tableName: String): String = {
+  def dropIndex(indexName: String, tableIdent: Identifier): String = {
     throw new UnsupportedOperationException("dropIndex is not supported")
   }
 
@@ -483,7 +522,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def listIndexes(
       conn: Connection,
-      tableName: String,
+      tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
     throw new UnsupportedOperationException("listIndexes is not supported")
   }
@@ -503,6 +542,13 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
+  }
+
+  /**
+   * returns the OFFSET clause for the SELECT statement
+   */
+  def getOffsetClause(offset: Integer): String = {
+    if (offset > 0 ) s"OFFSET $offset" else ""
   }
 
   def supportsTableSample: Boolean = false

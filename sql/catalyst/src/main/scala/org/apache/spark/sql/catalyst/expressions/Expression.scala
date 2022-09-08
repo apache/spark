@@ -19,15 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, SQLQueryContext, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -315,7 +317,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new IllegalStateException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw SparkException.internalError(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
   protected def typeSuffix =
@@ -396,12 +398,18 @@ trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplacea
  * them with Min and Max respectively.
  */
 trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
-  override def aggBufferSchema: StructType = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
-  override def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
-  override def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
-    "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  override def aggBufferSchema: StructType = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  }
+  override def aggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  }
+  override def inputAggBufferAttributes: Seq[AttributeReference] = {
+    throw SparkException.internalError(
+      "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
+  }
 }
 
 /**
@@ -452,6 +460,25 @@ trait Nondeterministic extends Expression {
   }
 
   protected def evalInternal(input: InternalRow): Any
+}
+
+/**
+ * An expression that contains conditional expression branches, so not all branches will be hit.
+ * All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  final override def foldable: Boolean = children.forall(_.foldable)
+
+  /**
+   * Return the children expressions which can always be hit at runtime.
+   */
+  def alwaysEvaluatedInputs: Seq[Expression]
+
+  /**
+   * Return groups of branches. For each group, at least one branch will be hit at runtime,
+   * so that we can eagerly evaluate the common expressions of a group.
+   */
+  def branchGroups: Seq[Seq[Expression]]
 }
 
 /**
@@ -569,6 +596,38 @@ abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
   }
 }
 
+/**
+ * An expression with SQL query context. The context string can be serialized from the Driver
+ * to executors. It will also be kept after rule transforms.
+ */
+trait SupportQueryContext extends Expression with Serializable {
+  protected var queryContext: Option[SQLQueryContext] = initQueryContext()
+
+  def initQueryContext(): Option[SQLQueryContext]
+
+  def getContextOrNull(): SQLQueryContext = queryContext.getOrElse(null)
+
+  def getContextOrNullCode(ctx: CodegenContext, withErrorContext: Boolean = true): String = {
+    if (withErrorContext && queryContext.isDefined) {
+      ctx.addReferenceObj("errCtx", queryContext.get)
+    } else {
+      "null"
+    }
+  }
+
+  // Note: Even though query contexts are serialized to executors, it will be regenerated from an
+  //       empty "Origin" during rule transforms since "Origin"s are not serialized to executors
+  //       for better performance. Thus, we need to copy the original query context during
+  //       transforms. The query context string is considered as a "tag" on the expression here.
+  override def copyTagsFrom(other: Expression): Unit = {
+    other match {
+      case s: SupportQueryContext =>
+        queryContext = s.queryContext
+      case _ =>
+    }
+    super.copyTagsFrom(other)
+  }
+}
 
 object UnaryExpression {
   def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)
@@ -683,7 +742,7 @@ object BinaryExpression {
  * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
-abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
+abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes with QueryErrorsBase {
 
   /**
    * Expected input type from both left/right child expressions, similar to the
@@ -702,11 +761,13 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (!left.dataType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${left.dataType.catalogString} and ${right.dataType.catalogString}).")
+      DataTypeMismatch(
+        errorSubClass = "BINARY_OP_DIFF_TYPES",
+        messageParameters = Array(toSQLType(left.dataType), toSQLType(right.dataType)))
     } else if (!inputType.acceptsType(left.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
-        s" not ${left.dataType.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "BINARY_OP_WRONG_TYPE",
+        messageParameters = Array(toSQLType(inputType), toSQLType(left.dataType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

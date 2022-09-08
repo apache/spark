@@ -24,15 +24,19 @@ import org.apache.spark.sql.types._
  * field indexes and field counts of complex type extractors and attributes
  * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
+ *
+ * @param schema nested column schema
+ * @param output output attributes of the data source relation. They are used to filter out
+ *               attributes in the schema that do not belong to the current relation.
  */
-case class ProjectionOverSchema(schema: StructType) {
+case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a: AttributeReference if fieldNames.contains(a.name) =>
+      case a: AttributeReference if fieldNames.contains(a.name) && output.contains(a) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {
@@ -61,8 +65,8 @@ case class ProjectionOverSchema(schema: StructType) {
         getProjection(child).map { projection => MapKeys(projection) }
       case MapValues(child) =>
         getProjection(child).map { projection => MapValues(projection) }
-      case GetMapValue(child, key, failOnError) =>
-        getProjection(child).map { projection => GetMapValue(projection, key, failOnError) }
+      case GetMapValue(child, key) =>
+        getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
@@ -72,6 +76,8 @@ case class ProjectionOverSchema(schema: StructType) {
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }
+      case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
+        getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
       case _ =>
         None
     }

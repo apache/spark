@@ -119,7 +119,8 @@ case class AddColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        col.position.map(_.position).orNull)
+        col.position.map(_.position).orNull,
+        col.default.orNull)
     }
   }
 
@@ -143,7 +144,8 @@ case class ReplaceColumns(
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
     require(table.resolved)
     val deleteChanges = table.schema.fieldNames.map { name =>
-      TableChange.deleteColumn(Array(name))
+      // REPLACE COLUMN should require column to exist
+      TableChange.deleteColumn(Array(name), false /* ifExists */)
     }
     val addChanges = columnsToAdd.map { col =>
       assert(col.path.isEmpty)
@@ -153,7 +155,8 @@ case class ReplaceColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        null)
+        null,
+        col.default.orNull)
     }
     deleteChanges ++ addChanges
   }
@@ -167,11 +170,12 @@ case class ReplaceColumns(
  */
 case class DropColumns(
     table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+    columnsToDrop: Seq[FieldName],
+    ifExists: Boolean) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     columnsToDrop.map { col =>
       require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
-      TableChange.deleteColumn(col.name.toArray)
+      TableChange.deleteColumn(col.name.toArray, ifExists)
     }
   }
 
@@ -204,7 +208,8 @@ case class AlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
+    position: Option[FieldPosition],
+    setDefaultExpression: Option[String]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray
@@ -222,7 +227,10 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+    val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
+      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

@@ -29,12 +29,6 @@ import org.apache.spark.sql.internal.SQLConf.PROPAGATE_DISTINCT_KEYS_ENABLED
  */
 trait LogicalPlanDistinctKeys { self: LogicalPlan =>
   lazy val distinctKeys: Set[ExpressionSet] = {
-    if (conf.getConf(PROPAGATE_DISTINCT_KEYS_ENABLED)) {
-      val keys = DistinctKeyVisitor.visit(self)
-      require(keys.forall(_.nonEmpty))
-      keys
-    } else {
-      Set.empty
-    }
+    if (conf.getConf(PROPAGATE_DISTINCT_KEYS_ENABLED)) DistinctKeyVisitor.visit(self) else Set.empty
   }
 }

@@ -1072,8 +1072,7 @@ class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
   }
 }
 
-class ALSStorageSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
+class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("invalid storage params") {
     intercept[IllegalArgumentException] {

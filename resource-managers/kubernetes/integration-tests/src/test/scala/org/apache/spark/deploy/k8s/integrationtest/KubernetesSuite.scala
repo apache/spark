@@ -156,8 +156,8 @@ class KubernetesSuite extends SparkFunSuite
       // Try the spark test home
       sys.props("spark.test.home")
     )
-    val sparkDirProp = possible_spark_dirs.filter(x =>
-      new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
+    val sparkDirProp = possible_spark_dirs.find(x =>
+      new File(Paths.get(x).toFile, "bin/spark-submit").exists).orNull
     require(sparkDirProp != null,
       s"Spark home directory must be provided in system properties tested $possible_spark_dirs")
     sparkHomeDir = Paths.get(sparkDirProp)
@@ -618,6 +618,7 @@ private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
   val schedulingTestTag = Tag("schedule")
+  val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

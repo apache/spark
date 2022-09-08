@@ -193,8 +193,10 @@ def local_connect_and_auth(port, auth_secret):
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
-    # On most of IPv6-ready systems, IPv6 will take precedence.
-    for res in socket.getaddrinfo("127.0.0.1", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    addr = "127.0.0.1"
+    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+        addr = "::1"
+    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)

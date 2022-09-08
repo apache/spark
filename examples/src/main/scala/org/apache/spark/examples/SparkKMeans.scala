@@ -38,7 +38,7 @@ object SparkKMeans {
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
-    for (i <- 0 until centers.length) {
+    for (i <- centers.indices) {
       val tempDist = squaredDistance(p, centers(i))
       if (tempDist < closest) {
         closest = tempDist

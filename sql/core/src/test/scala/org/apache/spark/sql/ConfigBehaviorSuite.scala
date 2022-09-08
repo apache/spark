@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,6 +68,44 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
         // chi-sq value would be very high.
         assert(computeChiSquareTest() > 300)
       }
+    }
+  }
+
+  test("SPARK-40211: customize initialNumPartitions for take") {
+    val totalElements = 100
+    val numToTake = 50
+    import scala.language.reflectiveCalls
+    val jobCountListener = new SparkListener {
+      private var count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      def reset(): Unit = count.set(0)
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        count.incrementAndGet()
+      }
+    }
+    spark.sparkContext.addSparkListener(jobCountListener)
+    val df = spark.range(0, totalElements, 1, totalElements)
+
+    // with default LIMIT_INITIAL_NUM_PARTITIONS = 1, expecting multiple jobs
+    df.take(numToTake)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(jobCountListener.getCount > 1)
+    jobCountListener.reset()
+    df.tail(numToTake)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    assert(jobCountListener.getCount > 1)
+
+    // setting LIMIT_INITIAL_NUM_PARTITIONS to large number(1000), expecting only 1 job
+
+    withSQLConf(SQLConf.LIMIT_INITIAL_NUM_PARTITIONS.key -> "1000") {
+      jobCountListener.reset()
+      df.take(numToTake)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobCountListener.getCount == 1)
+      jobCountListener.reset()
+      df.tail(numToTake)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(jobCountListener.getCount == 1)
     }
   }
 

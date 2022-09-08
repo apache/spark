@@ -12,7 +12,7 @@ sklearn
 matplotlib<3.3.0
 
 # PySpark test dependencies
-xmlrunner
+unittest-xml-reporting
 
 # PySpark test dependencies (optional)
 coverage
@@ -35,10 +35,13 @@ numpydoc
 jinja2<3.0.0
 sphinx<3.1.0
 sphinx-plotly-directive
+docutils<0.18.0
+# See SPARK-38279.
+markupsafe==2.0.1
 
 # Development scripts
 jira
 PyGithub
 
 # pandas API on Spark Code formatter.
-black
+black==22.6.0

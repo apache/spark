@@ -61,7 +61,7 @@ object PartitionSpec {
   val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionPath])
 }
 
-object PartitioningUtils extends SQLConfHelper{
+object PartitioningUtils extends SQLConfHelper {
 
   val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
 
@@ -359,7 +359,7 @@ object PartitioningUtils extends SQLConfHelper{
   def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
     dataType match {
       case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        castPartValueToDesiredType(dataType, value, null).toString
+        Option(castPartValueToDesiredType(dataType, value, null)).map(_.toString).orNull
       case _ => value
     }
 
@@ -530,9 +530,12 @@ object PartitioningUtils extends SQLConfHelper{
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType | ShortType | IntegerType => Integer.parseInt(value)
+    case ByteType => Integer.parseInt(value).toByte
+    case ShortType => Integer.parseInt(value).toShort
+    case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case FloatType | DoubleType => JDouble.parseDouble(value)
+    case FloatType => JDouble.parseDouble(value).toFloat
+    case DoubleType => JDouble.parseDouble(value)
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
@@ -545,6 +548,8 @@ object PartitioningUtils extends SQLConfHelper{
       }
     case it: AnsiIntervalType =>
       Cast(Literal(unescapePathName(value)), it).eval()
+    case BinaryType => value.getBytes()
+    case BooleanType => value.toBoolean
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 

@@ -1163,11 +1163,11 @@ class Index(IndexOpsMixin):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df
+        >>> df  # doctest: +SKIP
                max_speed  shield
         cobra          1       2
         viper          4       5
-        NaN            7       8
+        None           7       8
 
         >>> df.index.dropna()
         Index(['cobra', 'viper'], dtype='object')
@@ -2509,7 +2509,7 @@ class Index(IndexOpsMixin):
         elif is_list_like(other):
             other_idx = Index(other)
             if isinstance(other_idx, MultiIndex):
-                return other_idx.to_frame().head(0).index
+                raise ValueError("Names should be list-like for a MultiIndex")
             spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         else:

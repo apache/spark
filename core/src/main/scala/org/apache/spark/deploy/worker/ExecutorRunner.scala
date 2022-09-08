@@ -58,6 +58,7 @@ private[deploy] class ExecutorRunner(
     conf: SparkConf,
     val appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value,
+    val rpId: Int,
     val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
@@ -139,6 +140,7 @@ private[deploy] class ExecutorRunner(
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
     case "{{APP_ID}}" => appId
+    case "{{RESOURCE_PROFILE_ID}}" => rpId.toString
     case other => other
   }
 

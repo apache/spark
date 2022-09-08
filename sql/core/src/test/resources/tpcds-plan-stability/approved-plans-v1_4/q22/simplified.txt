@@ -15,7 +15,7 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                             Filter [inv_item_sk,inv_warehouse_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                  Scan parquet spark_catalog.default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
                                     SubqueryBroadcast [d_date_sk] #1
                                       BroadcastExchange #2
                                         WholeStageCodegen (1)
@@ -23,7 +23,7 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                                             Filter [d_month_seq,d_date_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_month_seq]
                             InputAdapter
                               ReusedExchange [d_date_sk] #2
                         InputAdapter
@@ -32,11 +32,11 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                               Filter [i_item_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                                    Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)
                           Filter [w_warehouse_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.warehouse [w_warehouse_sk]
+                                Scan parquet spark_catalog.default.warehouse [w_warehouse_sk]

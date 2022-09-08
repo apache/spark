@@ -20,10 +20,12 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
@@ -61,17 +63,27 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)
     when(executorRoleLabeledPods.watch(watch.capture())).thenReturn(watchConnection)
-    watchSourceUnderTest = new ExecutorPodsWatchSnapshotSource(
-      eventQueue, kubernetesClient)
-    watchSourceUnderTest.start(TEST_SPARK_APP_ID)
   }
 
   test("Watch events should be pushed to the snapshots store as snapshot updates.") {
+    val conf = new SparkConf()
+    watchSourceUnderTest = new ExecutorPodsWatchSnapshotSource(
+      eventQueue, kubernetesClient, conf)
+    watchSourceUnderTest.start(TEST_SPARK_APP_ID)
     val exec1 = runningExecutor(1)
     val exec2 = runningExecutor(2)
     watch.getValue.eventReceived(Action.ADDED, exec1)
     watch.getValue.eventReceived(Action.MODIFIED, exec2)
     verify(eventQueue).updatePod(exec1)
     verify(eventQueue).updatePod(exec2)
+  }
+
+  test("SPARK-36462: Verify if watchers are disabled we don't call pods() on the client") {
+    val conf = new SparkConf()
+    conf.set(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER, false)
+    watchSourceUnderTest = new ExecutorPodsWatchSnapshotSource(
+      eventQueue, kubernetesClient, conf)
+    watchSourceUnderTest.start(TEST_SPARK_APP_ID)
+    verify(kubernetesClient, never()).pods()
   }
 }

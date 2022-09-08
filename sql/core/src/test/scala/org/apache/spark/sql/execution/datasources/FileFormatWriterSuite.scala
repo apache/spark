@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class FileFormatWriterSuite
   extends QueryTest
   with SharedSparkSession
-  with CodegenInterpretedPlanTest{
+  with CodegenInterpretedPlanTest {
 
   import testImplicits._
 

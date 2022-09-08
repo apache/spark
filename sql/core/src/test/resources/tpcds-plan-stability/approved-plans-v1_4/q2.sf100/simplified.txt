@@ -20,12 +20,12 @@ WholeStageCodegen (13)
                                       Project [ws_sold_date_sk,ws_ext_sales_price]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
+                                            Scan parquet spark_catalog.default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
                                     WholeStageCodegen (2)
                                       Project [cs_sold_date_sk,cs_ext_sales_price]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
+                                            Scan parquet spark_catalog.default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
                                 InputAdapter
                                   BroadcastExchange #3
                                     WholeStageCodegen (3)
@@ -39,10 +39,10 @@ WholeStageCodegen (13)
                                                     Filter [d_year,d_week_seq]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.date_dim [d_week_seq,d_year]
+                                                          Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
+                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq,d_day_name]
                   InputAdapter
                     BroadcastExchange #5
                       WholeStageCodegen (5)
@@ -50,7 +50,7 @@ WholeStageCodegen (13)
                           Filter [d_year,d_week_seq]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.date_dim [d_week_seq,d_year]
+                                Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year]
               InputAdapter
                 BroadcastExchange #6
                   WholeStageCodegen (11)
@@ -69,12 +69,12 @@ WholeStageCodegen (13)
                                             Project [ws_sold_date_sk,ws_ext_sales_price]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
+                                                  Scan parquet spark_catalog.default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
                                           WholeStageCodegen (7)
                                             Project [cs_sold_date_sk,cs_ext_sales_price]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
+                                                  Scan parquet spark_catalog.default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
                                       InputAdapter
                                         BroadcastExchange #8
                                           WholeStageCodegen (8)
@@ -88,10 +88,10 @@ WholeStageCodegen (13)
                                                           Filter [d_year,d_week_seq]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.date_dim [d_week_seq,d_year]
+                                                                Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
+                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq,d_day_name]
                         InputAdapter
                           BroadcastExchange #10
                             WholeStageCodegen (10)
@@ -99,4 +99,4 @@ WholeStageCodegen (13)
                                 Filter [d_year,d_week_seq]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.date_dim [d_week_seq,d_year]
+                                      Scan parquet spark_catalog.default.date_dim [d_week_seq,d_year]

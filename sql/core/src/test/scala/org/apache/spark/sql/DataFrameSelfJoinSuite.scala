@@ -481,7 +481,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       val ex = intercept[AnalysisException](
         df3.join(df1, year($"df1.timeStr") === year($"df3.tsStr"))
       )
-      assert(ex.message.contains("Column 'df1.timeStr' does not exist."))
+      checkError(ex,
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map("objectName" -> "`df1`.`timeStr`",
+          "proposal" -> "`df3`.`timeStr`, `df1`.`tsStr`"))
     }
   }
 }

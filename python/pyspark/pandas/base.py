@@ -1179,6 +1179,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
+        if periods == 0:
+            return self.copy()
+
         col = self.spark.column
         window = (
             Window.partitionBy(*part_cols)
@@ -1364,8 +1367,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 sdf = sdf.orderBy(F.col("count").desc())
 
         if normalize:
-            sum = sdf_dropna.count()
-            sdf = sdf.withColumn("count", F.col("count") / SF.lit(sum))
+            drop_sum = sdf_dropna.count()
+            sdf = sdf.withColumn("count", F.col("count") / SF.lit(drop_sum))
 
         internal = InternalFrame(
             spark_frame=sdf,

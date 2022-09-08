@@ -46,6 +46,7 @@ class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<GenericRecord> {
       this.metadata = metadata;
     }
 
+    @Override
     protected RecordWriter<AvroKey<GenericRecord>, NullWritable> create(
         Schema writerSchema,
         GenericData dataModel,
@@ -80,14 +81,17 @@ class SparkAvroKeyRecordWriter<T> extends RecordWriter<AvroKey<T>, NullWritable>
     this.mAvroFileWriter.create(writerSchema, outputStream);
   }
 
+  @Override
   public void write(AvroKey<T> record, NullWritable ignore) throws IOException {
     this.mAvroFileWriter.append(record.datum());
   }
 
+  @Override
   public void close(TaskAttemptContext context) throws IOException {
     this.mAvroFileWriter.close();
   }
 
+  @Override
   public long sync() throws IOException {
     return this.mAvroFileWriter.sync();
   }

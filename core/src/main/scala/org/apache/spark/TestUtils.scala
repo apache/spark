@@ -281,9 +281,19 @@ private[spark] object TestUtils {
     attempt.isSuccess && attempt.get == 0
   }
 
-  def isPythonVersionAtLeast38(): Boolean = {
+  // SPARK-40053: This string needs to be updated when the
+  // minimum python supported version changes.
+  val minimumPythonSupportedVersion: String = "3.7.0"
+
+  def isPythonVersionAvailable: Boolean = {
+    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
+    assert(version.length == 3)
+    isPythonVersionAtLeast(version(0), version(1), version(2))
+  }
+
+  private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
-    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
     Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
@@ -431,7 +441,7 @@ private[spark] object TestUtils {
     val appenderBuilder = builder.newAppender("console", "CONSOLE")
       .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
     appenderBuilder.add(builder.newLayout("PatternLayout")
-      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n"))
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex"))
     builder.add(appenderBuilder)
     builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
     val configuration = builder.build()

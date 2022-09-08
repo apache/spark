@@ -413,7 +413,7 @@ class FMRegressor @Since("3.0.0") (
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE

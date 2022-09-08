@@ -180,6 +180,13 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
+if [ ! -z "${SPARK_LOCAL_HOSTNAME}" ]; then
+  echo "Using SPARK_LOCAL_HOSTNAME=$SPARK_LOCAL_HOSTNAME" 1>&2
+fi
+if [ ! -z "${SPARK_LOCAL_IP}" ]; then
+  echo "Using SPARK_LOCAL_IP=$SPARK_LOCAL_IP" 1>&2
+fi
+
 # call the `mvn` command as usual
 # SPARK-25854
 "${MVN_BIN}" "$@"

@@ -50,7 +50,8 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def propagateNull: Boolean
 
-  override def foldable: Boolean = children.forall(_.foldable) && deterministic
+  override def foldable: Boolean =
+    children.forall(_.foldable) && deterministic && trustedSerializable(dataType)
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
@@ -62,6 +63,14 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       .map(cls => v => cls.cast(v))
       .getOrElse(identity)
 
+  // Returns true if we can trust all values of the given DataType can be serialized.
+  private def trustedSerializable(dt: DataType): Boolean = {
+    // Right now we conservatively block all ObjectType (Java objects) regardless of
+    // serializability, because the type-level info with java.io.Serializable and
+    // java.io.Externalizable marker interfaces are not strong guarantees.
+    // This restriction can be relaxed in the future to expose more optimizations.
+    !dt.existsRecursively(_.isInstanceOf[ObjectType])
+  }
 
   /**
    * Prepares codes for arguments.
@@ -555,8 +564,27 @@ case class NewInstance(
   }
 
   override def eval(input: InternalRow): Any = {
-    val argValues = arguments.map(_.eval(input))
-    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+    var i = 0
+    val len = arguments.length
+    var resultNull = false
+    while (i < len) {
+      val result = arguments(i).eval(input).asInstanceOf[Object]
+      evaluatedArgs(i) = result
+      resultNull = resultNull || (result == null && needNullCheckForIndex(i))
+      i += 1
+    }
+    if (needNullCheck && resultNull) {
+      // return null if one of arguments is null
+      null
+    } else {
+      try {
+        constructor(evaluatedArgs)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
+      }
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1916,12 +1944,11 @@ case class ValidateExternalType(child: Expression, expected: DataType, lenient: 
       }
   }
 
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (checkType(result)) {
-      result
+  override def nullSafeEval(input: Any): Any = {
+    if (checkType(input)) {
+      input
     } else {
-      throw new RuntimeException(s"${result.getClass.getName}$errMsg")
+      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
     }
   }
 

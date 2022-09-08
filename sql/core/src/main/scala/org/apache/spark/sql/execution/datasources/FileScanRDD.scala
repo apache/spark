@@ -34,7 +34,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -69,7 +69,7 @@ class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition],
-    val readDataSchema: StructType,
+    val readSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
     options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
@@ -128,13 +128,14 @@ class FileScanRDD(
       // an unsafe projection to convert a joined internal row to an unsafe row
       private lazy val projection = {
         val joinedExpressions =
-          readDataSchema.fields.map(_.dataType) ++ metadataColumns.map(_.dataType)
+          readSchema.fields.map(_.dataType) ++ metadataColumns.map(_.dataType)
         UnsafeProjection.create(joinedExpressions)
       }
 
       /**
-       * For each partitioned file, metadata columns for each record in the file are exactly same.
-       * Only update metadata row when `currentFile` is changed.
+       * The value of some of the metadata columns remains exactly the same for each record of
+       * a partitioned file. Only need to update their values in the metadata row when `currentFile`
+       * is changed.
        */
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
@@ -145,7 +146,7 @@ class FileScanRDD(
       /**
        * Create an array of constant column vectors containing all required metadata columns
        */
-      private def createMetadataColumnVector(c: ColumnarBatch): Array[ConstantColumnVector] = {
+      private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
         val path = new Path(currentFile.filePath)
         metadataColumns.map(_.name).map {
           case FILE_PATH =>

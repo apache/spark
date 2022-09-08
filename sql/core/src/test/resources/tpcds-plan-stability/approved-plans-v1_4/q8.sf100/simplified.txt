@@ -20,7 +20,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                       Filter [ss_store_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.store_sales [ss_store_sk,ss_net_profit,ss_sold_date_sk]
+                                            Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_net_profit,ss_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
                                                 BroadcastExchange #3
                                                   WholeStageCodegen (1)
@@ -28,7 +28,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                                       Filter [d_qoy,d_year,d_date_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_qoy]
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #3
                                   InputAdapter
@@ -37,7 +37,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                         Filter [s_store_sk,s_zip]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.store [s_store_sk,s_store_name,s_zip]
+                                              Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_zip]
                   InputAdapter
                     WholeStageCodegen (13)
                       Sort [ca_zip]
@@ -54,7 +54,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                             Filter [ca_zip]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.customer_address [ca_zip]
+                                                  Scan parquet spark_catalog.default.customer_address [ca_zip]
                                             InputAdapter
                                               BroadcastExchange #7
                                                 WholeStageCodegen (10)
@@ -76,7 +76,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                                                                 Filter [ca_address_sk]
                                                                                   ColumnarToRow
                                                                                     InputAdapter
-                                                                                      Scan parquet default.customer_address [ca_address_sk,ca_zip]
+                                                                                      Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_zip]
                                                                     InputAdapter
                                                                       WholeStageCodegen (8)
                                                                         Sort [c_current_addr_sk]
@@ -87,4 +87,4 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                                                                   Filter [c_preferred_cust_flag,c_current_addr_sk]
                                                                                     ColumnarToRow
                                                                                       InputAdapter
-                                                                                        Scan parquet default.customer [c_current_addr_sk,c_preferred_cust_flag]
+                                                                                        Scan parquet spark_catalog.default.customer [c_current_addr_sk,c_preferred_cust_flag]

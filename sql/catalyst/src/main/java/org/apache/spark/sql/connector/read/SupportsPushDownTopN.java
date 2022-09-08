@@ -22,23 +22,22 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down top N(query with ORDER BY ... LIMIT n). Please note that the combination of top N
- * with other operations such as AGGREGATE, GROUP BY, CLUSTER BY, DISTRIBUTE BY, etc.
- * is NOT pushed down.
+ * push down top N(query with ORDER BY ... LIMIT n). We can push down top N with many other
+ * operations if they follow the operator order we defined in {@link ScanBuilder}'s class doc.
  *
  * @since 3.3.0
  */
 @Evolving
 public interface SupportsPushDownTopN extends ScanBuilder {
 
-    /**
-     * Pushes down top N to the data source.
-     */
-    boolean pushTopN(SortOrder[] orders, int limit);
+  /**
+   * Pushes down top N to the data source.
+   */
+  boolean pushTopN(SortOrder[] orders, int limit);
 
-    /**
-     * Whether the top N is partially pushed or not. If it returns true, then Spark will do top N
-     * again. This method will only be called when {@link #pushTopN} returns true.
-     */
-    default boolean isPartiallyPushed() { return true; }
+  /**
+   * Whether the top N is partially pushed or not. If it returns true, then Spark will do top N
+   * again. This method will only be called when {@link #pushTopN} returns true.
+   */
+  default boolean isPartiallyPushed() { return true; }
 }

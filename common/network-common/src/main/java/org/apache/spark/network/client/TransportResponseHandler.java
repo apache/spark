@@ -113,9 +113,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
       }
     }
-    for (Map.Entry<Long, BaseResponseCallback> entry : outstandingRpcs.entrySet()) {
+    for (BaseResponseCallback callback : outstandingRpcs.values()) {
       try {
-        entry.getValue().onFailure(cause);
+        callback.onFailure(cause);
       } catch (Exception e) {
         logger.warn("RpcResponseCallback.onFailure throws exception", e);
       }

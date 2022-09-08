@@ -69,6 +69,21 @@ class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession
     assert(INSTANCE_COUNT.get() === 1)
     assert(CALLBACK_COUNT.get() === 2)
   }
+
+  test("SPARK-39864 ExecutionListenerBus is lazily registered") {
+    spark = SparkSession.builder().master("local").appName("test").getOrCreate()
+    // Run a query to trigger the lazy initialization of the session state:
+    spark.sql("select 1").collect()
+    // The ExecutionListenerBus shouldn't be registered since no QueryExecutionListeners
+    // are registered:
+    assert(spark.sparkContext.listenerBus.findListenersByClass[ExecutionListenerBus]().isEmpty)
+    // Registering the first query execution listener registers a listener bus:
+    spark.listenerManager.register(new CountingQueryExecutionListener)
+    assert(spark.sparkContext.listenerBus.findListenersByClass[ExecutionListenerBus]().size == 1)
+    // Registering additional listeners reuses the same listener bus:
+    spark.listenerManager.register(new CountingQueryExecutionListener)
+    assert(spark.sparkContext.listenerBus.findListenersByClass[ExecutionListenerBus]().size == 1)
+  }
 }
 
 private class CountingQueryExecutionListener extends QueryExecutionListener {

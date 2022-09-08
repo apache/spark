@@ -252,8 +252,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      // TODO Adds IntervalType support
-      case _ => sys.error(s"Unsupported data type $dataType.")
+      case _ => throw new IllegalStateException(s"Unsupported data type $dataType.")
     }
   }
 

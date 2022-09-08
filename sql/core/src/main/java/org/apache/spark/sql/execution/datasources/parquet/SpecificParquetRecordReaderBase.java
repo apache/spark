@@ -71,6 +71,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  protected StructType sparkRequestedSchema;
   // Keep track of the version of the parquet writer. An older version wrote
   // corrupt delta byte arrays, and the version check is needed to detect that.
   protected ParsedVersion writerVersion;
@@ -113,10 +114,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     fileReader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
-    StructType sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    this.sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
     this.parquetColumn = converter.convertParquetColumn(requestedSchema,
-      Option.apply(sparkRequestedSchema));
+      Option.apply(this.sparkRequestedSchema));
     this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
 
@@ -148,6 +149,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    config.setBoolean(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED().key(), false);
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
@@ -198,6 +200,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    config.setBoolean(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED().key(), false);
     this.parquetColumn = new ParquetToSparkSchemaConverter(config)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();

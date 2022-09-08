@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -508,7 +509,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "VIEW"
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
-    TableIdentifier(viewName, Some(db))
+    TableIdentifier(viewName, Some(db), Some(SESSION_CATALOG_NAME))
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias") {
@@ -586,7 +587,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           var e = intercept[AnalysisException] {
             sql("ALTER VIEW v1 AS SELECT * FROM v2")
           }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
+          assert(e.contains("Not allowed to create a permanent view " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
             "referencing a temporary view v2"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
@@ -595,7 +597,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
             e = intercept[AnalysisException] {
               sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
             }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
+            assert(e.contains("Not allowed to create a permanent view " +
+              s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
               s"referencing a temporary function `$tempFunctionName`"))
           }
         }

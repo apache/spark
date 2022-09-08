@@ -257,6 +257,7 @@ Time series-related
    :toctree: api/
 
    Series.asof
+   Series.resample
    Series.shift
    Series.first_valid_index
    Series.last_valid_index

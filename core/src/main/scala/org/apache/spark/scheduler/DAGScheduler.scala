@@ -1175,6 +1175,13 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerUnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
+  private[scheduler] def handleStageFailed(
+      stageId: Int,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
+    stageIdToStage.get(stageId).foreach { abortStage(_, reason, exception) }
+  }
+
   private[scheduler] def handleTaskSetFailed(
       taskSet: TaskSet,
       reason: String,
@@ -1885,6 +1892,16 @@ private[spark] class DAGScheduler(
               mapOutputTracker.
                 unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
             }
+          } else {
+            // Unregister the merge result of <shuffleId, reduceId> if there is a FetchFailed event
+            // and is not a  MetaDataFetchException which is signified by bmAddress being null
+            if (bmAddress != null &&
+              bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
+              assert(pushBasedShuffleEnabled, "Push based shuffle expected to " +
+                "be enabled when handling merge block fetch failure.")
+              mapOutputTracker.
+                unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
+            }
           }
 
           if (failedStage.rdd.isBarrier()) {
@@ -2337,20 +2354,30 @@ private[spark] class DAGScheduler(
     // adaptive attempt while the stage might have failed/killed and shuffle id is getting
     // re-executing now.
     if (stage.shuffleDep.shuffleMergeId == shuffleMergeId) {
-      if (stage.pendingPartitions.isEmpty) {
+      // When it reaches here, there is a possibility that the stage will be resubmitted again
+      // because of various reasons. Some of these could be:
+      // a) Stage results are not available. All the tasks completed once so the
+      // pendingPartitions is empty but due to an executor failure some of the map outputs are not
+      // available any more, so the stage will be re-submitted.
+      // b) Stage failed due to a task failure.
+      // We should mark the stage as merged finalized irrespective of what state it is in.
+      // This will prevent the push being enabled for the re-attempt.
+      // Note: for indeterminate stages, this doesn't matter at all, since the merge finalization
+      // related state is reset during the stage submission.
+      stage.shuffleDep.markShuffleMergeFinalized()
+      if (stage.pendingPartitions.isEmpty)
         if (runningStages.contains(stage)) {
-          stage.shuffleDep.markShuffleMergeFinalized()
           processShuffleMapStageCompletion(stage)
-        } else {
-          // Unregister all merge results if the stage is currently not
-          // active (i.e. the stage is cancelled)
+        } else if (stage.isIndeterminate) {
+          // There are 2 possibilities here - stage is either cancelled or it will be resubmitted.
+          // If this is an indeterminate stage which is cancelled, we unregister all its merge
+          // results here just to free up some memory. If the indeterminate stage is resubmitted,
+          // merge results are cleared again when the newer attempt is submitted.
           mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
+          // For determinate stages, which have completed merge finalization, we don't need to
+          // unregister merge results - since the stage retry, or any other stage computing the
+          // same shuffle id, can use it.
         }
-      } else {
-        // stage still running, mark merge finalized. Stage completion will invoke
-        // processShuffleMapStageCompletion
-        stage.shuffleDep.markShuffleMergeFinalized()
-      }
     }
   }
 
@@ -2439,7 +2466,15 @@ private[spark] class DAGScheduler(
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
-    if (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch) {
+    // Check if the execId is a shuffle push merger. We do not remove the executor if it is,
+    // and only remove the outputs on the host.
+    val isShuffleMerger = execId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    if (isShuffleMerger && pushBasedShuffleEnabled) {
+      hostToUnregisterOutputs.foreach(
+        host => blockManagerMaster.removeShufflePushMergerLocation(host))
+    }
+    if (!isShuffleMerger &&
+      (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch)) {
       executorFailureEpoch(execId) = currentEpoch
       logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
       if (pushBasedShuffleEnabled) {
@@ -2451,6 +2486,8 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
+      // When the fetch failure is for a merged shuffle chunk, ignoreShuffleFileLostEpoch is true
+      // and so all the files will be removed.
       val remove = if (ignoreShuffleFileLostEpoch) {
         true
       } else if (!shuffleFileLostEpoch.contains(execId) ||
@@ -2576,6 +2613,13 @@ private[spark] class DAGScheduler(
     }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
+  }
+
+  /**
+   * Called by the OutputCommitCoordinator to cancel stage due to data duplication may happen.
+   */
+  private[scheduler] def stageFailed(stageId: Int, reason: String): Unit = {
+    eventProcessLoop.post(StageFailed(stageId, reason, None))
   }
 
   /**
@@ -2845,6 +2889,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case completion: CompletionEvent =>
       dagScheduler.handleTaskCompletion(completion)
+
+    case StageFailed(stageId, reason, exception) =>
+      dagScheduler.handleStageFailed(stageId, reason, exception)
 
     case TaskSetFailed(taskSet, reason, exception) =>
       dagScheduler.handleTaskSetFailed(taskSet, reason, exception)

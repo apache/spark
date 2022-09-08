@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedDBObjectName, UnresolvedFieldName, UnresolvedFieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -49,7 +49,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -73,7 +73,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -98,7 +98,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -122,7 +122,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
-            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
+            UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
             TestRelation2,
             tableSpec,
@@ -286,10 +286,21 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
-      alterTableTest(
-        DropColumns(table, Seq(UnresolvedFieldName(ref))),
-        Seq("Missing field " + ref.quoted)
-      )
+      Seq(true, false).foreach { ifExists =>
+        val expectedErrors = if (ifExists) {
+          Seq.empty[String]
+        } else {
+          Seq("Missing field " + ref.quoted)
+        }
+        val alter = DropColumns(table, Seq(UnresolvedFieldName(ref)), ifExists)
+        if (ifExists) {
+          // using IF EXISTS will silence all errors for missing columns
+          assertAnalysisSuccess(alter, caseSensitive = true)
+          assertAnalysisSuccess(alter, caseSensitive = false)
+        } else {
+          alterTableTest(alter, expectedErrors, expectErrorOnCaseSensitive = true)
+        }
+      }
     }
   }
 
@@ -305,7 +316,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -314,7 +325,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -323,7 +334,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None, None),
         Seq("Missing field " + ref.quoted)
       )
     }

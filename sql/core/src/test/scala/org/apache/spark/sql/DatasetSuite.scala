@@ -80,7 +80,7 @@ class DatasetSuite extends QueryTest
   test("toDS should compare map with byte array keys correctly") {
     // Choose the order of arrays in such way, that sorting keys of different maps by _.toString
     // will not incidentally put equal keys together.
-    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.toString).toArray
+    val arrays = (1 to 5).map(_ => Array[Byte](0.toByte, 0.toByte)).sortBy(_.mkString).toArray
     arrays(0)(1) = 1.toByte
     arrays(1)(1) = 2.toByte
     arrays(2)(1) = 2.toByte
@@ -322,19 +322,27 @@ class DatasetSuite extends QueryTest
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1)?+.+`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map(
+          "objectName" -> "`(_1)?+.+`",
+          "proposal" -> "`_1`, `_2`"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          ds.select(expr("`(_1|_2)`").as[Int])
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map(
+          "objectName" -> "`(_1|_2)`",
+          "proposal" -> "`_1`, `_2`"))
+
       var e = intercept[AnalysisException] {
-        ds.select(expr("`(_1)?+.+`").as[Int])
-      }
-      assert(e.getErrorClass == "MISSING_COLUMN")
-      assert(e.messageParameters.head == "`(_1)?+.+`")
-
-      e = intercept[AnalysisException] {
-        ds.select(expr("`(_1|_2)`").as[Int])
-      }
-      assert(e.getErrorClass == "MISSING_COLUMN")
-      assert(e.messageParameters.head == "`(_1|_2)`")
-
-      e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
       }
       assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
@@ -931,11 +939,13 @@ class DatasetSuite extends QueryTest
 
   test("verify mismatching field names fail with a good error") {
     val ds = Seq(ClassData("a", 1)).toDS()
-    val e = intercept[AnalysisException] {
-      ds.as[ClassData2]
-    }
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("c", "a, b")))
+    checkError(
+      exception = intercept[AnalysisException] (ds.as[ClassData2]),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map(
+        "objectName" -> "`c`",
+        "proposal" -> "`a`, `b`"))
   }
 
   test("runtime nullability check") {
@@ -1000,24 +1010,6 @@ class DatasetSuite extends QueryTest
     }
 
     checkDataset(cogrouped, "a13", "b24")
-  }
-
-  test("give nice error message when the real number of fields doesn't match encoder schema") {
-    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-
-    val message = intercept[AnalysisException] {
-      ds.as[(String, Int, Long)]
-    }.message
-    assert(message ==
-      "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.")
-
-    val message2 = intercept[AnalysisException] {
-      ds.as[Tuple1[String]]
-    }.message
-    assert(message2 ==
-      "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -1951,7 +1943,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast id from BIGINT to TINYINT"))
+    assert(thrownException.message.contains("""Cannot up cast id from "BIGINT" to "TINYINT""""))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {

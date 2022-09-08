@@ -17,10 +17,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -341,7 +342,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
   test("SPARK-36073: Transparently canonicalized expressions are not necessary subexpressions") {
     val add = Add(Literal(1), Literal(2))
-    val transparent = PromotePrecision(add)
+    val transparent = ProxyExpression(add)
 
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(transparent)
@@ -435,17 +436,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
-  test("SPARK-35886: PromotePrecision should not overwrite genCode") {
-    val p = PromotePrecision(Literal(Decimal("10.1")))
+  test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
+    val add = Add(Literal(1), Literal(0))
+    val n1 = NaNvl(Literal(1.0d), Add(add, add))
+    val e1 = new EquivalentExpressions
+    e1.addExprTree(n1)
+    assert(e1.getCommonSubexpressions.isEmpty)
 
-    val ctx = new CodegenContext()
-    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(Seq(p, p))
-    val code = ctx.withSubExprEliminationExprs(subExprs.states) {
-      Seq(p.genCode(ctx))
-    }.head
-    // Decimal `Literal` will add the value by `addReferenceObj`.
-    // So if `p` is replaced by subexpression, the literal will be reused.
-    assert(code.value.toString == "((Decimal) references[0] /* literal */)")
+    val n2 = NaNvl(add, add)
+    val e2 = new EquivalentExpressions
+    e2.addExprTree(n2)
+    assert(e2.getCommonSubexpressions.size == 1)
+    assert(e2.getCommonSubexpressions.head == add)
   }
 }
 
@@ -453,5 +455,15 @@ case class CodegenFallbackExpression(child: Expression)
   extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpression =
+    copy(child = newChild)
+}
+
+case class ProxyExpression(child: Expression) extends UnaryExpression {
+  override lazy val preCanonicalized: Expression = child.preCanonicalized
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    child.genCode(ctx)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 }

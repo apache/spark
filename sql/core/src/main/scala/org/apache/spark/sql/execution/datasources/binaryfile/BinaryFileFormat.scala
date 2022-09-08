@@ -97,7 +97,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val filterFuncs = filters.map(filter => createFilterFunction(filter))
+    val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
     val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
@@ -158,38 +158,38 @@ object BinaryFileFormat {
     StructField(LENGTH, LongType, false) ::
     StructField(CONTENT, BinaryType, true) :: Nil)
 
-  private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
+  private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {
-      case And(left, right) =>
-        s => createFilterFunction(left)(s) && createFilterFunction(right)(s)
-      case Or(left, right) =>
-        s => createFilterFunction(left)(s) || createFilterFunction(right)(s)
-      case Not(child) =>
-        s => !createFilterFunction(child)(s)
-
-      case LessThan(LENGTH, value: Long) =>
-        _.getLen < value
-      case LessThanOrEqual(LENGTH, value: Long) =>
-        _.getLen <= value
-      case GreaterThan(LENGTH, value: Long) =>
-        _.getLen > value
-      case GreaterThanOrEqual(LENGTH, value: Long) =>
-        _.getLen >= value
-      case EqualTo(LENGTH, value: Long) =>
-        _.getLen == value
-
+      case And(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) && rightPred(s))
+        case (Some(leftPred), None) => Some(leftPred)
+        case (None, Some(rightPred)) => Some(rightPred)
+        case (None, None) => Some(_ => true)
+      }
+      case Or(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) || rightPred(s))
+        case _ => Some(_ => true)
+      }
+      case Not(child) => createFilterFunction(child) match {
+        case Some(pred) => Some(s => !pred(s))
+        case _ => Some(_ => true)
+      }
+      case LessThan(LENGTH, value: Long) => Some(_.getLen < value)
+      case LessThanOrEqual(LENGTH, value: Long) => Some(_.getLen <= value)
+      case GreaterThan(LENGTH, value: Long) => Some(_.getLen > value)
+      case GreaterThanOrEqual(LENGTH, value: Long) => Some(_.getLen >= value)
+      case EqualTo(LENGTH, value: Long) => Some(_.getLen == value)
       case LessThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime < value.getTime
+        Some(_.getModificationTime < value.getTime)
       case LessThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime <= value.getTime
+        Some(_.getModificationTime <= value.getTime)
       case GreaterThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime > value.getTime
+        Some(_.getModificationTime > value.getTime)
       case GreaterThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime >= value.getTime
+        Some(_.getModificationTime >= value.getTime)
       case EqualTo(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime == value.getTime
-
-      case _ => (_ => true)
+        Some(_.getModificationTime == value.getTime)
+      case _ => None
     }
   }
 }

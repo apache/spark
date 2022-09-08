@@ -449,7 +449,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.log.layout</code></td>
-  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
+  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex</td>
   <td>
     The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
@@ -1438,6 +1438,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.3</td>
 </tr>
 <tr>
+  <td><code>spark.ui.timelineEnabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to display event timeline data on UI pages.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.timeline.executors.maximum</code></td>
   <td>250</td>
   <td>
@@ -1522,7 +1530,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
-    Default unit is bytes, unless otherwise specified.
+    Default unit is bytes, unless otherwise specified. This configuration only applies to
+    `spark.io.compression.codec`.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1532,7 +1541,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size in Snappy compression, in the case when Snappy compression codec is used. 
     Lowering this block size will also lower shuffle memory usage when Snappy is used.
-    Default unit is bytes, unless otherwise specified.
+    Default unit is bytes, unless otherwise specified. This configuration only applies
+    to `spark.io.compression.codec`.
   </td>
   <td>1.4.0</td>
 </tr>
@@ -1541,7 +1551,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>1</td>
   <td>
     Compression level for Zstd compression codec. Increasing the compression level will result in better
-    compression at the expense of more CPU and memory.
+    compression at the expense of more CPU and memory. This configuration only applies to 
+    `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1551,7 +1562,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Buffer size in bytes used in Zstd compression, in the case when Zstd compression codec
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
-    might increase the compression cost because of excessive JNI call overhead.
+    might increase the compression cost because of excessive JNI call overhead. This
+    configuration only applies to `spark.io.compression.codec`.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -2091,23 +2103,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
-  <td><code>spark.rpc.numRetries</code></td>
-  <td>3</td>
-  <td>
-    Number of times to retry before an RPC task gives up.
-    An RPC task will run at most times of this number.
-  </td>
-  <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.rpc.retry.wait</code></td>
-  <td>3s</td>
-  <td>
-    Duration for an RPC ask operation to wait before retrying.
-  </td>
-  <td>1.4.0</td>
-</tr>
-<tr>
   <td><code>spark.rpc.askTimeout</code></td>
   <td><code>spark.network.timeout</code></td>
   <td>
@@ -2486,6 +2481,41 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.speculation.efficiency.processRateMultiplier</code></td>
+  <td>0.75</td>
+  <td>
+    A multiplier that used when evaluating inefficient tasks. The higher the multiplier
+    is, the more tasks will be possibly considered as inefficient.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.efficiency.longRunTaskFactor</code></td>
+  <td>2</td>
+  <td>
+    A task will be speculated anyway as long as its duration has exceeded the value of multiplying
+    the factor and the time threshold (either be <code>spark.speculation.multiplier</code>
+    * successfulTaskDurations.median or <code>spark.speculation.minTaskRuntime</code>) regardless
+    of it's data process rate is good or not. This avoids missing the inefficient tasks when task
+    slow isn't related to data process rate.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.efficiency.enabled</code></td>
+  <td>true</td>
+  <td>
+    When set to true, spark will evaluate the efficiency of task processing through the stage task
+    metrics or its duration, and only need to speculate the inefficient tasks. A task is inefficient
+    when 1)its data process rate is less than the average data process rate of all successful tasks
+    in the stage multiplied by a multiplier or 2)its duration has exceeded the value of multiplying
+     <code>spark.speculation.efficiency.longRunTaskFactor</code> and the time threshold (either be
+     <code>spark.speculation.multiplier</code> * successfulTaskDurations.median or
+    <code>spark.speculation.minTaskRuntime</code>).
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
@@ -2734,9 +2764,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
-    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    Enables shuffle file tracking for executors, which allows dynamic allocation
     without the need for an external shuffle service. This option will try to keep alive executors
     that are storing shuffle data for active jobs.
   </td>
@@ -3213,7 +3243,7 @@ See your cluster manager specific page for requirements and details on each of -
 # Stage Level Scheduling Overview
 
 The stage level scheduling feature allows users to specify task and executor resource requirements at the stage level. This allows for different stages to run with executors that have different resources. A prime example of this is one ETL stage runs with executors with just CPUs, the next stage is an ML stage that needs GPUs. Stage level scheduling allows for user to request different executors that have GPUs when the ML stage runs rather then having to acquire executors with GPUs at the start of the application and them be idle while the ETL stage is being run.
-This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN and Kubernetes when dynamic allocation is enabled. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page for more implementation details.
+This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN, Kubernetes and Standalone when dynamic allocation is enabled. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page or [Standalone](spark-standalone.html#stage-level-scheduling-overview) page for more implementation details.
 
 See the `RDD.withResources` and `ResourceProfileBuilder` API's for using this feature. The current implementation acquires new executors for each `ResourceProfile`  created and currently has to be an exact match. Spark does not try to fit tasks into an executor that require a different ResourceProfile than the executor was created with. Executors that are not in use will idle timeout with the dynamic allocation logic. The default configuration for this feature is to only allow one ResourceProfile per stage. If the user associates more then 1 ResourceProfile to an RDD, Spark will throw an exception by default. See config `spark.scheduler.resource.profileMergeConflicts` to control that behavior. The current merge strategy Spark implements when `spark.scheduler.resource.profileMergeConflicts` is enabled is a simple max of each resource within the conflicting ResourceProfiles. Spark will create a new ResourceProfile with the max of each of the resources.
 

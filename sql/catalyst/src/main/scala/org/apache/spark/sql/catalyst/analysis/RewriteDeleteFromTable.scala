@@ -20,17 +20,16 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, Expression, Not}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, ReplaceData}
-import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRowLevelOperations, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLevelOperations, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites DELETE operations using plans that operate on individual or groups of rows.
  *
- * If a table implements [[SupportsDelete]] and [[SupportsRowLevelOperations]], this rule will
+ * If a table implements [[SupportsDeleteV2]] and [[SupportsRowLevelOperations]], this rule will
  * still rewrite the DELETE operation but the optimizer will check whether this particular DELETE
  * statement can be handled by simply passing delete filters to the connector. If so, the optimizer
  * will discard the rewritten plan and will allow the data source to delete using filters.
@@ -48,12 +47,9 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
           val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
           buildReplaceDataPlan(r, table, cond)
 
-        case DataSourceV2Relation(_: SupportsDelete, _, _, _, _) =>
+        case DataSourceV2Relation(_: SupportsDeleteV2, _, _, _, _) =>
           // don't rewrite as the table supports deletes only with filters
           d
-
-        case DataSourceV2Relation(t, _, _, _, _) =>
-          throw QueryCompilationErrors.tableDoesNotSupportDeletesError(t)
 
         case _ =>
           d

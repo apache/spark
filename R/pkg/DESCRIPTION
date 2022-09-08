@@ -3,13 +3,10 @@ Type: Package
 Version: 3.4.0
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
-Authors@R: c(person("Shivaram", "Venkataraman", role = "aut",
-                    email = "shivaram@cs.berkeley.edu"),
-             person("Xiangrui", "Meng", role = "aut",
-                    email = "meng@databricks.com"),
-             person("Felix", "Cheung", role = c("aut", "cre"),
-                    email = "felixcheung@apache.org"),
-             person(family = "The Apache Software Foundation", role = c("aut", "cph")))
+Authors@R:
+    person(family = "The Apache Software Foundation",
+           email = "dev@spark.apache.org",
+           role = c("aut", "cre", "cph"))
 License: Apache License (== 2.0)
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html

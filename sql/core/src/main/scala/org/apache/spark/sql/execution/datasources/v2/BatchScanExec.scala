@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeV2Filtering}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -37,7 +37,9 @@ case class BatchScanExec(
     output: Seq[AttributeReference],
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
-    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None,
+    @transient table: Table) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 
@@ -55,7 +57,7 @@ case class BatchScanExec(
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceStrategy.translateRuntimeFilter(e)
+      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
       case _ => None
     }
 
@@ -63,7 +65,7 @@ case class BatchScanExec(
       val originalPartitioning = outputPartitioning
 
       // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeFiltering]
+      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
       filterableScan.filter(dataSourceFilters.toArray)
 
       // call toBatch again to get filtered partitions
@@ -108,13 +110,15 @@ case class BatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
+    val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
     }
+    postDriverMetrics()
+    rdd
   }
 
   override def doCanonicalize(): BatchScanExec = {
@@ -130,5 +134,9 @@ case class BatchScanExec(
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
     val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
     redact(result)
+  }
+
+  override def nodeName: String = {
+    s"BatchScan ${table.name()}".trim
   }
 }

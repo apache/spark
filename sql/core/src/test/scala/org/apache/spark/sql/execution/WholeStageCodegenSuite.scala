@@ -42,7 +42,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("HashAggregate should be included in WholeStageCodegen") {
-    val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
+    val df = spark.range(10).agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.exists(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -762,10 +762,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           "SELECT AVG(v) FROM VALUES(1) t(v)",
           // Tet case with keys
           "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
-          val errMsg = intercept[IllegalStateException] {
+          val e = intercept[IllegalStateException] {
             sql(query).collect
-          }.getMessage
-          assert(errMsg.contains(expectedErrMsg))
+          }
+          assert(e.getMessage.contains(expectedErrMsg))
         }
       }
     }
@@ -784,10 +784,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           // Tet case with keys
           "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
             "GROUP BY k").foreach { query =>
-          val e = intercept[Exception] {
+          val e = intercept[IllegalStateException] {
             sql(query).collect
           }
-          assert(e.isInstanceOf[IllegalStateException])
           assert(e.getMessage.contains(expectedErrMsg))
         }
       }

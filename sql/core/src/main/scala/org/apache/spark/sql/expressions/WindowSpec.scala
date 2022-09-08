@@ -94,7 +94,7 @@ class WindowSpec private[sql](
    * An offset indicates the number of rows above or below the current row, the frame for the
    * current row starts or ends. For instance, given a row based sliding frame with a lower bound
    * offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-   * index 4 to index 6.
+   * index 4 to index 7.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window

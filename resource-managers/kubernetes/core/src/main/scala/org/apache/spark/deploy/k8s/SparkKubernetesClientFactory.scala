@@ -88,7 +88,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     // Start from an auto-configured config with the desired context
     // Fabric 8 uses null to indicate that the users current context should be used so if no
     // explicit setting pass null
-    val config = new ConfigBuilder(autoConfigure(kubeContext.getOrElse(null)))
+    val config = new ConfigBuilder(autoConfigure(kubeContext.orNull))
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withRequestTimeout(clientType.requestTimeout(sparkConf))

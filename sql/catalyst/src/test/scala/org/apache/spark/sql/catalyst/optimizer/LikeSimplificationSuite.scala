@@ -232,4 +232,33 @@ class LikeSimplificationSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-39251: Simplify MultiLike if remainPatterns is empty") {
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" likeAll("abc%")).analyze),
+      testRelation.where(StartsWith($"a", "abc")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" notLikeAll("abc%")).analyze),
+      testRelation.where(Not(StartsWith($"a", "abc"))).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" likeAny("abc%")).analyze),
+      testRelation.where(StartsWith($"a", "abc")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" notLikeAny("abc%")).analyze),
+      testRelation.where(Not(StartsWith($"a", "abc"))).analyze)
+  }
+
+  test("SPARK-40228: Simplify multiLike if child is foldable expression") {
+    comparePlans(Optimize.execute(testRelation.where("a" likeAny("abc%", "", "ab")).analyze),
+      testRelation.where(StartsWith("a", "abc") || EqualTo("a", "") || EqualTo("a", "ab")).analyze)
+  }
+
+  test("SPARK-40228: Do not simplify multiLike if child is not a cheap expression") {
+    val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
 }

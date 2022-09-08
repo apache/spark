@@ -17,22 +17,36 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-abstract class AverageBase
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       2.0
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
+       1.5
+  """,
+  group = "agg_funcs",
+  since = "1.0.0")
+case class Average(
+    child: Expression,
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
   extends DeclarativeAggregate
   with ImplicitCastInputTypes
+  with SupportQueryContext
   with UnaryLike[Expression] {
 
-  // Whether to use ANSI add or not during the execution.
-  def useAnsiAdd: Boolean
+  def this(child: Expression) = this(child, EvalMode.fromSQLConf(SQLConf.get))
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
@@ -67,6 +81,11 @@ abstract class AverageBase
   lazy val sum = AttributeReference("sum", sumDataType)()
   lazy val count = AttributeReference("count", LongType)()
 
+  protected def add(left: Expression, right: Expression): Expression = left.dataType match {
+    case _: DecimalType => DecimalAddNoOverflowCheck(left, right, left.dataType)
+    case _ => Add(left, right, evalMode)
+  }
+
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
@@ -74,19 +93,23 @@ abstract class AverageBase
     /* count = */ Literal(0L)
   )
 
-  protected def getMergeExpressions = Seq(
-    /* sum = */ Add(sum.left, sum.right, useAnsiAdd),
+  override lazy val mergeExpressions = Seq(
+    /* sum = */ add(sum.left, sum.right),
     /* count = */ count.left + count.right
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  protected def getEvaluateExpression = child.dataType match {
+  override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal()(
-        Divide(
-          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
-          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, resultType),
+        DecimalDivideWithOverflowCheck(
+          sum,
+          count.cast(DecimalType.LongDecimal),
+          resultType.asInstanceOf[DecimalType],
+          getContextOrNull(),
+          evalMode != EvalMode.ANSI))
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
@@ -94,46 +117,28 @@ abstract class AverageBase
       If(EqualTo(count, Literal(0L)),
         Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
-      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
+      Divide(sum.cast(resultType), count.cast(resultType), EvalMode.LEGACY)
   }
 
-  protected def getUpdateExpressions: Seq[Expression] = Seq(
+  override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
-    Add(
+    add(
       sum,
-      coalesce(child.cast(sumDataType), Literal.default(sumDataType)),
-      failOnError = useAnsiAdd),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
   // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
-       2.0
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
-       1.5
-  """,
-  group = "agg_funcs",
-  since = "1.0.0")
-case class Average(
-    child: Expression,
-    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled) extends AverageBase {
-  def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
 
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
 
-  override lazy val updateExpressions: Seq[Expression] = getUpdateExpressions
-
-  override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
-
-  override lazy val evaluateExpression: Expression = getEvaluateExpression
+  override def initQueryContext(): Option[SQLQueryContext] = if (evalMode == EvalMode.ANSI) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -151,52 +156,13 @@ case class Average(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class TryAverage(child: Expression) extends AverageBase {
-  override def useAnsiAdd: Boolean = resultType match {
-    // Double type won't fail, thus we can always use non-Ansi Add.
-    // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
-    // `failOnError` is false.
-    case _: DoubleType | _: DecimalType => false
-    case _ => true
-  }
-
-  private def addTryEvalIfNeeded(expression: Expression): Expression = {
-    if (useAnsiAdd) {
-      TryEval(expression)
+object TryAverageExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      Average(expressions.head, EvalMode.TRY)
     } else {
-      expression
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
     }
   }
-
-  override lazy val updateExpressions: Seq[Expression] = {
-    val expressions = getUpdateExpressions
-    addTryEvalIfNeeded(expressions.head) +: expressions.tail
-  }
-
-  override lazy val mergeExpressions: Seq[Expression] = {
-    val expressions = getMergeExpressions
-    if (useAnsiAdd) {
-      val bufferOverflow = sum.left.isNull && count.left > 0L
-      val inputOverflow = sum.right.isNull && count.right > 0L
-      Seq(
-        If(
-          bufferOverflow || inputOverflow,
-          Literal.create(null, resultType),
-          // If both the buffer and the input do not overflow, just add them, as they can't be
-          // null.
-          TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), useAnsiAdd))),
-          expressions(1))
-    } else {
-      expressions
-    }
-  }
-
-  override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(getEvaluateExpression)
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
-
-  override def prettyName: String = "try_avg"
 }

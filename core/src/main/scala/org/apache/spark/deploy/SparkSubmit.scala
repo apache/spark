@@ -1022,6 +1022,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
 
   override def main(args: Array[String]): Unit = {
+    Option(System.getenv("SPARK_PREFER_IPV6"))
+      .foreach(System.setProperty("java.net.preferIPv6Addresses", _))
     val submit = new SparkSubmit() {
       self =>
 

@@ -46,7 +46,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
   Utils => collectionUtils}
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -547,7 +547,6 @@ abstract class RDD[T: ClassTag](
       s"Fraction must be nonnegative, but got ${fraction}")
 
     withScope {
-      require(fraction >= 0.0, "Negative fraction value: " + fraction)
       if (withReplacement) {
         new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
       } else {
@@ -1249,18 +1248,12 @@ abstract class RDD[T: ClassTag](
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
       if (finalAggregateOnExecutor && partiallyAggregated.partitions.length > 1) {
-        // define a new partitioner that results in only 1 partition
-        val constantPartitioner = new Partitioner {
-          override def numPartitions: Int = 1
-
-          override def getPartition(key: Any): Int = 0
-        }
         // map the partially aggregated rdd into a key-value rdd
         // do the computation in the single executor with one partition
         // get the new RDD[U]
         partiallyAggregated = partiallyAggregated
           .map(v => (0.toByte, v))
-          .foldByKey(zeroValue, constantPartitioner)(cleanCombOp)
+          .foldByKey(zeroValue, new ConstantPartitioner)(cleanCombOp)
           .values
       }
       val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
@@ -1451,12 +1444,12 @@ abstract class RDD[T: ClassTag](
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1L
+        var numPartsToTry = conf.get(RDD_LIMIT_INITIAL_NUM_PARTITIONS)
         val left = num - buf.size
         if (partsScanned > 0) {
-          // If we didn't find any rows after the previous iteration, quadruple and retry.
-          // Otherwise, interpolate the number of partitions we need to try, but overestimate
-          // it by 50%. We also cap the estimation in the end.
+          // If we didn't find any rows after the previous iteration, multiply by
+          // limitScaleUpFactor and retry. Otherwise, interpolate the number of partitions we need
+          // to try, but overestimate it by 50%. We also cap the estimation in the end.
           if (buf.isEmpty) {
             numPartsToTry = partsScanned * scaleUpFactor
           } else {
@@ -1530,22 +1523,24 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
-    if (num == 0) {
+    if (num == 0 || this.getNumPartitions == 0) {
       Array.empty
     } else {
-      val mapRDDs = mapPartitions { items =>
-        // Priority keeps the largest elements, so let's reverse the ordering.
-        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-        queue ++= collectionUtils.takeOrdered(items, num)(ord)
-        Iterator.single(queue)
-      }
-      if (mapRDDs.partitions.length == 0) {
-        Array.empty
-      } else {
-        mapRDDs.reduce { (queue1, queue2) =>
-          queue1 ++= queue2
-          queue1
-        }.toArray.sorted(ord)
+      this.mapPartitionsWithIndex { case (pid, iter) =>
+        if (iter.nonEmpty) {
+          // Priority keeps the largest elements, so let's reverse the ordering.
+          Iterator.single(collectionUtils.takeOrdered(iter, num)(ord).toArray)
+        } else if (pid == 0) {
+          // make sure partition 0 always returns an array to avoid reduce on empty RDD
+          Iterator.single(Array.empty[T])
+        } else {
+          Iterator.empty
+        }
+      }.reduce { (array1, array2) =>
+        val size = math.min(num, array1.length + array2.length)
+        val array = Array.ofDim[T](size)
+        collectionUtils.mergeOrdered[T](Seq(array1, array2))(ord).copyToArray(array, 0, size)
+        array
       }
     }
   }
@@ -1816,7 +1811,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   @Since("3.1.0")
-  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  def getResourceProfile(): ResourceProfile = resourceProfile.orNull
 
   // =======================================================================
   // Other internal methods and fields

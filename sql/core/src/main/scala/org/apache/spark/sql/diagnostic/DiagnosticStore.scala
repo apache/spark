@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.diagnostic
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.annotation.JsonIgnore
 
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
@@ -29,10 +28,10 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
  * information. There's no state kept in this class, so it's ok to have multiple instances
  * of it in an application.
  */
-class DiagnosticStore(store: KVStore) {
+private[spark] class DiagnosticStore(store: KVStore) {
 
   def diagnosticsList(offset: Int, length: Int): Seq[ExecutionDiagnosticData] = {
-    store.view(classOf[ExecutionDiagnosticData]).skip(offset).max(length).asScala.toSeq
+    KVUtils.viewToSeq(store.view(classOf[ExecutionDiagnosticData]).skip(offset).max(length))
   }
 
   def diagnostic(executionId: Long): Option[ExecutionDiagnosticData] = {
@@ -44,16 +43,15 @@ class DiagnosticStore(store: KVStore) {
   }
 
   def adaptiveExecutionUpdates(executionId: Long): Seq[AdaptiveExecutionUpdate] = {
+    KVUtils.viewToSeq(
     store.view(classOf[AdaptiveExecutionUpdate])
       .index("updateTime")
-      .parent(executionId)
-      .asScala
-      .toSeq
+      .parent(executionId))
   }
 }
 
 /* Represents the diagnostic data of a SQL execution */
-class ExecutionDiagnosticData(
+private[spark] class ExecutionDiagnosticData(
     @KVIndexParam val executionId: Long,
     val physicalPlan: String,
     val submissionTime: Long,
@@ -61,7 +59,7 @@ class ExecutionDiagnosticData(
     val errorMessage: Option[String])
 
 /* Represents the plan change of an adaptive execution */
-class AdaptiveExecutionUpdate(
+private[spark] class AdaptiveExecutionUpdate(
     @KVIndexParam("id")
     val executionId: Long,
     @KVIndexParam(value = "updateTime", parent = "id")

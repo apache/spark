@@ -20,7 +20,6 @@ package org.apache.spark.status
 import java.io.File
 import java.util.{Date, Properties}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
 
@@ -1671,7 +1670,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
 
     // check peak executor metric values for each stage and executor
-    val stageExecSummaries = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.toSeq
+    val stageExecSummaries = KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]))
     stageExecSummaries.foreach { exec =>
       expectedStageValues.get(exec.stageId) match {
         case Some(stageValue) =>

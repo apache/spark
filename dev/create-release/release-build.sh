@@ -265,7 +265,12 @@ if [[ "$1" == "package" ]]; then
     # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
     # to dev0 to be closer to PEP440.
     PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -e "s/-/./" -e "s/SNAPSHOT/dev0/" -e "s/preview/dev/"`
-    echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
+
+    if [[ $SPARK_VERSION == 3.0* ]] || [[ $SPARK_VERSION == 3.1* ]] || [[ $SPARK_VERSION == 3.2* ]]; then
+      echo "__version__ = '$PYSPARK_VERSION'" > python/pyspark/version.py
+    else
+      echo "__version__: str = '$PYSPARK_VERSION'" > python/pyspark/version.py
+    fi
 
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
@@ -283,9 +288,7 @@ if [[ "$1" == "package" ]]; then
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
         --output $R_DIST_NAME.asc \
         --detach-sig $R_DIST_NAME
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        SHA512 $R_DIST_NAME > \
-        $R_DIST_NAME.sha512
+      shasum -a 512 $R_DIST_NAME > $R_DIST_NAME.sha512
     fi
 
     if [[ -n $PIP_FLAG ]]; then
@@ -296,9 +299,7 @@ if [[ "$1" == "package" ]]; then
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
         --output $PYTHON_DIST_NAME.asc \
         --detach-sig $PYTHON_DIST_NAME
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        SHA512 $PYTHON_DIST_NAME > \
-        $PYTHON_DIST_NAME.sha512
+      shasum -a 512 $PYTHON_DIST_NAME > $PYTHON_DIST_NAME.sha512
     fi
 
     echo "Copying and signing regular binary distribution"
@@ -306,9 +307,7 @@ if [[ "$1" == "package" ]]; then
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
-    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-      SHA512 spark-$SPARK_VERSION-bin-$NAME.tgz > \
-      spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
+    shasum -a 512 spark-$SPARK_VERSION-bin-$NAME.tgz > spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
   }
 
   # List of binary packages built. Populates two associative arrays, where the key is the "name" of

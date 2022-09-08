@@ -17,7 +17,13 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.classification.ClassifierParams
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -25,7 +31,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 
-private[spark] object DatasetUtils {
+private[spark] object DatasetUtils extends Logging {
 
   private[ml] def checkNonNanValues(colName: String, displayed: String): Column = {
     val casted = col(colName).cast(DoubleType)
@@ -96,6 +102,26 @@ private[spark] object DatasetUtils {
     }
   }
 
+  private[ml] def extractInstances(
+      p: PredictorParams,
+      df: Dataset[_],
+      numClasses: Option[Int] = None): RDD[Instance] = {
+    val labelCol = p match {
+      case c: ClassifierParams =>
+        checkClassificationLabels(c.getLabelCol, numClasses)
+      case _ => // TODO: there is no RegressorParams, maybe add it in the future?
+        checkRegressionLabels(p.getLabelCol)
+    }
+
+    val weightCol = p match {
+      case w: HasWeightCol => checkNonNegativeWeights(w.get(w.weightCol))
+      case _ => lit(1.0)
+    }
+
+    df.select(labelCol, weightCol, checkNonNanVectors(p.getFeaturesCol))
+      .rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
+  }
+
   /**
    * Cast a column in a Dataset to Vector type.
    *
@@ -136,6 +162,60 @@ private[spark] object DatasetUtils {
     dataset.select(columnToVector(dataset, colName))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
+    }
+  }
+
+  /**
+   * Get the number of classes.  This looks in column metadata first, and if that is missing,
+   * then this assumes classes are indexed 0,1,...,numClasses-1 and computes numClasses
+   * by finding the maximum label value.
+   *
+   * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
+   * such as in `extractLabeledPoints()`.
+   *
+   * @param dataset  Dataset which contains a column [[labelCol]]
+   * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
+   *                       is specified in the metadata, then maxNumClasses is ignored.
+   * @return  number of classes
+   * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
+   *                                   actual numClasses exceeds maxNumClasses
+   */
+  private[ml] def getNumClasses(
+      dataset: Dataset[_],
+      labelCol: String,
+      maxNumClasses: Int = 100): Int = {
+    MetadataUtils.getNumClasses(dataset.schema(labelCol)) match {
+      case Some(n: Int) => n
+      case None =>
+        // Get number of classes from dataset itself.
+        val maxLabelRow: Array[Row] = dataset
+          .select(max(checkClassificationLabels(labelCol, Some(maxNumClasses))))
+          .take(1)
+        if (maxLabelRow.isEmpty || maxLabelRow(0).get(0) == null) {
+          throw new SparkException("ML algorithm was given empty dataset.")
+        }
+        val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)
+        require((maxDoubleLabel + 1).isValidInt, s"Classifier found max label value =" +
+          s" $maxDoubleLabel but requires integers in range [0, ... ${Int.MaxValue})")
+        val numClasses = maxDoubleLabel.toInt + 1
+        require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
+          s" in column $labelCol, but this exceeded the max numClasses ($maxNumClasses) allowed" +
+          s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
+          s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
+          s" StringIndexer to the label column.")
+        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
+          s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
+        numClasses
+    }
+  }
+
+  /**
+   * Obtain the number of features in a vector column.
+   * If no metadata is available, extract it from the dataset.
+   */
+  private[ml] def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
+    MetadataUtils.getNumFeatures(dataset.schema(vectorCol)).getOrElse {
+      dataset.select(columnToVector(dataset, vectorCol)).head.getAs[Vector](0).size
     }
   }
 }

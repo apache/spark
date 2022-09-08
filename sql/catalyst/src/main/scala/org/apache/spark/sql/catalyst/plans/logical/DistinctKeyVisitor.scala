@@ -29,25 +29,21 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   private def projectDistinctKeys(
       keys: Set[ExpressionSet], projectList: Seq[NamedExpression]): Set[ExpressionSet] = {
     val outputSet = ExpressionSet(projectList.map(_.toAttribute))
-    val aliases = projectList.filter(_.isInstanceOf[Alias])
+    val aliases = projectList.collect {
+      // TODO: Expand distinctKeys for redundant aliases on the same expression
+      case alias: Alias if alias.child.deterministic => alias.child.canonicalized -> alias
+    }.toMap
     if (aliases.isEmpty) {
       keys.filter(_.subsetOf(outputSet))
     } else {
-      val aliasedDistinctKeys = keys.map { expressionSet =>
-        expressionSet.map { expression =>
-          expression transform {
-            case expr: Expression =>
-              // TODO: Expand distinctKeys for redundant aliases on the same expression
-              aliases
-                .collectFirst { case a: Alias if a.child.semanticEquals(expr) => a.toAttribute }
-                .getOrElse(expr)
-          }
-        }
-      }
+      val aliasedDistinctKeys = keys.map(_.map(_.transform {
+        case expr: Expression =>
+          aliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
+      }))
       aliasedDistinctKeys.collect {
         case es: ExpressionSet if es.subsetOf(outputSet) => ExpressionSet(es)
       } ++ keys.filter(_.subsetOf(outputSet))
-    }.filter(_.nonEmpty)
+    }
   }
 
   /**
@@ -69,7 +65,8 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   override def default(p: LogicalPlan): Set[ExpressionSet] = Set.empty[ExpressionSet]
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
-    val groupingExps = ExpressionSet(p.groupingExpressions) // handle group by a, a
+    // handle group by a, a and global aggregate
+    val groupingExps = ExpressionSet(p.groupingExpressions)
     projectDistinctKeys(addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
   }
 

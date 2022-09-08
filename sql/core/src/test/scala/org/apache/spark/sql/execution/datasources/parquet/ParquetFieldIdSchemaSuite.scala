@@ -39,14 +39,16 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: String,
       caseSensitive: Boolean = true,
-      useFieldId: Boolean = true): Unit = {
+      useFieldId: Boolean = true,
+      timestampNTZEnabled: Boolean = true): Unit = {
     test(s"Clipping with field id - $testName") {
       val fileSchema = MessageTypeParser.parseMessageType(parquetSchema)
       val actual = ParquetReadSupport.clipParquetSchema(
         fileSchema,
         catalystSchema,
         caseSensitive = caseSensitive,
-        useFieldId = useFieldId)
+        useFieldId = useFieldId,
+        timestampNTZEnabled = timestampNTZEnabled)
 
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))

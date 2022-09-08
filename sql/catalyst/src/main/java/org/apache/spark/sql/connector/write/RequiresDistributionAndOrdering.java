@@ -48,6 +48,18 @@ public interface RequiresDistributionAndOrdering extends Write {
   Distribution requiredDistribution();
 
   /**
+   * Returns if the distribution required by this write is strictly required or best effort only.
+   * <p>
+   * If true, Spark will strictly distribute incoming records across partitions to satisfy
+   * the required distribution before passing the records to the data source table on write.
+   * Otherwise, Spark may apply certain optimizations to speed up the query but break
+   * the distribution requirement.
+   *
+   * @return true if the distribution required by this write is strictly required; false otherwise.
+   */
+  default boolean distributionStrictlyRequired() { return true; }
+
+  /**
    * Returns the number of partitions required by this write.
    * <p>
    * Implementations may override this to require a specific number of input partitions.

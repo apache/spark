@@ -138,6 +138,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
 
     from pyspark.pandas.groupby import DataFrameGroupBy
+    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.series import Series
 
@@ -358,11 +359,9 @@ class DataFrame(Frame, Generic[T]):
 
     Parameters
     ----------
-    data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
-        or pandas-on-Spark Series
+    data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame,
+        Spark DataFrame, pandas-on-Spark DataFrame or pandas-on-Spark Series.
         Dict can contain Series, arrays, constants, or list-like objects
-        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
-        other arguments should not be used.
     index : Index or array-like
         Index to use for resulting frame. Will default to RangeIndex if
         no indexing information part of input data and no index provided
@@ -373,6 +372,17 @@ class DataFrame(Frame, Generic[T]):
         Data type to force. Only a single dtype is allowed. If None, infer
     copy : boolean, default False
         Copy data from inputs. Only affects DataFrame / 2d ndarray input
+
+    .. versionchanged:: 3.4.0
+        Since 3.4.0, it deals with `data` and `index` in this approach:
+        1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
+        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
+        the `index` if necessary, and then try to combine the `data` and `index`;
+        Note that if `data` and `index` doesn't have the same anchor, then
+        `compute.ops_on_diff_frames` should be turned on;
+        2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
+        it will first collect the `index` to driver if necessary, and then apply
+        the `Pandas.DataFrame(...)` creation internally;
 
     Examples
     --------
@@ -410,49 +420,168 @@ class DataFrame(Frame, Generic[T]):
 
     Constructing DataFrame from numpy ndarray:
 
-    >>> df2 = ps.DataFrame(np.random.randint(low=0, high=10, size=(5, 5)),
-    ...                    columns=['a', 'b', 'c', 'd', 'e'])
-    >>> df2  # doctest: +SKIP
+    >>> import numpy as np
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
        a  b  c  d  e
-    0  3  1  4  9  8
-    1  4  8  4  8  4
-    2  7  6  5  6  7
-    3  8  7  9  1  0
-    4  2  5  4  3  9
+    0  1  2  3  4  5
+    1  6  7  8  9  0
+
+    Constructing DataFrame from numpy ndarray with Pandas index:
+
+    >>> import numpy as np
+    >>> import pandas as pd
+
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     index=pd.Index([1, 4]), columns=['a', 'b', 'c', 'd', 'e'])
+       a  b  c  d  e
+    1  1  2  3  4  5
+    4  6  7  8  9  0
+
+    Constructing DataFrame from numpy ndarray with pandas-on-Spark index:
+
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> ps.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     index=ps.Index([1, 4]), columns=['a', 'b', 'c', 'd', 'e'])
+       a  b  c  d  e
+    1  1  2  3  4  5
+    4  6  7  8  9  0
+
+    Constructing DataFrame from Pandas DataFrame with Pandas index:
+
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
+    >>> ps.DataFrame(data=pdf, index=pd.Index([1, 4]))
+         a    b    c    d    e
+    1  6.0  7.0  8.0  9.0  0.0
+    4  NaN  NaN  NaN  NaN  NaN
+
+    Constructing DataFrame from Pandas DataFrame with pandas-on-Spark index:
+
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> pdf = pd.DataFrame(data=np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 0]]),
+    ...     columns=['a', 'b', 'c', 'd', 'e'])
+    >>> ps.DataFrame(data=pdf, index=ps.Index([1, 4]))
+         a    b    c    d    e
+    1  6.0  7.0  8.0  9.0  0.0
+    4  NaN  NaN  NaN  NaN  NaN
+
+    Constructing DataFrame from Spark DataFrame with Pandas index:
+
+    >>> import pandas as pd
+    >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
+    >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+    Traceback (most recent call last):
+      ...
+    ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
+
+    Enable 'compute.ops_on_diff_frames' to combine SparkDataFrame and Pandas index
+
+    >>> with ps.option_context("compute.ops_on_diff_frames", True):
+    ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+            x    y
+    0    Data  1.0
+    1  Bricks  2.0
+    2    None  NaN
+
+    Constructing DataFrame from Spark DataFrame with pandas-on-Spark index:
+
+    >>> import pandas as pd
+    >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
+    >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+    Traceback (most recent call last):
+      ...
+    ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
+
+    Enable 'compute.ops_on_diff_frames' to combine Spark DataFrame and pandas-on-Spark index
+
+    >>> with ps.option_context("compute.ops_on_diff_frames", True):
+    ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+            x    y
+    0    Data  1.0
+    1  Bricks  2.0
+    2    None  NaN
     """
 
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
+        index_assigned = False
         if isinstance(data, InternalFrame):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            internal = data
+            if index is None:
+                internal = data
         elif isinstance(data, SparkDataFrame):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            internal = InternalFrame(spark_frame=data, index_spark_columns=None)
+            if index is None:
+                internal = InternalFrame(spark_frame=data, index_spark_columns=None)
+        elif isinstance(data, ps.DataFrame):
+            assert columns is None
+            assert dtype is None
+            assert not copy
+            if index is None:
+                internal = data._internal
         elif isinstance(data, ps.Series):
-            assert index is None
             assert columns is None
             assert dtype is None
             assert not copy
-            data = data.to_frame()
-            internal = data._internal
+            if index is None:
+                internal = data.to_frame()._internal
         else:
-            if isinstance(data, pd.DataFrame):
-                assert index is None
-                assert columns is None
-                assert dtype is None
-                assert not copy
-                pdf = data
-            else:
-                pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
+            from pyspark.pandas.indexes.base import Index
+
+            if index is not None and isinstance(index, Index):
+                # with local data, collect ps.Index to driver
+                # to avoid mismatched results between
+                # ps.DataFrame([1, 2], index=ps.Index([1, 2]))
+                # and
+                # pd.DataFrame([1, 2], index=pd.Index([1, 2]))
+                index = index._to_pandas()
+
+            pdf = pd.DataFrame(data=data, index=index, columns=columns, dtype=dtype, copy=copy)
             internal = InternalFrame.from_pandas(pdf)
+            index_assigned = True
+
+        if index is not None and not index_assigned:
+            # TODO(SPARK-40226): Support MultiIndex
+            if isinstance(index, (ps.MultiIndex, pd.MultiIndex)):
+                raise ValueError("Cannot combine a Distributed Dataset with a MultiIndex")
+
+            data_df = ps.DataFrame(data=data, index=None, columns=columns, dtype=dtype, copy=copy)
+            index_ps = ps.Index(index)
+            index_df = index_ps.to_frame()
+
+            if same_anchor(data_df, index_df):
+                data_labels = data_df._internal.column_labels
+                data_pssers = [data_df._psser_for(label) for label in data_labels]
+                index_labels = index_df._internal.column_labels
+                index_pssers = [index_df._psser_for(label) for label in index_labels]
+                internal = data_df._internal.with_new_columns(data_pssers + index_pssers)
+
+                combined = ps.DataFrame(internal).set_index(index_labels)
+                combined.index.name = index_ps.name
+            else:
+                # drop un-matched rows in `data`
+                # note that `combine_frames` can not work with a MultiIndex for now
+                combined = combine_frames(data_df, index_df, how="right")
+                combined_labels = combined._internal.column_labels
+                index_labels = [label for label in combined_labels if label[0] == "that"]
+                combined = combined.set_index(index_labels)
+
+                combined._internal._column_labels = data_df._internal.column_labels
+                combined._internal._column_label_names = data_df._internal._column_label_names
+                combined._internal._index_names = index_df._internal.column_labels
+                combined.index.name = index_ps.name
+
+            internal = combined._internal
 
         object.__setattr__(self, "_internal_frame", internal)
 
@@ -490,20 +619,30 @@ class DataFrame(Frame, Generic[T]):
         return cast(InternalFrame, self._internal_frame)  # type: ignore[has-type]
 
     def _update_internal_frame(
-        self, internal: InternalFrame, requires_same_anchor: bool = True
+        self,
+        internal: InternalFrame,
+        check_same_anchor: bool = True,
+        anchor_force_disconnect: bool = False,
     ) -> None:
         """
         Update InternalFrame with the given one.
 
-        If the column_label is changed or the new InternalFrame is not the same `anchor`,
-        disconnect the link to the Series and create a new one.
+        If the column_label is changed or the new InternalFrame is not the same `anchor` or the
+        `anchor_force_disconnect` flag is set to True, disconnect the original anchor and create
+        a new one.
 
-        If `requires_same_anchor` is `False`, checking whether or not the same anchor is ignored
+        If `check_same_anchor` is `False`, checking whether or not the same anchor is ignored
         and force to update the InternalFrame, e.g., replacing the internal with the resolved_copy,
         updating the underlying Spark DataFrame which need to combine a different Spark DataFrame.
 
-        :param internal: the new InternalFrame
-        :param requires_same_anchor: whether checking the same anchor
+        Parameters
+        ----------
+        internal : InternalFrame
+            The new InternalFrame
+        check_same_anchor : bool
+            Whether checking the same anchor
+        anchor_force_disconnect : bool
+            Force to disconnect the original anchor and create a new one
         """
         from pyspark.pandas.series import Series
 
@@ -517,9 +656,9 @@ class DataFrame(Frame, Generic[T]):
                     psser = self._pssers[old_label]
 
                     renamed = old_label != new_label
-                    not_same_anchor = requires_same_anchor and not same_anchor(internal, psser)
+                    not_same_anchor = check_same_anchor and not same_anchor(internal, psser)
 
-                    if renamed or not_same_anchor:
+                    if renamed or not_same_anchor or anchor_force_disconnect:
                         psdf: DataFrame = DataFrame(self._internal.select_column(old_label))
                         psser._update_anchor(psdf)
                         psser = None
@@ -550,11 +689,11 @@ class DataFrame(Frame, Generic[T]):
         >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
-        >>> df
+        >>> df  # doctest: +SKIP
                max_speed  shield
         cobra          1       2
         viper          4       5
-        NaN            7       8
+        None           7       8
         >>> df.ndim
         2
         """
@@ -583,6 +722,7 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = True,
         **kwargs: Any,
     ) -> "Series":
         """
@@ -600,6 +740,8 @@ class DataFrame(Frame, Generic[T]):
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
             currently.
+        skipna : bool, default True
+            Exclude NA/null values when computing the result.
         """
         from pyspark.pandas.series import Series, first_series
 
@@ -618,7 +760,10 @@ class DataFrame(Frame, Generic[T]):
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    scol = sfun(psser)
+                    if not skipna and get_option("compute.eager_check") and psser.hasnans:
+                        scol = F.first(F.lit(np.nan))
+                    else:
+                        scol = sfun(psser)
 
                     if min_count > 0:
                         scol = F.when(Frame._count_expr(psser) >= min_count, scol)
@@ -842,6 +987,12 @@ class DataFrame(Frame, Generic[T]):
     hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
 
     @no_type_check
+    def boxplot(self, **kwds):
+        return self.plot.box(**kwds)
+
+    boxplot.__doc__ = PandasOnSparkPlotAccessor.box.__doc__
+
+    @no_type_check
     def kde(self, bw_method=None, ind=None, **kwds):
         return self.plot.kde(bw_method, ind, **kwds)
 
@@ -935,14 +1086,14 @@ class DataFrame(Frame, Generic[T]):
     )
 
     def pow(self, other: Any) -> "DataFrame":
-        return self ** other
+        return self**other
 
     pow.__doc__ = _flex_doc_FRAME.format(
         desc="Exponential power of series", op_name="**", equiv="dataframe ** other", reverse="rpow"
     )
 
     def rpow(self, other: Any) -> "DataFrame":
-        return other ** self
+        return other**self
 
     rpow.__doc__ = _flex_doc_FRAME.format(
         desc="Exponential power", op_name="**", equiv="other ** dataframe", reverse="pow"
@@ -1309,6 +1460,157 @@ class DataFrame(Frame, Generic[T]):
           * `min_periods` argument is not supported
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
+
+    # TODO: add axis parameter and support more methods
+    def corrwith(
+        self, other: DataFrameOrSeries, drop: bool = False, method: str = "pearson"
+    ) -> "Series":
+        """
+        Compute pairwise correlation.
+
+        Pairwise correlation is computed between rows or columns of
+        DataFrame with rows or columns of Series or DataFrame. DataFrames
+        are first aligned along both axes before computing the
+        correlations.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : DataFrame, Series
+            Object with which to compute correlations.
+
+        drop : bool, default False
+            Drop missing indices from result.
+
+        method : str, default 'pearson'
+            Method of correlation, one of:
+
+            * pearson : standard correlation coefficient
+
+        Returns
+        -------
+        Series
+            Pairwise correlations.
+
+        See Also
+        --------
+        DataFrame.corr : Compute pairwise correlation of columns.
+
+        Examples
+        --------
+        >>> df1 = ps.DataFrame({
+        ...         "A":[1, 5, 7, 8],
+        ...         "X":[5, 8, 4, 3],
+        ...         "C":[10, 4, 9, 3]})
+        >>> df1.corrwith(df1[["X", "C"]])
+        X    1.0
+        C    1.0
+        A    NaN
+        dtype: float64
+
+        >>> df2 = ps.DataFrame({
+        ...         "A":[5, 3, 6, 4],
+        ...         "B":[11, 2, 4, 3],
+        ...         "C":[4, 3, 8, 5]})
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     df1.corrwith(df2)
+        A   -0.041703
+        C    0.395437
+        X         NaN
+        B         NaN
+        dtype: float64
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        ...     df2.corrwith(df1.X)
+        A   -0.597614
+        B   -0.151186
+        C   -0.642857
+        dtype: float64
+        """
+        from pyspark.pandas.series import Series, first_series
+
+        if (method is not None) and (method not in ["pearson"]):
+            raise NotImplementedError("corrwith currently works only for method='pearson'")
+        if not isinstance(other, (DataFrame, Series)):
+            raise TypeError("unsupported type: {}".format(type(other).__name__))
+
+        right_is_series = isinstance(other, Series)
+
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self, other, how="inner")
+            this = combined["this"]
+            that = combined["that"]
+
+        this_numeric_column_labels: List[Label] = []
+        for column_label in this._internal.column_labels:
+            if isinstance(this._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+                this_numeric_column_labels.append(column_label)
+
+        that_numeric_column_labels: List[Label] = []
+        for column_label in that._internal.column_labels:
+            if isinstance(that._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+                that_numeric_column_labels.append(column_label)
+
+        intersect_numeric_column_labels: List[Label] = []
+        diff_numeric_column_labels: List[Label] = []
+        corr_scols = []
+        if right_is_series:
+            intersect_numeric_column_labels = this_numeric_column_labels
+            that_scol = that._internal.spark_column_for(that_numeric_column_labels[0])
+            for numeric_column_label in intersect_numeric_column_labels:
+                this_scol = this._internal.spark_column_for(numeric_column_label)
+                corr_scols.append(
+                    F.corr(this_scol.cast("double"), that_scol.cast("double")).alias(
+                        name_like_string(numeric_column_label)
+                    )
+                )
+        else:
+            for numeric_column_label in this_numeric_column_labels:
+                if numeric_column_label in that_numeric_column_labels:
+                    intersect_numeric_column_labels.append(numeric_column_label)
+                else:
+                    diff_numeric_column_labels.append(numeric_column_label)
+            for numeric_column_label in that_numeric_column_labels:
+                if numeric_column_label not in this_numeric_column_labels:
+                    diff_numeric_column_labels.append(numeric_column_label)
+            for numeric_column_label in intersect_numeric_column_labels:
+                this_scol = this._internal.spark_column_for(numeric_column_label)
+                that_scol = that._internal.spark_column_for(numeric_column_label)
+                corr_scols.append(
+                    F.corr(this_scol.cast("double"), that_scol.cast("double")).alias(
+                        name_like_string(numeric_column_label)
+                    )
+                )
+
+        corr_labels: List[Label] = intersect_numeric_column_labels
+        if not drop:
+            for numeric_column_label in diff_numeric_column_labels:
+                corr_scols.append(
+                    SF.lit(None).cast("double").alias(name_like_string(numeric_column_label))
+                )
+                corr_labels.append(numeric_column_label)
+
+        sdf = combined._internal.spark_frame.select(
+            *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
+        ).limit(
+            1
+        )  # limit(1) to avoid returning more than 1 row when intersection is empty
+
+        # The data is expected to be small so it's fine to transpose/use default index.
+        with ps.option_context("compute.max_rows", 1):
+            internal = InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                column_labels=corr_labels,
+                column_label_names=self._internal.column_label_names,
+            )
+            return first_series(DataFrame(internal).transpose())
 
     def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
         """
@@ -2046,7 +2348,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
          Donatello &  purple &  bo staff \\
         \bottomrule
         \end{tabular}
-        <BLANKLINE>
         """
 
         args = locals()
@@ -3464,19 +3765,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Property returning a Styler object containing methods for
         building a styled HTML representation for the DataFrame.
 
-        .. note:: currently it collects top 1000 rows and return its
-            pandas `pandas.io.formats.style.Styler` instance.
-
         Examples
         --------
         >>> ps.range(1001).style  # doctest: +SKIP
         <pandas.io.formats.style.Styler object at ...>
         """
         max_results = get_option("compute.max_rows")
-        pdf = self.head(max_results + 1)._to_internal_pandas()
-        if len(pdf) > max_results:
-            warnings.warn("'style' property will only use top %s rows." % max_results, UserWarning)
-        return pdf.head(max_results).style
+        if max_results is not None:
+            pdf = self.head(max_results + 1)._to_internal_pandas()
+            if len(pdf) > max_results:
+                warnings.warn(
+                    "'style' property will only use top %s rows." % max_results, UserWarning
+                )
+            return pdf.head(max_results).style
+        else:
+            return self._to_internal_pandas().style
 
     def set_index(
         self,
@@ -5495,16 +5798,28 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         inplace = validate_bool_kwarg(inplace, "inplace")
         if inplace:
-            self._update_internal_frame(psdf._internal, requires_same_anchor=False)
+            self._update_internal_frame(psdf._internal, check_same_anchor=False)
             return None
         else:
             return psdf
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "DataFrame":
-        if (method is not None) and (method not in ["linear"]):
+    def interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+        limit_area: Optional[str] = None,
+    ) -> "DataFrame":
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
+        if (limit_direction is not None) and (
+            limit_direction not in ["forward", "backward", "both"]
+        ):
+            raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
+        if (limit_area is not None) and (limit_area not in ["inside", "outside"]):
+            raise ValueError("invalid limit_area: '{}'".format(limit_area))
 
         numeric_col_names = []
         for label in self._internal.column_labels:
@@ -5514,7 +5829,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
-            lambda psser: psser._interpolate(method=method, limit=limit), should_resolve=True
+            lambda psser: psser._interpolate(
+                method=method, limit=limit, limit_direction=limit_direction, limit_area=limit_area
+            ),
+            should_resolve=True,
         )
 
     def replace(
@@ -6132,10 +6450,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
                 psdf = DataFrame(internal)
         else:
-            if isinstance(values, list):
-                index_values = values[-1]
-            else:
-                index_values = values
+            index_values = values
             index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
@@ -6465,6 +6780,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  2.0
         4  1.0
         5  2.0
+
+        >>> df.select_dtypes(include=['int'], exclude=['float64'])
+           a
+        0  1
+        1  2
+        2  1
+        3  2
+        4  1
+        5  2
 
         >>> df.select_dtypes(exclude=['int'])
                b    c  d
@@ -7047,23 +7371,23 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> df = ps.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
 
-        >>> df.sort_index()
-               A
-        a    1.0
-        b    2.0
-        NaN  NaN
+        >>> df.sort_index()  # doctest: +SKIP
+                A
+        a     1.0
+        b     2.0
+        None  NaN
 
-        >>> df.sort_index(ascending=False)
-               A
-        b    2.0
-        a    1.0
-        NaN  NaN
+        >>> df.sort_index(ascending=False)  # doctest: +SKIP
+                A
+        b     2.0
+        a     1.0
+        None  NaN
 
-        >>> df.sort_index(na_position='first')
-               A
-        NaN  NaN
-        a    1.0
-        b    2.0
+        >>> df.sort_index(na_position='first')  # doctest: +SKIP
+                A
+        None  NaN
+        a     1.0
+        b     2.0
 
         >>> df.sort_index(ignore_index=True)
              A
@@ -7072,11 +7396,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  NaN
 
         >>> df.sort_index(inplace=True)
-        >>> df
-               A
-        a    1.0
-        b    2.0
-        NaN  NaN
+        >>> df  # doctest: +SKIP
+                A
+        a     1.0
+        b     2.0
+        None  NaN
 
         >>> df = ps.DataFrame({'A': range(4), 'B': range(4)[::-1]},
         ...                   index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]],
@@ -7089,12 +7413,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b 0  1  2
           1  0  3
 
-        >>> df.sort_index(level=1)  # doctest: +SKIP
+        >>> df.sort_index(level=1)
              A  B
-        a 0  3  0
         b 0  1  2
-        a 1  2  1
+        a 0  3  0
         b 1  0  3
+        a 1  2  1
 
         >>> df.sort_index(level=[1, 0])
              A  B
@@ -8412,7 +8736,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             *HIDDEN_COLUMNS,
         )
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
-        self._update_internal_frame(internal, requires_same_anchor=False)
+        self._update_internal_frame(internal, check_same_anchor=False)
 
     # TODO: ddof should be implemented.
     def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
@@ -8608,6 +8932,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         frac: Optional[float] = None,
         replace: bool = False,
         random_state: Optional[int] = None,
+        ignore_index: bool = False,
     ) -> "DataFrame":
         """
         Return a random sample of items from an axis of object.
@@ -8630,6 +8955,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Sample with or without replacement.
         random_state : int, optional
             Seed for the random number generator (if int).
+        ignore_index : bool, default False
+            If True, the resulting index will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -8658,6 +8987,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 num_legs  num_wings  num_specimen_seen
         falcon         2          2                 10
         fish           0          0                  8
+
+        A random 50% sample of the ``DataFrame``, while ignoring the index.
+
+        >>> df.sample(frac=0.5, random_state=1, ignore_index=True)  # doctest: +SKIP
+           num_legs  num_wings  num_specimen_seen
+        0         4          0                  2
+        1         8          0                  1
+        2         0          0                  8
 
         Extract 25% random elements from the ``Series`` ``df['num_legs']``, with replacement,
         so the same items could appear more than once.
@@ -8689,7 +9026,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = self._internal.resolved_copy.spark_frame.sample(
             withReplacement=replace, fraction=frac, seed=random_state
         )
-        return DataFrame(self._internal.with_new_sdf(sdf))
+        if ignore_index:
+            return DataFrame(sdf.drop(*self._internal.index_spark_column_names))
+        else:
+            return DataFrame(self._internal.with_new_sdf(sdf))
 
     def astype(self, dtype: Union[str, Dtype, Dict[Name, Union[str, Dtype]]]) -> "DataFrame":
         """
@@ -9175,6 +9515,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         subset: Optional[Union[Name, List[Name]]] = None,
         keep: Union[bool, str] = "first",
         inplace: bool = False,
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Return DataFrame with duplicate rows removed, optionally only
@@ -9192,6 +9533,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             - False : Drop all duplicates.
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
+        ignore_index : boolean, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -9214,6 +9557,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2  a
         3  2  c
         4  3  d
+
+        >>> df.drop_duplicates(ignore_index=True).sort_index()
+           a  b
+        0  1  a
+        1  2  a
+        2  2  c
+        3  3  d
 
         >>> df.drop_duplicates('a').sort_index()
            a  b
@@ -9247,11 +9597,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         sdf = sdf.where(~scol_for(sdf, column)).drop(column)
         internal = self._internal.with_new_sdf(sdf)
+        psdf: DataFrame = DataFrame(internal)
+
         if inplace:
-            self._update_internal_frame(internal)
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
+            self._update_internal_frame(psdf._internal)
             return None
         else:
-            return DataFrame(internal)
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def reindex(
         self,
@@ -9758,7 +10112,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             non_existence_col = [idv for idv in id_vars if idv not in column_labels]
             if len(non_existence_col) != 0:
-                raveled_column_labels = np.ravel(column_labels)
+                raveled_column_labels: np.ndarray[Any, np.dtype[Any]] = np.ravel(column_labels)
                 missing = [
                     nec for nec in np.ravel(non_existence_col) if nec not in raveled_column_labels
                 ]
@@ -10352,6 +10706,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col1    False
         col2     True
         dtype: bool
+
+        Returns empty Series when the DataFrame is empty.
+        >>> df[[]].any()
+        Series([], dtype: bool)
         """
         axis = validate_axis(axis)
         if axis != 0:
@@ -10756,7 +11114,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Whether to return a new DataFrame.
         level : int or level name, default None
             In case of a MultiIndex, only rename labels in the specified level.
-        errors : {'ignore', 'raise}, default 'ignore'
+        errors : {'ignore', 'raise'}, default 'ignore'
             If 'raise', raise a `KeyError` when a dict-like `mapper`, `index`, or `columns`
             contains labels that are not present in the Index being transformed. If 'ignore',
             existing keys will be renamed and extra keys will be ignored.
@@ -10784,6 +11142,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0   1  4
         10  2  5
         20  3  6
+
+        >>> psdf1.rename(columns={"A": "a", "C": "c"}, errors="raise")
+        Traceback (most recent call last):
+            ...
+        KeyError: 'Index include value which is not in the `mapper`'
 
         >>> def str_lower(s) -> str:
         ...     return str.lower(s)
@@ -10900,7 +11263,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             num_indices = len(index_columns)
             if level:
                 if level < 0 or level >= num_indices:
-                    raise ValueError("level should be an integer between [0, num_indices)")
+                    raise ValueError("level should be an integer between [0, %s)" % num_indices)
 
             @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore[call-overload]
             def index_mapper_udf(s: pd.Series) -> pd.Series:
@@ -11944,7 +12307,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if inplace:
             # Here, the result is always a frame because the error is thrown during schema inference
             # from pandas.
-            self._update_internal_frame(result._internal, requires_same_anchor=False)
+            self._update_internal_frame(result._internal, check_same_anchor=False)
             return None
         elif should_return_series:
             return first_series(result).rename(series_name)
@@ -11954,7 +12317,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Returns a frame
             return result
 
-    def explode(self, column: Name) -> "DataFrame":
+    def explode(self, column: Name, ignore_index: bool = False) -> "DataFrame":
         """
         Transform each element of a list-like to a row, replicating index values.
 
@@ -11962,6 +12325,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         column : str or tuple
             Column to explode.
+        ignore_index : bool, default False
+            If True, the resulting index will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -11992,6 +12357,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  NaN  1
         2  3.0  1
         2  4.0  1
+
+        >>> df.explode('A', ignore_index=True)
+             A  B
+        0  1.0  1
+        1  2.0  1
+        2  3.0  1
+        3  NaN  1
+        4  3.0  1
+        5  4.0  1
         """
         from pyspark.pandas.series import Series
 
@@ -12020,7 +12394,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_fields[idx] = field.copy(dtype=dtype, spark_type=spark_type, nullable=True)
 
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
-        return DataFrame(internal)
+        result_df: DataFrame = DataFrame(internal)
+        return result_df.reset_index(drop=True) if ignore_index else result_df
 
     def mad(self, axis: Axis = 0) -> "Series":
         """
@@ -12115,6 +12490,135 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 column_label_names=None,
             )
             return first_series(DataFrame(internal))
+
+    def mode(self, axis: Axis = 0, numeric_only: bool = False, dropna: bool = True) -> "DataFrame":
+        """
+        Get the mode(s) of each element along the selected axis.
+
+        The mode of a set of values is the value that appears most often.
+        It can be multiple values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        axis : {0 or 'index'}, default 0
+            Axis for the function to be applied on.
+        numeric_only : bool, default False
+            If True, only apply to numeric columns.
+        dropna : bool, default True
+            Don't consider counts of NaN/NaT.
+
+        Returns
+        -------
+        DataFrame
+            The modes of each column or row.
+
+        See Also
+        --------
+        Series.mode : Return the highest frequency value in a Series.
+        Series.value_counts : Return the counts of values in a Series.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([('bird', 2, 2),
+        ...                    ('mammal', 4, np.nan),
+        ...                    ('arthropod', 8, 0),
+        ...                    ('bird', 2, np.nan)],
+        ...                   index=('falcon', 'horse', 'spider', 'ostrich'),
+        ...                   columns=('species', 'legs', 'wings'))
+        >>> df
+                   species  legs  wings
+        falcon        bird     2    2.0
+        horse       mammal     4    NaN
+        spider   arthropod     8    0.0
+        ostrich       bird     2    NaN
+
+        By default, missing values are not considered, and the mode of wings
+        are both 0 and 2. Because the resulting DataFrame has two rows,
+        the second row of ``species`` and ``legs`` contains ``NaN``.
+
+        >>> df.mode()
+          species  legs  wings
+        0    bird   2.0    0.0
+        1    None   NaN    2.0
+
+        Setting ``dropna=False`` ``NaN`` values are considered and they can be
+        the mode (like for wings).
+
+        >>> df.mode(dropna=False)
+          species  legs  wings
+        0    bird     2    NaN
+
+        Setting ``numeric_only=True``, only the mode of numeric columns is
+        computed, and columns of other types are ignored.
+
+        >>> df.mode(numeric_only=True)
+           legs  wings
+        0   2.0    0.0
+        1   NaN    2.0
+        """
+        axis = validate_axis(axis, none_axis=0)
+        if axis != 0:
+            raise ValueError('axis should be either 0 or "index" currently.')
+        if numeric_only is None and axis == 0:
+            numeric_only = True
+
+        mode_scols: List[Column] = []
+        mode_col_names: List[str] = []
+        mode_labels: List[Label] = []
+        for label, col_name in zip(
+            self._internal.column_labels, self._internal.data_spark_column_names
+        ):
+            psser = self._psser_for(label)
+            is_numeric = isinstance(psser.spark.data_type, (NumericType, BooleanType))
+
+            if not numeric_only or is_numeric:
+                scol = psser.spark.column
+                mode_scol = SF.mode(scol, dropna).alias(col_name)
+                mode_scols.append(mode_scol)
+                mode_col_names.append(col_name)
+                mode_labels.append(label)
+
+        # Here, after aggregation, a spark_frame looks like below:
+        # +-------+----+----------+
+        # |species|legs|     wings|
+        # +-------+----+----------+
+        # | [bird]| [2]|[0.0, 2.0]|
+        # +-------+----+----------+
+        sdf = self._internal.spark_frame.select(mode_scols)
+        sdf = sdf.select(*[F.array_sort(F.col(name)).alias(name) for name in mode_col_names])
+
+        tmp_zip_col = "__tmp_zip_col__"
+        tmp_explode_col = "__tmp_explode_col__"
+
+        # After this transformation, sdf turns out to be:
+        # +-------+----+-----+
+        # |species|legs|wings|
+        # +-------+----+-----+
+        # |   bird|   2|  0.0|
+        # |   null|null|  2.0|
+        # +-------+----+-----+
+        sdf = (
+            sdf.select(F.arrays_zip(*[F.col(name) for name in mode_col_names]).alias(tmp_zip_col))
+            .select(F.explode(F.col(tmp_zip_col)).alias(tmp_explode_col))
+            .select(
+                *[
+                    F.col("{0}.{1}".format(tmp_explode_col, name)).alias(name)
+                    for name in mode_col_names
+                ]
+            )
+        )
+
+        sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, F.monotonically_increasing_id())
+
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+            column_labels=mode_labels,
+            data_spark_columns=[scol_for(sdf, col) for col in mode_col_names],
+        )
+        return DataFrame(internal)
 
     def tail(self, n: int = 5) -> "DataFrame":
         """
@@ -12469,6 +12973,75 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
+    def resample(
+        self,
+        rule: str,
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        on: Optional["Series"] = None,
+    ) -> "DataFrameResampler":
+        """
+        Resample time-series data.
+
+        Convenience method for frequency conversion and resampling of time series.
+        The object must have a datetime-like index (only support `DatetimeIndex` for now),
+        or the caller must pass the label of a datetime-like
+        series/index to the ``on`` keyword parameter.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        rule : str
+            The offset string or object representing target conversion.
+            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
+            'T', 'MIN', 'S'}.
+        closed : {{'right', 'left'}}, default None
+            Which side of bin interval is closed. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        label : {{'right', 'left'}}, default None
+            Which bin edge label to label bucket with. The default is 'left'
+            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            have a default of 'right'.
+        on : Series, optional
+            For a DataFrame, column to use instead of index for resampling.
+            Column must be datetime-like.
+
+        Returns
+        -------
+        DataFrameResampler
+
+        See Also
+        --------
+        Series.resample : Resample a Series.
+        groupby : Group by mapping, function, label, or list of labels.
+        """
+        from pyspark.pandas.indexes import DatetimeIndex
+        from pyspark.pandas.resample import DataFrameResampler
+
+        if on is None and not isinstance(self.index, DatetimeIndex):
+            raise NotImplementedError("resample currently works only for DatetimeIndex")
+        if on is not None and not isinstance(as_spark_type(on.dtype), TimestampType):
+            raise NotImplementedError("`on` currently works only for TimestampType")
+
+        agg_columns: List[ps.Series] = []
+        for column_label in self._internal.column_labels:
+            if isinstance(self._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+                agg_columns.append(self._psser_for(column_label))
+
+        if len(agg_columns) == 0:
+            raise ValueError("No available aggregation columns!")
+
+        return DataFrameResampler(
+            psdf=self,
+            resamplekey=on,
+            rule=rule,
+            closed=closed,
+            label=label,
+            agg_columns=agg_columns,
+        )
+
     def _to_internal_pandas(self) -> pd.DataFrame:
         """
         Return a pandas DataFrame directly from _internal to avoid overhead of copy.
@@ -12543,7 +13116,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return self.loc[:, key]
         elif is_list_like(key):
             return self.loc[:, list(key)]
-        raise NotImplementedError(key)
 
     def __setitem__(self, key: Any, value: Any) -> None:
         from pyspark.pandas.series import Series
@@ -12593,7 +13165,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Same Series.
             psdf = self._assign({key: value})
 
-        self._update_internal_frame(psdf._internal)
+        # Since Spark 3.4, df.__setitem__ generates a new dataframe instead of operating
+        # in-place to follow pandas v1.4 behavior, see also SPARK-38946.
+        self._update_internal_frame(psdf._internal, anchor_force_disconnect=True)
 
     @staticmethod
     def _index_normalized_label(level: int, labels: Union[Name, Sequence[Name]]) -> List[Label]:
@@ -12801,6 +13375,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
     )
+    globs["spark"] = spark
 
     db_name = "db%s" % str(uuid.uuid4()).replace("-", "")
     spark.sql("CREATE DATABASE %s" % db_name)

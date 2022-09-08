@@ -50,12 +50,12 @@ class QueryCompilationErrorsDSv2Suite
         }
 
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
-        checkErrorClass(
+        checkError(
           exception = e,
           errorClass = "UNSUPPORTED_FEATURE",
-          msg = "The feature is not supported: " +
-            s""""IF NOT EXISTS" for the table `testcat`.`ns1`.`ns2`.`tbl` by "INSERT INTO".""",
-          sqlState = Some("0A000"))
+          errorSubClass = "INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+          parameters = Map("tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`"),
+          sqlState = "0A000")
       }
     }
   }
@@ -70,10 +70,10 @@ class QueryCompilationErrorsDSv2Suite
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `id`")
+        parameters = Map("columnName" -> "`id`"))
     }
   }
 
@@ -87,10 +87,10 @@ class QueryCompilationErrorsDSv2Suite
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      checkErrorClass(
+      checkError(
         exception = e,
         errorClass = "NON_PARTITION_COLUMN",
-        msg = "PARTITION clause cannot contain a non-partition column name: `data`")
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 }

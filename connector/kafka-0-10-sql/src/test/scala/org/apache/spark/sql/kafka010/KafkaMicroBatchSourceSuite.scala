@@ -120,7 +120,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
 
       val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
-          case StreamingExecutionRelation(source: KafkaSource, _) => source
+          case StreamingExecutionRelation(source: KafkaSource, _, _) => source
           case r: StreamingDataSourceV2Relation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
               r.stream.isInstanceOf[KafkaContinuousStream] =>
             r.stream
@@ -338,6 +338,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
 
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
     withTempDir { dir =>
       testStream(mapped)(
@@ -435,6 +436,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25)
     )
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1, 2) ++ (10 to 25) ++ (100 to 125)
     withTempDir { dir =>
       testStream(mapped)(
@@ -537,6 +539,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
 
     // When Trigger.Once() is used, the read limit should be ignored
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     val allData = Seq(1, 2) ++ (10 to 30) ++ (100 to 128)
     withTempDir { dir =>
       testStream(mapped)(
@@ -1392,7 +1395,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaSource, _) => true
+          case StreamingExecutionRelation(_: KafkaSource, _, _) => true
         }.nonEmpty
       }
     )
@@ -1448,7 +1451,8 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+        withClue(s"minPartitions = $minPartitions generated factories " +
+          s"${inputPartitions.mkString("inputPartitions(", ", ", ")")}\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
         }
       }
@@ -2280,7 +2284,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       val headers = row.getList[Row](row.fieldIndex("headers")).asScala
       assert(headers.length === expected.length)
 
-      (0 until expected.length).foreach { idx =>
+      expected.indices.foreach { idx =>
         val key = headers(idx).getAs[String]("key")
         val value = headers(idx).getAs[Array[Byte]]("value")
         assert(key === expected(idx)._1)

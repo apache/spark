@@ -91,8 +91,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       if (countLeaves(hadoopFsRelation.dataSchema) > countLeaves(prunedDataSchema) ||
         countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
-        val projectionOverSchema =
-          ProjectionOverSchema(prunedDataSchema.merge(prunedMetadataSchema))
+        val projectionOverSchema = ProjectionOverSchema(
+          prunedDataSchema.merge(prunedMetadataSchema), AttributeSet(relation.output))
         Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {

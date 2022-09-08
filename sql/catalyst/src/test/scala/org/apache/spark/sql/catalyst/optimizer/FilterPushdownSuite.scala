@@ -58,8 +58,8 @@ class FilterPushdownSuite extends PlanTest {
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
   val expectedPredicatePushDownResult = {
-    val left = testRelation.where(($"a" > 3 || $"a" > 1)).subquery(Symbol("x"))
-    val right = testRelation.where($"a" > 13 || $"a" > 11).subquery(Symbol("y"))
+    val left = testRelation.where(($"a" > 3 || $"a" > 1)).subquery("x")
+    val right = testRelation.where($"a" > 13 || $"a" > 11).subquery("y")
     left.join(right, condition = Some("x.b".attr === "y.b".attr
       && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))).analyze
   }
@@ -68,7 +68,7 @@ class FilterPushdownSuite extends PlanTest {
   test("eliminate subqueries") {
     val originalQuery =
       testRelation
-        .subquery(Symbol("y"))
+        .subquery("y")
         .select($"a")
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -150,7 +150,7 @@ class FilterPushdownSuite extends PlanTest {
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
-        .select($"a" + $"b" as Symbol("e"))
+        .select($"a" + $"b" as "e")
         .where($"e" === 1)
         .analyze
 
@@ -158,7 +158,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .where($"a" + $"b" === 1)
-        .select($"a" + $"b" as Symbol("e"))
+        .select($"a" + $"b" as "e")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -182,7 +182,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("nondeterministic: can't push down filter through project with nondeterministic field") {
     val originalQuery = testRelation
-      .select(Rand(10).as(Symbol("rand")), $"a")
+      .select(Rand(10).as("rand"), $"a")
       .where($"a" > 5)
       .analyze
 
@@ -193,7 +193,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("nondeterministic: can't push down filter through aggregate with nondeterministic field") {
     val originalQuery = testRelation
-      .groupBy($"a")($"a", Rand(10).as(Symbol("rand")))
+      .groupBy($"a")($"a", Rand(10).as("rand"))
       .where($"a" > 5)
       .analyze
 
@@ -235,8 +235,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push to either side") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -254,8 +254,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push to one side") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -272,8 +272,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: do not push down non-deterministic filters into join condition") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation1.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery = x.join(y).where(Rand(10) > 5.0).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -282,8 +282,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push to one side after transformCondition") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation1.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -301,8 +301,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: rewrite filter to push to either side") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -319,8 +319,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left semi join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation1.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftSemi, Option("x.a".attr === "y.d".attr && "x.b".attr >= 1 && "y.d".attr >= 2))
@@ -336,8 +336,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left outer join #1") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftOuter)
@@ -353,8 +353,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down right outer join #1") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, RightOuter)
@@ -362,7 +362,7 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val right = testRelation.where($"b" === 2).subquery(Symbol("d"))
+    val right = testRelation.where($"b" === 2).subquery("d")
     val correctAnswer =
       x.join(right, RightOuter).where("x.b".attr === 1).analyze
 
@@ -370,8 +370,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left outer join #2") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftOuter, Some("x.b".attr === 1))
@@ -379,7 +379,7 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"b" === 2).subquery(Symbol("d"))
+    val left = testRelation.where($"b" === 2).subquery("d")
     val correctAnswer =
       left.join(y, LeftOuter, Some("d.b".attr === 1)).where("y.b".attr === 2).analyze
 
@@ -387,8 +387,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down right outer join #2") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, RightOuter, Some("y.b".attr === 1))
@@ -396,7 +396,7 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val right = testRelation.where($"b" === 2).subquery(Symbol("d"))
+    val right = testRelation.where($"b" === 2).subquery("d")
     val correctAnswer =
       x.join(right, RightOuter, Some("d.b".attr === 1)).where("x.b".attr === 2).analyze
 
@@ -404,8 +404,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left outer join #3") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftOuter, Some("y.b".attr === 1))
@@ -413,8 +413,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"b" === 2).subquery(Symbol("l"))
-    val right = testRelation.where($"b" === 1).subquery(Symbol("r"))
+    val left = testRelation.where($"b" === 2).subquery("l")
+    val right = testRelation.where($"b" === 1).subquery("r")
     val correctAnswer =
       left.join(right, LeftOuter).where("r.b".attr === 2).analyze
 
@@ -422,8 +422,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down right outer join #3") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, RightOuter, Some("y.b".attr === 1))
@@ -431,7 +431,7 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val right = testRelation.where($"b" === 2).subquery(Symbol("r"))
+    val right = testRelation.where($"b" === 2).subquery("r")
     val correctAnswer =
       x.join(right, RightOuter, Some("r.b".attr === 1)).where("x.b".attr === 2).analyze
 
@@ -439,8 +439,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left outer join #4") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftOuter, Some("y.b".attr === 1))
@@ -448,8 +448,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"b" === 2).subquery(Symbol("l"))
-    val right = testRelation.where($"b" === 1).subquery(Symbol("r"))
+    val left = testRelation.where($"b" === 2).subquery("l")
+    val right = testRelation.where($"b" === 1).subquery("r")
     val correctAnswer =
       left.join(right, LeftOuter).where("r.b".attr === 2 && "l.c".attr === "r.c".attr).analyze
 
@@ -457,8 +457,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down right outer join #4") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, RightOuter, Some("y.b".attr === 1))
@@ -466,8 +466,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.subquery(Symbol("l"))
-    val right = testRelation.where($"b" === 2).subquery(Symbol("r"))
+    val left = testRelation.subquery("l")
+    val right = testRelation.where($"b" === 2).subquery("r")
     val correctAnswer =
       left.join(right, RightOuter, Some("r.b".attr === 1)).
         where("l.b".attr === 2 && "l.c".attr === "r.c".attr).analyze
@@ -476,8 +476,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down left outer join #5") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, LeftOuter, Some("y.b".attr === 1 && "x.a".attr === 3))
@@ -485,8 +485,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"b" === 2).subquery(Symbol("l"))
-    val right = testRelation.where($"b" === 1).subquery(Symbol("r"))
+    val left = testRelation.where($"b" === 2).subquery("l")
+    val right = testRelation.where($"b" === 1).subquery("r")
     val correctAnswer =
       left.join(right, LeftOuter, Some("l.a".attr===3)).
         where("r.b".attr === 2 && "l.c".attr === "r.c".attr).analyze
@@ -495,8 +495,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down right outer join #5") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, RightOuter, Some("y.b".attr === 1 && "x.a".attr === 3))
@@ -504,8 +504,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"a" === 3).subquery(Symbol("l"))
-    val right = testRelation.where($"b" === 2).subquery(Symbol("r"))
+    val left = testRelation.where($"a" === 3).subquery("l")
+    val right = testRelation.where($"b" === 2).subquery("r")
     val correctAnswer =
       left.join(right, RightOuter, Some("r.b".attr === 1)).
         where("l.b".attr === 2 && "l.c".attr === "r.c".attr).analyze
@@ -514,8 +514,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: can't push down") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y, condition = Some("x.b".attr === "y.b".attr))
@@ -526,8 +526,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: conjunctive predicates") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -535,8 +535,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"a" === 1).subquery(Symbol("x"))
-    val right = testRelation.where($"a" === 1).subquery(Symbol("y"))
+    val left = testRelation.where($"a" === 1).subquery("x")
+    val right = testRelation.where($"a" === 1).subquery("y")
     val correctAnswer =
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
@@ -545,8 +545,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: conjunctive predicates #2") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = {
       x.join(y)
@@ -554,8 +554,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"a" === 1).subquery(Symbol("x"))
-    val right = testRelation.subquery(Symbol("y"))
+    val left = testRelation.where($"a" === 1).subquery("x")
+    val right = testRelation.subquery("y")
     val correctAnswer =
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
@@ -564,9 +564,9 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: conjunctive predicates #3") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
-    val z = testRelation.subquery(Symbol("z"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+    val z = testRelation.subquery("z")
 
     val originalQuery = {
       z.join(x.join(y))
@@ -575,9 +575,9 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val lleft = testRelation.where($"a" >= 3).subquery(Symbol("z"))
-    val left = testRelation.where($"a" === 1).subquery(Symbol("x"))
-    val right = testRelation.subquery(Symbol("y"))
+    val lleft = testRelation.where($"a" >= 3).subquery("z")
+    val left = testRelation.where($"a" === 1).subquery("x")
+    val right = testRelation.subquery("y")
     val correctAnswer =
       lleft.join(
         left.join(right, condition = Some("x.b".attr === "y.b".attr)),
@@ -588,8 +588,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: push down where clause into left anti join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val originalQuery =
       x.join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
         .where("x.a".attr > 10)
@@ -603,8 +603,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: only push down join conditions to the right of a left anti join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val originalQuery =
       x.join(y,
         LeftAnti,
@@ -620,8 +620,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("joins: only push down join conditions to the right of an existence join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val fillerVal = $"val".boolean
     val originalQuery =
       x.join(y,
@@ -715,7 +715,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("aggregate: push down filter when filter on group by expression") {
     val originalQuery = testRelation
-                        .groupBy($"a")($"a", count($"b") as Symbol("c"))
+                        .groupBy($"a")($"a", count($"b") as "c")
                         .select($"a", $"c")
                         .where($"a" === 2)
 
@@ -723,7 +723,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testRelation
                         .where($"a" === 2)
-                        .groupBy($"a")($"a", count($"b") as Symbol("c"))
+                        .groupBy($"a")($"a", count($"b") as "c")
                         .analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -731,7 +731,7 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: don't push down filter when filter not on group by expression") {
     val originalQuery = testRelation
                         .select($"a", $"b")
-                        .groupBy($"a")($"a", count($"b") as Symbol("c"))
+                        .groupBy($"a")($"a", count($"b") as "c")
                         .where($"c" === 2L)
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -742,7 +742,7 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: push down filters partially which are subset of group by expressions") {
     val originalQuery = testRelation
                         .select($"a", $"b")
-                        .groupBy($"a")($"a", count($"b") as Symbol("c"))
+                        .groupBy($"a")($"a", count($"b") as "c")
                         .where($"c" === 2L && $"a" === 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -750,7 +750,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
                         .where($"a" === 3)
                         .select($"a", $"b")
-                        .groupBy($"a")($"a", count($"b") as Symbol("c"))
+                        .groupBy($"a")($"a", count($"b") as "c")
                         .where($"c" === 2L)
                         .analyze
 
@@ -760,7 +760,7 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: push down filters with alias") {
     val originalQuery = testRelation
       .select($"a", $"b")
-      .groupBy($"a")(($"a" + 1) as Symbol("aa"), count($"b") as Symbol("c"))
+      .groupBy($"a")(($"a" + 1) as "aa", count($"b") as "c")
       .where(($"c" === 2L || $"aa" > 4) && $"aa" < 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -768,7 +768,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .where($"a" + 1 < 3)
       .select($"a", $"b")
-      .groupBy($"a")(($"a" + 1) as Symbol("aa"), count($"b") as Symbol("c"))
+      .groupBy($"a")(($"a" + 1) as "aa", count($"b") as "c")
       .where($"c" === 2L || $"aa" > 4)
       .analyze
 
@@ -778,7 +778,7 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: push down filters with literal") {
     val originalQuery = testRelation
       .select($"a", $"b")
-      .groupBy($"a")($"a", count($"b") as Symbol("c"), "s" as Symbol("d"))
+      .groupBy($"a")($"a", count($"b") as "c", "s" as "d")
       .where($"c" === 2L && $"d" === "s")
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -786,7 +786,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .where("s" === "s")
       .select($"a", $"b")
-      .groupBy($"a")($"a", count($"b") as Symbol("c"), "s" as Symbol("d"))
+      .groupBy($"a")($"a", count($"b") as "c", "s" as "d")
       .where($"c" === 2L)
       .analyze
 
@@ -796,7 +796,7 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: don't push down filters that are nondeterministic") {
     val originalQuery = testRelation
       .select($"a", $"b")
-      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"),
+      .groupBy($"a")($"a" + Rand(10) as "aa", count($"b") as "c",
         Rand(11).as("rnd"))
       .where($"c" === 2L && $"aa" + Rand(10).as("rnd") === 3 && $"rnd" === 5)
 
@@ -804,7 +804,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .select($"a", $"b")
-      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"),
+      .groupBy($"a")($"a" + Rand(10) as "aa", count($"b") as "c",
         Rand(11).as("rnd"))
       .where($"c" === 2L && $"aa" + Rand(10).as("rnd") === 3 && $"rnd" === 5)
       .analyze
@@ -898,9 +898,9 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("predicate subquery: push down simple") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
-    val z = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("z"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+    val z = LocalRelation($"a".int, $"b".int, $"c".int).subquery("z")
 
     val query = x
       .join(y, Inner, Option("x.a".attr === "y.a".attr))
@@ -915,10 +915,10 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("predicate subquery: push down complex") {
-    val w = testRelation.subquery(Symbol("w"))
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
-    val z = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("z"))
+    val w = testRelation.subquery("w")
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+    val z = LocalRelation($"a".int, $"b".int, $"c".int).subquery("z")
 
     val query = w
       .join(x, Inner, Option("w.a".attr === "x.a".attr))
@@ -935,9 +935,9 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("SPARK-20094: don't push predicate with IN subquery into join condition") {
-    val x = testRelation.subquery(Symbol("x"))
-    val z = testRelation.subquery(Symbol("z"))
-    val w = testRelation1.subquery(Symbol("w"))
+    val x = testRelation.subquery("x")
+    val z = testRelation.subquery("z")
+    val w = testRelation1.subquery("w")
 
     val queryPlan = x
       .join(z)
@@ -959,10 +959,10 @@ class FilterPushdownSuite extends PlanTest {
       windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation.select($"a", $"b", $"c",
-      winExpr.as(Symbol("window"))).where($"a" > 1)
+      winExpr.as("window")).where($"a" > 1)
     val correctAnswer = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -974,10 +974,10 @@ class FilterPushdownSuite extends PlanTest {
         windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation.select($"a", $"b", $"c",
-      winExpr.as(Symbol("window"))).where($"a" * 3 > 15)
+      winExpr.as("window")).where($"a" * 3 > 15)
     val correctAnswer = testRelation
       .where($"a" * 3 > 15).select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -988,12 +988,12 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr1 = windowExpr(count($"b"), winSpec)
     val winExpr2 = windowExpr(sum($"b"), winSpec)
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2")))
+      .select($"a", $"b", $"c", winExpr1.as("window1"), winExpr2.as("window2"))
       .where($"a" > 1)
 
     val correctAnswer = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
-      .window(winExpr1.as(Symbol("window1")) :: winExpr2.as(Symbol("window2")) :: Nil,
+      .window(winExpr1.as("window1") :: winExpr2.as("window2") :: Nil,
         $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window1", $"window2").analyze
 
@@ -1007,19 +1007,19 @@ class FilterPushdownSuite extends PlanTest {
     val winSpec2 = windowSpec($"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil, UnspecifiedFrame)
     val winExpr2 = windowExpr(count($"b"), winSpec2)
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2")))
+      .select($"a", $"b", $"c", winExpr1.as("window1"), winExpr2.as("window2"))
       .where($"a" > 1)
 
     val correctAnswer1 = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
-      .window(winExpr1.as(Symbol("window1")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
-      .window(winExpr2.as(Symbol("window2")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
+      .window(winExpr1.as("window1") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr2.as("window2") :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
       .select($"a", $"b", $"c", $"window1", $"window2").analyze
 
     val correctAnswer2 = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
-      .window(winExpr2.as(Symbol("window2")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
-      .window(winExpr1.as(Symbol("window1")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr2.as("window2") :: Nil, $"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil)
+      .window(winExpr1.as("window1") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window1", $"window2").analyze
 
     // When Analyzer adding Window operators after grouping the extracted Window Expressions
@@ -1040,18 +1040,18 @@ class FilterPushdownSuite extends PlanTest {
     val winSpec2 = windowSpec($"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
     val winExpr2 = windowExpr(count($"a"), winSpec2)
     val originalQuery = testRelation
-      .select($"a", winExpr1.as(Symbol("window1")), $"b", $"c", winExpr2.as(Symbol("window2")))
+      .select($"a", winExpr1.as("window1"), $"b", $"c", winExpr2.as("window2"))
       .where($"b" > 1)
 
     val correctAnswer1 = testRelation.select($"a", $"b", $"c")
-      .window(winExpr1.as(Symbol("window1")) :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr1.as("window1") :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
       .where($"b" > 1)
-      .window(winExpr2.as(Symbol("window2")) :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr2.as("window2") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"window1", $"b", $"c", $"window2").analyze
 
     val correctAnswer2 = testRelation.select($"a", $"b", $"c")
-      .window(winExpr2.as(Symbol("window2")) :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
-      .window(winExpr1.as(Symbol("window1")) :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr2.as("window2") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr1.as("window1") :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
       .where($"b" > 1)
       .select($"a", $"window1", $"b", $"c", $"window2").analyze
 
@@ -1071,11 +1071,11 @@ class FilterPushdownSuite extends PlanTest {
       windowExpr(count($"b"),
         windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .where($"a" + $"b" > 1).select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1097,11 +1097,11 @@ class FilterPushdownSuite extends PlanTest {
       UnspecifiedFrame)
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .where($"a" + $"b" > 1).select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
-      .window(winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
+      .window(winExprAnalyzed.as("window") :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1115,10 +1115,10 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is c > 1, but the partitioning key is (a, b).
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"c" > 1)
     val correctAnswer = testRelation.select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .where($"c" > 1).select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1132,7 +1132,7 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is a > 1, but the partitioning key is (a + b, b)
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" > 1)
 
     val winSpecAnalyzed = windowSpec(
@@ -1142,7 +1142,7 @@ class FilterPushdownSuite extends PlanTest {
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
     val correctAnswer = testRelation.select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
       .window(
-        winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: $"b".attr :: Nil, $"b".asc :: Nil)
+        winExprAnalyzed.as("window") :: Nil, $"_w0" :: $"b".attr :: Nil, $"b".asc :: Nil)
       .where($"a" > 1).select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1154,11 +1154,11 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is a + b > 1, but the partitioning key is b.
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
       .where($"a" + $"b" > 1).select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1179,10 +1179,10 @@ class FilterPushdownSuite extends PlanTest {
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
 
     // No push down: the predicate is a + b > 1, but the partitioning key is a + b.
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as("window"))
       .where($"a" - $"b" > 1)
     val correctAnswer = testRelation.select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
-      .window(winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
+      .window(winExprAnalyzed.as("window") :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
       .where($"a" - $"b" > 1).select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1292,8 +1292,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down filter predicates through inner join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery = x.join(y).where(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate))
 
@@ -1302,8 +1302,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down join predicates through inner join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate)))
@@ -1313,8 +1313,8 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down complex predicates through inner join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val joinCondition = (("x.b".attr === "y.b".attr)
       && ((("x.a".attr === 5) && ("y.a".attr >= 2) && ("y.a".attr <= 3))
@@ -1324,18 +1324,18 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = x.join(y, condition = Some(joinCondition))
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation.where(
-      ($"a" === 5 || $"a" === 2 || $"a" === 1)).subquery(Symbol("x"))
+      ($"a" === 5 || $"a" === 2 || $"a" === 1)).subquery("x")
     val right = testRelation.where(
       ($"a" >= 2 && $"a" <= 3) || ($"a" >= 1 && $"a" <= 14) || ($"a" >= 9 && $"a" <= 27))
-      .subquery(Symbol("y"))
+      .subquery("y")
     val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("push down predicates(with NOT predicate) through inner join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr)
@@ -1343,8 +1343,8 @@ class FilterPushdownSuite extends PlanTest {
         && ("x.a".attr < 2 || ("y.a".attr > 13)) || ("x.a".attr > 1) && ("y.a".attr > 11))))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"a" <= 3 || $"a" >= 2).subquery(Symbol("x"))
-    val right = testRelation.subquery(Symbol("y"))
+    val left = testRelation.where($"a" <= 3 || $"a" >= 2).subquery("x")
+    val right = testRelation.subquery("y")
     val correctAnswer =
       left.join(right, condition = Some("x.b".attr === "y.b".attr
         && (("x.a".attr <= 3) || (("x.a".attr >= 2) && ("y.a".attr <= 13)))
@@ -1354,16 +1354,16 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down predicates through left join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery =
       x.join(y, joinType = LeftOuter, condition = Some(("x.b".attr === "y.b".attr)
         && simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.subquery(Symbol("x"))
-    val right = testRelation.where($"a" > 13 || $"a" > 11).subquery(Symbol("y"))
+    val left = testRelation.subquery("x")
+    val right = testRelation.where($"a" > 13 || $"a" > 11).subquery("y")
     val correctAnswer =
       left.join(right, joinType = LeftOuter, condition = Some("x.b".attr === "y.b".attr
         && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
@@ -1373,16 +1373,16 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down predicates through right join") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery =
       x.join(y, joinType = RightOuter, condition = Some(("x.b".attr === "y.b".attr)
         && simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where($"a" > 3 || $"a" > 1).subquery(Symbol("x"))
-    val right = testRelation.subquery(Symbol("y"))
+    val left = testRelation.where($"a" > 3 || $"a" > 1).subquery("x")
+    val right = testRelation.subquery("y")
     val correctAnswer =
       left.join(right, joinType = RightOuter, condition = Some("x.b".attr === "y.b".attr
         && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
@@ -1392,16 +1392,16 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("SPARK-32302: avoid generating too many predicates") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
 
     val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr) && ((("x.a".attr > 3) &&
         ("x.a".attr < 13) && ("y.c".attr <= 5)) || (("y.a".attr > 2) && ("y.c".attr < 1)))))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.subquery(Symbol("x"))
-    val right = testRelation.where($"c" <= 5 || ($"a" > 2 && $"c" < 1)).subquery(Symbol("y"))
+    val left = testRelation.subquery("x")
+    val right = testRelation.where($"c" <= 5 || ($"a" > 2 && $"c" < 1)).subquery("y")
     val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr &&
       ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5)) ||
         (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
@@ -1410,9 +1410,9 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("push down predicate through multiple joins") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
-    val z = testRelation.subquery(Symbol("z"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+    val z = testRelation.subquery("z")
     val xJoinY = x.join(y, condition = Some("x.b".attr === "y.b".attr))
     val originalQuery = z.join(xJoinY,
       condition = Some("x.a".attr === "z.a".attr && simpleDisjunctivePredicate))

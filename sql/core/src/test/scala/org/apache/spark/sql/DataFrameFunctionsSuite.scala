@@ -435,6 +435,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
     checkAnswer(
+      df1.select(array_sort(col("a"), (x, y) => call_udf("fAsc", x, y))),
+      Seq(
+        Row(Seq(1, 2, 2, 3, 5)))
+    )
+
+    checkAnswer(
+      df1.select(array_sort(col("a"), (x, y) => call_udf("fDesc", x, y))),
+      Seq(
+        Row(Seq(5, 3, 2, 2, 1)))
+    )
+
+    checkAnswer(
       df1.selectExpr("array_sort(a, (x, y) -> fAsc(x, y))"),
       Seq(
         Row(Seq(1, 2, 2, 3, 5)))
@@ -448,12 +460,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
     checkAnswer(
+      df2.select(array_sort(col("a"), (x, y) => call_udf("fString", x, y))),
+      Seq(
+        Row(Seq("dc", "bc", "ab")))
+    )
+
+    checkAnswer(
       df2.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
       Seq(
         Row(Seq("dc", "bc", "ab")))
     )
 
     val df3 = Seq(Array[String]("a", "abcd", "abc")).toDF("a")
+    checkAnswer(
+      df3.select(array_sort(col("a"), (x, y) => call_udf("fStringLength", x, y))),
+      Seq(
+        Row(Seq("a", "abc", "abcd")))
+    )
+
     checkAnswer(
       df3.selectExpr("array_sort(a, (x, y) -> fStringLength(x, y))"),
       Seq(
@@ -463,12 +487,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4),
       Array(1, 2)), "x")).toDF("a", "b")
     checkAnswer(
+      df4.select(array_sort(col("a"), (x, y) => call_udf("fAsc", size(x), size(y)))),
+      Seq(
+        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
+    )
+
+    checkAnswer(
       df4.selectExpr("array_sort(a, (x, y) -> fAsc(cardinality(x), cardinality(y)))"),
       Seq(
         Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
     )
 
     val df5 = Seq(Array[String]("bc", null, "ab", "dc")).toDF("a")
+    checkAnswer(
+      df5.select(array_sort(col("a"), (x, y) => call_udf("fString", x, y))),
+      Seq(
+        Row(Seq("dc", "bc", "ab", null)))
+    )
+
     checkAnswer(
       df5.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
       Seq(
@@ -484,6 +520,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-38130: array_sort with lambda of non-orderable items") {
     val df6 = Seq((Array[Map[String, Int]](Map("a" -> 1), Map("b" -> 2, "c" -> 3),
       Map()), "x")).toDF("a", "b")
+    checkAnswer(
+      df6.select(array_sort(col("a"), (x, y) => size(x) - size(y))),
+      Seq(
+        Row(Seq[Map[String, Int]](Map(), Map("a" -> 1), Map("b" -> 2, "c" -> 3))))
+    )
+
     checkAnswer(
       df6.selectExpr("array_sort(a, (x, y) -> cardinality(x) - cardinality(y))"),
       Seq(
@@ -1586,6 +1628,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e3.message.contains(errorMsg3))
   }
 
+  test("SPARK-40214: get function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3"), 2),
+      (Seq[String](null, ""), 1),
+      (Seq[String](), 2),
+      (null, 3)
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(get(df("a"), lit(-1))),
+      Seq(Row(null), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(0))),
+      Seq(Row("1"), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(1))),
+      Seq(Row("2"), Row(""), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(2))),
+      Seq(Row("3"), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), lit(3))),
+      Seq(Row(null), Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), df("b"))),
+      Seq(Row("3"), Row(""), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(get(df("a"), df("b") - 1)),
+      Seq(Row("2"), Row(null), Row(null), Row(null))
+    )
+  }
+
   test("array_union functions") {
     val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
     val ans1 = Row(Seq(1, 2, 3, 4))
@@ -2434,11 +2514,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
-    val ex3 = intercept[AnalysisException] {
-      df.selectExpr("transform(a, x -> x)")
-    }
-    assert(ex3.getErrorClass == "MISSING_COLUMN")
-    assert(ex3.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("transform(a, x -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("map_filter") {
@@ -2506,11 +2587,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires map type"))
 
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("map_filter(a, (k, v) -> k > v)")
-    }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("map_filter(a, (k, v) -> k > v)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2666,11 +2748,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("filter(a, x -> x)")
-    }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("filter(a, x -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2799,11 +2882,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("exists(a, x -> x)")
-    }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("exists(a, x -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2946,17 +3030,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("forall(a, x -> x)")
-    }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("forall(a, x -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
 
-    val ex4a = intercept[AnalysisException] {
-      df.select(forall(col("a"), x => x))
-    }
-    assert(ex4a.getErrorClass == "MISSING_COLUMN")
-    assert(ex4a.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.select(forall(col("a"), x => x))),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -3130,11 +3216,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex4a.getMessage.contains("data type mismatch: argument 3 requires int type"))
 
-    val ex5 = intercept[AnalysisException] {
-      df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
-    }
-    assert(ex5.getErrorClass == "MISSING_COLUMN")
-    assert(ex5.messageParameters.head == "a")
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("aggregate(a, 0, (acc, x) -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3684,11 +3771,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(zip_with(df("i"), df("a2"), (acc, x) => x))
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires array type"))
-    val ex4 = intercept[AnalysisException] {
-      df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
-    }
-    assert(ex4.getErrorClass == "MISSING_COLUMN")
-    assert(ex4.messageParameters.head == "a")
+
+    checkError(
+      exception =
+        intercept[AnalysisException](df.selectExpr("zip_with(a1, a, (acc, x) -> x)")),
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.io.ColumnIOUtil
 import org.apache.parquet.io.GroupColumnIO
 import org.apache.parquet.io.PrimitiveColumnIO
 import org.apache.parquet.schema.Type.Repetition
@@ -42,14 +41,14 @@ case class ParquetColumn(
 
 object ParquetColumn {
   def apply(sparkType: DataType, io: PrimitiveColumnIO): ParquetColumn = {
-    this(sparkType, Some(io.getColumnDescriptor), ColumnIOUtil.getRepetitionLevel(io),
-      ColumnIOUtil.getDefinitionLevel(io), io.getType.isRepetition(Repetition.REQUIRED),
-      ColumnIOUtil.getFieldPath(io), Seq.empty)
+    this(sparkType, Some(io.getColumnDescriptor), io.getRepetitionLevel,
+      io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
+      io.getFieldPath, Seq.empty)
   }
 
   def apply(sparkType: DataType, io: GroupColumnIO, children: Seq[ParquetColumn]): ParquetColumn = {
-    this(sparkType, None, ColumnIOUtil.getRepetitionLevel(io),
-      ColumnIOUtil.getDefinitionLevel(io), io.getType.isRepetition(Repetition.REQUIRED),
-      ColumnIOUtil.getFieldPath(io), children)
+    this(sparkType, None, io.getRepetitionLevel,
+      io.getDefinitionLevel, io.getType.isRepetition(Repetition.REQUIRED),
+      io.getFieldPath, children)
   }
 }

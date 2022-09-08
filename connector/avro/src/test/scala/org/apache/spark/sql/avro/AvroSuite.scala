@@ -550,8 +550,8 @@ abstract class AvroSuite
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()
     assert(fixed.map(_(0).asInstanceOf[Array[Byte]]).exists(p => p(1) == 3))
 
-    val enum = spark.read.format("avro").load(testAvro).select("enum").collect()
-    assert(enum.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
+    val enums = spark.read.format("avro").load(testAvro).select("enum").collect()
+    assert(enums.map(_(0)).toSet == Set("SPADES", "CLUBS", "DIAMONDS"))
 
     val record = spark.read.format("avro").load(testAvro).select("record").collect()
     assert(record(0)(0).getClass.toString.contains("Row"))
@@ -875,7 +875,7 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "Not an enum: null")
+      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1075,8 +1075,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
       assert(message.contains("Caused by: java.lang.NullPointerException: "))
-      assert(message.contains(
-        "null of string in string in field Name of test_schema in test_schema"))
+      assert(message.contains("null in string in field Name"))
     }
   }
 
@@ -1182,14 +1181,16 @@ abstract class AvroSuite
           sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.contains("Cannot save interval data type into external storage.") ||
-          msg.contains("AVRO data source does not support interval data type."))
+          msg.contains("Column `INTERVAL '1' DAY` has a data type of interval day, " +
+            "which is not supported by Avro."))
 
         msg = intercept[AnalysisException] {
           spark.udf.register("testType", () => new IntervalData())
           sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
         }.getMessage
         assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"avro data source does not support interval data type."))
+          .contains("column `testtype()` has a data type of interval, " +
+            "which is not supported by avro."))
       }
     }
   }
@@ -1817,7 +1818,7 @@ abstract class AvroSuite
   // It generates input files for the test below:
   // "SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
   ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4/3.2") {
-    val resourceDir = "external/avro/src/test/resources"
+    val resourceDir = "connector/avro/src/test/resources"
     val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     def save(
       in: Seq[String],
@@ -2335,7 +2336,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.nonEmpty)
@@ -2368,7 +2369,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       assert(filterCondition.isDefined)
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       assert(fileScan.nonEmpty)
       assert(fileScan.get.partitionFilters.isEmpty)
@@ -2408,7 +2409,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val basePath = dir.getCanonicalPath + "/avro"
       val expected_plan_fragment =
         s"""
-           |\\(1\\) BatchScan
+           |\\(1\\) BatchScan avro file:$basePath
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
@@ -2449,7 +2450,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             .where("value = 'a'")
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan, _, _) => f
+            case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
           }
           assert(fileScan.nonEmpty)
           if (filtersPushdown) {

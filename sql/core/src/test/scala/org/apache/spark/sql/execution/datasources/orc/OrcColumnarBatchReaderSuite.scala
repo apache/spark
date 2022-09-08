@@ -30,7 +30,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -48,9 +48,6 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     "struct<col1:int,col2:int,p1:string>", "struct<col1:int,col2:int,p2:string>")
   orcFileSchemaList.foreach { case schema =>
     val orcFileSchema = TypeDescription.fromString(schema)
-
-    val isConstant = classOf[WritableColumnVector].getDeclaredField("isConstant")
-    isConstant.setAccessible(true)
 
     def getReader(
         requestedDataColIds: Array[Int],
@@ -83,10 +80,9 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       assert(batch.numCols() === 2)
 
       assert(batch.column(0).isInstanceOf[OrcColumnVector])
-      assert(batch.column(1).isInstanceOf[OnHeapColumnVector])
+      assert(batch.column(1).isInstanceOf[ConstantColumnVector])
 
-      val p1 = batch.column(1).asInstanceOf[OnHeapColumnVector]
-      assert(isConstant.get(p1).asInstanceOf[Boolean]) // Partition column is constant.
+      val p1 = batch.column(1).asInstanceOf[ConstantColumnVector]
       assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
     }
   }

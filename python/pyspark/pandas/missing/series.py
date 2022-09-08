@@ -39,7 +39,6 @@ class MissingPandasLikeSeries:
     convert_dtypes = _unsupported_function("convert_dtypes")
     infer_objects = _unsupported_function("infer_objects")
     reorder_levels = _unsupported_function("reorder_levels")
-    resample = _unsupported_function("resample")
     searchsorted = _unsupported_function("searchsorted")
     set_axis = _unsupported_function("set_axis")
     to_hdf = _unsupported_function("to_hdf")

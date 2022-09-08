@@ -33,6 +33,7 @@ from pyspark.ml.linalg import (
 )
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.sql import Row
+from pyspark.sql.functions import unwrap_udt
 
 
 class VectorTests(MLlibTestCase):
@@ -350,6 +351,19 @@ class VectorUDTTests(MLlibTestCase):
                 self.assertEqual(v, self.dv1)
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
+
+    def test_unwrap_udt(self):
+        df = self.spark.createDataFrame(
+            [(Vectors.dense(1.0, 2.0, 3.0),), (Vectors.sparse(3, {1: 1.0, 2: 5.5}),)],
+            ["vec"],
+        )
+        results = df.select(unwrap_udt("vec").alias("v2")).collect()
+        unwrapped_vec = Row("type", "size", "indices", "values")
+        expected = [
+            Row(v2=unwrapped_vec(1, None, None, [1.0, 2.0, 3.0])),
+            Row(v2=unwrapped_vec(0, 3, [1, 2], [1.0, 5.5])),
+        ]
+        self.assertEquals(results, expected)
 
 
 class MatrixUDTTests(MLlibTestCase):
