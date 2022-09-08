@@ -770,6 +770,32 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stop()
   }
 
+  test("SPARK-40186: shuffleMergeManager should have been shutdown before db closed") {
+    val maxId = 100
+    s1 = createYarnShuffleService()
+    val resolver = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    (0 until maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      val appInfo = makeAppInfo("user", appId)
+      s1.initializeApplication(appInfo)
+      val mergedShuffleInfo =
+        new ExecutorShuffleInfo(
+          Array(new File(tempDir, "foo/foo").getAbsolutePath,
+            new File(tempDir, "bar/bar").getAbsolutePath), 3,
+          SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+      resolver.registerExecutor(appId.toString, mergedShuffleInfo)
+    }
+
+    (0 until maxId).foreach { id =>
+      val appId = ApplicationId.newInstance(0, id)
+      resolver.applicationRemoved(appId.toString, true)
+    }
+
+    s1.stop()
+
+    assert(ShuffleTestAccessor.isMergedShuffleCleanerShutdown(resolver))
+  }
+
   test("Dangling finalized merged partition info in DB will be removed during restart") {
     s1 = createYarnShuffleServiceWithCustomMergeManager(
       ShuffleTestAccessor.createMergeManagerWithNoOpAppShuffleDBCleanup)
