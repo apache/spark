@@ -119,6 +119,20 @@ private[spark] object SparkThrowableHelper {
     parameterNames
   }
 
+  def getMessageParameters(
+      errorClass: String,
+      errorSubCLass: String,
+      params: Map[String, String]): Array[String] = {
+    getParameterNames(errorClass, errorSubCLass).map(params.getOrElse(_, "?"))
+  }
+
+  def getMessage(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String]): String = {
+    getMessage(errorClass, errorSubClass, messageParameters, "")
+  }
+
   def getMessage(
       errorClass: String,
       errorSubClass: String,

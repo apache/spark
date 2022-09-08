@@ -145,12 +145,12 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Check if error class is missing") {
     val ex1 = intercept[IllegalArgumentException] {
-      getMessage("", null, Array.empty)
+      getMessage("", null, Array.empty[String])
     }
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM", null, Array.empty)
+      getMessage("LOREM_IPSUM", null, Array.empty[String])
     }
     assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
@@ -158,7 +158,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[AssertionError] {
-      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty)
+      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty[String])
     }
 
     // Does not fail with too many args (expects 0 args)

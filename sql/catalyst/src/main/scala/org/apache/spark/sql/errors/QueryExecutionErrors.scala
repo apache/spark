@@ -231,10 +231,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(
-        toSQLValue(index, IntegerType),
-        toSQLValue(numElements, IntegerType),
-        toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map(
+        "indexValue" -> toSQLValue(index, IntegerType),
+        "arraySize" -> toSQLValue(numElements, IntegerType),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -245,11 +245,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       context: SQLQueryContext): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      messageParameters =
-        Array(
-          toSQLValue(index, IntegerType),
-          toSQLValue(numElements, IntegerType),
-          toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map(
+        "indexValue" -> toSQLValue(index, IntegerType),
+        "arraySize" -> toSQLValue(numElements, IntegerType),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -825,7 +824,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
-    new SparkSQLException(errorClass = "UNRECOGNIZED_SQL_TYPE", Array(sqlType.toString))
+    new SparkSQLException(
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      messageParameters = Map("typeName" -> sqlType.toString))
   }
 
   def unsupportedJdbcTypeError(content: String): Throwable = {
@@ -855,7 +856,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkSQLFeatureNotSupportedException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "JDBC_TRANSACTION",
-      messageParameters = Array[String]())
+      messageParameters = Map.empty[String, String])
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -1374,7 +1375,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
     new SparkIndexOutOfBoundsException(
-      errorClass = "INDEX_OUT_OF_BOUNDS", None, Array(toSQLValue(idx, IntegerType)))
+      errorClass = "INDEX_OUT_OF_BOUNDS",
+      errorSubClass = None,
+      messageParameters = Map("indexValue" -> toSQLValue(idx, IntegerType)))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1702,8 +1705,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {
-    new SparkSecurityException(errorClass = "RESET_PERMISSION_TO_ORIGINAL", None,
-      Array(permission.toString, path.toString, e.getMessage))
+    new SparkSecurityException(
+      errorClass = "RESET_PERMISSION_TO_ORIGINAL", None,
+      messageParameters = Map(
+        "permission" -> permission.toString,
+        "path" -> path.toString,
+        "message" -> e.getMessage))
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
