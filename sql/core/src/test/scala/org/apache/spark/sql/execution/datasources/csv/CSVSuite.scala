@@ -2653,11 +2653,12 @@ abstract class CSVSuite
               .option("header", true)
               .csv(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val ex = intercept[AnalysisException] {
-              readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }
-            assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-            assert(ex.messageParameters.head == "`AAA`")
+            checkError(
+              exception = intercept[AnalysisException] {
+                readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
+              },
+              errorClass = "UNRESOLVED_COLUMN",
+              parameters = Map("columnName" -> "`AAA`"))
           }
         }
       }

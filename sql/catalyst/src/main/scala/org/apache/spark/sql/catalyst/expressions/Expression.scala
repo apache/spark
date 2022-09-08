@@ -763,11 +763,15 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes wi
     if (!left.dataType.sameType(right.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_DIFF_TYPES",
-        messageParameters = Array(toSQLType(left.dataType), toSQLType(right.dataType)))
+        messageParameters = Map(
+          "left" -> toSQLType(left.dataType),
+          "right" -> toSQLType(right.dataType)))
     } else if (!inputType.acceptsType(left.dataType)) {
       DataTypeMismatch(
         errorSubClass = "BINARY_OP_WRONG_TYPE",
-        messageParameters = Array(toSQLType(inputType), toSQLType(left.dataType)))
+        messageParameters = Map(
+          "inputType" -> toSQLType(inputType),
+          "actualDataType" -> toSQLType(left.dataType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

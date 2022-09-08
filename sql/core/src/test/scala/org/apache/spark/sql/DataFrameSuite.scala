@@ -2784,11 +2784,12 @@ class DataFrameSuite extends QueryTest
 
     implicit val valueEncoder = RowEncoder(df.schema)
 
-    val err = intercept[AnalysisException] {
-      df.groupBy($"d", $"b").as[GroupByKey, Row]
-    }
-    assert(err.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(err.messageParameters.head == "`d`")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.groupBy($"d", $"b").as[GroupByKey, Row]
+      },
+      errorClass = "UNRESOLVED_COLUMN",
+      parameters = Map("columnName" -> "`d`"))
   }
 
   test("emptyDataFrame should be foldable") {

@@ -2089,19 +2089,20 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
-            |SELECT * FROM (
-            | SELECT c3 FROM (
-            |  SELECT c1, c2 from values(1,2) t(c1, c2)
-            |  )
-            |)
-          """.stripMargin)
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+              |SELECT * FROM (
+              | SELECT c3 FROM (
+              |  SELECT c1, c2 from values(1,2) t(c1, c2)
+              |  )
+              |)
+            """.stripMargin)
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        parameters = Map("columnName" -> "`c3`"))
     }
   }
 
