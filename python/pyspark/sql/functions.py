@@ -5405,15 +5405,26 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col2 : :class:`~pyspark.sql.Column` or str
         name of column containing a set of values
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of map type.
+
     Examples
     --------
     >>> df = spark.createDataFrame([([2, 5], ['a', 'b'])], ['k', 'v'])
-    >>> df.select(map_from_arrays(df.k, df.v).alias("map")).show()
+    >>> df = df.select(map_from_arrays(df.k, df.v).alias("col"))
+    >>> df.show()
     +----------------+
-    |             map|
+    |             col|
     +----------------+
     |{2 -> a, 5 -> b}|
     +----------------+
+    >>> df.printSchema()
+    root
+     |-- col: map (nullable = true)
+     |    |-- key: long
+     |    |-- value: string (valueContainsNull = true)
     """
     return _invoke_function_over_columns("map_from_arrays", col1, col2)
 
@@ -5441,12 +5452,21 @@ def array(
         column names or :class:`~pyspark.sql.Column`\\s that have
         the same data type.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of array type.
+
     Examples
     --------
     >>> df.select(array('age', 'age').alias("arr")).collect()
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     >>> df.select(array([df.age, df.age]).alias("arr")).collect()
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
+    >>> df.select(array('age', 'age').alias("col")).printSchema()
+    root
+     |-- col: array (nullable = false)
+     |    |-- element: long (containsNull = true)
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -5467,6 +5487,11 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     value :
         value or column to check for in array
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `boolean` type.
+
     Examples
     --------
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
@@ -5486,6 +5511,11 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     false otherwise.
 
     .. versionadded:: 2.4.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of `boolean` type.
 
     Examples
     --------
@@ -5514,6 +5544,11 @@ def slice(
     length : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the length of the slice
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of array type. Subset of array.
+
     Examples
     --------
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
@@ -5535,6 +5570,20 @@ def array_join(
 
     .. versionadded:: 2.4.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    delimiter : str
+        delimiter to use concatanate elements
+    null_replacement : str, optional
+        if set then null values will be replaced by this value
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a column of string type. Concatanated values.
+
     Examples
     --------
     >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
@@ -5554,19 +5603,40 @@ def array_join(
 def concat(*cols: "ColumnOrName") -> Column:
     """
     Concatenates multiple input columns together into a single column.
-    The function works with strings, binary and compatible array columns.
+    The function works with strings, numeric, binary and compatible array columns.
+    Or any type that can be converted to string is good candidate as input value.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        target column or columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        concatatened values. Type of the `Column` depends on input columns' type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_join` to concatanate string columns with delimiter
 
     Examples
     --------
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
-    >>> df.select(concat(df.s, df.d).alias('s')).collect()
+    >>> df = df.select(concat(df.s, df.d).alias('s'))
+    >>> df.collect()
     [Row(s='abcd123')]
+    >>> df
+    DataFrame[s: string]
 
     >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
-    >>> df.select(concat(df.a, df.b, df.c).alias("arr")).collect()
+    >>> df = df.select(concat(df.a, df.b, df.c).alias("arr"))
+    >>> df.collect()
     [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
+    >>> df
+    DataFrame[arr: array<bigint>]
     """
     return _invoke_function_over_seq_of_columns("concat", cols)
 
@@ -5583,6 +5653,18 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     The position is not zero based, but 1 based index. Returns 0 if the given
     value could not be found in the array.
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    value : Any
+        value to look for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        position of the value in the given array if found and 0 otherwise.
+
     Examples
     --------
     >>> df = spark.createDataFrame([(["c", "b", "a"],), ([],)], ['data'])
@@ -5594,8 +5676,10 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 
 def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     """
-    Collection function: Returns element of array at given index in extraction if col is array.
-    Returns value for the given key in extraction if col is map.
+    Collection function: Returns element of array at given index in `extraction` if col is array.
+    Returns value for the given key in `extraction` if col is map. If position is negative
+    then location of the element will start from end, if number is outside the
+    array boundaries then None will be returned.
 
     .. versionadded:: 2.4.0
 
@@ -5605,6 +5689,11 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
         name of column containing array or map
     extraction :
         index to check for in array or key to check for in map
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value at given position.
 
     Notes
     -----
@@ -5619,6 +5708,10 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
     >>> df.select(element_at(df.data, 1)).collect()
     [Row(element_at(data, 1)='a')]
+    >>> df.select(element_at(df.data, -1)).collect()
+    [Row(element_at(data, -1)='c')]
+    >>> df.select(element_at(df.data, -4)).collect()
+    [Row(element_at(data, -4)=None)]
 
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
     >>> df.select(element_at(df.data, lit("a"))).collect()
@@ -5641,6 +5734,11 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
         name of column containing array
     index : :class:`~pyspark.sql.Column` or str or int
         index to check for in array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value at given position.
 
     Notes
     -----
@@ -5706,6 +5804,11 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     element :
         element to be removed from the array
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array excluding given value.
+
     Examples
     --------
     >>> df = spark.createDataFrame([([1, 2, 3, 1, 1],), ([],)], ['data'])
@@ -5725,6 +5828,11 @@ def array_distinct(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         name of column or expression
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of unique values.
 
     Examples
     --------
@@ -5748,6 +5856,11 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
         name of column containing array
     col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values in the intersection of two arrays.
 
     Examples
     --------
@@ -5773,6 +5886,11 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values in union of two arrays.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -5797,6 +5915,11 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array of values from first array that is not in the second.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -5814,6 +5937,22 @@ def explode(col: "ColumnOrName") -> Column:
     `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 1.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value.
+
+    See Also
+    --------
+    :meth:`pyspark.functions.posexplode`
+    :meth:`pyspark.functions.explode_outer`
+    :meth:`pyspark.functions.posexplode_outer`
 
     Examples
     --------
@@ -5840,6 +5979,16 @@ def posexplode(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 2.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value including positions as a separate column.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -5865,6 +6014,16 @@ def explode_outer(col: "ColumnOrName") -> Column:
     `key` and `value` for elements in the map unless specified otherwise.
 
     .. versionadded:: 2.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value.
 
     Examples
     --------
@@ -5903,6 +6062,16 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 2.3.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        one row per array item or map key value including positions as a separate column.
+
     Examples
     --------
     >>> df = spark.createDataFrame(
@@ -5932,7 +6101,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
 
 def get_json_object(col: "ColumnOrName", path: str) -> Column:
     """
-    Extracts json object from a json string based on json path specified, and returns json string
+    Extracts json object from a json string based on json `path` specified, and returns json string
     of the extracted json object. It will return null if the input json string is invalid.
 
     .. versionadded:: 1.6.0
@@ -5943,6 +6112,11 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
         string column in json format
     path : str
         path to the json object to extract
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string representation of given JSON object value.
 
     Examples
     --------
@@ -5965,7 +6139,12 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         string column in json format
     fields : str
-        fields to extract
+        a field or fields to extract
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new row for each given field value from json object
 
     Examples
     --------
@@ -6004,6 +6183,11 @@ def from_json(
         in the version you use.
 
         .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of complex type from given JSON object.
 
     Examples
     --------
@@ -6059,6 +6243,11 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 
         .. # noqa
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        JSON object as string column.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -6108,6 +6297,11 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         .. versionchanged:: 3.0
            It accepts `options` parameter to control schema inferring.
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string representatio of a :class:`StructType` parsed from given JSON.
+
     Examples
     --------
     >>> df = spark.range(1)
@@ -6144,6 +6338,11 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
 
         .. # noqa
 
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a string representatio of a :class:`StructType` parsed from given CSV.
+
     Examples
     --------
     >>> df = spark.range(1)
@@ -6179,6 +6378,11 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
         in the version you use.
 
         .. # noqa
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a CSV string converted from given :class:`StructType`.
 
     Examples
     --------
