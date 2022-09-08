@@ -687,8 +687,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.stop()
   }
 
-  // TODO: should enable this test after SPARK-40186 is resolved.
-  ignore("Finalized merged shuffle are written into DB and cleaned up after application stopped") {
+  test("Finalized merged shuffle are written into DB and cleaned up after application stopped") {
     s1 = createYarnShuffleService()
 
     val app1Id = ApplicationId.newInstance(0, 1)
