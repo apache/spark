@@ -96,6 +96,24 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(Optimize.execute(query), correctAnswer)
   }
 
+  test("equality predicates inside a `NOT` can be propagated if it is not nullable") {
+    val query = testRelation
+      .where(Not(columnA === Add(columnD, Literal(1)) && columnD === Literal(9))).analyze
+    val correctAnswer = testRelation
+      .where(Not(columnA === Literal(10)) || Not(columnD === Literal(9))).analyze
+
+    comparePlans(Optimize.execute(query), correctAnswer)
+  }
+
+  test("equality predicates inside a `NOT` can't be propagated it is nullable") {
+    val query = testRelation
+      .where(Not(columnA === Add(columnB, Literal(1)) && columnB === Literal(9))).analyze
+    val correctAnswer = testRelation
+      .where(Not(columnA === Add(columnB, Literal(1))) || Not(columnB === Literal(9))).analyze
+
+    comparePlans(Optimize.execute(query), correctAnswer)
+  }
+
   test("equality predicates inside a `NOT` should not be picked for propagation") {
     val query = testRelation
       .select(columnA)
