@@ -92,9 +92,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    * Returns whether this DecimalType is tighter than `other`. If yes, it means `this`
    * can be casted into `other` safely without losing any precision or range.
    */
-  private[sql] def isTighterThan(other: DataType): Boolean = isTighterThanInternal(other)
-
-  private def isTighterThanInternal(other: DataType): Boolean = other match {
+  private[sql] def isTighterThan(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
     case dt: IntegralType =>
