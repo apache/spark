@@ -1046,8 +1046,7 @@ CREATE table  t(v array<string>) USING PARQUET
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`spark_catalog`.`default`.`t`'). The associated location('file:/Users/Daniel.Tenedorio/spark-2/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/t') already exists.
+
 
 
 -- !query
@@ -1056,10 +1055,9 @@ EXPLAIN SELECT * FROM t  WHERE v IN (array('a'), null)
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-org.apache.spark.sql.AnalysisException: Table or view not found: t; line 1 pos 22;
-'Project [*]
-+- 'Filter 'v IN (array(a),null)
-   +- 'UnresolvedRelation [t], [], false
+*Filter v#x IN ([a],null)
++- *ColumnarToRow
+   +- FileScan parquet spark_catalog.default.t[v#x] Batched: true, DataFilters: [v#x IN ([a],null)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t], PartitionFilters: [], PushedFilters: [In(v, [[a],null])], ReadSchema: struct<v:array<string>>
 
 
 -- !query
@@ -1067,5 +1065,4 @@ DROP TABLE t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: t; line 1 pos 11
+
