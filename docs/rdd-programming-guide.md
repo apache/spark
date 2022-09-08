@@ -984,7 +984,7 @@ for details.
 </tr>
 <tr>
   <td> <b>sample</b>(<i>withReplacement</i>, <i>fraction</i>, <i>seed</i>) </td>
-  <td> Sample a fraction <i>fraction</i> of the data, with or without replacement, using a given random number generator seed. </td>
+  <td> Sample a <i>fraction</i> of the data, with or without replacement, using a given random number generator seed. </td>
 </tr>
 <tr>
   <td> <b>union</b>(<i>otherDataset</i>) </td>
