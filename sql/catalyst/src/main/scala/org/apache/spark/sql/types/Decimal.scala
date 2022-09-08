@@ -483,12 +483,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def remainder(that: Decimal): Decimal = this % that
 
-  def unary_- : Decimal = {
-    if (decimalVal.eq(null)) {
-      Decimal(-longVal, precision, scale)
-    } else {
-      Decimal(-decimalVal, precision, scale)
-    }
+  def unary_- : Decimal = if (decimalVal.eq(null)) {
+    Decimal(-longVal, precision, scale)
+  } else {
+    Decimal(-decimalVal, precision, scale)
   }
 
   def abs: Decimal = if (this < Decimal.ZERO) this.unary_- else this
