@@ -119,8 +119,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Moving to project root and building API docs."
     cd("..")
 
-    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt \"set parallelExecution := false\" clean package -Phive") || raise("PySpark doc generation failed")
+    puts "Running 'build/sbt clean package -Phive -Pnoshade-connect' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive -Pnoshade-connect") || raise("PySpark doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")

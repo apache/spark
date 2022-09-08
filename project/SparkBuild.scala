@@ -1193,7 +1193,8 @@ object CopyDependencies {
           if (destJar.isFile()) {
             destJar.delete()
           }
-          if (jar.getName.contains("spark-connect")) {
+          if (jar.getName.contains("spark-connect") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
