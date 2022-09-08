@@ -45,6 +45,9 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  * `FileOutputCommitter` or it must implement the `StreamCapabilities`
  * interface and declare that it has the capability
  * `mapreduce.job.committer.dynamic.partitioning`.
+ * That feature is available on Hadoop releases with the Intermediate
+ * Manifest Committer for GCS and ABFS; it is not supported by the
+ * S3A committers.
  * @constructor Instantiate.
  * @param jobId                     job
  * @param dest                      destination
@@ -55,7 +58,8 @@ class PathOutputCommitProtocol(
     jobId: String,
     dest: String,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, dest, dynamicPartitionOverwrite) with Serializable {
+  extends HadoopMapReduceCommitProtocol(jobId, dest, dynamicPartitionOverwrite)
+    with Serializable {
 
   /** The committer created. */
   @transient private var committer: PathOutputCommitter = _
@@ -84,7 +88,6 @@ class PathOutputCommitProtocol(
   override protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
     logTrace(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
-
 
     // Special feature to force out the FileOutputCommitter, so as to guarantee
     // that the binding is working properly.
@@ -174,7 +177,7 @@ class PathOutputCommitProtocol(
   override def newTaskTempFileAbsPath(
     taskContext: TaskAttemptContext,
     absoluteDir: String,
-    spec: FileNameSpec): String =  {
+    spec: FileNameSpec): String = {
 
     if (supportsDynamicPartitions) {
       super.newTaskTempFileAbsPath(taskContext, absoluteDir, spec)
@@ -208,9 +211,10 @@ object PathOutputCommitProtocol {
     " dynamicPartitionOverwrite"
 
   /**
-     * Stream Capabilities probe for spark dynamic partitioning compatibility.
-     */
-  private[cloud] val CAPABILITY_DYNAMIC_PARTITIONING = "mapreduce.job.committer.dynamic.partitioning"
+   * Stream Capabilities probe for spark dynamic partitioning compatibility.
+   */
+  private[cloud] val CAPABILITY_DYNAMIC_PARTITIONING =
+    "mapreduce.job.committer.dynamic.partitioning"
 
   /**
    * Scheme prefix for per-filesystem scheme committers.

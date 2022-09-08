@@ -108,18 +108,23 @@ class CommitterBindingSuite extends SparkFunSuite {
 
   test("committer protocol can be serialized and deserialized") {
     val tempDir = File.createTempFile("ser", ".bin")
+
     tempDir.delete()
     val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString, false)
+
     val serData = File.createTempFile("ser", ".bin")
     var out: ObjectOutputStream = null
     var in: ObjectInputStream = null
+
     try {
       out = new ObjectOutputStream(new FileOutputStream(serData))
       out.writeObject(committer)
       out.close
       in = new ObjectInputStream(new FileInputStream(serData))
       val result = in.readObject()
+
       val committer2 = result.asInstanceOf[PathOutputCommitProtocol]
+
       assert(committer.destination === committer2.destination,
         "destination mismatch on round trip")
       assert(committer.destPath === committer2.destPath,
@@ -134,6 +139,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     val instance = FileCommitProtocol.instantiate(
       pathCommitProtocolClassname,
       jobId, "file:///tmp", false)
+
     val protocol = instance.asInstanceOf[PathOutputCommitProtocol]
     assert("file:///tmp" === protocol.destination)
   }
@@ -199,7 +205,9 @@ class CommitterBindingSuite extends SparkFunSuite {
    */
   test("FileOutputCommitter through PathOutputCommitProtocol") {
     // temp path; use a unique filename
-    val jobCommitDir = File.createTempFile("FileOutputCommitter-through-PathOutputCommitProtocol", "")
+    val jobCommitDir = File.createTempFile(
+      "FileOutputCommitter-through-PathOutputCommitProtocol",
+      "")
     try {
       // delete the temp file and create a temp dir.
       jobCommitDir.delete();

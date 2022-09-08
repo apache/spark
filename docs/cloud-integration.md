@@ -309,7 +309,7 @@ It is not critical for job correctness to use this with Azure storage; the
 classic FileOutputCommitter is safe there -however this new committer scales
 better for large jobs with deep and wide directory trees.
 
-Because google GCS does not support atomic directory renaming,
+Because Google GCS does not support atomic directory renaming,
 the manifest committer should be used where available.
 
 This committer does support  "dynamic partition overwrite" (see below). 
