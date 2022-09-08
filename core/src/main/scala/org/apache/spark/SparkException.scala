@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.FileNotFoundException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 import java.util.ConcurrentModificationException
@@ -332,22 +332,6 @@ private[spark] class SparkIndexOutOfBoundsException(
   override def getErrorSubClass: String = errorSubClass.orNull
 }
 
-/**
- * IO exception thrown from Spark with an error class.
- */
-private[spark] class SparkIOException(
-    errorClass: String,
-    errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
-  extends IOException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
-    with SparkThrowable {
-
-  override def getMessageParameters: Array[String] = messageParameters
-  override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull
-}
-
 private[spark] class SparkRuntimeException(
     errorClass: String,
     errorSubClass: Option[String] = None,
@@ -441,25 +425,6 @@ private[spark] class SparkSQLException(
   override def getMessageParameters: Array[String] = messageParameters
   override def getErrorClass: String = errorClass
   override def getErrorSubClass: String = errorSubClass.orNull
-}
-
-/**
- * No such element exception thrown from Spark with an error class.
- */
-private[spark] class SparkNoSuchElementException(
-    errorClass: String,
-    errorSubClass: Option[String] = None,
-    messageParameters: Array[String],
-    context: Array[QueryContext],
-    summary: String)
-  extends NoSuchElementException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters, summary))
-    with SparkThrowable {
-
-  override def getMessageParameters: Array[String] = messageParameters
-  override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull
-  override def getQueryContext: Array[QueryContext] = context
 }
 
 /**
