@@ -138,6 +138,10 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasMode(e: Column, ignoreNA: Boolean): Column = {
     Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
   }
+
+  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
+    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
+  }
 }
 
 /**

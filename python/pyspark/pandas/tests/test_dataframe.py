@@ -6958,6 +6958,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
         self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
 
+        # ddof
+        with self.assertRaisesRegex(TypeError, "ddof must be integer"):
+            psdf.cov(ddof="ddof")
+        for ddof in [-1, 0, 2]:
+            self.assert_eq(pdf.cov(ddof=ddof), psdf.cov(ddof=ddof), almost=True)
+            self.assert_eq(
+                pdf.cov(min_periods=4, ddof=ddof), psdf.cov(min_periods=4, ddof=ddof), almost=True
+            )
+            self.assert_eq(pdf.cov(min_periods=5, ddof=ddof), psdf.cov(min_periods=5, ddof=ddof))
+
         # bool
         pdf = pd.DataFrame(
             {
