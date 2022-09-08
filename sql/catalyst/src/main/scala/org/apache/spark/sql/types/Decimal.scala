@@ -453,7 +453,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal + that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      Decimal(toBigDecimal.bigDecimal.add(that.toBigDecimal.bigDecimal))
+      Decimal(toJavaBigDecimal.add(that.toJavaBigDecimal))
     }
   }
 
@@ -461,7 +461,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal - that.longVal, Math.max(precision, that.precision) + 1, scale)
     } else {
-      Decimal(toBigDecimal.bigDecimal.subtract(that.toBigDecimal.bigDecimal))
+      Decimal(toJavaBigDecimal.subtract(that.toJavaBigDecimal))
     }
   }
 
