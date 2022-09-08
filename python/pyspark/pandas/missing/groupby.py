@@ -59,7 +59,6 @@ class MissingPandasLikeDataFrameGroupBy:
     # Functions
     boxplot = _unsupported_function("boxplot")
     ngroup = _unsupported_function("ngroup")
-    nth = _unsupported_function("nth")
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
@@ -93,7 +92,6 @@ class MissingPandasLikeSeriesGroupBy:
     aggregate = _unsupported_function("aggregate")
     describe = _unsupported_function("describe")
     ngroup = _unsupported_function("ngroup")
-    nth = _unsupported_function("nth")
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
