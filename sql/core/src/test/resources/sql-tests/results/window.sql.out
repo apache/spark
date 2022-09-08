@@ -915,7 +915,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42000",
   "messageParameters" : {
     "inputString" : "The definition of window `w` is repetitive."
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 226,
+    "stopIndex" : 394,
+    "fragment" : "WINDOW\n    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),\n    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)"
+  } ]
 }
 
 

@@ -688,7 +688,12 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
-    assertAnalysisErrorClass(parsedPlan, "UNRESOLVED_COLUMN", Array("`a`", "`x`, `y`"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      "UNRESOLVED_COLUMN",
+      "WITH_SUGGESTION",
+      Array("`a`", "`x`, `y`"),
+      caseSensitive = true)
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
@@ -697,7 +702,12 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
     assertNotResolved(parsedPlan2)
-    assertAnalysisErrorClass(parsedPlan2, "UNRESOLVED_COLUMN", Array("`a`", "`x`, `y`"))
+    assertAnalysisErrorClass(
+      parsedPlan2,
+      "UNRESOLVED_COLUMN",
+      "WITH_SUGGESTION",
+      Array("`a`", "`x`, `y`"),
+      caseSensitive = true)
   }
 
   test("SPARK-36498: reorder inner fields with byName mode") {

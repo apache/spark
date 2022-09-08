@@ -1024,3 +1024,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Literals of type 'not_supported' are currently not supported for the interval day to second type.; line 1 pos 7
+
+
+-- !query
+select datepart('year', c), datepart('year', ntz), datepart('year', i) from t
+-- !query schema
+struct<datepart(year FROM c):int,datepart(year FROM ntz):int,datepart(year FROM i):int>
+-- !query output
+2011	2011	11
+
+
+-- !query
+select datepart('DAY', interval '123 12:34:56.789123123' DAY TO SECOND)
+-- !query schema
+struct<datepart(DAY FROM INTERVAL '123 12:34:56.789123' DAY TO SECOND):int>
+-- !query output
+123

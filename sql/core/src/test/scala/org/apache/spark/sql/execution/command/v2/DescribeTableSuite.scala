@@ -104,10 +104,11 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           sql(s"DESC $tbl key1").collect()
         },
         errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`key1`",
-          "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
+          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
     }
   }
 
@@ -129,10 +130,11 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
             sql(s"DESC $tbl KEY").collect()
           },
           errorClass = "UNRESOLVED_COLUMN",
+          errorSubClass = "WITH_SUGGESTION",
           sqlState = "42000",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "objectList" -> "`test_catalog`.`ns`.`tbl`.`key`"))
+            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"))
       }
     }
   }

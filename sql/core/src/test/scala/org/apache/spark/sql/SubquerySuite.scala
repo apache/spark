@@ -886,9 +886,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
-      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.sameElements(Array("`a`", "`t`.`i`, `t`.`j`")))
+      checkError(
+        exception =
+          intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)")),
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = Some("WITH_SUGGESTION"),
+        parameters = Map(
+          "objectName" -> "`a`",
+          "proposal" -> "`t`.`i`, `t`.`j`"))
     }
   }
 

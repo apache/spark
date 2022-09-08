@@ -231,10 +231,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`year`",
-    "objectList" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+    "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
   }
 }
 
@@ -340,10 +341,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`s`",
-    "objectList" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+    "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
   }
 }
 

@@ -583,10 +583,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`q2`",
-    "objectList" : "`int8_tbl`.`q1`"
+    "proposal" : "`int8_tbl`.`q1`"
   }
 }
 

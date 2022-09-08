@@ -151,6 +151,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
+    <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
@@ -191,7 +192,8 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
-    <antlr4.version>4.8</antlr4.version>
+    <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
+    <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
     <htmlunit.version>2.62.0</htmlunit.version>
@@ -3503,6 +3505,7 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+        <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
         <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
         <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>
