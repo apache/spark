@@ -26,14 +26,17 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, FinalizeShuffleMerge}
-import org.apache.spark.network.shuffledb.DB
-import org.apache.spark.network.shuffledb.DBBackend
+import org.apache.spark.network.shuffledb.{DB, DBBackend}
 import org.apache.spark.network.util.{DBProvider, TransportConf}
 
 /**
  * just a cheat to get package-visible members in tests
  */
 object ShuffleTestAccessor {
+
+  import com.fasterxml.jackson.databind.ObjectMapper
+
+  import org.apache.spark.network.shuffledb.StoreVersion
 
   def getBlockResolver(handler: ExternalBlockHandler): ExternalShuffleBlockResolver = {
     handler.blockManager
@@ -212,9 +215,12 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
-    dbBackend: DBBackend,
-    file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val db = DBProvider.initDB(dbBackend, file)
+      dbBackend: DBBackend,
+      file: File,
+      version: StoreVersion,
+      mapper: ObjectMapper)
+    : ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+    val db = DBProvider.initDB(dbBackend, file, version, mapper)
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result
