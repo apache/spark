@@ -90,26 +90,10 @@ private[spark] object SparkThrowableHelper {
       errorSubClass: String,
       messageParameters: Array[String],
       context: String): String = {
-    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
-      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
-    val (displayClass, displayMessageParameters, displayFormat) = if (errorInfo.subClass.isEmpty) {
-      (errorClass, messageParameters, errorInfo.messageFormat)
-    } else {
-      val subClasses = errorInfo.subClass.get
-      if (errorSubClass == null) {
-        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
-      }
-      val errorSubInfo = subClasses.getOrElse(errorSubClass,
-        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
-      (errorClass + "." + errorSubClass, messageParameters,
-        errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
-    }
-    val displayMessage = String.format(
-      displayFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-      displayMessageParameters : _*)
-    val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
-
-    s"[$displayClass] $displayMessage$displayQueryContext"
+    val names = getParameterNames(errorClass, errorSubClass)
+    assert(names.length <= messageParameters.length)
+    val params = (names zip messageParameters).toMap
+    getMessage(errorClass, errorSubClass, params, context)
   }
 
   def getParameterNames(errorClass: String, errorSubCLass: String): Array[String] = {

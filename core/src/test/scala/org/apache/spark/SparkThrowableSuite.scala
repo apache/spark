@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
@@ -158,7 +157,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Check if message parameters match message format") {
     // Requires 2 args
-    intercept[IllegalFormatException] {
+    intercept[AssertionError] {
       getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty)
     }
 
