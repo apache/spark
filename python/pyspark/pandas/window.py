@@ -40,6 +40,9 @@ from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
+from pyspark.sql.types import (
+    DoubleType,
+)
 from pyspark.sql.window import WindowSpec
 
 
@@ -100,6 +103,15 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)
+
+    def quantile(self, q: float, accuracy: int = 10000) -> FrameLike:
+        def quantile(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                F.percentile_approx(scol.cast(DoubleType()), q, accuracy).over(self._window),
+            ).otherwise(SF.lit(None))
+
+        return self._apply_as_series_or_frame(quantile)
 
     def std(self) -> FrameLike:
         def std(scol: Column) -> Column:
@@ -560,6 +572,101 @@ class Rolling(RollingLike[FrameLike]):
         4  4.333333  21.666667
         """
         return super().mean()
+
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate the rolling quantile of the values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the rolling
+            calculation.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameters are not supported yet.
+
+        the current implementation of this API uses Spark's Window without
+        specifying partition specification. This leads to move all data into
+        single partition in single machine and could cause serious
+        performance degradation. Avoid this method against very large dataset.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.quantile : Equivalent method for Series.
+        DataFrame.quantile : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([4, 3, 5, 2, 6])
+        >>> s
+        0    4
+        1    3
+        2    5
+        3    2
+        4    6
+        dtype: int64
+
+        >>> s.rolling(2).quantile(0.5)
+        0    NaN
+        1    3.0
+        2    3.0
+        3    2.0
+        4    2.0
+        dtype: float64
+
+        >>> s.rolling(3).quantile(0.5)
+        0    NaN
+        1    NaN
+        2    4.0
+        3    3.0
+        4    5.0
+        dtype: float64
+
+        For DataFrame, each rolling quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df
+           A   B
+        0  4  16
+        1  3   9
+        2  5  25
+        3  2   4
+        4  6  36
+
+        >>> df.rolling(2).quantile(0.5)
+             A    B
+        0  NaN  NaN
+        1  3.0  9.0
+        2  3.0  9.0
+        3  2.0  4.0
+        4  2.0  4.0
+
+        >>> df.rolling(3).quantile(0.5)
+             A     B
+        0  NaN   NaN
+        1  NaN   NaN
+        2  4.0  16.0
+        3  3.0   9.0
+        4  5.0  25.0
+        """
+        return super().quantile(quantile, accuracy)
 
     def std(self) -> FrameLike:
         """
@@ -1136,6 +1243,77 @@ class RollingGroupby(RollingLike[FrameLike]):
         """
         return super().mean()
 
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate rolling quantile.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the rolling
+            calculation.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameters are not supported yet.
+
+        See Also
+        --------
+        Series.rolling : Calling object with Series data.
+        DataFrame.rolling : Calling object with DataFrames.
+        Series.quantile : Equivalent method for Series.
+        DataFrame.quantile : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).rolling(3).quantile(0.5).sort_index()
+        2  0     NaN
+           1     NaN
+        3  2     NaN
+           3     NaN
+           4     3.0
+        4  5     NaN
+           6     NaN
+           7     4.0
+           8     4.0
+        5  9     NaN
+           10    NaN
+        dtype: float64
+
+        For DataFrame, each rolling quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).rolling(2).quantile(0.5).sort_index()
+                 B
+        A
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
+        """
+        return super().quantile(quantile, accuracy)
+
     def std(self) -> FrameLike:
         """
         Calculate rolling standard deviation.
@@ -1482,6 +1660,66 @@ class Expanding(ExpandingLike[FrameLike]):
         dtype: float64
         """
         return super().mean()
+
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+        Calculate the expanding quantile of the values.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the expanding
+            calculation.
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas (the result is
+        similar to the interpolation set to `lower`), also `interpolation` parameters are
+        not supported yet.
+
+        the current implementation of this API uses Spark's Window without
+        specifying partition specification. This leads to move all data into
+        single partition in single machine and could cause serious
+        performance degradation. Avoid this method against very large dataset.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.quantile : Equivalent method for Series.
+        DataFrame.quantile : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        The below examples will show expanding quantile calculations with window sizes of
+        two and three, respectively.
+
+        >>> s = ps.Series([1, 2, 3, 4])
+        >>> s.expanding(2).quantile(0.5)
+        0    NaN
+        1    1.0
+        2    2.0
+        3    2.0
+        dtype: float64
+
+        >>> s.expanding(3).quantile(0.5)
+        0    NaN
+        1    NaN
+        2    2.0
+        3    2.0
+        dtype: float64
+        """
+        return super().quantile(quantile, accuracy)
 
     def std(self) -> FrameLike:
         """
@@ -1977,6 +2215,77 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
           10  25.0
         """
         return super().mean()
+
+    def quantile(self, quantile: float, accuracy: int = 10000) -> FrameLike:
+        """
+         Calculate the expanding quantile of the values.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        quantile : float
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the expanding
+            calculation.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also `interpolation`
+        parameters are not supported yet.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.quantile : Equivalent method for Series.
+        DataFrame.quantile : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s.groupby(s).expanding(3).quantile(0.5).sort_index()
+        2  0     NaN
+           1     NaN
+        3  2     NaN
+           3     NaN
+           4     3.0
+        4  5     NaN
+           6     NaN
+           7     4.0
+           8     4.0
+        5  9     NaN
+           10    NaN
+        dtype: float64
+
+        For DataFrame, each expanding quantile is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.groupby(df.A).expanding(2).quantile(0.5).sort_index()
+                 B
+        A
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
+        """
+        return super().quantile(quantile, accuracy)
 
     def std(self) -> FrameLike:
         """
