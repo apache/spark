@@ -29,7 +29,7 @@ class SparkException(
     cause: Throwable,
     errorClass: Option[String],
     errorSubClass: Option[String],
-    messageParameters: Array[String],
+    messageParameters: Map[String, String],
     context: Array[QueryContext] = Array.empty)
   extends Exception(message, cause) with SparkThrowable {
 
@@ -37,23 +37,24 @@ class SparkException(
        message: String,
        cause: Throwable,
        errorClass: Option[String],
-       messageParameters: Array[String]) =
-     this(message = message,
-          cause = cause,
-          errorClass = errorClass,
-          errorSubClass = None,
-          messageParameters = messageParameters)
+       messageParameters: Map[String, String]) =
+     this(
+       message = message,
+       cause = cause,
+       errorClass = errorClass,
+       errorSubClass = None,
+       messageParameters = messageParameters)
 
   def this(message: String, cause: Throwable) =
     this(message = message, cause = cause, errorClass = None, errorSubClass = None,
-      messageParameters = Array.empty)
+      messageParameters = Map.empty)
 
   def this(message: String) =
     this(message = message, cause = null)
 
   def this(
       errorClass: String,
-      messageParameters: Array[String],
+      messageParameters: Map[String, String],
       cause: Throwable,
       context: Array[QueryContext],
       summary: String) =
@@ -65,7 +66,7 @@ class SparkException(
       messageParameters = messageParameters,
       context)
 
-  def this(errorClass: String, messageParameters: Array[String], cause: Throwable) =
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Throwable) =
     this(
       message = SparkThrowableHelper.getMessage(errorClass, null, messageParameters),
       cause = cause,
@@ -76,7 +77,7 @@ class SparkException(
   def this(
       errorClass: String,
       errorSubClass: String,
-      messageParameters: Array[String],
+      messageParameters: Map[String, String],
       cause: Throwable) =
     this(
       message = SparkThrowableHelper.getMessage(errorClass, errorSubClass, messageParameters),
@@ -85,7 +86,12 @@ class SparkException(
       errorSubClass = Some(errorSubClass),
       messageParameters = messageParameters)
 
-  override def getMessageParameters: Array[String] = messageParameters
+  override def getMessageParameters: Array[String] = {
+    errorClass.map { ec =>
+      SparkThrowableHelper.getMessageParameters(ec, errorSubClass.orNull, messageParameters)
+    }.getOrElse(Array.empty)
+  }
+
   override def getErrorClass: String = errorClass.orNull
   override def getErrorSubClass: String = errorSubClass.orNull
   override def getQueryContext: Array[QueryContext] = context
@@ -93,11 +99,17 @@ class SparkException(
 
 object SparkException {
   def internalError(msg: String): SparkException = {
-    new SparkException(errorClass = "INTERNAL_ERROR", messageParameters = Array(msg), cause = null)
+    new SparkException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> msg),
+      cause = null)
   }
 
   def internalError(msg: String, cause: Throwable): SparkException = {
-    new SparkException(errorClass = "INTERNAL_ERROR", messageParameters = Array(msg), cause = cause)
+    new SparkException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> msg),
+      cause = cause)
   }
 }
 

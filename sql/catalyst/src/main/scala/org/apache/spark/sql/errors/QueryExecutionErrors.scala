@@ -180,13 +180,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
-    new SparkException(errorClass = "CANNOT_CAST_DATATYPE",
-      messageParameters = Array(NullType.typeName, to.typeName), null)
+    new SparkException(
+      errorClass = "CANNOT_CAST_DATATYPE",
+      messageParameters = Map(
+        "sourceType" -> NullType.typeName,
+        "targetType" -> to.typeName),
+      cause = null)
   }
 
   def cannotCastError(from: DataType, to: DataType): Throwable = {
-    new SparkException(errorClass = "CANNOT_CAST_DATATYPE",
-      messageParameters = Array(from.typeName, to.typeName), null)
+    new SparkException(
+      errorClass = "CANNOT_CAST_DATATYPE",
+      messageParameters = Map(
+        "sourceType" -> from.typeName,
+        "targetType" -> to.typeName),
+      cause = null)
   }
 
   def cannotParseDecimalError(): Throwable = {
@@ -203,8 +211,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
       outputType: String, e: Throwable): Throwable = {
-    new SparkException(errorClass = "FAILED_EXECUTE_UDF",
-      messageParameters = Array(funcCls, inputTypes, outputType), e)
+    new SparkException(
+      errorClass = "FAILED_EXECUTE_UDF",
+      messageParameters = Map(
+        "functionName" -> funcCls,
+        "signature" -> inputTypes,
+        "result" -> outputType),
+      cause = e)
   }
 
   def divideByZeroError(context: SQLQueryContext): ArithmeticException = {
@@ -765,7 +778,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def writingJobAbortedError(e: Throwable): Throwable = {
     new SparkException(
       errorClass = "WRITING_JOB_ABORTED",
-      messageParameters = Array.empty,
+      messageParameters = Map.empty,
       cause = e)
   }
 
@@ -2086,22 +2099,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidBucketFile(path: String): Throwable = {
-    new SparkException(errorClass = "INVALID_BUCKET_FILE", messageParameters = Array(path),
+    new SparkException(
+      errorClass = "INVALID_BUCKET_FILE",
+      messageParameters = Map("path" -> path),
       cause = null)
   }
 
   def multipleRowSubqueryError(context: SQLQueryContext): Throwable = {
     new SparkException(
       errorClass = "MULTI_VALUE_SUBQUERY_ERROR",
-      messageParameters = Array.empty,
+      messageParameters = Map.empty,
       cause = null,
       context = getQueryContext(context),
       summary = getSummary(context))
   }
 
   def nullComparisonResultError(): Throwable = {
-    new SparkException(errorClass = "NULL_COMPARISON_RESULT",
-      messageParameters = Array(), cause = null)
+    new SparkException(
+      errorClass = "NULL_COMPARISON_RESULT",
+      messageParameters = Map.empty,
+      cause = null)
   }
 
   def invalidPatternError(funcName: String, pattern: String): RuntimeException = {

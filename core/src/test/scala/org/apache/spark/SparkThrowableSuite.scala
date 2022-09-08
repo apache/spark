@@ -211,7 +211,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     try {
       throw new SparkException(
         errorClass = "WRITING_JOB_ABORTED",
-        messageParameters = Array.empty,
+        messageParameters = Map.empty,
         cause = null)
     } catch {
       case e: SparkThrowable =>
@@ -227,7 +227,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     try {
       throw new SparkException(
         errorClass = "INTERNAL_ERROR",
-        messageParameters = Array("this is an internal error"),
+        messageParameters = Map("message" -> "this is an internal error"),
         cause = null
       )
     } catch {

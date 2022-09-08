@@ -317,12 +317,16 @@ private[spark] object SparkCoreErrors {
   }
 
   def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {
-    new SparkException(errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
-      messageParameters = Array(invalidProtocol), cause = null)
+    new SparkException(
+      errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      messageParameters = Map("protocol" -> invalidProtocol),
+      cause = null)
   }
 
   def graphiteSinkPropertyMissingError(missingProperty: String): Throwable = {
-    new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
-      messageParameters = Array(missingProperty), cause = null)
+    new SparkException(
+      errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Map("property" -> missingProperty),
+      cause = null)
   }
 }
