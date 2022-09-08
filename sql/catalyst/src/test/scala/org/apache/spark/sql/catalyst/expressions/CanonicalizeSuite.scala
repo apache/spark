@@ -183,4 +183,11 @@ class CanonicalizeSuite extends SparkFunSuite {
     // canonicalization should not converted resolved cast to unresolved
     assert(cast.canonicalized.resolved)
   }
+
+  test("SPARK-40362: Commutative operator under BinaryComparison") {
+    Seq(EqualTo, EqualNullSafe, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual)
+      .foreach { bc =>
+        assert(bc(Add($"a", $"b"), Literal(10)).semanticEquals(bc(Add($"b", $"a"), Literal(10))))
+      }
+  }
 }

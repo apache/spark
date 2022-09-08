@@ -28,16 +28,29 @@ object Canonicalize {
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
     case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => reorderCommutativeOperators(other) :: Nil
+    case other => reorderOperators(other) :: Nil
   }
 
   /** Orders a set of commutative operations by their hash code. */
   private def orderCommutative(
       e: Expression,
-      f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] =
+      f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
     gatherCommutative(e, f).sortBy(_.hashCode())
+  }
 
-  def reorderCommutativeOperators(e: Expression): Expression = e match {
+  private def orderBinaryComparison(
+      e: BinaryComparison,
+      f: (Expression, Expression) => BinaryComparison) = {
+    val l = reorderOperators(e.left)
+    val r = reorderOperators(e.right)
+    if (l.hashCode() > r.hashCode()) {
+      f(r, l)
+    } else {
+      f(l, r)
+    }
+  }
+
+  def reorderOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
     case a @ Add(_, _, f) =>
       orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
@@ -65,6 +78,15 @@ object Canonicalize {
       val newChildren = orderCommutative(l, { case Least(children) => children })
       Least(newChildren)
 
-    case _ => e.withNewChildren(e.children.map(reorderCommutativeOperators))
+    case bc: EqualTo => orderBinaryComparison(bc, EqualTo)
+    case bc: EqualNullSafe => orderBinaryComparison(bc, EqualNullSafe)
+
+    case bc: GreaterThan => orderBinaryComparison(bc, LessThan)
+    case bc: LessThan => orderBinaryComparison(bc, GreaterThan)
+
+    case bc: GreaterThanOrEqual => orderBinaryComparison(bc, LessThanOrEqual)
+    case bc: LessThanOrEqual => orderBinaryComparison(bc, GreaterThanOrEqual)
+
+    case _ => e.withNewChildren(e.children.map(reorderOperators))
   }
 }
