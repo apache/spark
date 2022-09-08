@@ -76,7 +76,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     checkRewrite(RewriteDistinctAggregates(input))
   }
 
-  test("eliminate multiple distinct groups due to superficial differences") {
+  test("SPARK-40382: eliminate multiple distinct groups due to superficial differences") {
     val input = testRelation
       .groupBy($"a")(
         countDistinct($"b" + $"c").as("agg1"),
@@ -91,7 +91,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
-  test("reduce multiple distinct groups due to superficial differences") {
+  test("SPARK-40382: reduce multiple distinct groups due to superficial differences") {
     val input = testRelation
       .groupBy($"a")(
         countDistinct($"b" + $"c" + $"d").as("agg1"),

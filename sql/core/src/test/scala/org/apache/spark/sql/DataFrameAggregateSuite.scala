@@ -1485,6 +1485,22 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
   }
+
+  test("SPARK-40382: All distinct aggregation children are semantically equivalent") {
+    val df = Seq(
+      (1, 1, 1),
+      (1, 2, 3),
+      (1, 2, 3),
+      (2, 1, 1),
+      (2, 2, 5)
+    ).toDF("k", "c1", "c2")
+    val res1 = df.groupBy("k")
+      .agg(sum("c1"), countDistinct($"c2" + 1), sum_distinct(lit(1) + $"c2"))
+    checkAnswer(res1, Row(1, 5, 2, 6) :: Row(2, 3, 2, 8) :: Nil)
+
+    val res2 = df.selectExpr("count(distinct C2)", "count(distinct c2)")
+    checkAnswer(res2, Row(3, 3) :: Nil)
+  }
 }
 
 case class B(c: Option[Double])
