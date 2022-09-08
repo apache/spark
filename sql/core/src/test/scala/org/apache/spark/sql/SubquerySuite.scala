@@ -523,8 +523,11 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val errMsg = intercept[AnalysisException] {
         sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
       }
-      assert(errMsg.getMessage.contains(
-        "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
+      checkError(
+        errMsg,
+        errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        errorSubClass = Some("NON_CORRELATED_COLUMNS_IN_GROUP_BY"),
+        parameters = Map("value" -> "c2"))
     }
   }
 
@@ -532,21 +535,28 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains("Correlated scalar subqueries must be aggregated"))
-
+    checkError(
+      msg1,
+      errorClass = "INVALID_SUBQUERY_EXPRESSION",
+      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SUBQUERY"))
     val msg2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
     }
-    assert(msg2.getMessage.contains(
-      "The output of a correlated scalar subquery must be aggregated"))
+    checkError(
+      msg2,
+      errorClass = "INVALID_SUBQUERY_EXPRESSION",
+      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SUBQUERY_OUTPUT"))
   }
 
   test("non-equal correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains(
-      "Correlated column is not allowed in predicate (l2.a < outer(l1.a))"))
+    checkError(
+      msg1,
+      errorClass = "INVALID_SUBQUERY_EXPRESSION",
+      errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
+      parameters = Map("predicate" -> "(l2.a < outer(l1.a))"))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -1983,9 +1993,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t1", "t2") {
       Seq((0, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 2), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
-      assert(intercept[AnalysisException] {
+      val msg1 = intercept[AnalysisException] {
         sql("SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)")
-      }.getMessage.contains("Correlated column is not allowed in predicate"))
+      }
+      checkError(
+        msg1,
+        errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
+        parameters = Map("predicate" -> "(t2.c1 > outer(t1.c1))"))
     }
   }
 
@@ -2005,13 +2020,19 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
           |""".stripMargin),
         Row(5) :: Row(null) :: Nil)
-      assert(intercept[AnalysisException] {
+      val msg1 = intercept[AnalysisException] {
         sql(
           """
             |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
             |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
             |""".stripMargin)
-      }.getMessage.contains("Correlated column is not allowed in predicate"))
+      }
+      checkError(
+        msg1,
+        errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
+        parameters = Map(
+          "predicate" -> "(CAST(t2.c1 AS SMALLINT) = outer(__auto_generated_subquery_name.a))"))
     }
   }
 

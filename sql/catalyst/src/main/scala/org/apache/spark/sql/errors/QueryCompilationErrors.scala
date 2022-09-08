@@ -1543,14 +1543,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"'$operation' does not support partitioning")
   }
 
-  def mixedRefsInAggFunc(funcStr: String): Throwable = {
-    val msg = "Found an aggregate function in a correlated predicate that has both " +
-      "outer and local references, which is not supported: " + funcStr
-    new AnalysisException(msg)
+  def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
+    throw new AnalysisException(
+      errorClass = "INVALID_SUBQUERY_EXPRESSION",
+      errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+      origin = origin,
+      messageParameters = Array(funcStr))
   }
 
   def functionCannotProcessInputError(
-      unbound: UnboundFunction,
+                                       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(s"Function '${unbound.name}' cannot process " +

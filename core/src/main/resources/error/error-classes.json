@@ -327,6 +327,83 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_SUBQUERY_EXPRESSION" : {
+    "message" : [
+      "Invalid subquery expression"
+    ],
+    "subClass" : {
+      "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
+        "message" : [
+          "Accessing outer query column is not allowed in this location"
+        ]
+      },
+      "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
+        "message" : [
+          "Found an aggregate function in a correlated predicate that has both outer and local references, which is not supported: <function>"
+        ]
+      },
+      "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
+        "message" : [
+          "Correlated column is not allowed in predicate <predicate>"
+        ]
+      },
+      "CORRELATED_SCALAR_SUBQUERIES_IN_GROUP_BY_MUST_BE_IN_AGGREGATE_EXPRESSIONS" : {
+        "message" : [
+          "Correlated scalar subqueries in the GROUP BY clause must also be in the aggregate expressions"
+        ]
+      },
+      "CORRELATED_SCALAR_SUBQUERIES_ONLY_IN_FILTER_AGGREGATE_PROJECT" : {
+        "message" : [
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands"
+        ]
+      },
+      "EXPRESSIONS_REFERENCING_OUTER_QUERY_COLUMN_ONLY_ALLOWED_IN_WHERE_HAVING" : {
+        "message" : [
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"
+        ]
+      },
+      "IN_EXISTS_SUBQUERIES_ONLY_IN_FILTER_AGGREGATE_PROJECT" : {
+        "message" : [
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands"
+        ]
+      },
+      "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
+        "message" : [
+          "Lateral join condition cannot be non-deterministic: <condition>"
+        ]
+      },
+      "MORE_THAN_ONE_OUTPUT_COLUMN" : {
+        "message" : [
+          "Scalar subquery must return only one column, but got <number>"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SUBQUERY" : {
+        "message" : [
+          "Correlated scalar subqueries must be aggregated"
+        ]
+      },
+      "MUST_AGGREGATE_CORRELATED_SUBQUERY_OUTPUT" : {
+        "message" : [
+          "The output of a correlated scalar subquery must be aggregated"
+        ]
+      },
+      "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
+        "message" : [
+          "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>"
+        ]
+      },
+      "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
+        "message" : [
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row"
+        ]
+      },
+      "OUTER_ATTRIBUTE_NOT_FOUND" : {
+        "message" : [
+          "Outer attribute not found: <value>"
+        ]
+      }
+    }
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [
       "Unknown static partition column: <columnName>"
