@@ -916,7 +916,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         There is a behavior difference between pandas-on-Spark and pandas:
 
         * when there is no aggregation column, and `n` not equal to 0 or -1,
-        the returned empty dataframe may have an index with different lenght `__len__`.
+            the returned empty dataframe may have an index with different lenght `__len__`.
 
         Examples
         --------
