@@ -275,7 +275,7 @@ class ResourceProfile(
  */
 @Evolving
 @Since("3.4.0")
-class TaskResourceProfile(
+private[spark] class TaskResourceProfile(
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
 

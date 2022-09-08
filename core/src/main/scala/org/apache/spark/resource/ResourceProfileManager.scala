@@ -113,8 +113,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       "Tasks and executors must have valid resource profile id")
     val taskRp = resourceProfileFromId(taskRpId)
 
-    taskRpId == executorRpId || (!dynamicEnabled && taskRp.isInstanceOf[TaskResourceProfile] &&
-      executorRpId == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    // When dynamic allocation disabled, tasks with TaskResourceProfile can always reuse
+    // all the executors with default resource profile.
+    taskRpId == executorRpId || (!dynamicEnabled && taskRp.isInstanceOf[TaskResourceProfile])
   }
 
   def addResourceProfile(rp: ResourceProfile): Unit = {
