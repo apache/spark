@@ -19,12 +19,14 @@ package org.apache.spark
 
 import java.net.URL
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.util.JsonProtocol.toJsonString
 import org.apache.spark.util.Utils
@@ -131,6 +133,32 @@ private[spark] object SparkThrowableHelper {
     val parameterSeq = matches.toArray
     val parameterNames = parameterSeq.map(p => p.stripPrefix("<").stripSuffix(">"))
     parameterNames
+  }
+
+  def getMessage(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String],
+      context: String): String = {
+    val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
+      throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
+    val (displayClass, displayFormat) = if (errorInfo.subClass.isEmpty) {
+      (errorClass, errorInfo.messageFormat)
+    } else {
+      val subClasses = errorInfo.subClass.get
+      if (errorSubClass == null) {
+        throw new IllegalArgumentException(s"Subclass required for error class '$errorClass'")
+      }
+      val errorSubInfo = subClasses.getOrElse(errorSubClass,
+        throw new IllegalArgumentException(s"Cannot find sub error class '$errorSubClass'"))
+      (errorClass + "." + errorSubClass,
+        errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
+    }
+    val sub = new StringSubstitutor(messageParameters.asJava)
+    val displayMessage = sub.replace(displayFormat.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
+    val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
+
+    s"[$displayClass] $displayMessage$displayQueryContext"
   }
 
   def getSqlState(errorClass: String): String = {

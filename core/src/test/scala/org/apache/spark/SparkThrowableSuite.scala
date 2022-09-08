@@ -180,6 +180,19 @@ class SparkThrowableSuite extends SparkFunSuite {
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
     )
+
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`foo`",
+          "proposal" -> "`bar`, `baz`"),
+        ""
+      ) ==
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+    )
   }
 
   test("Try catching legacy SparkError") {
