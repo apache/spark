@@ -168,30 +168,43 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       colName: String,
       candidates: Seq[String],
       origin: Origin): Throwable = {
-    val candidateIds = candidates.map(candidate => toSQLId(candidate))
     new AnalysisException(
       errorClass = errorClass,
-      messageParameters = Array(toSQLId(colName), candidateIds.mkString(", ")),
-      origin = origin)
+      errorSubClass = if (candidates.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(colName)), if (candidates.isEmpty) {
+        Array.empty
+      } else {
+        Array(candidates.take(5).map(toSQLId).mkString(", "))
+      }),
+      origin = origin
+    )
   }
 
-  def unresolvedColumnError(
-      columnName: String,
-      proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
+  def unresolvedColumnError(columnName: String, proposal: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_COLUMN",
-      messageParameters = Array(toSQLId(columnName), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters = Array.concat(Array(toSQLId(columnName)), if (proposal.isEmpty) {
+        Array.empty
+      } else {
+        Array(proposal.take(5).map(toSQLId).mkString(", "))
+      }))
   }
 
   def unresolvedFieldError(
       fieldName: String,
       columnPath: Seq[String],
       proposal: Seq[String]): Throwable = {
-    val proposalStr = proposal.map(toSQLId).mkString(", ")
     new AnalysisException(
       errorClass = "UNRESOLVED_FIELD",
-      messageParameters = Array(toSQLId(fieldName), toSQLId(columnPath), proposalStr))
+      errorSubClass = if (proposal.isEmpty) "WITHOUT_SUGGESTION" else "WITH_SUGGESTION",
+      messageParameters =
+        Array.concat(Array(toSQLId(fieldName), toSQLId(columnPath)), if (proposal.isEmpty) {
+          Array.empty
+        } else {
+          Array(proposal.map(toSQLId).mkString(", "))
+        })
+    )
   }
 
   def dataTypeMismatchForDeserializerError(
@@ -554,8 +567,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
-    new AnalysisException(s"$operation is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(
+      nameParts: Seq[String],
+      operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "TABLE_OPERATION",
+      messageParameters = Array(toSQLId(nameParts), operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
@@ -868,10 +886,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
     new AnalysisException(
       s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
-  }
-
-  def deleteOnlySupportedWithV2TablesError(): Throwable = {
-    new AnalysisException("DELETE is only supported with v2 tables.")
   }
 
   def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
@@ -2539,5 +2553,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
       messageParameters = Array(toSQLId(name), toSQLType(dt), toSQLType(expected)))
+  }
+
+  def columnNotInGroupByClauseError(expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+      messageParameters = Array(toSQLExpr(expression))
+    )
   }
 }

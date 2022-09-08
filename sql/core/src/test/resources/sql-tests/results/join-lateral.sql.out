@@ -280,10 +280,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`t2`.`c1`",
-    "objectList" : ""
+    "objectName" : "`t2`.`c1`"
   }
 }
 
@@ -405,10 +405,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`t1`.`c1`",
-    "objectList" : ""
+    "objectName" : "`t1`.`c1`"
   }
 }
 
@@ -421,10 +421,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITHOUT_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "objectName" : "`c2`",
-    "objectList" : ""
+    "objectName" : "`c2`"
   }
 }
 
@@ -455,10 +455,11 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
-    "objectList" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
+    "proposal" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
   }
 }
 

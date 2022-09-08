@@ -65,6 +65,12 @@
     ],
     "sqlState" : "22005"
   },
+  "COLUMN_NOT_IN_GROUP_BY_CLAUSE" : {
+    "message" : [
+      "The expression <expression> is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in `first()` (or `first_value()`) if you don't care which value you get."
+    ],
+    "sqlState" : "42000"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [
       "Another instance of this query was just started by a concurrent session."
@@ -448,20 +454,56 @@
   },
   "UNRESOLVED_COLUMN" : {
     "message" : [
-      "A column or function parameter with name <objectName> cannot be resolved. Did you mean one of the following? [<objectList>]"
+      "A column or function parameter with name <objectName> cannot be resolved."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_FIELD" : {
     "message" : [
-      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>. Did you mean one of the following? [<proposal>]"
+      "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Did you mean one of the following? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it. Otherwise, did you mean one of the following column(s)? [<proposal>]"
+      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Otherwise did you mean one of the following column(s)? [<proposal>]"
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "UNSUPPORTED_DATATYPE" : {
@@ -585,6 +627,11 @@
       "SET_TABLE_PROPERTY" : {
         "message" : [
           "<property> is a reserved table property, <msg>."
+        ]
+      },
+      "TABLE_OPERATION" : {
+        "message" : [
+          "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {

@@ -178,7 +178,10 @@ object Project {
           createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
         } else {
           if (columnPath.isEmpty) {
-            throw QueryCompilationErrors.unresolvedColumnError(f.name, fields.map(_._1))
+            val candidates = fields.map(_._1)
+            val orderedCandidates =
+              StringUtils.orderStringsBySimilarity(f.name, candidates)
+            throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
           } else {
             throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
           }
