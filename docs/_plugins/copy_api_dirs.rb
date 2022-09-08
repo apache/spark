@@ -121,8 +121,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Why would Python docs need an SBT build?
     puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean") || raise("PySpark doc clean build error")
-    system("build/sbt -Phadoop-3 -Phive -Phive-thriftserver connect/assembly package") || raise("PySpark doc generation failed")
+    system("build/sbt clean -Phive Test/package package") || raise("PySpark doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")
@@ -168,7 +167,7 @@ if not (ENV['SKIP_API'] == '1')
       cd("..")
 
       puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-      system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
+      system("build/sbt clean -Phive Test/package package") || raise("SQL doc generation failed")
 
       puts "Moving back into docs dir."
       cd("docs")
