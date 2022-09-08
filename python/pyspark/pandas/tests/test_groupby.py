@@ -1384,7 +1384,11 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
 
-        with self.assertRaisesRegex(TypeError, "Unsupported type"):
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth(slice(0, 2))
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth([0, 1, -1])
+        with self.assertRaisesRegex(TypeError, "Invalid index"):
             self.psdf.groupby("B").nth("x")
 
     def test_cumcount(self):

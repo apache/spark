@@ -944,8 +944,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if isinstance(n, slice) or is_list_like(n):
+            raise NotImplementedError("n doesn't support slice or list for now")
         if not isinstance(n, int):
-            raise TypeError("Unsupported type %s" % type(n).__name__)
+            raise TypeError("Invalid index %s" % type(n).__name__)
 
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         internal, agg_columns, sdf = self._prepare_reduce(
