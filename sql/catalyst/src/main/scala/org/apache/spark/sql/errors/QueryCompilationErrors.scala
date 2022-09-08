@@ -1552,7 +1552,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionCannotProcessInputError(
-                                       unbound: UnboundFunction,
+      unbound: UnboundFunction,
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(s"Function '${unbound.name}' cannot process " +
