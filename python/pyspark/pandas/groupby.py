@@ -58,6 +58,7 @@ from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions a
 from pyspark.sql.types import (
     BooleanType,
     DataType,
+    DoubleType,
     NumericType,
     StructField,
     StructType,
@@ -586,9 +587,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         Return group values at the given quantile.
 
-        .. note:: `quantile` in pandas-on-Spark are using distributed percentile approximation
-            algorithm unlike pandas, the result might different with pandas in accuracy, also
-            `interpolation` parameters are not supported yet.
+        .. versionadded:: 3.4.0
 
         Parameters
         ----------
@@ -599,11 +598,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             The relative error can be deduced by 1.0 / accuracy.
             This is a panda-on-Spark specific parameter.
 
-            .. versionadded:: 3.4.0
-
         Returns
         -------
         pyspark.pandas.Series or pyspark.pandas.DataFrame
+            Return type determined by caller of GroupBy object.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also
+        `interpolation` parameters are not supported yet.
 
         See Also
         --------
@@ -624,8 +628,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         >>> df.groupby('key').quantile()
              val
         key
-        a    2
-        b    3
+        a    2.0
+        b    3.0
         """
         if is_list_like(q):
             raise NotImplementedError("q doesn't support for list like type for now")
@@ -634,7 +638,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
         return self._reduce_for_stat_function(
-            lambda col: F.percentile_approx(col, q, accuracy),
+            lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
             accepted_spark_types=(NumericType, BooleanType),
             bool_to_numeric=True,
         )
