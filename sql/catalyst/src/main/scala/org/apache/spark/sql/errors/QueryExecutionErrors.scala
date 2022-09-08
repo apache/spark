@@ -175,11 +175,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       hint: String): SparkIllegalArgumentException = {
       new SparkIllegalArgumentException(
         errorClass = "CONVERSION_INVALID_INPUT",
-        messageParameters = Array(
-          toSQLValue(s, StringType),
-          toSQLValue(fmt, StringType),
-          toSQLType(to),
-          toSQLId(hint)))
+        messageParameters = Map(
+          "str" -> toSQLValue(s, StringType),
+          "fmt" -> toSQLValue(fmt, StringType),
+          "targetType" -> toSQLType(to),
+          "suggestion" -> toSQLId(hint)))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -199,8 +199,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Array(dataType + failure))
+    new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> (dataType + failure)))
   }
 
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
@@ -339,8 +340,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def illegalUrlError(url: UTF8String): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "CANNOT_DECODE_URL",
-      messageParameters = Array(url.toString)
+    new SparkIllegalArgumentException(
+      errorClass = "CANNOT_DECODE_URL",
+      messageParameters = Map("url" -> url.toString)
     )
   }
 
@@ -578,10 +580,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def inferDateWithLegacyTimeParserError(): Throwable with SparkThrowable = {
-    new SparkIllegalArgumentException(errorClass = "CANNOT_INFER_DATE",
-      messageParameters = Array()
-    )
+  def inferDateWithLegacyTimeParserError(): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "CANNOT_INFER_DATE",
+      messageParameters = Map.empty)
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
@@ -663,14 +665,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
-    pathExists match {
-      case true => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = Some("EXISTENT_PATH"),
-        messageParameters = Array(toSQLValue(saveMode, StringType)))
-      case _ => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
-        errorSubClass = Some("NON_EXISTENT_PATH"),
-        messageParameters = Array(toSQLValue(saveMode, StringType)))
-    }
+    new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_SAVE_MODE",
+      errorSubClass = Some(if (pathExists) "EXISTENT_PATH" else "NON_EXISTENT_PATH"),
+      messageParameters = Map("saveMode" -> toSQLValue(saveMode, StringType)))
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {

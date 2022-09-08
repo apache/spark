@@ -295,7 +295,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE",
       errorSubClass = Some("EXISTENT_PATH"),
-      messageParameters = Array("UNSUPPORTED_MODE"))
+      messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE",

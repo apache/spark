@@ -36,7 +36,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -2805,13 +2805,11 @@ abstract class CSVSuite
 
     // Error should be thrown when attempting to prefersDate with Legacy parser
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      val msg = intercept[IllegalArgumentException] {
-        spark.read
-          .format("csv")
-          .options(options1)
-          .load(testFile(dateInferSchemaFile))
-      }.getMessage
-      assert(msg.contains("CANNOT_INFER_DATE"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.read.format("csv").options(options1).load(testFile(dateInferSchemaFile))
+        },
+        errorClass = "CANNOT_INFER_DATE")
     } else {
       // 1. Specify date format and timestamp format
       // 2. Date inference should work with default date format when dateFormat is not provided
@@ -2859,10 +2857,11 @@ abstract class CSVSuite
         .csv(path.getAbsolutePath)
 
       if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-        val msg = intercept[IllegalArgumentException] {
-          output.collect()
-        }.getMessage
-        assert(msg.contains("CANNOT_INFER_DATE"))
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            output.collect()
+          },
+          errorClass = "CANNOT_INFER_DATE")
       } else {
         checkAnswer(
           output,
