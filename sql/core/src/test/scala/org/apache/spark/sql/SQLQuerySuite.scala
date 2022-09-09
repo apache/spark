@@ -4559,7 +4559,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         val msg = intercept[SparkException] {
           sql("select cast(cast(d as int) as long) from dt").collect()
         }.getCause.getMessage
-        assert(msg.contains("[CAST_OVERFLOW]"))
+        assert(msg.contains("The value 9000000000BD of the type \"DECIMAL(10,0)\" " +
+          "cannot be cast to \"INT\" due to an overflow"))
       }
     }
   }
