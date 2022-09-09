@@ -136,9 +136,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`t1a`",
-    "objectList" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
+    "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
   }
 }

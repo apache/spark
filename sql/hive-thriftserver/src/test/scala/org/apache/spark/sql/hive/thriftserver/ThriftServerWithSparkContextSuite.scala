@@ -162,7 +162,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val e1 = intercept[HiveSQLException](exec(sql))
       // scalastyle:off line.size.limit
       assert(e1.getMessage ===
-        """Error running query: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+        """Error running query: [DIVIDE_BY_ZERO] org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
           |== SQL(line 1, position 8) ==
           |select 1 / 0
           |       ^^^^^
@@ -171,7 +171,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.MINIMAL}")
       val e2 = intercept[HiveSQLException](exec(sql))
       assert(e2.getMessage ===
-        """Error running query: {
+        """{
           |  "errorClass" : "DIVIDE_BY_ZERO",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
@@ -189,7 +189,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       exec(s"set ${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.STANDARD}")
       val e3 = intercept[HiveSQLException](exec(sql))
       assert(e3.getMessage ===
-        """Error running query: {
+        """{
           |  "errorClass" : "DIVIDE_BY_ZERO",
           |  "message" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
           |  "sqlState" : "22012",

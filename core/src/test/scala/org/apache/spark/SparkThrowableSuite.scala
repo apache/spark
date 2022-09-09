@@ -126,7 +126,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message format invariants") {
     val messageFormats = errorClassToInfoMap.values.toSeq.flatMap { i =>
-      Seq(i.messageFormat) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.messageFormat)
+      Seq(i.messageFormat)
     }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
@@ -159,7 +159,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("UNRESOLVED_COLUMN", null, Array.empty)
+      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty)
     }
 
     // Does not fail with too many args (expects 0 args)
@@ -171,9 +171,15 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("Error message is formatted") {
-    assert(getMessage("UNRESOLVED_COLUMN", null, Array("`foo`", "`bar`, `baz`")) ==
-      "[UNRESOLVED_COLUMN] A column or function parameter with name `foo` cannot be resolved. " +
-        "Did you mean one of the following? [`bar`, `baz`]")
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
+        Array("`foo`", "`bar`, `baz`")
+      ) ==
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+    )
   }
 
   test("Try catching legacy SparkError") {

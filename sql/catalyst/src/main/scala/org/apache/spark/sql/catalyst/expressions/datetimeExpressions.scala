@@ -153,6 +153,30 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def prettyName: String = "current_date"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current date at the start of query evaluation. All calls of curdate within the same query return the same value.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2022-09-06
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object CurDateExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.isEmpty) {
+      CurrentDate()
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+        Seq.empty, funcName, expressions.length)
+    }
+  }
+}
+
 abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false

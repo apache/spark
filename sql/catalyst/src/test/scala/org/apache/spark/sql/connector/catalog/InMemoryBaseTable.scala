@@ -83,6 +83,7 @@ abstract class InMemoryBaseTable(
     case _: HoursTransform =>
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -177,6 +178,13 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (str: UTF8String, StringType) =>
+            str.substring(0, length.value.asInstanceOf[Int])
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
     }
   }
 
