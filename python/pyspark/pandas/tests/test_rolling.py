@@ -39,6 +39,10 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
     def _test_rolling_func(self, ps_func, pd_func=None):
         if not pd_func:
             pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self._convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self._convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(ps_func(psser.rolling(2)), pd_func(pser.rolling(2)))
@@ -67,35 +71,39 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(ps_func(psdf.rolling(2)), pd_func(pdf.rolling(2)))
 
     def test_rolling_min(self):
-        self._test_rolling_func(lambda x: x.min())
+        self._test_rolling_func("min")
 
     def test_rolling_max(self):
-        self._test_rolling_func(lambda x: x.max())
+        self._test_rolling_func("max")
 
     def test_rolling_mean(self):
-        self._test_rolling_func(lambda x: x.mean())
+        self._test_rolling_func("mean")
 
     def test_rolling_sum(self):
-        self._test_rolling_func(lambda x: x.sum())
+        self._test_rolling_func("sum")
 
     def test_rolling_count(self):
-        self._test_rolling_func(lambda x: x.count())
+        self._test_rolling_func("count")
 
     def test_rolling_std(self):
-        self._test_rolling_func(lambda x: x.std())
+        self._test_rolling_func("std")
 
     def test_rolling_var(self):
-        self._test_rolling_func(lambda x: x.var())
+        self._test_rolling_func("var")
 
     def test_rolling_skew(self):
-        self._test_rolling_func(lambda x: x.skew())
+        self._test_rolling_func("skew")
 
     def test_rolling_kurt(self):
-        self._test_rolling_func(lambda x: x.kurt())
+        self._test_rolling_func("kurt")
 
     def _test_groupby_rolling_func(self, ps_func, pd_func=None):
         if not pd_func:
             pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self._convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self._convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(
@@ -193,32 +201,32 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             )
 
     def test_groupby_rolling_count(self):
-        self._test_groupby_rolling_func(lambda x: x.count())
+        self._test_groupby_rolling_func("count")
 
     def test_groupby_rolling_min(self):
-        self._test_groupby_rolling_func(lambda x: x.min())
+        self._test_groupby_rolling_func("min")
 
     def test_groupby_rolling_max(self):
-        self._test_groupby_rolling_func(lambda x: x.max())
+        self._test_groupby_rolling_func("max")
 
     def test_groupby_rolling_mean(self):
-        self._test_groupby_rolling_func(lambda x: x.mean())
+        self._test_groupby_rolling_func("mean")
 
     def test_groupby_rolling_sum(self):
-        self._test_groupby_rolling_func(lambda x: x.sum())
+        self._test_groupby_rolling_func("sum")
 
     def test_groupby_rolling_std(self):
         # TODO: `std` now raise error in pandas 1.0.0
-        self._test_groupby_rolling_func(lambda x: x.std())
+        self._test_groupby_rolling_func("std")
 
     def test_groupby_rolling_var(self):
-        self._test_groupby_rolling_func(lambda x: x.var())
+        self._test_groupby_rolling_func("var")
 
     def test_groupby_rolling_skew(self):
-        self._test_groupby_rolling_func(lambda x: x.skew())
+        self._test_groupby_rolling_func("skew")
 
     def test_groupby_rolling_kurt(self):
-        self._test_groupby_rolling_func(lambda x: x.kurt())
+        self._test_groupby_rolling_func("kurt")
 
 
 if __name__ == "__main__":

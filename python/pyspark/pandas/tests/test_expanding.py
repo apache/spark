@@ -29,6 +29,10 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_expanding_func(self, ps_func, pd_func=None):
         if not pd_func:
             pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self._convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self._convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
@@ -67,35 +71,39 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(repr(ps.range(10).expanding(5)), "Expanding [min_periods=5]")
 
     def test_expanding_count(self):
-        self._test_expanding_func(lambda x: x.count())
+        self._test_expanding_func("count")
 
     def test_expanding_min(self):
-        self._test_expanding_func(lambda x: x.min())
+        self._test_expanding_func("min")
 
     def test_expanding_max(self):
-        self._test_expanding_func(lambda x: x.max())
+        self._test_expanding_func("max")
 
     def test_expanding_mean(self):
-        self._test_expanding_func(lambda x: x.mean())
+        self._test_expanding_func("mean")
 
     def test_expanding_sum(self):
-        self._test_expanding_func(lambda x: x.sum())
+        self._test_expanding_func("sum")
 
     def test_expanding_std(self):
-        self._test_expanding_func(lambda x: x.std())
+        self._test_expanding_func("std")
 
     def test_expanding_var(self):
-        self._test_expanding_func(lambda x: x.var())
+        self._test_expanding_func("var")
 
     def test_expanding_skew(self):
-        self._test_expanding_func(lambda x: x.skew())
+        self._test_expanding_func("skew")
 
     def test_expanding_kurt(self):
-        self._test_expanding_func(lambda x: x.kurt())
+        self._test_expanding_func("kurt")
 
     def _test_groupby_expanding_func(self, ps_func, pd_func=None):
         if not pd_func:
             pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self._convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self._convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(
@@ -193,31 +201,31 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
             )
 
     def test_groupby_expanding_count(self):
-        self._test_groupby_expanding_func(lambda x: x.count())
+        self._test_groupby_expanding_func("count")
 
     def test_groupby_expanding_min(self):
-        self._test_groupby_expanding_func(lambda x: x.min())
+        self._test_groupby_expanding_func("min")
 
     def test_groupby_expanding_max(self):
-        self._test_groupby_expanding_func(lambda x: x.max())
+        self._test_groupby_expanding_func("max")
 
     def test_groupby_expanding_mean(self):
-        self._test_groupby_expanding_func(lambda x: x.mean())
+        self._test_groupby_expanding_func("mean")
 
     def test_groupby_expanding_sum(self):
-        self._test_groupby_expanding_func(lambda x: x.sum())
+        self._test_groupby_expanding_func("sum")
 
     def test_groupby_expanding_std(self):
-        self._test_groupby_expanding_func(lambda x: x.std())
+        self._test_groupby_expanding_func("std")
 
     def test_groupby_expanding_var(self):
-        self._test_groupby_expanding_func(lambda x: x.var())
+        self._test_groupby_expanding_func("var")
 
     def test_groupby_expanding_skew(self):
-        self._test_groupby_expanding_func(lambda x: x.skew())
+        self._test_groupby_expanding_func("skew")
 
     def test_groupby_expanding_kurt(self):
-        self._test_groupby_expanding_func(lambda x: x.kurt())
+        self._test_groupby_expanding_func("kurt")
 
 
 if __name__ == "__main__":
