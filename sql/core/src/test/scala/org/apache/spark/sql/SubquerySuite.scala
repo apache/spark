@@ -538,14 +538,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkError(
       msg1,
       errorClass = "INVALID_SUBQUERY_EXPRESSION",
-      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SUBQUERY"))
+      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY"))
     val msg2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
     }
     checkError(
       msg2,
       errorClass = "INVALID_SUBQUERY_EXPRESSION",
-      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SUBQUERY_OUTPUT"))
+      errorSubClass = Some("MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT"))
   }
 
   test("non-equal correlated scalar subquery") {

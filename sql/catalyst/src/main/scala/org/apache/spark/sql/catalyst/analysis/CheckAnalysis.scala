@@ -756,7 +756,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       if (aggregates.isEmpty) {
         throw new AnalysisException(
           errorClass = "INVALID_SUBQUERY_EXPRESSION",
-          errorSubClass = "MUST_AGGREGATE_CORRELATED_SUBQUERY_OUTPUT",
+          errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
           origin = expr.origin,
           messageParameters = Array.empty[String])
       }
@@ -824,7 +824,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         if (query.output.size != 1) {
           throw new AnalysisException(
             errorClass = "INVALID_SUBQUERY_EXPRESSION",
-            errorSubClass = "MORE_THAN_ONE_OUTPUT_COLUMN",
+            errorSubClass = "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
             origin = expr.origin,
             messageParameters = Array(query.output.size.toString))
         }
@@ -837,7 +837,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case _ =>
               throw new AnalysisException(
                 errorClass = "INVALID_SUBQUERY_EXPRESSION",
-                errorSubClass = "MUST_AGGREGATE_CORRELATED_SUBQUERY",
+                errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
                 origin = expr.origin,
                 messageParameters = Array.empty[String])
           }
@@ -861,7 +861,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case other =>
               throw new AnalysisException(
                 errorClass = "INVALID_SUBQUERY_EXPRESSION",
-                errorSubClass = "CORRELATED_SCALAR_SUBQUERIES_ONLY_IN_FILTER_AGGREGATE_PROJECT",
+                errorSubClass = "CORRELATED_SCALAR_SUBQUERIES_ONLY_IN_CERTAIN_PLACES",
                 origin = other.origin,
                 messageParameters = Array.empty[String])
           }
@@ -901,7 +901,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _ =>
             throw new AnalysisException(
               errorClass = "INVALID_SUBQUERY_EXPRESSION",
-              errorSubClass = "IN_EXISTS_SUBQUERIES_ONLY_IN_FILTER_AGGREGATE_PROJECT",
+              errorSubClass = "IN_EXISTS_SUBQUERIES_ONLY_IN_CERTAIN_PLACES",
               origin = expr.origin,
               messageParameters = Array.empty[String])
         }
@@ -968,7 +968,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       if (hasOuterReferences(p)) {
         throw new AnalysisException(
           errorClass = "INVALID_SUBQUERY_EXPRESSION",
-          errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+          errorSubClass = "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
           origin = p.origin,
           messageParameters = Array.empty[String])
       }

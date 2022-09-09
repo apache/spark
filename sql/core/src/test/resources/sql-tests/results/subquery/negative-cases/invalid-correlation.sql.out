@@ -117,14 +117,10 @@ WHERE  t1a IN (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses:
-Aggregate [min(outer(t2a#x)) AS min(outer(t2.t2a))#x]
-+- SubqueryAlias t3
-   +- View (`t3`, [t3a#x,t3b#x,t3c#x])
-      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]
-         +- Project [t3a#x, t3b#x, t3c#x]
-            +- SubqueryAlias t3
-               +- LocalRelation [t3a#x, t3b#x, t3c#x]
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorSubClass" : "EXPRESSIONS_REFERENCING_OUTER_QUERY_COLUMN_ONLY_ALLOWED_IN_WHERE_HAVING"
+}
 
 
 -- !query
