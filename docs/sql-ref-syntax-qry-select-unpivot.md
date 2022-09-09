@@ -33,7 +33,7 @@ UNPIVOT [ { INCLUDE | EXCLUDE } NULLS ] (
 single_value_column_unpivot:
     values_column
     FOR name_column
-    IN (unpivot_column [[AS] alias] [, ...])
+    IN (unpivot_column [, ...])
 
 multi_value_column_unpivot:
     (values_column [, ...])

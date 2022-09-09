@@ -18,6 +18,11 @@ UNPIVOT EXCLUDE NULLS (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)
 );
 
+SELECT * FROM courseEarnings
+UNPIVOT (
+  earningsYear FOR year IN (`2012` as `twenty-twelve`, `2013` as `twenty-thirteen`, `2014` as `twenty-fourteen`)
+);
+
 SELECT up.* FROM courseEarnings
 UNPIVOT (
   earningsYear FOR year IN (`2012`, `2013`, `2014`)

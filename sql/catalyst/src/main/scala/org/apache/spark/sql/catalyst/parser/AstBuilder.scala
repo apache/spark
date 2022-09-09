@@ -1174,14 +1174,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
-   * Create an Unpivot column with or without an alias.
+   * Create an Unpivot column as NamedExpression.
    */
   override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
-    val e = expression(ctx.expression)
-    if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
-    } else {
-      UnresolvedAlias(e)
+    visitNamedExpression(ctx.namedExpression) match {
+      case ne: NamedExpression => ne
+      case e => UnresolvedAlias(e)
     }
   }
 
