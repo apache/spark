@@ -55,17 +55,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     throw new AnalysisException(msg)
   }
 
-  protected def failAnalysisForSubqueryExpression(
-      errorSubClass: String,
-      origin: Origin,
-      messageParameters: Array[String] = Array.empty[String]): Nothing = {
-    throw new AnalysisException(
-      errorClass = "INVALID_SUBQUERY_EXPRESSION",
-      errorSubClass = errorSubClass,
-      origin = origin,
-      messageParameters = messageParameters)
-  }
-
   protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => e
