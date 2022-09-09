@@ -588,7 +588,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`q2`",
     "proposal" : "`int8_tbl`.`q1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 74,
+    "fragment" : "ORDER BY q2 LIMIT 1"
+  } ]
 }
 
 
