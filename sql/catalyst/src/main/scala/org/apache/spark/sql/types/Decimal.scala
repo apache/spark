@@ -204,7 +204,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       decimalVal.toBigInt
     } else {
-      BigInt(actualLongVal)
+      BigInt(rawLongValue)
     }
   }
 
@@ -212,7 +212,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       decimalVal.underlying().toBigInteger()
     } else {
-      java.math.BigInteger.valueOf(actualLongVal)
+      java.math.BigInteger.valueOf(rawLongValue)
     }
   }
 
@@ -240,11 +240,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toFloat: Float = toBigDecimal.floatValue
 
-  private def actualLongVal: Long = longVal / POW_10(_scale)
+  private def rawLongValue: Long = longVal / POW_10(_scale)
 
   def toLong: Long = {
     if (decimalVal.eq(null)) {
-      actualLongVal
+      rawLongValue
     } else {
       decimalVal.longValue
     }
@@ -280,8 +280,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {
     if (decimalVal.eq(null)) {
-      val numericVal = f1(actualLongVal)
-      if (actualLongVal == numericVal) {
+      val numericVal = f1(rawLongValue)
+      if (rawLongValue == numericVal) {
         numericVal
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
@@ -304,7 +304,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   private[sql] def roundToLong(): Long = {
     if (decimalVal.eq(null)) {
-      actualLongVal
+      rawLongValue
     } else {
       try {
         // We cannot store Long.MAX_VALUE as a Double without losing precision.
@@ -488,12 +488,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       DecimalType.MAX_SCALE, MATH_CONTEXT.getRoundingMode))
 
   def % (that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal,
-      MATH_CONTEXT))
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def quot(that: Decimal): Decimal =
-    if (that.isZero) null else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal,
-      MATH_CONTEXT))
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
 
