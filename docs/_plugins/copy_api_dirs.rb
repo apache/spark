@@ -121,7 +121,8 @@ if not (ENV['SKIP_API'] == '1')
 
     # Why would Python docs need an SBT build?
     puts "Running 'build/sbt clean Test/package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean -Phive Test/package") || raise("PySpark doc generation failed")
+    system("build/sbt clean -Phadoop-3 -Pmesos -Phadoop-cloud -Pyarn -Pspark-ganglia-lgpl -Phive -Pdocker-integration-tests -Pkubernetes -Phive-thriftserver -Pkinesis-asl Test/package streaming-kinesis-asl-assembly/assembly connect/assembly") || raise("Python doc generation failed (build 1")
+    system("build/sbt -Phadoop-3 -Pmesos -Phadoop-cloud -Pyarn -Pspark-ganglia-lgpl -Phive -Pdocker-integration-tests -Pkubernetes -Phive-thriftserver -Pkinesis-asl assembly/package") || raise("Python doc generation failed (build 1")
 
     puts "Moving back into docs dir."
     cd("docs")
