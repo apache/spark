@@ -80,6 +80,7 @@ Computations / Descriptive Stats
    GroupBy.sum
    GroupBy.var
    GroupBy.nunique
+   GroupBy.quantile
    GroupBy.size
    GroupBy.diff
    GroupBy.idxmax

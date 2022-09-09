@@ -848,6 +848,16 @@ The following extra configuration options are available when the shuffle service
     would be a valid Java package or class name and not include spaces.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.service.db.backend</code></td>
+  <td>LEVELDB</td>
+  <td>
+    To specify the kind of disk-base store used in shuffle service state store, supports `LEVELDB` and `ROCKSDB` now 
+    and `LEVELDB` as default value. 
+    The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
+  </td>
+  <td>3.4.0</td>
+</tr>
 </table>
 
 Please note that the instructions above assume that the default shuffle service name,
