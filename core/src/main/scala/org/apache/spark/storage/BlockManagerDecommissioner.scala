@@ -127,7 +127,7 @@ private[storage] class BlockManagerDecommissioner(
               }
               logInfo(s"Migrated $shuffleBlockInfo to $peer")
             } catch {
-              case e: IOException =>
+              case e @ ( _ : IOException | _ : SparkException) =>
                 // If a block got deleted before netty opened the file handle, then trying to
                 // load the blocks now will fail. This is most likely to occur if we start
                 // migrating blocks and then the shuffle TTL cleaner kicks in. However this
