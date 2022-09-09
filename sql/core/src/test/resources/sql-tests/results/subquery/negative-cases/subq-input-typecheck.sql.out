@@ -61,7 +61,13 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorSubClass" : "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  }
+}
 
 
 -- !query
@@ -76,7 +82,13 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorSubClass" : "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "messageParameters" : {
+    "number" : "2"
+  }
+}
 
 
 -- !query

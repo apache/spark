@@ -723,7 +723,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
       global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
+    assertAnalysisError(plan, "Predicate subqueries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {

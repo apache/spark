@@ -372,11 +372,6 @@
           "Lateral join condition cannot be non-deterministic: <condition>"
         ]
       },
-      "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
-        "message" : [
-          "Scalar subquery must return only one column, but got <number>"
-        ]
-      },
       "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
           "Correlated scalar subqueries must be aggregated"
@@ -400,6 +395,11 @@
       "OUTER_ATTRIBUTE_NOT_FOUND" : {
         "message" : [
           "Outer attribute not found: <value>"
+        ]
+      },
+      "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
+        "message" : [
+          "Scalar subquery must return only one column, but got <number>"
         ]
       }
     }
