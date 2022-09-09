@@ -122,6 +122,14 @@ object ExternalCatalogUtils {
     }
   }
 
+  def getPartitionSpecString(value: String): String = {
+    if (value == null || value.isEmpty) {
+      null
+    } else {
+      value
+    }
+  }
+
   def getPartitionValueString(value: String): String = {
     if (value == null || value.isEmpty) {
       DEFAULT_PARTITION_NAME

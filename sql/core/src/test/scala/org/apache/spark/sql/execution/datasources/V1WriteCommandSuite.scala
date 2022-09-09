@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -96,6 +98,33 @@ abstract class V1WriteCommandSuiteBase extends QueryTest with SQLTestUtils {
     }
 
     spark.listenerManager.unregister(listener)
+  }
+
+  private def getV1WriteCommand(df: DataFrame): V1WriteCommand = {
+    val plan = df.queryExecution.sparkPlan
+      .asInstanceOf[CommandResultExec].commandPhysicalPlan
+    val dataWritingCommandExec = plan match {
+      case aqe: AdaptiveSparkPlanExec => aqe.inputPlan
+      case _ => plan
+    }
+    val v1WriteCommand = dataWritingCommandExec.asInstanceOf[DataWritingCommandExec].cmd
+    assert(v1WriteCommand.isInstanceOf[V1WriteCommand])
+    v1WriteCommand.asInstanceOf[V1WriteCommand]
+  }
+
+  protected def checkStaticPartitions(
+      expectedStaticPartitions: Map[String, String],
+      hasLogicalSort: Boolean,
+      hasEmpty2Null: Boolean = false)(query: => DataFrame): Unit = {
+    executeAndCheckOrdering(hasLogicalSort, true, hasEmpty2Null) {
+      val df = query
+      val v1writes = getV1WriteCommand(df)
+      val actualStaticPartitions = v1writes.staticPartitions
+      assert(actualStaticPartitions.size == expectedStaticPartitions.size)
+      actualStaticPartitions.foreach { case (k, v) =>
+        assert(expectedStaticPartitions.contains(k) && expectedStaticPartitions(k) == v)
+      }
+    }
   }
 }
 
@@ -274,6 +303,114 @@ class V1WriteCommandSuite extends V1WriteCommandSuiteBase with SharedSparkSessio
               |SELECT key, value, key, value FROM testData
               |""".stripMargin)
         }
+      }
+    }
+  }
+
+  test("SPARK-40354: Support eliminate dynamic partition for v1 writes - insert") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t(key INT, value STRING) USING PARQUET
+          |PARTITIONED BY (p1 INT, p2 STRING)
+          |""".stripMargin)
+
+      // optimize all dynamic partition to static with special partition value
+      checkStaticPartitions(Map("p1" -> null, "p2" -> null), hasLogicalSort = false) {
+        sql(
+          """
+            |INSERT INTO t PARTITION(p1, p2)
+            |SELECT key, value, cast(null as int) as p1, '' as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      Seq("WHERE key = 1", "DISTRIBUTE BY key", "ORDER BY key", "LIMIT 10").foreach { extra =>
+        val hasLogicalSort = extra.contains("ORDER")
+        // optimize all dynamic partition to static
+        checkStaticPartitions(Map("p1" -> "1", "p2" -> "b"), hasLogicalSort = hasLogicalSort) {
+          sql(
+           s"""
+              |INSERT INTO t PARTITION(p1, p2)
+              |SELECT key, value, 1 as p1, 'b' as p2 FROM testData
+              |$extra
+              |""".stripMargin)
+        }
+      }
+
+      // static partition ahead of dynamic
+      checkStaticPartitions(Map("p1" -> "1"), hasLogicalSort = true, hasEmpty2Null = true) {
+        sql(
+          """
+            |INSERT INTO t PARTITION(p1, p2)
+            |SELECT key, value, 1 as p1, value as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // dynamic partition ahead of static
+      checkStaticPartitions(Map.empty, hasLogicalSort = true) {
+        sql(
+          """
+            |INSERT INTO t PARTITION(p1, p2)
+            |SELECT key, value, key as p1, 'b' as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // all partition columns are dynamic
+      checkStaticPartitions(Map.empty, hasLogicalSort = true, hasEmpty2Null = true) {
+        sql(
+          """
+            |INSERT INTO t PARTITION(p1, p2)
+            |SELECT key, value, key as p1, value p2 FROM testData
+            |""".stripMargin)
+      }
+    }
+  }
+
+  test("SPARK-40354: Support eliminate dynamic partition for v1 writes - ctas") {
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      // optimize all dynamic partition to static with special partition value
+      checkStaticPartitions(Map("p1" -> null, "p2" -> null), hasLogicalSort = false) {
+        sql(
+          """
+            |CREATE TABLE t1 USING PARQUET PARTITIONED BY(p1, p2) AS
+            |SELECT key, value, cast(null as int) as p1, '' as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // optimize all dynamic partition to static
+      checkStaticPartitions(Map("p1" -> "1", "p2" -> "b"), hasLogicalSort = false) {
+        sql(
+          """
+            |CREATE TABLE t2 USING PARQUET PARTITIONED BY(p1, p2) AS
+            |SELECT key, value, 1 as p1, 'b' as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // static partition ahead of dynamic
+      checkStaticPartitions(Map("p1" -> "1"), hasLogicalSort = true, hasEmpty2Null = true) {
+        sql(
+          """
+            |CREATE TABLE t3 USING PARQUET PARTITIONED BY(p1, p2) AS
+            |SELECT key, value, 1 as p1, value as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // dynamic partition ahead of static
+      checkStaticPartitions(Map.empty, hasLogicalSort = true) {
+        sql(
+          """
+            |CREATE TABLE t4 USING PARQUET PARTITIONED BY(p1, p2) AS
+            |SELECT key, value, key as p1, 'b' as p2 FROM testData
+            |""".stripMargin)
+      }
+
+      // all partition columns are dynamic
+      checkStaticPartitions(Map.empty, hasLogicalSort = true, hasEmpty2Null = true) {
+        sql(
+          """
+            |CREATE TABLE t5 USING PARQUET PARTITIONED BY(p1, p2) AS
+            |SELECT key, value, key as p1, value as p2 FROM testData
+            |""".stripMargin)
       }
     }
   }

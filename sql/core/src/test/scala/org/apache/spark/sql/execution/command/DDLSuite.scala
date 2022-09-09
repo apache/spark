@@ -1539,7 +1539,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
           assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
           spark.sql(
-            s"INSERT INTO TABLE $tableName PARTITION(c='c', b) SELECT *, 'b' FROM t WHERE 1 = 0")
+            s"INSERT INTO TABLE $tableName PARTITION(c='c', b) SELECT *, a FROM t WHERE 1 = 0")
           assert(spark.sql(s"SHOW PARTITIONS $tableName").count() == 0)
           assert(!new File(dir, "c=c/b=b").exists())
           checkAnswer(spark.table(tableName), Nil)

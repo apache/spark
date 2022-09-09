@@ -142,7 +142,8 @@ case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
     query: LogicalPlan,
-    outputColumnNames: Seq[String])
+    outputColumnNames: Seq[String],
+    staticPartitions: Map[String, String] = Map.empty)
   extends V1WriteCommand {
 
   override lazy val partitionColumns: Seq[Attribute] = {
@@ -156,7 +157,8 @@ case class CreateDataSourceTableAsSelectCommand(
 
   override def requiredOrdering: Seq[SortOrder] = {
     val options = table.storage.properties
-    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options,
+      numStaticPartitionCols)
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
@@ -181,8 +183,8 @@ case class CreateDataSourceTableAsSelectCommand(
         return Seq.empty
       }
 
-      saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
+      saveDataIntoTable(sparkSession, table, table.storage.locationUri, child, SaveMode.Append,
+        tableExists = true, staticPartitions)
     } else {
       table.storage.locationUri.foreach { p =>
         DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
@@ -194,8 +196,8 @@ case class CreateDataSourceTableAsSelectCommand(
       } else {
         table.storage.locationUri
       }
-      val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
+      val result = saveDataIntoTable(sparkSession, table, tableLocation, child, SaveMode.Overwrite,
+        tableExists = false, staticPartitions)
       val tableSchema = CharVarcharUtils.getRawSchema(result.schema, sessionState.conf)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
@@ -229,7 +231,8 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[URI],
       physicalPlan: SparkPlan,
       mode: SaveMode,
-      tableExists: Boolean): BaseRelation = {
+      tableExists: Boolean,
+      staticPartitionSpec: Map[String, String]): BaseRelation = {
     // Create the relation based on the input logical plan: `query`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -241,7 +244,8 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan, metrics)
+      dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan, metrics,
+        staticPartitionSpec)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
@@ -251,4 +255,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(query = newChild)
+
+  override def withNewStaticPartitionSpec(partitionSpec: Map[String, String]): V1WriteCommand =
+    copy(staticPartitions = partitionSpec)
 }

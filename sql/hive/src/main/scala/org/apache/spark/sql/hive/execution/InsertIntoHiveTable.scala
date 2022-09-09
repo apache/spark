@@ -85,6 +85,9 @@ case class InsertIntoHiveTable(
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, table.bucketSpec, options)
   }
 
+  def staticPartitions: Map[String, String] =
+    partition.filter(_._2.isDefined).map(kv => kv._1 -> kv._2.get)
+
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
@@ -293,4 +296,6 @@ case class InsertIntoHiveTable(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoHiveTable =
     copy(query = newChild)
+
+  override def withNewStaticPartitionSpec(partitionSpec: Map[String, String]): V1WriteCommand = this
 }

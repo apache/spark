@@ -76,7 +76,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override def requiredOrdering: Seq[SortOrder] =
     V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
-      staticPartitions.size)
+      numStaticPartitionCols)
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -188,7 +188,7 @@ case class InsertIntoHadoopFsRelationCommand(
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
-          numStaticPartitionCols = staticPartitions.size)
+          numStaticPartitionCols = numStaticPartitionCols)
 
 
       // update metastore partition metadata
@@ -278,4 +278,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
+
+  override def withNewStaticPartitionSpec(partitionSpec: Map[String, String]): V1WriteCommand =
+    copy(staticPartitions = partitionSpec)
 }

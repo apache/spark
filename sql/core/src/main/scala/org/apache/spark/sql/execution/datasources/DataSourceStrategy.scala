@@ -179,7 +179,7 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
       // Let's say that we have a table "t", which is created by
       // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
       // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
-      // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+      // will be converted to "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 2, 3".
       //
       // Basically, we will put those partition columns having a assigned value back
       // to the SELECT clause. The output of the SELECT clause is organized as

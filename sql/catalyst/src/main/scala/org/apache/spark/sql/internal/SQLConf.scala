@@ -420,6 +420,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ELIMINATE_DYNAMIC_PARTITION_WRITES =
+    buildConf("spark.sql.optimizer.eliminateDynamicPartitionWrites")
+      .internal()
+      .doc("When set to true, Spark optimizer will infer if the partition column is static and " +
+        "convert it to static partition.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -4683,6 +4692,9 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)
+
+  def eliminateDynamicPartitionWrites: Boolean =
+    getConf(SQLConf.ELIMINATE_DYNAMIC_PARTITION_WRITES)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 

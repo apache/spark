@@ -450,7 +450,10 @@ case class DataSource(
    * The returned command is unresolved and need to be analyzed.
    */
   private def planForWritingFileFormat(
-      format: FileFormat, mode: SaveMode, data: LogicalPlan): InsertIntoHadoopFsRelationCommand = {
+      format: FileFormat,
+      mode: SaveMode,
+      data: LogicalPlan,
+      staticPartitions: Map[String, String] = Map.empty): InsertIntoHadoopFsRelationCommand = {
     // Don't glob path for the write path.  The contracts here are:
     //  1. Only one output path can be specified on the write path;
     //  2. Output path must be a legal HDFS style file system path;
@@ -477,7 +480,7 @@ case class DataSource(
     // will be adjusted within InsertIntoHadoopFsRelation.
     InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath,
-      staticPartitions = Map.empty,
+      staticPartitions = staticPartitions,
       ifPartitionNotExists = false,
       partitionColumns = partitionColumns.map(UnresolvedAttribute.quoted),
       bucketSpec = bucketSpec,
@@ -504,13 +507,15 @@ case class DataSource(
    *                     command with this physical plan instead of creating a new physical plan,
    *                     so that the metrics can be correctly linked to the given physical plan and
    *                     shown in the web UI.
+   * @param staticPartitions The static partitions for this writing.
    */
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
       outputColumnNames: Seq[String],
       physicalPlan: SparkPlan,
-      metrics: Map[String, SQLMetric]): BaseRelation = {
+      metrics: Map[String, SQLMetric],
+      staticPartitions: Map[String, String] = Map.empty): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -519,7 +524,7 @@ case class DataSource(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
-        val cmd = planForWritingFileFormat(format, mode, data)
+        val cmd = planForWritingFileFormat(format, mode, data, staticPartitions)
         val resolvedPartCols =
           DataSource.resolvePartitionColumns(cmd.partitionColumns, outputColumns, data, equality)
         val resolved = cmd.copy(

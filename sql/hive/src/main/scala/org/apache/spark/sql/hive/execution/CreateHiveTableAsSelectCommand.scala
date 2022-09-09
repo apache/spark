@@ -36,6 +36,7 @@ trait CreateHiveTableAsSelectBase extends V1WriteCommand with V1WritesHiveUtils 
   val query: LogicalPlan
   val outputColumnNames: Seq[String]
   val mode: SaveMode
+  override def staticPartitions: Map[String, String] = Map.empty
 
   protected val tableIdentifier = tableDesc.identifier
 
@@ -157,6 +158,8 @@ case class CreateHiveTableAsSelectCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): CreateHiveTableAsSelectCommand = copy(query = newChild)
+
+  override def withNewStaticPartitionSpec(partitionSpec: Map[String, String]): V1WriteCommand = this
 }
 
 /**
@@ -207,4 +210,6 @@ case class OptimizedCreateHiveTableAsSelectCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): OptimizedCreateHiveTableAsSelectCommand = copy(query = newChild)
+
+  override def withNewStaticPartitionSpec(partitionSpec: Map[String, String]): V1WriteCommand = this
 }
