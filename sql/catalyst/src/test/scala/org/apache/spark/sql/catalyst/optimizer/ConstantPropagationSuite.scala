@@ -205,7 +205,7 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(Optimize.execute(query2), correctAnswer2)
   }
 
-  test("SPARK-39069: Replace constants in inequality predicate") {
+  test("SPARK-39069: Replace constants in inequality predicates") {
     comparePlans(
       Optimize.execute(testRelation.where($"a" > $"b" && $"b" + 1 > $"c" && $"b" === 2).analyze),
       testRelation.where($"a" > 2 && Literal(3) > $"c" && $"b" === 2).analyze)
@@ -213,6 +213,13 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.where($"a".in(1, 2) && $"a" === 2).analyze),
       testRelation.where($"a" === 2).analyze)
+  }
+
+  test("SPARK-39069: Replace constants in nested predicates") {
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(($"a" > $"b" + 1 && $"b" === 1 || $"c" === 1) && $"b" === 1).analyze),
+      testRelation.where(($"a" > 2 || $"c" === 1) && $"b" === 1).analyze)
   }
 
   test("SPARK-39069: Don't replace constants in IsNotNull") {
