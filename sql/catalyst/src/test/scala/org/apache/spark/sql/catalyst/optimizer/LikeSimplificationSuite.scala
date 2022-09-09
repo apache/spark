@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class LikeSimplificationSuite extends PlanTest {
 
@@ -231,5 +232,17 @@ class LikeSimplificationSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-40228: Simplify multiLike if child is foldable expression") {
+    comparePlans(Optimize.execute(testRelation.where("a" likeAny("abc%", "", "ab")).analyze),
+      testRelation.where(StartsWith("a", "abc") || EqualTo("a", "") || EqualTo("a", "ab") ||
+        LikeAny("a", Seq.empty[UTF8String])).analyze)
+  }
+
+  test("SPARK-40228: Do not simplify multiLike if child is not a cheap expression") {
+    val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 }
