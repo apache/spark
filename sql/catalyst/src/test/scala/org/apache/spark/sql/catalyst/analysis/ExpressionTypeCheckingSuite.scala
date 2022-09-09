@@ -77,6 +77,12 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("check types for binary arithmetic") {
+    // We will cast String to Double for binary arithmetic
+    assertSuccess(Add($"intField", $"stringField"))
+    assertSuccess(Subtract($"intField", $"stringField"))
+    assertSuccess(Multiply($"intField", $"stringField"))
+    assertSuccess(Divide($"intField", $"stringField"))
+    assertSuccess(Remainder($"intField", $"stringField"))
     // checkAnalysis(BitwiseAnd($"intField", $"stringField"))
 
     assertErrorForDifferingTypes(
