@@ -22,6 +22,7 @@ import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
@@ -34,7 +35,8 @@ case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
-  with QueryErrorsSuiteBase {
+  with QueryErrorsSuiteBase
+  with SharedSparkSession {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {
