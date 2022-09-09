@@ -82,6 +82,10 @@
       <artifactId>leveldbjni-all</artifactId>
       <version>1.8</version>
     </dependency>
+    <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
