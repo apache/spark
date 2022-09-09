@@ -184,44 +184,44 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     this
   }
 
-  def toBigDecimal: BigDecimal = if (decimalVal.eq(null)) {
-    BigDecimal(longVal, _scale)
-  } else {
+  def toBigDecimal: BigDecimal = if (decimalVal.ne(null)) {
     decimalVal
+  } else {
+    BigDecimal(longVal, _scale)
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = if (decimalVal.eq(null)) {
-    java.math.BigDecimal.valueOf(longVal, _scale)
-  } else {
+  def toJavaBigDecimal: java.math.BigDecimal = if (decimalVal.ne(null)) {
     decimalVal.underlying()
+  } else {
+    java.math.BigDecimal.valueOf(longVal, _scale)
   }
 
-  def toScalaBigInt: BigInt = if (decimalVal.eq(null)) {
-    BigInt(actualLongVal)
-  } else {
+  def toScalaBigInt: BigInt = if (decimalVal.ne(null)) {
     decimalVal.toBigInt
+  } else {
+    BigInt(actualLongVal)
   }
 
-  def toJavaBigInteger: java.math.BigInteger = if (decimalVal.eq(null)) {
-    java.math.BigInteger.valueOf(actualLongVal)
-  } else {
+  def toJavaBigInteger: java.math.BigInteger = if (decimalVal.ne(null)) {
     decimalVal.underlying().toBigInteger()
+  } else {
+    java.math.BigInteger.valueOf(toLong)
   }
 
-  def toUnscaledLong: Long = if (decimalVal.eq(null)) {
-    longVal
-  } else {
+  def toUnscaledLong: Long = if (decimalVal.ne(null)) {
     decimalVal.underlying().unscaledValue().longValueExact()
+  } else {
+    longVal
   }
 
   override def toString: String = toBigDecimal.toString()
 
   def toPlainString: String = toJavaBigDecimal.toPlainString
 
-  def toDebugString: String = if (decimalVal.eq(null)) {
-    s"Decimal(compact, $longVal, $precision, $scale)"
-  } else {
+  def toDebugString: String = if (decimalVal.ne(null)) {
     s"Decimal(expanded, $decimalVal, $precision, $scale)"
+  } else {
+    s"Decimal(compact, $longVal, $precision, $scale)"
   }
 
   def toDouble: Double = toBigDecimal.doubleValue
@@ -401,18 +401,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       // In both cases, we will check whether our precision is okay below
     }
 
-    if (dv.eq(null)) {
-      // We're still using Longs, but we should check whether we match the new precision
-      val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
-      if (lv <= -p || lv >= p) {
-        // Note that we shouldn't have been able to fix this by switching to BigDecimal
-        return false
-      }
-    } else {
+    if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
       dv = dv.setScale(scale, roundMode)
       if (dv.precision > precision) {
+        return false
+      }
+    } else {
+      // We're still using Longs, but we should check whether we match the new precision
+      val p = POW_10(math.min(precision, MAX_LONG_DIGITS))
+      if (lv <= -p || lv >= p) {
+        // Note that we shouldn't have been able to fix this by switching to BigDecimal
         return false
       }
     }
@@ -442,7 +442,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def hashCode(): Int = toBigDecimal.hashCode()
 
-  def isZero: Boolean = if (decimalVal.eq(null)) longVal == 0 else decimalVal.signum == 0
+  def isZero: Boolean = if (decimalVal.ne(null)) decimalVal.signum == 0 else longVal == 0
 
   // We should follow DecimalPrecision promote if use longVal for add and subtract:
   // Operation    Result Precision                        Result Scale
@@ -483,10 +483,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def remainder(that: Decimal): Decimal = this % that
 
-  def unary_- : Decimal = if (decimalVal.eq(null)) {
-    Decimal(-longVal, precision, scale)
-  } else {
+  def unary_- : Decimal = if (decimalVal.ne(null)) {
     Decimal(-decimalVal, precision, scale)
+  } else {
+    Decimal(-longVal, precision, scale)
   }
 
   def abs: Decimal = if (this < Decimal.ZERO) this.unary_- else this
