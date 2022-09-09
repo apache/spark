@@ -400,7 +400,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
         checkFilterPredicate(
           In(intAttr, Array(2, 3, 4, 5, 6, 7).map(Literal.apply)),
-          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
           Seq(Row(2), Row(3), Row(4)))
       }
     }
@@ -485,7 +485,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
         checkFilterPredicate(
           In(longAttr, Array(2L, 3L, 4L, 5L, 6L, 7L).map(Literal.apply)),
-          if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+          if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
           Seq(Row(2L), Row(3L), Row(4L)))
       }
     }
