@@ -5620,7 +5620,7 @@ def concat(*cols: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.sql.functions.array_join` to concatanate string columns with delimiter
+    :meth:`pyspark.sql.functions.array_join` : to concatanate string columns with delimiter
 
     Examples
     --------
