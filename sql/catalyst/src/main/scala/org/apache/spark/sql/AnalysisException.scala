@@ -93,7 +93,7 @@ class AnalysisException protected[sql] (
       errorClass = Some(errorClass),
       errorSubClass = None,
       messageParameters = messageParameters,
-      context = Array(origin.context))
+      context = origin.getQueryContext)
 
   def this(
       errorClass: String,
@@ -117,7 +117,7 @@ class AnalysisException protected[sql] (
       errorClass = Some(errorClass),
       errorSubClass = Option(errorSubClass),
       messageParameters = messageParameters,
-      context = Array(origin.context))
+      context = origin.getQueryContext)
 
   def copy(
       message: String = this.message,
@@ -135,7 +135,7 @@ class AnalysisException protected[sql] (
     val newException = this.copy(
       line = origin.line,
       startPosition = origin.startPosition,
-      context = Array(origin.context))
+      context = origin.getQueryContext)
     newException.setStackTrace(getStackTrace)
     newException
   }
