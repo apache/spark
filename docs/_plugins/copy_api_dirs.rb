@@ -19,80 +19,6 @@ require 'fileutils'
 include FileUtils
 
 if not (ENV['SKIP_API'] == '1')
-
-  if not (ENV['SKIP_PYTHONDOC'] == '1')
-    # Build Sphinx docs for Python
-
-    puts "Moving to project root and building API docs."
-    cd("..")
-
-    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package -Phive") || raise("PySpark doc generation failed")
-
-    puts "Moving back into docs dir."
-    cd("docs")
-
-    puts "Moving to python/docs directory and building sphinx."
-    cd("../python/docs")
-    system("make html") || raise("Python doc generation failed")
-
-    puts "Moving back into docs dir."
-    cd("../../docs")
-
-    puts "Making directory api/python"
-    mkdir_p "api/python"
-
-    puts "cp -r ../python/docs/build/html/. api/python"
-    cp_r("../python/docs/build/html/.", "api/python")
-  end
-
-  if not (ENV['SKIP_RDOC'] == '1')
-    # Build SparkR API docs
-
-    puts "Moving to R directory and building roxygen docs."
-    cd("../R")
-    system("./create-docs.sh") || raise("R doc generation failed")
-
-    puts "Moving back into docs dir."
-    cd("../docs")
-
-    puts "Making directory api/R"
-    mkdir_p "api/R"
-
-    puts "cp -r ../R/pkg/docs/. api/R"
-    cp_r("../R/pkg/docs/.", "api/R")
-  end
-
-  if not (ENV['SKIP_SQLDOC'] == '1')
-    # Build SQL API docs
-
-    if ENV['SKIP_PYTHONDOC'] == '1'
-      # SQL documentation build requires the full build to run queries.
-      # If the build was not done in PySpark documentation generation, we should build it here.
-      puts "Moving to project root and building API docs."
-      cd("..")
-
-      puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
-      system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
-
-      puts "Moving back into docs dir."
-      cd("docs")
-    end
-
-    puts "Moving to SQL directory and building docs."
-    cd("../sql")
-    system("./create-docs.sh") || raise("SQL doc generation failed")
-
-    puts "Moving back into docs dir."
-    cd("../docs")
-
-    puts "Making directory api/sql"
-    mkdir_p "api/sql"
-
-    puts "cp -r ../sql/site/. api/sql"
-    cp_r("../sql/site/.", "api/sql")
-  end
-
   if not (ENV['SKIP_SCALADOC'] == '1')
     # Build Scaladoc for Scala and Javadoc for Java
 
@@ -185,6 +111,79 @@ if not (ENV['SKIP_API'] == '1')
     css = File.readlines("./css/api-javadocs.css")
     css_file = dest + "/stylesheet.css"
     File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
+  end
+
+  if not (ENV['SKIP_PYTHONDOC'] == '1')
+    # Build Sphinx docs for Python
+
+    puts "Moving to project root and building API docs."
+    cd("..")
+
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("PySpark doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("docs")
+
+    puts "Moving to python/docs directory and building sphinx."
+    cd("../python/docs")
+    system("make html") || raise("Python doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("../../docs")
+
+    puts "Making directory api/python"
+    mkdir_p "api/python"
+
+    puts "cp -r ../python/docs/build/html/. api/python"
+    cp_r("../python/docs/build/html/.", "api/python")
+  end
+
+  if not (ENV['SKIP_RDOC'] == '1')
+    # Build SparkR API docs
+
+    puts "Moving to R directory and building roxygen docs."
+    cd("../R")
+    system("./create-docs.sh") || raise("R doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("../docs")
+
+    puts "Making directory api/R"
+    mkdir_p "api/R"
+
+    puts "cp -r ../R/pkg/docs/. api/R"
+    cp_r("../R/pkg/docs/.", "api/R")
+  end
+
+  if not (ENV['SKIP_SQLDOC'] == '1')
+    # Build SQL API docs
+
+    if ENV['SKIP_PYTHONDOC'] == '1'
+      # SQL documentation build requires the full build to run queries.
+      # If the build was not done in PySpark documentation generation, we should build it here.
+      puts "Moving to project root and building API docs."
+      cd("..")
+
+      puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+      system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
+
+      puts "Moving back into docs dir."
+      cd("docs")
+    end
+
+    puts "Moving to SQL directory and building docs."
+    cd("../sql")
+    system("./create-docs.sh") || raise("SQL doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("../docs")
+
+    puts "Making directory api/sql"
+    mkdir_p "api/sql"
+
+    puts "cp -r ../sql/site/. api/sql"
+    cp_r("../sql/site/.", "api/sql")
   end
 
 end
