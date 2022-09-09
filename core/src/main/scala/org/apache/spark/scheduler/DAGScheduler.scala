@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{IOException, NotSerializableException}
+import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, ScheduledFuture, TimeoutException, TimeUnit}
 import java.util.concurrent.{Future => JFutrue}
@@ -287,13 +287,12 @@ private[spark] class DAGScheduler(
 
   // When push-based shuffle is enabled, spark driver will submit a finalize task which will send
   // a finalize rpc to each merger ESS after the shuffle map stage is complete. The merge
-  // finalization task takes up to PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
+  // finalization takes up to PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
   private val shuffleMergeFinalizeScheduler =
     ThreadUtils.newDaemonThreadPoolScheduledExecutor("shuffle-merge-finalizer",
       shuffleMergeFinalizeNumThreads)
 
-  // Send finalize RPC tasks to merger ESS, one thread per RPC and will be cancelled after
-  // PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT.
+  // Send finalize RPC tasks to merger ESS
   private val shuffleSendFinalizeRpcExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(shuffleFinalizeRpcThreads, "shuffle-merge-finalize-rpc")
 
@@ -2268,11 +2267,6 @@ private[spark] class DAGScheduler(
                       }
 
                       override def onShuffleMergeFailure(e: Throwable): Unit = {
-                        if (e.isInstanceOf[IOException]) {
-                          logInfo(s"Failed to connect external shuffle service " +
-                            s"${shuffleServiceLoc.hostPort}")
-                          blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
-                        }
                       }
                     })
                 }
@@ -2302,12 +2296,6 @@ private[spark] class DAGScheduler(
                         // Do not fail the future as this would cause dag scheduler to prematurely
                         // give up on waiting for merge results from the remaining shuffle services
                         // if one fails
-                        if (e.isInstanceOf[IOException]) {
-                          logInfo(s"Failed to connect external shuffle service " +
-                            s"${shuffleServiceLoc.hostPort}")
-                          blockManagerMaster.removeShufflePushMergerLocation(shuffleServiceLoc.host)
-                          results(index).set(false)
-                        }
                       }
                     })
                 }
@@ -2335,13 +2323,8 @@ private[spark] class DAGScheduler(
   private def cancelFinalizeShuffleMergeFutures(
       futures: Seq[JFutrue[_]],
       delayInSecs: Long): Unit = {
-    def cancelFutures(): Unit = {
-      futures.map(future => {
-        if (!future.isDone) {
-          future.cancel(true)
-        }
-      })
-    }
+
+    def cancelFutures(): Unit = futures.foreach(_.cancel(true))
 
     if (delayInSecs > 0) {
       shuffleMergeFinalizeScheduler.schedule(new Runnable {

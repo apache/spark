@@ -25,7 +25,9 @@ import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
@@ -36,13 +38,14 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
@@ -4440,37 +4443,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
-  test("SPARK-40096: Remove shuffle push merger location if connection creation fails") {
+  test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely") {
     initPushBasedShuffleConfs(conf)
-    // connectionCreationTimeout < shuffleMergeResultsTimeoutSec 10s by default
-    conf.set("spark.shuffle.io.connectionCreationTimeout", "5s")
-    val unreachableHost = "192.168.254.254"
+
+    val blockStoreClient = mock(classOf[ExternalBlockStoreClient])
+    val blockStoreClientField = classOf[BlockManager].getDeclaredField("blockStoreClient")
+    blockStoreClientField.setAccessible(true)
+    blockStoreClientField.set(sc.env.blockManager, blockStoreClient)
+    val sentHosts = ArrayBuffer[String]()
+    doAnswer { (invoke: InvocationOnMock) =>
+      val host = invoke.getArgument[String](0)
+      sentHosts += host
+      // Block FinalizeShuffleMerge rpc for 2 seconds
+      if (invoke.getArgument[String](0) == "hostA") {
+        Thread.sleep(2000)
+      }
+    }.when(blockStoreClient).finalizeShuffleMerge(any(), any(), any(), any(), any())
+
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", unreachableHost, 12345)))
-
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    shuffleDep.setMergerLocs(Seq(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
-    Seq(true, false) foreach { registerMergeStatuses =>
-      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeStatuses)
-      verify(blockManagerMaster, times(1))
-        .removeShufflePushMergerLocation(unreachableHost)
-    }
-  }
 
-  test("SPARK-40096: Do not remove shuffle push merger location for InterruptedException") {
-    initPushBasedShuffleConfs(conf)
-    // connectionCreationTimeout > shuffleMergeResultsTimeoutSec 10s by default
-    conf.set("spark.shuffle.io.connectionCreationTimeout", "12s")
-    val unreachableHost = "192.168.254.254"
-    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    shuffleDep.setMergerLocs(Seq(BlockManagerId("UnknownESSId", unreachableHost, 12345)))
-
-    val shuffleStage = scheduler.createShuffleMapStage(shuffleDep, 0)
-    Seq(true, false) foreach { registerMergeStatuses =>
-      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeStatuses)
-      verify(blockManagerMaster, times(0))
-        .removeShufflePushMergerLocation(unreachableHost)
+    Seq(true, false).foreach { registerMergeResults =>
+      sentHosts.clear()
+      scheduler.finalizeShuffleMerge(shuffleStage, registerMergeResults)
+      verify(blockStoreClient, times(2))
+        .finalizeShuffleMerge(any(), any(), any(), any(), any())
+      assert((sentHosts diff Seq("hostA", "hostB")).isEmpty)
+      reset(blockStoreClient)
     }
   }
 
