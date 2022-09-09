@@ -73,12 +73,14 @@ Computations / Descriptive Stats
    GroupBy.mean
    GroupBy.median
    GroupBy.min
+   GroupBy.nth
    GroupBy.rank
    GroupBy.sem
    GroupBy.std
    GroupBy.sum
    GroupBy.var
    GroupBy.nunique
+   GroupBy.quantile
    GroupBy.size
    GroupBy.diff
    GroupBy.idxmax

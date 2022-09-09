@@ -1357,6 +1357,48 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
 
+    def test_quantile(self):
+        dfs = [
+            pd.DataFrame(
+                [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
+            ),
+            pd.DataFrame(
+                [["a", True], ["a", True], ["a", False], ["b", True], ["b", True], ["b", False]],
+                columns=["key", "val"],
+            ),
+        ]
+        for df in dfs:
+            psdf = ps.from_pandas(df)
+            # q accept float and int between 0 and 1
+            for i in [0, 0.1, 0.5, 1]:
+                self.assert_eq(
+                    df.groupby("key").quantile(q=i, interpolation="lower"),
+                    psdf.groupby("key").quantile(q=i),
+                    almost=True,
+                )
+                self.assert_eq(
+                    df.groupby("key")["val"].quantile(q=i, interpolation="lower"),
+                    psdf.groupby("key")["val"].quantile(q=i),
+                    almost=True,
+                )
+            # raise ValueError when q not in [0, 1]
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=1.1)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=-0.1)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=2)
+            with self.assertRaises(ValueError):
+                psdf.groupby("key").quantile(q=np.nan)
+            # raise TypeError when q type mismatch
+            with self.assertRaises(TypeError):
+                psdf.groupby("key").quantile(q="0.1")
+            # raise NotImplementedError when q is list like type
+            with self.assertRaises(NotImplementedError):
+                psdf.groupby("key").quantile(q=(0.1, 0.5))
+            with self.assertRaises(NotImplementedError):
+                psdf.groupby("key").quantile(q=[0.1, 0.5])
+
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
@@ -1379,6 +1421,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.last())
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
+
+    def test_nth(self):
+        for n in [0, 1, 2, 128, -1, -2, -128]:
+            self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
+
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth(slice(0, 2))
+        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
+            self.psdf.groupby("B").nth([0, 1, -1])
+        with self.assertRaisesRegex(TypeError, "Invalid index"):
+            self.psdf.groupby("B").nth("x")
 
     def test_cumcount(self):
         pdf = pd.DataFrame(

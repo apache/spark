@@ -21,9 +21,10 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.LevelDB;
-import org.apache.spark.network.shuffledb.DB;
+import org.apache.spark.network.shuffledb.RocksDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
 public class DBProvider {
@@ -33,11 +34,13 @@ public class DBProvider {
         StoreVersion version,
         ObjectMapper mapper) throws IOException {
       if (dbFile != null) {
-        // TODO: SPARK-38888, add rocksdb implementation.
         switch (dbBackend) {
           case LEVELDB:
             org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
             return levelDB != null ? new LevelDB(levelDB) : null;
+          case ROCKSDB:
+            org.rocksdb.RocksDB rocksDB = RocksDBProvider.initRockDB(dbFile, version, mapper);
+            return rocksDB != null ? new RocksDB(rocksDB) : null;
           default:
             throw new IllegalArgumentException("Unsupported DBBackend: " + dbBackend);
         }

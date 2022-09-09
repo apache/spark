@@ -45,7 +45,7 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
@@ -58,6 +58,7 @@ from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions a
 from pyspark.sql.types import (
     BooleanType,
     DataType,
+    DoubleType,
     NumericType,
     StructField,
     StructType,
@@ -581,6 +582,67 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
         )
 
+    # TODO: 'q' accepts list like type
+    def quantile(self, q: float = 0.5, accuracy: int = 10000) -> FrameLike:
+        """
+        Return group values at the given quantile.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        q : float, default 0.5 (50% quantile)
+            Value between 0 and 1 providing the quantile to compute.
+        accuracy : int, optional
+            Default accuracy of approximation. Larger value means better accuracy.
+            The relative error can be deduced by 1.0 / accuracy.
+            This is a panda-on-Spark specific parameter.
+
+        Returns
+        -------
+        pyspark.pandas.Series or pyspark.pandas.DataFrame
+            Return type determined by caller of GroupBy object.
+
+        Notes
+        -------
+        `quantile` in pandas-on-Spark are using distributed percentile approximation
+        algorithm unlike pandas, the result might different with pandas, also
+        `interpolation` parameters are not supported yet.
+
+        See Also
+        --------
+        pyspark.pandas.Series.quantile
+        pyspark.pandas.DataFrame.quantile
+        pyspark.sql.functions.percentile_approx
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([
+        ...     ['a', 1], ['a', 2], ['a', 3],
+        ...     ['b', 1], ['b', 3], ['b', 5]
+        ... ], columns=['key', 'val'])
+
+        Groupby one column and return the quantile of the remaining columns in
+        each group.
+
+        >>> df.groupby('key').quantile()
+             val
+        key
+        a    2.0
+        b    3.0
+        """
+        if is_list_like(q):
+            raise NotImplementedError("q doesn't support for list like type for now")
+        if not is_number(q):
+            raise TypeError("must be real number, not %s" % type(q).__name__)
+        if not 0 <= q <= 1:
+            raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
+        return self._reduce_for_stat_function(
+            lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
+            accepted_spark_types=(NumericType, BooleanType),
+            bool_to_numeric=True,
+        )
+
     def min(self, numeric_only: Optional[bool] = False) -> FrameLike:
         """
         Compute min of group values.
@@ -894,6 +956,104 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             accepted_spark_types=(NumericType, BooleanType),
             bool_to_numeric=True,
         )
+
+    # TODO: 1, 'n' accepts list and slice; 2, implement 'dropna' parameter
+    def nth(self, n: int) -> FrameLike:
+        """
+        Take the nth row from each group.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        n : int
+            A single nth value for the row
+
+        Returns
+        -------
+        Series or DataFrame
+
+        Notes
+        -----
+        There is a behavior difference between pandas-on-Spark and pandas:
+
+        * when there is no aggregation column, and `n` not equal to 0 or -1,
+            the returned empty dataframe may have an index with different lenght `__len__`.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
+        ...                    'B': [np.nan, 2, 3, 4, 5]}, columns=['A', 'B'])
+        >>> g = df.groupby('A')
+        >>> g.nth(0)
+             B
+        A
+        1  NaN
+        2  3.0
+        >>> g.nth(1)
+             B
+        A
+        1  2.0
+        2  5.0
+        >>> g.nth(-1)
+             B
+        A
+        1  4.0
+        2  5.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+        """
+        if isinstance(n, slice) or is_list_like(n):
+            raise NotImplementedError("n doesn't support slice or list for now")
+        if not isinstance(n, int):
+            raise TypeError("Invalid index %s" % type(n).__name__)
+
+        groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
+        internal, agg_columns, sdf = self._prepare_reduce(
+            groupkey_names=groupkey_names,
+            accepted_spark_types=None,
+            bool_to_numeric=False,
+        )
+        psdf: DataFrame = DataFrame(internal)
+
+        if len(psdf._internal.column_labels) > 0:
+            window1 = Window.partitionBy(*groupkey_names).orderBy(NATURAL_ORDER_COLUMN_NAME)
+            tmp_row_number_col = verify_temp_column_name(sdf, "__tmp_row_number_col__")
+            if n >= 0:
+                sdf = (
+                    psdf._internal.spark_frame.withColumn(
+                        tmp_row_number_col, F.row_number().over(window1)
+                    )
+                    .where(F.col(tmp_row_number_col) == n + 1)
+                    .drop(tmp_row_number_col)
+                )
+            else:
+                window2 = Window.partitionBy(*groupkey_names).rowsBetween(
+                    Window.unboundedPreceding, Window.unboundedFollowing
+                )
+                tmp_group_size_col = verify_temp_column_name(sdf, "__tmp_group_size_col__")
+                sdf = (
+                    psdf._internal.spark_frame.withColumn(
+                        tmp_group_size_col, F.count(F.lit(0)).over(window2)
+                    )
+                    .withColumn(tmp_row_number_col, F.row_number().over(window1))
+                    .where(F.col(tmp_row_number_col) == F.col(tmp_group_size_col) + 1 + n)
+                    .drop(tmp_group_size_col, tmp_row_number_col)
+                )
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+
+        return self._prepare_return(DataFrame(internal))
 
     def all(self, skipna: bool = True) -> FrameLike:
         """
