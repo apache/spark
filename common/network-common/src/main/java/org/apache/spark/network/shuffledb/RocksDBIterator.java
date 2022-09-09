@@ -17,15 +17,20 @@
 
 package org.apache.spark.network.shuffledb;
 
-import com.google.common.base.Throwables;
-
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-public class LevelDBIterator implements DBIterator {
+import com.google.common.base.Throwables;
+import org.rocksdb.RocksIterator;
 
-    private final org.iq80.leveldb.DBIterator it;
+/**
+ * RocksDB implementation of `DBIterator`.
+ */
+public class RocksDBIterator implements DBIterator {
+
+    private final RocksIterator it;
 
     private boolean checkedNext;
 
@@ -33,8 +38,8 @@ public class LevelDBIterator implements DBIterator {
 
     private Map.Entry<byte[], byte[]> next;
 
-    public LevelDBIterator(org.iq80.leveldb.DBIterator it) {
-        this.it = it;
+    public RocksDBIterator(RocksIterator it) {
+      this.it = it;
     }
 
     @Override
@@ -55,34 +60,36 @@ public class LevelDBIterator implements DBIterator {
 
     @Override
     public Map.Entry<byte[], byte[]> next() {
-        if (!hasNext()) {
-          throw new NoSuchElementException();
-        }
-        checkedNext = false;
-        Map.Entry<byte[], byte[]> ret = next;
-        next = null;
-        return ret;
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      checkedNext = false;
+      Map.Entry<byte[], byte[]> ret = next;
+      next = null;
+      return ret;
     }
 
     @Override
     public void close() throws IOException {
       if (!closed) {
-       it.close();
-       closed = true;
-       next = null;
+        it.close();
+        closed = true;
+        next = null;
       }
     }
 
     @Override
     public void seek(byte[] key) {
-        it.seek(key);
+      it.seek(key);
     }
 
     private Map.Entry<byte[], byte[]> loadNext() {
-        boolean hasNext = it.hasNext();
-        if (!hasNext) {
-            return null;
-        }
-        return it.next();
+      if (it.isValid()) {
+        Map.Entry<byte[], byte[]> nextEntry =
+          new AbstractMap.SimpleEntry<>(it.key(), it.value());
+        it.next();
+        return nextEntry;
+      }
+      return null;
     }
 }

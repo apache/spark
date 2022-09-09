@@ -344,7 +344,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "'b'" :: "group by" :: Nil
+    "\"b\"" :: "COLUMN_NOT_IN_GROUP_BY_CLAUSE" :: Nil
   )
 
   errorTest(

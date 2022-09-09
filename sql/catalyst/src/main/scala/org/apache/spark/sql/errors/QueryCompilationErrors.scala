@@ -594,8 +594,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
-    new AnalysisException(s"$operation is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(
+      nameParts: Seq[String],
+      operation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = "TABLE_OPERATION",
+      messageParameters = Array(toSQLId(nameParts), operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
@@ -895,10 +900,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
     new AnalysisException(
       s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
-  }
-
-  def deleteOnlySupportedWithV2TablesError(): Throwable = {
-    new AnalysisException("DELETE is only supported with v2 tables.")
   }
 
   def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
@@ -2580,5 +2581,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "name" -> toSQLId(name),
         "type" -> toSQLType(dt),
         "expectedType" -> toSQLType(expected)))
+  }
+
+  def columnNotInGroupByClauseError(expression: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+      messageParameters = Array(toSQLExpr(expression))
+    )
   }
 }

@@ -897,11 +897,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
-            }.getMessage
-            assert(e.contains(
-              "expression 'spark_catalog.default.t.c1' is neither present " +
-              "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
-              "first() (or first_value) if you don't care which value you get."))
+            }
+            checkError(e,
+              errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
+              parameters = Map(
+                "expression" -> "\"c1\""))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {

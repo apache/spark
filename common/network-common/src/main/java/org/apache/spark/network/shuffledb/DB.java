@@ -19,10 +19,13 @@ package org.apache.spark.network.shuffledb;
 
 import java.io.Closeable;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * The local KV storage used to persist the shuffle state,
  * the implementations may include LevelDB, RocksDB, etc.
  */
+@Private
 public interface DB extends Closeable {
     /**
      * Set the DB entry for "key" to "value".
