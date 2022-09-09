@@ -78,24 +78,6 @@ private[spark] object SparkThrowableHelper {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
-  def getMessage(
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Array[String]): String = {
-    getMessage(errorClass, errorSubClass, messageParameters, "")
-  }
-
-  def getMessage(
-      errorClass: String,
-      errorSubClass: String,
-      messageParameters: Array[String],
-      context: String): String = {
-    val names = getParameterNames(errorClass, errorSubClass)
-    assert(names.length <= messageParameters.length)
-    val params = (names zip messageParameters).toMap
-    getMessage(errorClass, errorSubClass, params, context)
-  }
-
   def getParameterNames(errorClass: String, errorSubCLass: String): Array[String] = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
@@ -126,11 +108,25 @@ private[spark] object SparkThrowableHelper {
     getParameterNames(errorClass, errorSubCLass).map(params.getOrElse(_, "?"))
   }
 
+  def getMessageParameters(
+      errorClass: String,
+      errorSubCLass: String,
+      params: java.util.Map[String, String]): Array[String] = {
+    getParameterNames(errorClass, errorSubCLass).map(params.getOrDefault(_, "?"))
+  }
+
   def getMessage(
       errorClass: String,
       errorSubClass: String,
       messageParameters: Map[String, String]): String = {
     getMessage(errorClass, errorSubClass, messageParameters, "")
+  }
+
+  def getMessage(
+      errorClass: String,
+      errorSubClass: String,
+      messageParameters: java.util.Map[String, String]): String = {
+    getMessage(errorClass, errorSubClass, messageParameters.asScala.toMap, "")
   }
 
   def getMessage(
@@ -153,7 +149,13 @@ private[spark] object SparkThrowableHelper {
         errorInfo.messageFormat + " " + errorSubInfo.messageFormat)
     }
     val sub = new StringSubstitutor(messageParameters.asJava)
-    val displayMessage = sub.replace(displayFormat.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
+    sub.setEnableUndefinedVariableException(true)
+    val displayMessage = try {
+      sub.replace(displayFormat.replaceAll("<([a-zA-Z0-9_-]+)>", "\\$\\{$1\\}"))
+    } catch {
+      case _: IllegalArgumentException => throw SparkException.internalError(
+        s"Undefined an error message parameter: $messageParameters")
+    }
     val displayQueryContext = (if (context.isEmpty) "" else "\n") + context
 
     s"[$displayClass] $displayMessage$displayQueryContext"

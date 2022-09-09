@@ -145,24 +145,26 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Check if error class is missing") {
     val ex1 = intercept[IllegalArgumentException] {
-      getMessage("", null, Array.empty[String])
+      getMessage("", null, Map.empty[String, String])
     }
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM", null, Array.empty[String])
+      getMessage("LOREM_IPSUM", null, Map.empty[String, String])
     }
     assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
 
   test("Check if message parameters match message format") {
     // Requires 2 args
-    intercept[AssertionError] {
-      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty[String])
+    val e = intercept[SparkException] {
+      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Map.empty[String, String])
     }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessageParameters.head.contains("Undefined an error message parameter"))
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", null, Array("foo", "bar", "baz")) ==
+    assert(getMessage("DIVIDE_BY_ZERO", null, Map("config" -> "foo", "a" -> "bar")) ==
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
@@ -174,7 +176,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       getMessage(
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array("`foo`", "`bar`, `baz`")
+        Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
