@@ -205,81 +205,85 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     }
     // assert(createdFromNull.get(11) === null)
 
-    // If we have an UnsafeRow with columns that are initially non-null and we null out those
-    // columns, then the serialized row representation should be identical to what we would get by
-    // creating an entirely null row via the converter
-    val rowWithNoNullColumns: InternalRow = {
-      val r = new SpecificInternalRow(fieldTypes)
-      r.setNullAt(0)
-      r.setBoolean(1, false)
-      r.setByte(2, 20)
-      r.setShort(3, 30)
-      r.setInt(4, 400)
-      r.setLong(5, 500)
-      r.setFloat(6, 600)
-      r.setDouble(7, 700)
-      r.update(8, UTF8String.fromString("hello"))
-      r.update(9, "world".getBytes(StandardCharsets.UTF_8))
-      r.setDecimal(10, Decimal(10), 10)
-      r.setDecimal(11, Decimal(10.00, 38, 18), 38)
-      // r.update(11, Array(11))
-      r
-    }
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        // If we have an UnsafeRow with columns that are initially non-null and we null out those
+        // columns, then the serialized row representation should be identical to what we would get
+        // by creating an entirely null row via the converter
+        val rowWithNoNullColumns: InternalRow = {
+          val r = new SpecificInternalRow(fieldTypes)
+          r.setNullAt(0)
+          r.setBoolean(1, false)
+          r.setByte(2, 20)
+          r.setShort(3, 30)
+          r.setInt(4, 400)
+          r.setLong(5, 500)
+          r.setFloat(6, 600)
+          r.setDouble(7, 700)
+          r.update(8, UTF8String.fromString("hello"))
+          r.update(9, "world".getBytes(StandardCharsets.UTF_8))
+          r.setDecimal(10, Decimal(10), 10)
+          r.setDecimal(11, Decimal(10.00, 38, 18), 38)
+          // r.update(11, Array(11))
+          r
+        }
 
-    val setToNullAfterCreation = converter.apply(rowWithNoNullColumns)
-    assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
-    assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
-    assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
-    assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
-    assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
-    assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
-    assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
-    assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
-    assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
-    assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.getBinary(9))
-    assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
-      rowWithNoNullColumns.getDecimal(10, 10, 0))
-    assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
-      rowWithNoNullColumns.getDecimal(11, 38, 18))
+        val setToNullAfterCreation = converter.apply(rowWithNoNullColumns)
+        assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
+        assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
+        assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
+        assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
+        assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
+        assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
+        assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
+        assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
+        assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
+        assert(setToNullAfterCreation.getBinary(9) === rowWithNoNullColumns.getBinary(9))
+        assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
+          rowWithNoNullColumns.getDecimal(10, 10, 0))
+        assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
+          rowWithNoNullColumns.getDecimal(11, 38, 18))
 
-    for (i <- fieldTypes.indices) {
-      // Can't call setNullAt() on DecimalType
-      if (i == 11) {
-        setToNullAfterCreation.setDecimal(11, null, 38)
-      } else {
-        setToNullAfterCreation.setNullAt(i)
+        for (i <- fieldTypes.indices) {
+          // Can't call setNullAt() on DecimalType
+          if (i == 11) {
+            setToNullAfterCreation.setDecimal(11, null, 38)
+          } else {
+            setToNullAfterCreation.setNullAt(i)
+          }
+        }
+
+        setToNullAfterCreation.setNullAt(0)
+        setToNullAfterCreation.setBoolean(1, false)
+        setToNullAfterCreation.setByte(2, 20)
+        setToNullAfterCreation.setShort(3, 30)
+        setToNullAfterCreation.setInt(4, 400)
+        setToNullAfterCreation.setLong(5, 500)
+        setToNullAfterCreation.setFloat(6, 600)
+        setToNullAfterCreation.setDouble(7, 700)
+        // setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
+        // setToNullAfterCreation.update(9, "world".getBytes)
+        setToNullAfterCreation.setDecimal(10, Decimal(10), 10)
+        setToNullAfterCreation.setDecimal(11, Decimal(10.00, 38, 18), 38)
+        // setToNullAfterCreation.update(11, Array(11))
+
+        assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
+        assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
+        assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
+        assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
+        assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
+        assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
+        assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
+        assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
+        // assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
+        // assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
+        assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
+          rowWithNoNullColumns.getDecimal(10, 10, 0))
+        assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
+          rowWithNoNullColumns.getDecimal(11, 38, 18))
+        // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
       }
     }
-
-    setToNullAfterCreation.setNullAt(0)
-    setToNullAfterCreation.setBoolean(1, false)
-    setToNullAfterCreation.setByte(2, 20)
-    setToNullAfterCreation.setShort(3, 30)
-    setToNullAfterCreation.setInt(4, 400)
-    setToNullAfterCreation.setLong(5, 500)
-    setToNullAfterCreation.setFloat(6, 600)
-    setToNullAfterCreation.setDouble(7, 700)
-    // setToNullAfterCreation.update(8, UTF8String.fromString("hello"))
-    // setToNullAfterCreation.update(9, "world".getBytes)
-    setToNullAfterCreation.setDecimal(10, Decimal(10), 10)
-    setToNullAfterCreation.setDecimal(11, Decimal(10.00, 38, 18), 38)
-    // setToNullAfterCreation.update(11, Array(11))
-
-    assert(setToNullAfterCreation.isNullAt(0) === rowWithNoNullColumns.isNullAt(0))
-    assert(setToNullAfterCreation.getBoolean(1) === rowWithNoNullColumns.getBoolean(1))
-    assert(setToNullAfterCreation.getByte(2) === rowWithNoNullColumns.getByte(2))
-    assert(setToNullAfterCreation.getShort(3) === rowWithNoNullColumns.getShort(3))
-    assert(setToNullAfterCreation.getInt(4) === rowWithNoNullColumns.getInt(4))
-    assert(setToNullAfterCreation.getLong(5) === rowWithNoNullColumns.getLong(5))
-    assert(setToNullAfterCreation.getFloat(6) === rowWithNoNullColumns.getFloat(6))
-    assert(setToNullAfterCreation.getDouble(7) === rowWithNoNullColumns.getDouble(7))
-    // assert(setToNullAfterCreation.getString(8) === rowWithNoNullColumns.getString(8))
-    // assert(setToNullAfterCreation.get(9) === rowWithNoNullColumns.get(9))
-    assert(setToNullAfterCreation.getDecimal(10, 10, 0) ===
-      rowWithNoNullColumns.getDecimal(10, 10, 0))
-    assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
-      rowWithNoNullColumns.getDecimal(11, 38, 18))
-    // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
   }
 
   testBothCodegenAndInterpreted("basic conversion with struct type") {
@@ -565,17 +569,21 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     }
 
     // Simple tests
-    val inputRow = InternalRow.fromSeq(Seq(
-      false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
-      Decimal(255), IntervalUtils.stringToInterval(UTF8String.fromString( "interval 1 day")),
-        Array[Byte](1, 2)
-    ))
-    val fields1 = Array(
-      BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
-      DoubleType, StringType, DecimalType.defaultConcreteType, CalendarIntervalType,
-      BinaryType)
+    Seq("JDKBigDecimal", "Int128").foreach { implementation =>
+      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        val inputRow = InternalRow.fromSeq(Seq(
+          false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
+          Decimal(255), IntervalUtils.stringToInterval(UTF8String.fromString( "interval 1 day")),
+          Array[Byte](1, 2)
+        ))
+        val fields1 = Array(
+          BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+          DoubleType, StringType, DecimalType.defaultConcreteType, CalendarIntervalType,
+          BinaryType)
 
-    assert(convertBackToInternalRow(inputRow, fields1) === inputRow)
+        assert(convertBackToInternalRow(inputRow, fields1) === inputRow)
+      }
+    }
 
     // Array tests
     val arrayRow = InternalRow.fromSeq(Seq(

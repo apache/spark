@@ -39,58 +39,44 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @Unstable
 final class Decimal(
-    decimal128Enabled: Boolean, initEnabled: Boolean) extends Ordered[Decimal] with Serializable {
+    isDefaultImpl: Boolean,
+    initEnabled: Boolean = true) extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
   private var jdkDecimalOperation: JDKDecimalOperation = null
   private var decimal128Operation: Decimal128Operation = null
 
-  def this(decimal128Enabled: Boolean) = this(decimal128Enabled, true)
-
-  def this() = this(SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "Int128")
+  def this() = this(SQLConf.get.isDefaultDecimalImplementation)
 
   if (initEnabled) {
-    if (decimal128Enabled) {
-      decimal128Operation = new Decimal128Operation()
-    } else {
+    if (isDefaultImpl) {
       jdkDecimalOperation = new JDKDecimalOperation()
+    } else {
+      decimal128Operation = new Decimal128Operation()
     }
   }
 
-  def decimalOperation: DecimalOperation[_] = if (decimal128Enabled) {
-    decimal128Operation
-  } else {
+  def decimalOperation: DecimalOperation[_] = if (isDefaultImpl) {
     jdkDecimalOperation
+  } else {
+    decimal128Operation
   }
 
-  def precision: Int = if (decimal128Enabled) {
-    decimal128Operation.precision
-  } else {
-    jdkDecimalOperation.precision
-  }
+  def precision: Int = decimalOperation.precision
 
-  def scale: Int = if (decimal128Enabled) {
-    decimal128Operation.scale
-  } else {
-    jdkDecimalOperation.scale
-  }
+  def scale: Int = decimalOperation.scale
 
-  def lessThanZero: Boolean = if (decimal128Enabled) {
-    this < ZERO128
-  } else {
+  def lessThanZero: Boolean = if (isDefaultImpl) {
     this < ZERO
+  } else {
+    this < ZERO128
   }
 
   /**
    * Set this Decimal to the given Long. Will have precision 20 and scale 0.
    */
   def set(longVal: Long): Decimal = {
-    if (decimal128Enabled) {
-      decimal128Operation.set(longVal)
-    } else {
-      jdkDecimalOperation.set(longVal)
-    }
-
+    decimalOperation.set(longVal)
     this
   }
 
@@ -98,12 +84,7 @@ final class Decimal(
    * Set this Decimal to the given Int. Will have precision 10 and scale 0.
    */
   def set(intVal: Int): Decimal = {
-    if (decimal128Enabled) {
-      decimal128Operation.set(intVal)
-    } else {
-      jdkDecimalOperation.set(intVal)
-    }
-
+    decimalOperation.set(intVal)
     this
   }
 
@@ -123,11 +104,7 @@ final class Decimal(
    */
   def setOrNull(unscaled: Long, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    val result = if (decimal128Enabled) {
-      decimal128Operation.setOrNull(unscaled, precision, scale)
-    } else {
-      jdkDecimalOperation.setOrNull(unscaled, precision, scale)
-    }
+    val result = decimalOperation.setOrNull(unscaled, precision, scale)
     if (result == null) {
       return null
     }
@@ -140,11 +117,7 @@ final class Decimal(
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
     DecimalType.checkNegativeScale(scale)
-    if (decimal128Enabled) {
-      decimal128Operation.set(decimal, precision, scale)
-    } else {
-      jdkDecimalOperation.set(decimal, precision, scale)
-    }
+    decimalOperation.set(decimal, precision, scale)
 
     this
   }
@@ -153,12 +126,7 @@ final class Decimal(
    * Set this Decimal to the given BigDecimal value, inheriting its precision and scale.
    */
   def set(decimal: BigDecimal): Decimal = {
-    if (decimal128Enabled) {
-      decimal128Operation.set(decimal)
-    } else {
-      jdkDecimalOperation.set(decimal)
-    }
-
+    decimalOperation.set(decimal)
     this
   }
 
@@ -169,12 +137,7 @@ final class Decimal(
    * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
    */
   def set(bigintval: BigInteger): Decimal = {
-    if (decimal128Enabled) {
-      decimal128Operation.set(bigintval)
-    } else {
-      jdkDecimalOperation.set(bigintval)
-    }
-
+    decimalOperation.set(bigintval)
     this
   }
 
@@ -182,64 +145,47 @@ final class Decimal(
    * Set this Decimal to the given Decimal value.
    */
   def set(decimal: Decimal): Decimal = {
-    if (decimal128Enabled) {
-      decimal128Operation.set(decimal.decimal128Operation)
-    } else {
+    if (SQLConf.get.isDefaultDecimalImplementation) {
       jdkDecimalOperation.set(decimal.jdkDecimalOperation)
+    } else {
+      decimal128Operation.set(decimal.decimal128Operation)
     }
 
     this
   }
 
-  def toBigDecimal: BigDecimal = if (decimal128Enabled) {
-    decimal128Operation.toBigDecimal
-  } else {
-    jdkDecimalOperation.toBigDecimal
+  /**
+   * Set this Decimal to the given two Long values to represent the high and low bits
+   * of 128 bits respectively, with a given precision and scale.
+   */
+  def set(high: Long, low: Long, precision: Int, scale: Int): Decimal = {
+    assert(!SQLConf.get.isDefaultDecimalImplementation)
+    decimal128Operation.set(high, low, precision, scale)
+
+    this
   }
 
-  def toJavaBigDecimal: java.math.BigDecimal = if (decimal128Enabled) {
-    decimal128Operation.toJavaBigDecimal
-  } else {
-    jdkDecimalOperation.toJavaBigDecimal
-  }
+  def toBigDecimal: BigDecimal = decimalOperation.toBigDecimal
 
-  def toScalaBigInt: BigInt = if (decimal128Enabled) {
-    decimal128Operation.toScalaBigInt
-  } else {
-    jdkDecimalOperation.toScalaBigInt
-  }
+  def toJavaBigDecimal: java.math.BigDecimal = decimalOperation.toJavaBigDecimal
 
-  def toJavaBigInteger: java.math.BigInteger = if (decimal128Enabled) {
-    decimal128Operation.toJavaBigInteger
-  } else {
-    jdkDecimalOperation.toJavaBigInteger
-  }
+  def toScalaBigInt: BigInt = decimalOperation.toScalaBigInt
 
-  def toUnscaledLong: Long = if (decimal128Enabled) {
-    decimal128Operation.toUnscaledLong
-  } else {
-    jdkDecimalOperation.toUnscaledLong
-  }
+  def toJavaBigInteger: java.math.BigInteger = decimalOperation.toJavaBigInteger
+
+  def toUnscaledLong: Long = decimalOperation.toUnscaledLong
 
   override def toString: String = toBigDecimal.toString()
 
   def toPlainString: String = toJavaBigDecimal.toPlainString
 
-  def toDebugString: String = if (decimal128Enabled) {
-    decimal128Operation.toDebugString
-  } else {
-    jdkDecimalOperation.toDebugString
-  }
+  def toDebugString: String = decimalOperation.toDebugString
 
   def toDouble: Double = toBigDecimal.doubleValue
 
   def toFloat: Float = toBigDecimal.floatValue
 
-  def toLong: Long = if (decimal128Enabled) {
-    decimal128Operation.toLong
-  } else {
-    jdkDecimalOperation.toLong
-  }
+  def toLong: Long = decimalOperation.toLong
 
   def toInt: Int = toLong.toInt
 
@@ -251,47 +197,28 @@ final class Decimal(
    * @return the Byte value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Byte type.
    */
-  private[sql] def roundToByte(): Byte = if (decimal128Enabled) {
-    decimal128Operation.roundToNumeric[Byte](
-      this, ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
-  } else {
-    jdkDecimalOperation.roundToNumeric[Byte](
-      this, ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
-  }
+  private[sql] def roundToByte(): Byte = decimalOperation.roundToNumeric[Byte](
+    this, ByteType, Byte.MaxValue, Byte.MinValue) (_.toByte) (_.toByte)
 
   /**
    * @return the Short value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Short type.
    */
-  private[sql] def roundToShort(): Short = if (decimal128Enabled) {
-    decimal128Operation.roundToNumeric[Short](
-      this, ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
-  } else {
-    jdkDecimalOperation.roundToNumeric[Short](
-      this, ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
-  }
+  private[sql] def roundToShort(): Short = decimalOperation.roundToNumeric[Short](
+    this, ShortType, Short.MaxValue, Short.MinValue) (_.toShort) (_.toShort)
 
   /**
    * @return the Int value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Int type.
    */
-  private[sql] def roundToInt(): Int = if (decimal128Enabled) {
-    decimal128Operation.roundToNumeric[Int](
-      this, IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
-  } else {
-    jdkDecimalOperation.roundToNumeric[Int](
-      this, IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
-  }
+  private[sql] def roundToInt(): Int = decimalOperation.roundToNumeric[Int](
+    this, IntegerType, Int.MaxValue, Int.MinValue) (_.toInt) (_.toInt)
 
   /**
    * @return the Long value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Long type.
    */
-  private[sql] def roundToLong(): Long = if (decimal128Enabled) {
-    decimal128Operation.roundToLong(this)
-  } else {
-    jdkDecimalOperation.roundToLong(this)
-  }
+  private[sql] def roundToLong(): Long = decimalOperation.roundToLong(this)
 
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.
@@ -335,18 +262,15 @@ final class Decimal(
   private[sql] def changePrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value): Boolean = if (decimal128Enabled) {
-    decimal128Operation.changePrecision(precision, scale, roundMode)
-  } else {
-    jdkDecimalOperation.changePrecision(precision, scale, roundMode)
-  }
+      roundMode: BigDecimal.RoundingMode.Value): Boolean =
+    decimalOperation.changePrecision(precision, scale, roundMode)
 
   override def clone(): Decimal = new Decimal().set(this)
 
-  override def compare(other: Decimal): Int = if (decimal128Enabled) {
-    decimal128Operation.compare(other.decimal128Operation)
-  } else {
+  override def compare(other: Decimal): Int = if (isDefaultImpl) {
     jdkDecimalOperation.compare(other.jdkDecimalOperation)
+  } else {
+    decimal128Operation.compare(other.decimal128Operation)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -358,11 +282,7 @@ final class Decimal(
 
   override def hashCode(): Int = toBigDecimal.hashCode()
 
-  def isZero: Boolean = if (decimal128Enabled) {
-    decimal128Operation.isZero
-  } else {
-    jdkDecimalOperation.isZero
-  }
+  def isZero: Boolean = decimalOperation.isZero
 
   // We should follow DecimalPrecision promote if use longVal for add and subtract:
   // Operation    Result Precision                        Result Scale
@@ -370,22 +290,22 @@ final class Decimal(
   // e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   // e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
   def + (that: Decimal): Decimal = {
-    val decimal = new Decimal(decimal128Enabled, false)
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.add(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.add(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.add(that.decimal128Operation)
     }
 
     decimal
   }
 
   def - (that: Decimal): Decimal = {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.subtract(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.subtract(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.subtract(that.decimal128Operation)
     }
 
     decimal
@@ -393,11 +313,11 @@ final class Decimal(
 
   // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal = {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.multiply(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.multiply(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.multiply(that.decimal128Operation)
     }
 
     decimal
@@ -406,11 +326,11 @@ final class Decimal(
   def / (that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.divide(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.divide(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.divide(that.decimal128Operation)
     }
 
     decimal
@@ -419,11 +339,11 @@ final class Decimal(
   def % (that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.remainder(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.remainder(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.remainder(that.decimal128Operation)
     }
 
     decimal
@@ -432,11 +352,11 @@ final class Decimal(
   def quot(that: Decimal): Decimal = if (that.isZero) {
     null
   } else {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.quot(that.decimal128Operation)
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.quot(that.jdkDecimalOperation)
+    } else {
+      decimal.decimal128Operation = decimal128Operation.quot(that.decimal128Operation)
     }
 
     decimal
@@ -445,11 +365,11 @@ final class Decimal(
   def remainder(that: Decimal): Decimal = this % that
 
   def unary_- : Decimal = {
-    val decimal = new Decimal
-    if (decimal128Enabled) {
-      decimal.decimal128Operation = decimal128Operation.negative
-    } else {
+    val decimal = new Decimal(isDefaultImpl, false)
+    if (isDefaultImpl) {
       decimal.jdkDecimalOperation = jdkDecimalOperation.negative
+    } else {
+      decimal.decimal128Operation = decimal128Operation.negative
     }
 
     decimal
@@ -483,11 +403,12 @@ object Decimal {
 
   val POW_10 = Array.tabulate[Long](MAX_LONG_DIGITS + 1)(i => math.pow(10, i).toLong)
 
-  private[sql] val ZERO = new Decimal(false).set(0)
-  private[sql] val ONE = new Decimal(false).set(1)
+  private[sql] val ZERO = Decimal(0)
+  private[sql] val ONE = Decimal(1)
 
-  private[sql] val ZERO128 = new Decimal(true).set(0)
-  private[sql] val ONE128 = new Decimal(true).set(1)
+  private[sql] val ZERO128 = new Decimal(false).set(0)
+
+  private[sql] val ONE128 = new Decimal(false).set(1)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
@@ -508,6 +429,9 @@ object Decimal {
 
   def apply(value: java.math.BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
+
+  def apply(high: Long, low: Long, precision: Int, scale: Int): Decimal =
+    new Decimal().set(high, low, precision, scale)
 
   def apply(unscaled: Long, precision: Int, scale: Int): Decimal =
     new Decimal().set(unscaled, precision, scale)

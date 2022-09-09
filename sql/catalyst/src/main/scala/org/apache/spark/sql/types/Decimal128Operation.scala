@@ -34,7 +34,10 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
 
   def newInstance(): Decimal128Operation = new Decimal128Operation()
 
-  private def set(int128: Int128, precision: Int, scale: Int): Decimal128Operation = {
+  def set(high: Long, low: Long, precision: Int, scale: Int): Decimal128Operation =
+    set(Int128(high, low), precision, scale)
+
+  def set(int128: Int128, precision: Int, scale: Int): Decimal128Operation = {
     this.int128 = int128
     this._precision = precision
     this._scale = scale

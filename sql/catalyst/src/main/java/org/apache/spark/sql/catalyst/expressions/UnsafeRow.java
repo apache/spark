@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -294,7 +295,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         setNullAt(ordinal);
         // keep the offset for future update
         Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
-      } else {
+      } else if (SQLConf.get().isDefaultDecimalImplementation()) {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
         byte[] bytes = integer.toByteArray();
@@ -304,6 +305,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, baseObject, baseOffset + cursor, bytes.length);
         setLong(ordinal, (cursor << 32) | ((long) bytes.length));
+      } else {
+        assert(value.decimalOperation() instanceof Decimal128Operation);
+        Decimal128Operation decimal128Operation = (Decimal128Operation) value.decimalOperation();
+        Platform.putLong(baseObject, baseOffset + cursor, decimal128Operation.high());
+        Platform.putLong(baseObject, baseOffset + cursor + 8, decimal128Operation.low());
+        setLong(ordinal, (cursor << 32) | 16L);
       }
     }
   }
@@ -388,11 +395,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.createUnsafe(getLong(ordinal), precision, scale);
-    } else {
+    } else if (SQLConf.get().isDefaultDecimalImplementation()) {
       byte[] bytes = getBinary(ordinal);
       BigInteger bigInteger = new BigInteger(bytes);
       BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
       return Decimal.apply(javaDecimal, precision, scale);
+    } else {
+      final long offsetAndSize = getLong(ordinal);
+      final int offset = (int) (offsetAndSize >> 32);
+      final long high = Platform.getLong(baseObject, baseOffset + offset);
+      final long low = Platform.getLong(baseObject, baseOffset + offset + 8);
+      return Decimal.apply(high, low, precision, scale);
     }
   }
 

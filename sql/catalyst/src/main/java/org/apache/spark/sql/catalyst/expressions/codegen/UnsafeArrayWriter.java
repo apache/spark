@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128Operation;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
@@ -170,7 +172,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     if (input != null && input.changePrecision(precision, scale)) {
       if (precision <= Decimal.MAX_LONG_DIGITS()) {
         write(ordinal, input.toUnscaledLong());
-      } else {
+      } else if (SQLConf.get().isDefaultDecimalImplementation()) {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
         assert numBytes <= 16;
@@ -186,6 +188,20 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
         // move the cursor forward with 8-bytes boundary
         increaseCursor(roundedSize);
+      } else {
+        // grow the global buffer before writing data.
+        holder.grow(16);
+
+        zeroOutPaddingBytes(16);
+
+        assert(input.decimalOperation() instanceof Decimal128Operation);
+        Decimal128Operation decimal128Operation = (Decimal128Operation) input.decimalOperation();
+        Platform.putLong(getBuffer(), cursor(), decimal128Operation.high());
+        Platform.putLong(getBuffer(), cursor() + 8, decimal128Operation.low());
+        setOffsetAndSize(ordinal, 16);
+
+        // move the cursor forward with 8-bytes boundary
+        increaseCursor(16);
       }
     } else {
       setNull(ordinal);

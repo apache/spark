@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Decimal128Operation;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 
@@ -203,7 +205,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
-      } else {
+      } else if (SQLConf.get().isDefaultDecimalImplementation()) {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         final int numBytes = bytes.length;
         assert numBytes <= 16;
@@ -212,6 +214,12 @@ public final class UnsafeRowWriter extends UnsafeWriter {
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor(), numBytes);
         setOffsetAndSize(ordinal, bytes.length);
+      } else {
+        assert(input.decimalOperation() instanceof Decimal128Operation);
+        Decimal128Operation decimal128Operation = (Decimal128Operation) input.decimalOperation();
+        Platform.putLong(getBuffer(), cursor(), decimal128Operation.high());
+        Platform.putLong(getBuffer(), cursor() + 8, decimal128Operation.low());
+        setOffsetAndSize(ordinal, 16);
       }
 
       // move the cursor forward.

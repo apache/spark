@@ -162,12 +162,12 @@ public class BenchmarkAdd {
   }
 
   private static Decimal newJDKDecimal(BigDecimal bigDecimal) {
-    Decimal decimal = new Decimal(false);
+    Decimal decimal = new Decimal(true, true);
     return decimal.set(new scala.math.BigDecimal(bigDecimal));
   }
 
   private static Decimal newDecimal128(BigDecimal bigDecimal) {
-    Decimal decimal = new Decimal(true);
+    Decimal decimal = new Decimal(false, true);
     return decimal.set(new scala.math.BigDecimal(bigDecimal));
   }
 
