@@ -2789,7 +2789,8 @@ class DataFrameSuite extends QueryTest
         df.groupBy($"d", $"b").as[GroupByKey, Row]
       },
       errorClass = "UNRESOLVED_COLUMN",
-      parameters = Map("columnName" -> "`d`"))
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map("objectName" -> "`d`", "proposal" -> "`a`, `b`, `c`"))
   }
 
   test("emptyDataFrame should be foldable") {

@@ -2658,7 +2658,8 @@ abstract class CSVSuite
                 readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
               },
               errorClass = "UNRESOLVED_COLUMN",
-              parameters = Map("columnName" -> "`AAA`"))
+              errorSubClass = Some("WITH_SUGGESTION"),
+              parameters = Map("objectName" -> "`AAA`", "proposal" -> "`BBB`, `aaa`"))
           }
         }
       }
