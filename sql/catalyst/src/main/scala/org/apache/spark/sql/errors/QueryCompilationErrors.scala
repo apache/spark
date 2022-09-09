@@ -600,7 +600,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       errorSubClass = "TABLE_OPERATION",
-      messageParameters = Array(toSQLId(nameParts), operation))
+      messageParameters = Map(
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> operation))
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
@@ -2586,7 +2588,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def columnNotInGroupByClauseError(expression: Expression): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_NOT_IN_GROUP_BY_CLAUSE",
-      messageParameters = Array(toSQLExpr(expression))
+      messageParameters = Map("expression" -> toSQLExpr(expression))
     )
   }
 }
