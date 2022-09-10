@@ -200,7 +200,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // because at this point in instantiation there is no Configuration object; it is not passed
     // until `serviceInit` is called, at which point it's too late to adjust the name.
     super("spark_shuffle");
-    logger.info("Initializing YARN shuffle service for Spark", new Throwable());
+    logger.info("Initializing YARN shuffle service for Spark");
     instance = this;
   }
 
@@ -218,7 +218,6 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration externalConf) throws Exception {
-    logger.warn("who call me", new Throwable());
     _conf = new Configuration(externalConf);
     URL confOverlayUrl = Thread.currentThread().getContextClassLoader()
         .getResource(SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME);
