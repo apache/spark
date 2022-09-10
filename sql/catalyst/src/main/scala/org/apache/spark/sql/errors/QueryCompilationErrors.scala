@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.errors
 
-import scala.collection.immutable.Map
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
