@@ -33,7 +33,11 @@ public abstract class CustomAvgMetric implements CustomMetric {
   @Override
   public String aggregateTaskMetrics(long[] taskMetrics) {
     if (taskMetrics.length > 0) {
-      double average = ((double)Arrays.stream(taskMetrics).sum()) / taskMetrics.length;
+      long sum = 0L;
+      for (long taskMetric : taskMetrics) {
+        sum += taskMetric;
+      }
+      double average = ((double) sum) / taskMetrics.length;
       return new DecimalFormat("#0.000").format(average);
     } else {
       return "0";

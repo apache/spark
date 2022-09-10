@@ -31,6 +31,10 @@ import java.util.Arrays;
 public abstract class CustomSumMetric implements CustomMetric {
   @Override
   public String aggregateTaskMetrics(long[] taskMetrics) {
-    return String.valueOf(Arrays.stream(taskMetrics).sum());
+    long sum = 0L;
+    for (long taskMetric : taskMetrics) {
+      sum += taskMetric;
+    }
+    return String.valueOf(sum);
   }
 }
