@@ -48,7 +48,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 58,
+    "fragment" : "GROUP BY b"
+  } ]
 }
 
 
@@ -118,7 +125,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 61,
+    "fragment" : "GROUP BY a + 1"
+  } ]
 }
 
 
@@ -199,7 +213,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"k\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 83,
+    "fragment" : "GROUP BY udf(a)"
+  } ]
 }
 
 
@@ -224,7 +245,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 58,
+    "fragment" : "GROUP BY k"
+  } ]
 }
 
 

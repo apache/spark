@@ -98,7 +98,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 33,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -114,7 +121,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "0",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "0"
+  } ]
 }
 
 
@@ -130,7 +144,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -146,7 +167,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "aggExpr" : "sum(data.b) AS `sum(b)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 40,
+    "stopIndex" : 40,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -162,7 +190,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 44,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -390,7 +425,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 46,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -406,7 +448,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "aggExpr" : "count(1) AS `count(1)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -422,7 +471,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "-1",
     "size" : "3"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 48,
+    "fragment" : "-1"
+  } ]
 }
 
 
@@ -438,7 +494,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "aggExpr" : "count(1) AS `count(1)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 50,
+    "fragment" : "3"
+  } ]
 }
 
 

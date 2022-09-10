@@ -3280,7 +3280,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`y`.`f1`",
     "proposal" : "`j`.`f1`, `j`.`f1`, `x`.`q1`, `x`.`q2`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "select * from\n  int8_tbl x join (int4_tbl x cross join int4_tbl y) j on udf(q1) = udf(y.f1)"
+  } ]
 }
 
 
@@ -3307,7 +3314,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
     "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 77,
+    "fragment" : "select udf(t1.uunique1) from\n  tenk1 t1 join tenk2 t2 on t1.two = udf(t2.two)"
+  } ]
 }
 
 
@@ -3325,7 +3339,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
     "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 82,
+    "fragment" : "select udf(udf(t2.uunique1)) from\n  tenk1 t1 join tenk2 t2 on udf(t1.two) = t2.two"
+  } ]
 }
 
 
@@ -3343,7 +3364,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`uunique1`",
     "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 79,
+    "fragment" : "select udf(uunique1) from\n  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two)"
+  } ]
 }
 
 
@@ -3550,7 +3578,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 68,
+    "fragment" : "select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss"
+  } ]
 }
 
 
@@ -3566,7 +3601,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 55,
+    "fragment" : "select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss"
+  } ]
 }
 
 
@@ -3582,7 +3624,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`f1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss"
+  } ]
 }
 
 
@@ -3598,7 +3647,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`a`.`f1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 75,
+    "fragment" : "select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss"
+  } ]
 }
 
 

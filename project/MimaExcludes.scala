@@ -85,7 +85,11 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI$default$3"),
 
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
+
+    // [SPARK-40324][SQL] Provide query context in AnalysisException
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.withPosition")
   )
 
   // Defulat exclude rules
