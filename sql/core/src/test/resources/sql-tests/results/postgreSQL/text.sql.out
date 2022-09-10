@@ -315,7 +315,14 @@ org.apache.spark.sql.AnalysisException
     "parameter" : "strfmt",
     "functionName" : "`format_string`",
     "expected" : "expects %1$, %2$ and so on, but got %0$."
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "format_string('%0$s', 'Hello')"
+  } ]
 }
 
 

@@ -87,6 +87,10 @@ object MimaExcludes {
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
     ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
 
+    // [SPARK-40324][SQL] Provide query context in AnalysisException
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.withPosition"),
+
     // [SPARK-40400][SQL] Pass error message parameters to exceptions as a map
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.messageParameters"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.AnalysisException.copy$default$7"),

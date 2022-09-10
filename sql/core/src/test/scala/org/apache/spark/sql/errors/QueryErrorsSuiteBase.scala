@@ -18,9 +18,8 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.test.SharedSparkSession
 
-trait QueryErrorsSuiteBase extends SharedSparkSession {
+trait QueryErrorsSuiteBase {
 
   case class ExpectedContext(
       objectType: String,

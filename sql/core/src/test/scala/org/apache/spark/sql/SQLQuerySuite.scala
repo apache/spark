@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -58,7 +59,7 @@ import org.apache.spark.util.ResetSystemProperties
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
-    with ResetSystemProperties {
+    with ResetSystemProperties with QueryErrorsSuiteBase {
   import testImplicits._
 
   setupTestData()
@@ -2663,16 +2664,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
         sql("CREATE TABLE S(C struct<F:int>) USING parquet")
         checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
+        val query = "SELECT * FROM t, S WHERE c = C"
         checkError(
           exception = intercept[AnalysisException] {
-            sql("SELECT * FROM t, S WHERE c = C")
+            sql(query)
           },
           errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
             "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""))
+            "right" -> "\"STRUCT<F: INT>\""),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = 29))
       }
     }
   }

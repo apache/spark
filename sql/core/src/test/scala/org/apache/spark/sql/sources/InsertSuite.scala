@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsSuiteBase}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -57,7 +57,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
-class InsertSuite extends DataSourceTest with SharedSparkSession {
+class InsertSuite extends DataSourceTest with QueryErrorsSuiteBase with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -1298,8 +1298,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception =
             intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
           errorClass = "UNRESOLVED_COLUMN",
-          errorSubClass = Some("WITH_SUGGESTION"),
-          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"))
+          errorSubClass = "WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+          context = ExpectedContext(
+            fragment = "insert into t (I)", start = 0, stop = 16))
       }
     }
   }

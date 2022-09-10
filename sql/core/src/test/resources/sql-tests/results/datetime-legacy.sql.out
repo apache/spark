@@ -1500,7 +1500,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "select timestamp'2011-11-11 11:11:11' + '1'"
+  } ]
 }
 
 
@@ -1517,7 +1524,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "select '1' + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 
@@ -1534,7 +1548,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + NULL)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"VOID\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "select timestamp'2011-11-11 11:11:11' + null"
+  } ]
 }
 
 
@@ -1551,7 +1572,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(NULL + TIMESTAMP '2011-11-11 11:11:11')\"",
     "left" : "\"VOID\"",
     "right" : "\"TIMESTAMP\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "select null + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 
