@@ -890,7 +890,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _ =>
             throw new AnalysisException(
               errorClass = "INVALID_SUBQUERY_EXPRESSION",
-              errorSubClass = "IN_EXISTS_SUBQUERIES_ONLY_IN_CERTAIN_PLACES",
+              errorSubClass = "IN_EXISTS_SUBQUERIES_ONLY_CERTAIN_PLACES",
               origin = expr.origin,
               messageParameters = Array.empty[String])
         }
@@ -1049,7 +1049,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           errorClass = "INVALID_SUBQUERY_EXPRESSION",
           errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
           origin = p.origin,
-          messageParameters = Array(s"${predicates.map(_.sql).mkString}"))
+          messageParameters = Array.empty[String])
       }
     }
 

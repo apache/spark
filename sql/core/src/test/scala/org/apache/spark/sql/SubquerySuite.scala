@@ -555,8 +555,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkError(
       msg1,
       errorClass = "INVALID_SUBQUERY_EXPRESSION",
-      errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
-      parameters = Map("predicate" -> "(l2.a < outer(l1.a))"))
+      errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -1999,8 +1998,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkError(
         msg1,
         errorClass = "INVALID_SUBQUERY_EXPRESSION",
-        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
-        parameters = Map("predicate" -> "(t2.c1 > outer(t1.c1))"))
+        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"))
     }
   }
 
@@ -2030,9 +2028,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkError(
         msg1,
         errorClass = "INVALID_SUBQUERY_EXPRESSION",
-        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"),
-        parameters = Map(
-          "predicate" -> "(CAST(t2.c1 AS SMALLINT) = outer(__auto_generated_subquery_name.a))"))
+        errorSubClass = Some("CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE"))
     }
   }
 

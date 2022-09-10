@@ -344,7 +344,7 @@
       },
       "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
         "message" : [
-          "Correlated column is not allowed in predicate <predicate>"
+          "Correlated column is not allowed in predicate"
         ]
       },
       "CORRELATED_SCALAR_SUBQUERIES_IN_GROUP_BY_MUST_BE_IN_AGGREGATE_EXPRESSIONS" : {

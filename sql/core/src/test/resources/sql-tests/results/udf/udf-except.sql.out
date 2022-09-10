@@ -103,7 +103,4 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
   "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-  "messageParameters" : {
-    "predicate" : "(CAST(udf(cast(k as string)) AS STRING) = CAST(udf(cast(outer(k#440) as string)) AS STRING))"
-  }
 }
