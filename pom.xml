@@ -398,7 +398,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1139,13 +1139,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.12</version>
+        <version>3.2.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
-        <version>3.2.12.0</version>
+        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+        <version>3.2.11.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1154,7 +1154,7 @@
         <version>3.2.12.0</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.1 and upgrade this to 3.2.12.0 -->
+      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.1 and upgrade this to 3.2.11.0 -->
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
@@ -1182,7 +1182,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.16.0</version>
+        <version>1.15.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
