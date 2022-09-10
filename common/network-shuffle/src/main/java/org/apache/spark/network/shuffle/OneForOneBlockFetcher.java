@@ -113,10 +113,28 @@ public class OneForOneBlockFetcher {
    * @return whether the array contains only shuffle block IDs
    */
   private boolean areShuffleBlocksOrChunks(String[] blockIds) {
-    if (Arrays.stream(blockIds).anyMatch(blockId -> !blockId.startsWith(SHUFFLE_BLOCK_PREFIX))) {
+    if (isAnyBlockNotStartWithShuffleBlockPrefix(blockIds)) {
       // It comes here because there is a blockId which doesn't have "shuffle_" prefix so we
       // check if all the block ids are shuffle chunk Ids.
-      return Arrays.stream(blockIds).allMatch(blockId -> blockId.startsWith(SHUFFLE_CHUNK_PREFIX));
+      return isAllBlocksStartWithShuffleChunkPrefix(blockIds);
+    }
+    return true;
+  }
+
+  private boolean isAnyBlockNotStartWithShuffleBlockPrefix(String[] blockIds) {
+    for (String blockId : blockIds) {
+      if (!blockId.startsWith(SHUFFLE_BLOCK_PREFIX)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isAllBlocksStartWithShuffleChunkPrefix(String[] blockIds) {
+    for (String blockId : blockIds) {
+      if (!blockId.startsWith(SHUFFLE_CHUNK_PREFIX)) {
+        return false;
+      }
     }
     return true;
   }
