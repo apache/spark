@@ -398,12 +398,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1145,22 +1145,22 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.11</version>
+        <version>3.2.13</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.2.11.0</version>
+        <artifactId>scalacheck-1-16_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
-        <version>3.2.12.0</version>
+        <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
+        <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.1 and upgrade this to 3.2.11.0 -->
+      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.2 and upgrade this to 3.2.13.0 -->
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
@@ -1170,13 +1170,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.5.1</version>
+        <version>4.6.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.5.1</version>
+        <version>4.6.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1188,7 +1188,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.15.4</version>
+        <version>1.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
