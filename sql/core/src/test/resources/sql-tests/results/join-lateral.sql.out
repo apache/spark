@@ -318,8 +318,16 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
-  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES"
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 58,
+    "fragment" : "SELECT * FROM t1, LATERAL (SELECT c1 + c2 + rand(0) AS c3)"
+  } ]
 }
 
 
@@ -330,8 +338,16 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
-  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES"
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "SELECT * FROM t1, LATERAL (SELECT rand(0) FROM t2)"
+  } ]
 }
 
 
@@ -342,11 +358,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
   "messageParameters" : {
     "condition" : "((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 76,
+    "fragment" : "SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2) s ON t1.c1 + rand(0) = s.c1"
+  } ]
 }
 
 

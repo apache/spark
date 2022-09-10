@@ -743,11 +743,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         case a: AggregateExpression => a
       })
       if (aggregates.isEmpty) {
-        throw new AnalysisException(
-          errorClass = "INVALID_SUBQUERY_EXPRESSION",
-          errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT",
-          origin = expr.origin,
-          messageParameters = Array.empty[String])
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+          errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY_OUTPUT")
       }
 
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
@@ -760,10 +758,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       val invalidCols = groupByCols -- correlatedCols
       // GROUP BY columns must be a subset of columns in the predicates
       if (invalidCols.nonEmpty) {
-        throw new AnalysisException(
-          errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        expr.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-          origin = expr.origin,
           messageParameters = Array(invalidCols.map(_.name).mkString(",")))
       }
     }
@@ -789,10 +786,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case o: OuterReference =>
               p.children.foreach(e =>
                 if (!e.output.exists(_.exprId == o.exprId)) {
-                  throw new AnalysisException(
-                    errorClass = "INVALID_SUBQUERY_EXPRESSION",
-                    errorSubClass = "OUTER_ATTRIBUTE_NOT_FOUND",
-                    origin = o.origin,
+                  o.failAnalysis(
+                    errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+                    errorSubClass = "CORRELATED_COLUMN_NOT_FOUND",
                     messageParameters = Array(o.name))
                 })
             case _ =>
@@ -811,10 +807,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
-          throw new AnalysisException(
+          expr.failAnalysis(
             errorClass = "INVALID_SUBQUERY_EXPRESSION",
             errorSubClass = "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-            origin = expr.origin,
             messageParameters = Array(query.output.size.toString))
         }
 
@@ -823,12 +818,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
-            case _ =>
-              throw new AnalysisException(
-                errorClass = "INVALID_SUBQUERY_EXPRESSION",
+            case other =>
+              expr.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                 errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                origin = expr.origin,
-                messageParameters = Array.empty[String])
+                planString = other.toString)
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -840,19 +834,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // it must also be in the aggregate expressions to be rewritten in the optimization
               // phase.
               if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
-                throw new AnalysisException(
-                  errorClass = "INVALID_SUBQUERY_EXPRESSION",
-                  errorSubClass =
-                    "CORRELATED_SCALAR_SUBQUERIES_IN_GROUP_BY_MUST_BE_IN_AGGREGATE_EXPRESSIONS",
-                  origin = a.origin,
-                  messageParameters = Array.empty[String])
+                a.failAnalysis(
+                  errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+                  errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+                  planString = a.toString)
               }
             case other =>
-              throw new AnalysisException(
-                errorClass = "INVALID_SUBQUERY_EXPRESSION",
-                errorSubClass = "CORRELATED_SCALAR_SUBQUERIES_ONLY_IN_CERTAIN_PLACES",
-                origin = other.origin,
-                messageParameters = Array.empty[String])
+              other.failAnalysis(
+                errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+                errorSubClass = "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+                planString = other.toString)
           }
         }
         // Validate to make sure the correlations appearing in the query are valid and
@@ -865,18 +856,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
-          throw new AnalysisException(
-            errorClass = "INVALID_SUBQUERY_EXPRESSION",
+          expr.failAnalysis(
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
             errorSubClass = "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            origin = expr.origin,
-            messageParameters = Array.empty[String])
+            planString = plan.toString)
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
-          throw new AnalysisException(
-            errorClass = "INVALID_SUBQUERY_EXPRESSION",
+          join.condition.get.failAnalysis(
+            errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
             errorSubClass = "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
-            origin = join.origin,
             messageParameters = Array(join.condition.get.sql))
         }
         // Validate to make sure the correlations appearing in the query are valid and
@@ -888,11 +877,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _: Filter | _: SupportsSubquery | _: Join |
             _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
-            throw new AnalysisException(
-              errorClass = "INVALID_SUBQUERY_EXPRESSION",
-              errorSubClass = "IN_EXISTS_SUBQUERIES_ONLY_CERTAIN_PLACES",
-              origin = expr.origin,
-              messageParameters = Array.empty[String])
+            expr.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+              errorSubClass = "UNSUPPORTED_IN_EXISTS_SUBQUERY",
+              planString = plan.toString)
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -946,7 +934,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
           if (a.references.nonEmpty) {
-            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql, a.origin)
+            a.failAnalysis(
+              errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+              errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
+              messageParameters = Array(a.sql))
           }
         case _ =>
       }
@@ -955,11 +946,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     // Make sure a plan's subtree does not contain outer references
     def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
       if (hasOuterReferences(p)) {
-        throw new AnalysisException(
-          errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-          origin = p.origin,
-          messageParameters = Array.empty[String])
+          planString = p.toString)
       }
     }
 
@@ -978,11 +968,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
       if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
-        throw new AnalysisException(
-          errorClass = "INVALID_SUBQUERY_EXPRESSION",
-          errorSubClass = "EXPRESSIONS_REFERENCING_OUTER_QUERY_COLUMN_ONLY_ALLOWED_IN_WHERE_HAVING",
-          origin = p.origin,
-          messageParameters = Array.empty[String])
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+          errorSubClass = "UNSUPPORTED_CORRELATED_REFERENCE",
+          planString = p.toString)
       }
     }
 
@@ -1045,11 +1034,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
       if (predicates.nonEmpty) {
         // Report a non-supported case as an exception
-        throw new AnalysisException(
-          errorClass = "INVALID_SUBQUERY_EXPRESSION",
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-          origin = p.origin,
-          messageParameters = Array.empty[String])
+          planString = s"${predicates.map(_.sql).mkString}:\n$p")
       }
     }
 

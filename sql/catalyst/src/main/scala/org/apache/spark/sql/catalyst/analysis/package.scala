@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.
@@ -45,15 +46,51 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
     }
 
-    /** Fails the analysis at the point where a specific tree node was parsed. */
+    /** Fails the analysis at the point where a specific tree node was parsed with a given cause. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and message parameters.
+     */
     def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and subclass and message parameters.
+     */
+    def failAnalysis(
+        errorClass: String,
+        errorSubClass: String,
+        messageParameters: Array[String] = Array.empty[String]): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        errorSubClass = errorSubClass,
+        messageParameters = messageParameters,
+        origin = t.origin)
+    }
+
+    /**
+     * Fails the analysis at the point where a specific tree node was parsed using a provided
+     * error class and subclass and one message parameter comprising a plan string. The plan string
+     * will be printed in the error message if and only if the corresponding Spark configuration is
+     * enabled.
+     */
+    def failAnalysis(
+        errorClass: String,
+        errorSubClass: String,
+        planString: String): Nothing = {
+      throw new AnalysisException(
+        errorClass = errorClass,
+        errorSubClass = errorSubClass,
+        messageParameters = Array(if (SQLConf.get.includePlansInErrors) s": $planString" else ""),
         origin = t.origin)
     }
 

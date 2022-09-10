@@ -1544,8 +1544,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def mixedRefsInAggFunc(funcStr: String, origin: Origin): Throwable = {
-    throw new AnalysisException(
-      errorClass = "INVALID_SUBQUERY_EXPRESSION",
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
       errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
       origin = origin,
       messageParameters = Array(funcStr))

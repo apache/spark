@@ -485,11 +485,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
   "messageParameters" : {
     "function" : "sum(DISTINCT (outer(a.four) + b.four))"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 114,
+    "stopIndex" : 142,
+    "fragment" : "sum(distinct a.four + b.four)"
+  } ]
 }
 
 

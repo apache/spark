@@ -101,6 +101,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 281,
+    "fragment" : "SELECT t1.k\nFROM   t1\nWHERE  t1.v <= (SELECT   udf(max(udf(t2.v)))\n                FROM     t2\n                WHERE    udf(t2.k) = udf(t1.k))\nMINUS\nSELECT t1.k\nFROM   t1\nWHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))\n                FROM     t2\n                WHERE    t2.k = t1.k)"
+  } ]
 }

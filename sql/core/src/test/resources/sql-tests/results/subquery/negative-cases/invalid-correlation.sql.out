@@ -76,11 +76,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
   "messageParameters" : {
     "function" : "min((outer(t1.t1a) + t2.t2a))"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 139,
+    "stopIndex" : 152,
+    "fragment" : "min(t1a + t2a)"
+  } ]
 }
 
 
@@ -98,11 +105,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
   "messageParameters" : {
     "function" : "min((outer(t2.t2a) + t3.t3a))"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 233,
+    "stopIndex" : 246,
+    "fragment" : "min(t2a + t3a)"
+  } ]
 }
 
 
@@ -118,8 +132,16 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION",
-  "errorSubClass" : "EXPRESSIONS_REFERENCING_OUTER_QUERY_COLUMN_ONLY_ALLOWED_IN_WHERE_HAVING"
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
+  "errorSubClass" : "UNSUPPORTED_CORRELATED_REFERENCE",
+  "messageParameters" : { },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 162,
+    "fragment" : "SELECT t1a \nFROM   t1\nWHERE  t1a IN (SELECT t2a \n               FROM   t2\n               WHERE  EXISTS (SELECT min(t2a) \n                              FROM   t3))"
+  } ]
 }
 
 
