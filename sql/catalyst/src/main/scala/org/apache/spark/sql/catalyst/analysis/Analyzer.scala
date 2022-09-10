@@ -210,7 +210,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       } catch {
         case e: AnalysisException =>
           val ae = e.copy(plan = Option(analyzed),
-            context = analyzed.getQueryContext(analyzed.origin.context))
+            context = analyzed.origin.getQueryContext)
           ae.setStackTrace(e.getStackTrace)
           throw ae
       }

@@ -21,13 +21,17 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
 case class Cases(lower: String, UPPER: String)
 
-class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton {
+class HiveParquetSuite extends QueryTest
+  with ParquetTest
+  with TestHiveSingleton
+  with QueryErrorsSuiteBase {
 
   test("Case insensitive attribute names") {
     withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {
@@ -112,24 +116,29 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
 
   test("SPARK-33323: Add query resolved check before convert hive relation") {
     withTable("t") {
+      val query =
+        s"""
+           |CREATE TABLE t STORED AS PARQUET AS
+           |SELECT * FROM (
+           | SELECT c3 FROM (
+           |  SELECT c1, c2 from values(1,2) t(c1, c2)
+           |  )
+           |)
+           |""".stripMargin
       val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t STORED AS PARQUET AS
-             |SELECT * FROM (
-             | SELECT c3 FROM (
-             |  SELECT c1, c2 from values(1,2) t(c1, c2)
-             |  )
-             |)
-          """.stripMargin)
+        sql(query)
       }
       checkError(
         exception = ex,
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map("objectName" -> "`c3`",
           "proposal" -> ("`__auto_generated_subquery_name`.`c1`, " +
-            "`__auto_generated_subquery_name`.`c2`")))
+            "`__auto_generated_subquery_name`.`c2`")),
+        context = ExpectedContext(
+          fragment = query.trim, start = 1, stop = 118)
+       )
     }
   }
 

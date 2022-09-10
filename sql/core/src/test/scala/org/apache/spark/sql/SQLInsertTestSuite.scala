@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.unsafe.types.UTF8String
@@ -27,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
+trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with QueryErrorsSuiteBase {
 
   import testImplicits._
 
@@ -169,8 +170,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         exception =
           intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)")),
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
-        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"))
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
+        context = ExpectedContext(
+          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
+        ))
     }
   }
 
