@@ -97,6 +97,12 @@ class YarnShuffleIntegrationWithLevelDBBackendSuite
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB
 }
 
+@ExtendedYarnTest
+class YarnShuffleIntegrationWithRocksDBBackendSuite
+  extends YarnShuffleIntegrationSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
+}
+
 /**
  * Integration test for the external shuffle service with auth on.
  */
@@ -119,6 +125,11 @@ abstract class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
 @ExtendedYarnTest
 class YarnShuffleAuthWithLevelDBBackendSuite extends YarnShuffleAuthSuite {
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB
+}
+
+@ExtendedYarnTest
+class YarnShuffleAuthWithRocksDBBackendSuite extends YarnShuffleAuthSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
 }
 
 private object YarnExternalShuffleDriver extends Logging with Matchers {

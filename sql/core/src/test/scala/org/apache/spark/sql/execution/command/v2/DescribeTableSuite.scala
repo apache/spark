@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -27,7 +28,9 @@ import org.apache.spark.util.Utils
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
-class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
+class DescribeTableSuite extends command.DescribeTableSuiteBase
+  with CommandSuiteBase
+  with QueryErrorsSuiteBase {
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -99,16 +102,19 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         |CREATE TABLE $tbl
         |(key int COMMENT 'column_comment', col struct<x:int, y:string>)
         |$defaultUsing""".stripMargin)
+      val query = s"DESC $tbl key1"
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"DESC $tbl key1").collect()
+          sql(query).collect()
         },
         errorClass = "UNRESOLVED_COLUMN",
         errorSubClass = "WITH_SUGGESTION",
         sqlState = "42000",
         parameters = Map(
           "objectName" -> "`key1`",
-          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"))
+          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
+        context = ExpectedContext(
+          fragment = query, start = 0, stop = 28))
     }
   }
 
@@ -125,16 +131,19 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { tbl =>
         sql(s"CREATE TABLE $tbl (key int COMMENT 'comment1') $defaultUsing")
+        val query = s"DESC $tbl KEY"
         checkError(
           exception = intercept[AnalysisException] {
-            sql(s"DESC $tbl KEY").collect()
+            sql(query).collect()
           },
           errorClass = "UNRESOLVED_COLUMN",
           errorSubClass = "WITH_SUGGESTION",
           sqlState = "42000",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"))
+            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
+          context = ExpectedContext(
+            fragment = query, start = 0, stop = 27))
       }
     }
   }

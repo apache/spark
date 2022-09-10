@@ -75,7 +75,14 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`FROM`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 109,
+    "fragment" : "CREATE VIEW key_dependent_view_no_cols AS\n   SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0"
+  } ]
 }
 
 
