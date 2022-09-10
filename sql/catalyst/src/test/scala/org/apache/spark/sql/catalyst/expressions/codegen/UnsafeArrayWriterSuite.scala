@@ -26,6 +26,6 @@ class UnsafeArrayWriterSuite extends SparkFunSuite {
     val arrayWriter = new UnsafeArrayWriter(rowWriter, 8)
     assert(intercept[IllegalArgumentException] {
       arrayWriter.initialize(268271216)
-    }.getMessage.contains("Cannot initialize array to size 2179703640 bytes"))
+    }.getMessage.contains("Cannot initialize array with size 2179703640 bytes"))
   }
 }

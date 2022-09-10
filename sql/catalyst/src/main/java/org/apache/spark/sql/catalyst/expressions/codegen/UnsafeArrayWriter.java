@@ -57,17 +57,17 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
     long fixedPartInBytesLong =
       ByteArrayMethods.roundNumberOfBytesToNearestWord((long) elementSize * numElements);
-    long totalDesiredSize = headerInBytes + fixedPartInBytesLong;
+    long totalInitialSize = headerInBytes + fixedPartInBytesLong;
 
-    if (totalDesiredSize > Integer.MAX_VALUE) {
+    if (totalInitialSize > Integer.MAX_VALUE) {
       throw new IllegalArgumentException(
-        "Cannot initialize array to size " + totalDesiredSize + " bytes");
+        "Cannot initialize array with size " + totalInitialSize + " bytes");
     }
 
-    // it's now safe to cast fixedPartInBytesLong and totalDesiredSize to int
+    // it's now safe to cast fixedPartInBytesLong and totalInitialSize to int
     int fixedPartInBytes = (int) fixedPartInBytesLong;
     // Grows the global buffer ahead for header and fixed size data.
-    holder.grow((int)totalDesiredSize);
+    holder.grow((int)totalInitialSize);
 
     // Write numElements and clear out null bits to header
     Platform.putLong(getBuffer(), startingOffset, numElements);
