@@ -2092,11 +2092,12 @@ class InsertSuite extends DataSourceTest with QueryErrorsSuiteBase with SharedSp
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
+      val insert = s"INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET"
       checkError(
         exception = intercept[AnalysisException] {
           sql(
             s"""
-              |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+              |$insert
               |SELECT * FROM (
               | SELECT c3 FROM (
               |  SELECT c1, c2 from values(1,2) t(c1, c2)
@@ -2105,11 +2106,16 @@ class InsertSuite extends DataSourceTest with QueryErrorsSuiteBase with SharedSp
             """.stripMargin)
         },
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = "42000",
         parameters = Map(
           "objectName" -> "`c3`",
           "proposal" ->
-            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"))
+            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+        context = ExpectedContext(
+          fragment = insert,
+          start = 1,
+          stop = insert.length))
     }
   }
 
