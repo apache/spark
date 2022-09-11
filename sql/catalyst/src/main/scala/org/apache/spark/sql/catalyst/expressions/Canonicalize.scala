@@ -65,6 +65,6 @@ object Canonicalize {
       val newChildren = orderCommutative(l, { case Least(children) => children })
       Least(newChildren)
 
-    case _ => e.withNewChildren(e.children.map(reorderCommutativeOperators)).preCanonicalized
+    case _ => e.withNewChildren(e.children.map(reorderCommutativeOperators)).customPrecanonicalize()
   }
 }
