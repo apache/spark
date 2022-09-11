@@ -459,7 +459,7 @@ case class CodegenFallbackExpression(child: Expression)
 }
 
 case class ProxyExpression(child: Expression) extends UnaryExpression {
-  override lazy val preCanonicalized: Expression = child.preCanonicalized
+  override def customPrecanonicalize(): Expression = child
   override def dataType: DataType = child.dataType
   override def eval(input: InternalRow): Any = child.eval(input)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =

@@ -248,8 +248,10 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val preCanonicalized: Expression = {
     val canonicalizedChildren = children.map(_.preCanonicalized)
-    withNewChildren(canonicalizedChildren)
+    withNewChildren(canonicalizedChildren).customPrecanonicalize()
   }
+
+  def customPrecanonicalize(): Expression = this
 
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
@@ -363,7 +365,7 @@ trait RuntimeReplaceable extends Expression {
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
+  override def customPrecanonicalize(): Expression = replacement.preCanonicalized
 
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
