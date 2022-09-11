@@ -221,7 +221,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
     }
-    val canonicalizedChildren = cleaned.children.map(_.preCanonicalized)
+    val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
   }
 }
