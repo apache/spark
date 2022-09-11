@@ -736,8 +736,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate with
-CommutativeExpresionCanonicalization {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -825,8 +824,7 @@ CommutativeExpresionCanonicalization {
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpresionCanonicalization {
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
 

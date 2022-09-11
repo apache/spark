@@ -61,26 +61,25 @@ class CanonicalizeSuite extends SparkFunSuite {
     val expId = NamedExpression.newExprId
     val qualifier = Seq.empty[String]
     val structType = StructType(
-      StructField("a", StructType(StructField("b", IntegerType, nullable = false) :: Nil),
-        nullable = false) :: Nil)
+      StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
 
     // GetStructField with different names are semantically equal
     val fieldA1 = GetStructField(
-      AttributeReference("data1", structType, nullable = false)(expId, qualifier),
+      AttributeReference("data1", structType, false)(expId, qualifier),
       0, Some("a1"))
     val fieldA2 = GetStructField(
-      AttributeReference("data2", structType, nullable = false)(expId, qualifier),
+      AttributeReference("data2", structType, false)(expId, qualifier),
       0, Some("a2"))
     assert(fieldA1.semanticEquals(fieldA2))
 
     val fieldB1 = GetStructField(
       GetStructField(
-        AttributeReference("data1", structType, nullable = false)(expId, qualifier),
+        AttributeReference("data1", structType, false)(expId, qualifier),
         0, Some("a1")),
       0, Some("b1"))
     val fieldB2 = GetStructField(
       GetStructField(
-        AttributeReference("data2", structType, nullable = false)(expId, qualifier),
+        AttributeReference("data2", structType, false)(expId, qualifier),
         0, Some("a2")),
       0, Some("b2"))
     assert(fieldB1.semanticEquals(fieldB2))
@@ -336,5 +335,78 @@ class CanonicalizeSuite extends SparkFunSuite {
     val newLeastExpr = least(leastExpr.children(1), leastExpr.children.head)
     val builtCondnCanonicalized = EqualTo(newLeastExpr, 6).canonicalized
     assertEquals(canonicalizedFullCond, builtCondnCanonicalized)
+  }
+
+  test("SPARK-40362 validate fix using a deep nested tree of commutative & non" +
+    "commutative expressions") {
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int).analyze
+
+    val y = tr1.where(
+      CaseWhen(
+        Seq(
+          ('a.attr + 'b.attr > Literal(300), Literal(1)),
+          ('a.attr * 'b.attr > Literal(400), Literal(2)),
+          (('a.attr * 'b.attr - 700 > Literal(100)) || ('d.attr * 'e.attr < Literal(1000)),
+            Literal(7)),
+          (
+            CaseWhen(
+              Seq(
+                (abs('b.attr * 'd.attr) - 100 > Literal(50), Literal(5)),
+                (abs('e.attr * 'a.attr) < Literal(30), Literal(11)),
+                ((abs('c.attr * 'a.attr) < Literal(30)) && ('a.attr * 'd.attr < Literal(1000)),
+                  Literal(17)),
+              ), Option(Literal(99))) > Literal(-1000), Literal(9)
+          )
+        ), Option(Literal(-2000))) > Literal(-160000)).analyze
+
+    val fullCond = y.asInstanceOf[Filter].condition.clone()
+
+    val canonicalizeCond1 = fullCond.canonicalized
+
+    // get a new expression where for the commutative expressions, reverse the
+    // operands
+    val fullConditionWithOpsReversed = fullCond.transformDown {
+      case a@Add(l, r, _) => a.copy(left = r, right = l)
+      case m@Multiply(l, r, _) => m.copy(left = r, right = l)
+      case a@And(l, r) => a.copy(left = r, right = l)
+      case o@Or(l, r) => o.copy(left = r, right = l)
+    }
+
+    val canonicalizedCond2 = fullConditionWithOpsReversed.canonicalized
+
+    assertEquals(canonicalizeCond1, canonicalizedCond2)
+  }
+
+  test("benchmark1") {
+    val t1 = System.currentTimeMillis
+    val col = Literal(true)
+    var and = And(col, col)
+    var i = 0
+    while (i < 2000) {
+      and = And(and, col)
+      i += 1
+    }
+    and.canonicalized
+    val t2 = System.currentTimeMillis
+    println("time = " + (t2 - t1))
+  }
+
+  test("benchmark2") {
+    val t1 = System.currentTimeMillis()
+    val col1 = AttributeReference("a", IntegerType)()
+    val col2 = AttributeReference("b", IntegerType)()
+    var and: Expression = And(col1 + col2 < 100, col1 * col2 > -100)
+    var i = 0
+    while (i < 2000) {
+      and = if (i % 2 == 0) {
+        And(and, col1 * col2 > -i * 10)
+      } else {
+        Or(and, col1 * col2 > -i * 10)
+      }
+      i += 1
+    }
+    and.canonicalized
+    val t2 = System.currentTimeMillis()
+    println("time taken ms= " + (t2 - t1))
   }
 }
