@@ -23,6 +23,7 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.window.WindowExec
@@ -37,6 +38,7 @@ import org.apache.spark.sql.types._
  */
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
+  with QueryErrorsSuiteBase
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
@@ -404,8 +406,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-    assert(e.messageParameters.sameElements(Array("`invalid`", "`value`, `key`")))
+    checkError(
+      exception = e,
+      errorClass = "UNRESOLVED_COLUMN",
+      errorSubClass = Some("WITH_SUGGESTION"),
+      parameters = Map(
+        "objectName" -> "`invalid`",
+        "proposal" -> "`value`, `key`"))
   }
 
   test("numerical aggregate functions on string column") {

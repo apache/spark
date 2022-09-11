@@ -76,6 +76,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }
+      case ElementAt(left, right, defaultValueOutOfBound, failOnError) if right.foldable =>
+        getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
       case _ =>
         None
     }

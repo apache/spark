@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.unsafe.types.UTF8String
@@ -27,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
+trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with QueryErrorsSuiteBase {
 
   import testImplicits._
 
@@ -165,10 +166,16 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage.contains(
-        "[UNRESOLVED_COLUMN] A column or function parameter with name `c4` cannot be resolved. " +
-          "Did you mean one of the following? [`c1`, `c2`, `c3`]"))
+      checkError(
+        exception =
+          intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)")),
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
+        context = ExpectedContext(
+          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
+        ))
     }
   }
 

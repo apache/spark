@@ -82,3 +82,9 @@ class YarnShuffleAlternateNameConfigWithLevelDBBackendSuite
   extends YarnShuffleAlternateNameConfigSuite {
   override protected def dbBackend: DBBackend = DBBackend.LEVELDB
 }
+
+@ExtendedYarnTest
+class YarnShuffleAlternateNameConfigWithRocksDBBackendSuite
+  extends YarnShuffleAlternateNameConfigSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
+}

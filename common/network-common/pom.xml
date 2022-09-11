@@ -82,6 +82,10 @@
       <artifactId>leveldbjni-all</artifactId>
       <version>1.8</version>
     </dependency>
+    <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -151,7 +155,6 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <scope>test</scope>
    </dependency>
 
     <!--

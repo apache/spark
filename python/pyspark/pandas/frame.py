@@ -378,7 +378,8 @@ class DataFrame(Frame, Generic[T]):
         1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
         pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallize
         the `index` if necessary, and then try to combine the `data` and `index`;
-        Note that in this case `compute.ops_on_diff_frames` should be turned on;
+        Note that if `data` and `index` doesn't have the same anchor, then
+        `compute.ops_on_diff_frames` should be turned on;
         2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
         it will first collect the `index` to driver if necessary, and then apply
         the `Pandas.DataFrame(...)` creation internally;
@@ -527,13 +528,13 @@ class DataFrame(Frame, Generic[T]):
             assert dtype is None
             assert not copy
             if index is None:
-                internal = data._internal.resolved_copy
+                internal = data._internal
         elif isinstance(data, ps.Series):
             assert columns is None
             assert dtype is None
             assert not copy
             if index is None:
-                internal = data.to_frame()._internal.resolved_copy
+                internal = data.to_frame()._internal
         else:
             from pyspark.pandas.indexes.base import Index
 
@@ -558,17 +559,27 @@ class DataFrame(Frame, Generic[T]):
             index_ps = ps.Index(index)
             index_df = index_ps.to_frame()
 
-            # drop un-matched rows in `data`
-            # note that `combine_frames` can not work with a MultiIndex for now
-            combined = combine_frames(data_df, index_df, how="right")
-            combined_labels = combined._internal.column_labels
-            index_labels = [label for label in combined_labels if label[0] == "that"]
-            combined = combined.set_index(index_labels)
+            if same_anchor(data_df, index_df):
+                data_labels = data_df._internal.column_labels
+                data_pssers = [data_df._psser_for(label) for label in data_labels]
+                index_labels = index_df._internal.column_labels
+                index_pssers = [index_df._psser_for(label) for label in index_labels]
+                internal = data_df._internal.with_new_columns(data_pssers + index_pssers)
 
-            combined._internal._column_labels = data_df._internal.column_labels
-            combined._internal._column_label_names = data_df._internal._column_label_names
-            combined._internal._index_names = index_df._internal.column_labels
-            combined.index.name = index_ps.name
+                combined = ps.DataFrame(internal).set_index(index_labels)
+                combined.index.name = index_ps.name
+            else:
+                # drop un-matched rows in `data`
+                # note that `combine_frames` can not work with a MultiIndex for now
+                combined = combine_frames(data_df, index_df, how="right")
+                combined_labels = combined._internal.column_labels
+                index_labels = [label for label in combined_labels if label[0] == "that"]
+                combined = combined.set_index(index_labels)
+
+                combined._internal._column_labels = data_df._internal.column_labels
+                combined._internal._column_label_names = data_df._internal._column_label_names
+                combined._internal._index_names = index_df._internal.column_labels
+                combined.index.name = index_ps.name
 
             internal = combined._internal
 
