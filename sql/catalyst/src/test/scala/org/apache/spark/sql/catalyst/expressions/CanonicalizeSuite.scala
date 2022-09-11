@@ -354,7 +354,7 @@ class CanonicalizeSuite extends SparkFunSuite {
                 (abs('b.attr * 'd.attr) - 100 > Literal(50), Literal(5)),
                 (abs('e.attr * 'a.attr) < Literal(30), Literal(11)),
                 ((abs('c.attr * 'a.attr) < Literal(30)) && ('a.attr * 'd.attr < Literal(1000)),
-                  Literal(17)),
+                  Literal(17))
               ), Option(Literal(99))) > Literal(-1000), Literal(9)
           )
         ), Option(Literal(-2000))) > Literal(-160000)).analyze
