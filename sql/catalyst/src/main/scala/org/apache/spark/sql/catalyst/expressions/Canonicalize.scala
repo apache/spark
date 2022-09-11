@@ -39,14 +39,14 @@ object Canonicalize {
   }
 
   private def orderBinaryComparison(
-      e: BinaryComparison,
-      f: (Expression, Expression) => BinaryComparison) = {
-    val l = reorderOperators(e.left)
-    val r = reorderOperators(e.right)
+      bc: BinaryComparison,
+      reverse: (Expression, Expression) => BinaryComparison) = {
+    val l = reorderOperators(bc.left)
+    val r = reorderOperators(bc.right)
     if (l.hashCode() > r.hashCode()) {
-      f(r, l)
+      reverse(r, l)
     } else {
-      f(l, r)
+      bc.withNewChildren(Seq(l, r))
     }
   }
 
