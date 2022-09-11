@@ -387,8 +387,10 @@ class CanonicalizeSuite extends SparkFunSuite {
       i += 1
     }
     and.canonicalized
-    val t2 = System.currentTimeMillis
-    println("time = " + (t2 - t1))
+    val t2 = System.currentTimeMillis()
+    // scalastyle:off println
+    println("time taken ms= " + (t2 - t1))
+    // scalastyle:on println
   }
 
   test("benchmark2") {
@@ -406,7 +408,10 @@ class CanonicalizeSuite extends SparkFunSuite {
       i += 1
     }
     and.canonicalized
+
     val t2 = System.currentTimeMillis()
+    // scalastyle:off println
     println("time taken ms= " + (t2 - t1))
+    // scalastyle:on println
   }
 }
