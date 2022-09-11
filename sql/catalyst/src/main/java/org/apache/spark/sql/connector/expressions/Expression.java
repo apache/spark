@@ -44,16 +44,10 @@ public interface Expression {
    * List of fields or columns that are referenced by this expression.
    */
   default NamedReference[] references() {
-    List<NamedReference> list = new ArrayList<>();
-    Set<NamedReference> uniqueValues = new HashSet<>();
+    Set<NamedReference> set = new LinkedHashSet<>();
     for (Expression e : children()) {
-      NamedReference[] references = e.references();
-      for (NamedReference reference : references) {
-        if (uniqueValues.add(reference)) {
-          list.add(reference);
-        }
-      }
+      Collections.addAll(set, e.references());
     }
-    return list.toArray(new NamedReference[0]);
+    return set.toArray(new NamedReference[0]);
   }
 }
