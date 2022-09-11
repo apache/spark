@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Arrays;
 import java.text.DecimalFormat;
 
 /**

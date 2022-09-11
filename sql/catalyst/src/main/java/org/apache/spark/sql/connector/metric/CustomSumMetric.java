@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Arrays;
-
 /**
  * Built-in `CustomMetric` that sums up metric values. Note that please extend this class
  * and override `name` and `description` to create your custom metric for real usage.
