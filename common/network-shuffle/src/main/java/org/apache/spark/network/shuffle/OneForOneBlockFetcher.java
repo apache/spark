@@ -121,7 +121,7 @@ public class OneForOneBlockFetcher {
     return true;
   }
 
-  private boolean isAnyBlockNotStartWithShuffleBlockPrefix(String[] blockIds) {
+  private static boolean isAnyBlockNotStartWithShuffleBlockPrefix(String[] blockIds) {
     for (String blockId : blockIds) {
       if (!blockId.startsWith(SHUFFLE_BLOCK_PREFIX)) {
         return true;
@@ -130,7 +130,7 @@ public class OneForOneBlockFetcher {
     return false;
   }
 
-  private boolean isAllBlocksStartWithShuffleChunkPrefix(String[] blockIds) {
+  private static boolean isAllBlocksStartWithShuffleChunkPrefix(String[] blockIds) {
     for (String blockId : blockIds) {
       if (!blockId.startsWith(SHUFFLE_CHUNK_PREFIX)) {
         return false;

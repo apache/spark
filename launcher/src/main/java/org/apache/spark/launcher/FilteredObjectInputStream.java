@@ -50,7 +50,7 @@ class FilteredObjectInputStream extends ObjectInputStream {
     return super.resolveClass(desc);
   }
 
-  private boolean isValid(ObjectStreamClass desc) {
+  private static boolean isValid(ObjectStreamClass desc) {
     for (String p : ALLOWED_PACKAGES) {
       if (desc.getName().startsWith(p)) {
         return true;
