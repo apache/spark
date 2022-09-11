@@ -1798,7 +1798,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     comparePlans(correctAnswer, plan2)
   }
 
-  test("plan equivalence with case statements and performance comparison with benefit" +
+  ignore("plan equivalence with case statements and performance comparison with benefit" +
     "of more than 10x conservatively") {
     def getTestPlan: LogicalPlan = {
       val tr = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int, 'f.int, 'g.int, 'h.int, 'i.int,
