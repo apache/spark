@@ -870,7 +870,7 @@ class AnalysisErrorSuite extends AnalysisTest {
             Filter(cond, t1))
         ).as("sub") :: Nil,
         t2)
-      assertAnalysisError(plan, s"Correlated column is not allowed in predicate ($msg)" :: Nil)
+      assertAnalysisError(plan, s"Correlated column is not allowed in predicate: ($msg)" :: Nil)
     }
   }
 

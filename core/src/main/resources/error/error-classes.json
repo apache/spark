@@ -333,7 +333,7 @@
     ],
     "subClass" : {
       "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
-        "message": [
+        "message" : [
           "Scalar subquery must return only one column, but got <number>"
         ]
       }
@@ -715,7 +715,7 @@
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
-      "Invalid subquery:"
+      "Invalid subquery expression:"
     ],
     "subClass" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
