@@ -414,4 +414,46 @@ class CanonicalizeSuite extends SparkFunSuite {
     println("time taken ms= " + (t2 - t1))
     // scalastyle:on println
   }
+
+  test("benchmark3") {
+    val col1 = AttributeReference("a", IntegerType)()
+    val col2 = AttributeReference("b", IntegerType)()
+    val t1 = System.currentTimeMillis()
+    var and: Expression = And(col1 + col2 < 100, col1 * col2 > -100)
+    var i = 0
+    while (i < 2000) {
+      and = if (i % 2 == 0) {
+        And(and, col1 * col2 > -i * 10)
+      } else {
+        Or(and, col1 * col2 > -i * 10)
+      }
+      i += 1
+    }
+    and.canonicalized
+    // now canonicalize every child of and so as to see impact of non caching of precanonicalize
+    and.foreach(_.canonicalized)
+    val t2 = System.currentTimeMillis()
+    // scalastyle:off println
+    println("time taken with commutative expressions ms= " + (t2 - t1))
+    // scalastyle:on println
+
+    val t3 = System.currentTimeMillis()
+    var sub: Expression = col1 - col2
+    i = 0
+    while (i < 2000) {
+      sub = if (i % 2 == 0) {
+       sub - col1
+      } else {
+       sub / col2
+      }
+      i += 1
+    }
+    sub.canonicalized
+    // now canonicalize every child of and so as to see impact of non caching of precanonicalize
+    sub.foreach(_.canonicalized)
+    val t4 = System.currentTimeMillis()
+    // scalastyle:off println
+    println("time taken with non commutative expressions ms= " + (t4 - t3))
+    // scalastyle:on println
+  }
 }
