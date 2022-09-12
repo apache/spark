@@ -28,17 +28,16 @@ object Canonicalize {
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
     case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => reorderOperators(other) :: Nil
+    case other => reorderCommutativeOperators(other) :: Nil
   }
 
   /** Orders a set of commutative operations by their hash code. */
   private def orderCommutative(
       e: Expression,
-      f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
+      f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] =
     gatherCommutative(e, f).sortBy(_.hashCode())
-  }
 
-  def reorderOperators(e: Expression): Expression = e match {
+  def reorderCommutativeOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
     case a @ Add(_, _, f) =>
       orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
