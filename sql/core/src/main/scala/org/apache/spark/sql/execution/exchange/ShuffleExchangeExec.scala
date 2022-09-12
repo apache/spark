@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.util.Random
 import java.util.function.Supplier
 
 import scala.concurrent.Future
@@ -298,8 +297,7 @@ object ShuffleExchangeExec {
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
-        // Distributes elements evenly across output partitions, starting from a random partition.
-        var position = new Random(TaskContext.get().partitionId()).nextInt(numPartitions)
+        var position = TaskContext.get().partitionId()
         (row: InternalRow) => {
           // The HashPartitioner will handle the `mod` by the number of partitions
           position += 1
