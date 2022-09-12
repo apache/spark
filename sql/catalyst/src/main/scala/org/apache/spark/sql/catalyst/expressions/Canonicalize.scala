@@ -28,21 +28,21 @@ object Canonicalize {
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
     case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => reorderOperators(other) :: Nil
+    case other => preCanonicalizeAndReorderOperators(other) :: Nil
   }
 
   /** Orders a set of commutative operations by their hash code. */
   private def orderCommutative(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
-    gatherCommutative(e, f).map(_.preCanonicalized).sortBy(_.hashCode())
+    gatherCommutative(e, f).sortBy(_.hashCode())
   }
 
   private def orderBinaryComparison(
       bc: BinaryComparison,
       reverse: (Expression, Expression) => BinaryComparison) = {
-    val l = reorderOperators(bc.left).preCanonicalized
-    val r = reorderOperators(bc.right).preCanonicalized
+    val l = preCanonicalizeAndReorderOperators(bc.left)
+    val r = preCanonicalizeAndReorderOperators(bc.right)
     if (l.hashCode() > r.hashCode()) {
       reverse(r, l)
     } else {
@@ -50,7 +50,7 @@ object Canonicalize {
     }
   }
 
-  def reorderOperators(e: Expression): Expression = e match {
+  def preCanonicalizeAndReorderOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
     case a @ Add(_, _, f) =>
       orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
@@ -87,6 +87,6 @@ object Canonicalize {
     case bc: GreaterThanOrEqual => orderBinaryComparison(bc, LessThanOrEqual)
     case bc: LessThanOrEqual => orderBinaryComparison(bc, GreaterThanOrEqual)
 
-    case _ => e.mapChildren(reorderOperators).preCanonicalized
+    case _ => e.mapChildren(preCanonicalizeAndReorderOperators).preCanonicalized
   }
 }

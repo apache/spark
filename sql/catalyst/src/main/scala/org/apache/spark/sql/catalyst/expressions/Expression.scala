@@ -260,7 +260,7 @@ abstract class Expression extends TreeNode[Expression] {
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
    */
-  lazy val canonicalized: Expression = Canonicalize.reorderOperators(this)
+  lazy val canonicalized: Expression = Canonicalize.preCanonicalizeAndReorderOperators(this)
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
