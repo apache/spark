@@ -38,18 +38,6 @@ object Canonicalize {
     gatherCommutative(e, f).sortBy(_.hashCode())
   }
 
-  private def orderBinaryComparison(
-      bc: BinaryComparison,
-      reverse: (Expression, Expression) => BinaryComparison) = {
-    val l = preCanonicalizeAndReorderOperators(bc.left)
-    val r = preCanonicalizeAndReorderOperators(bc.right)
-    if (l.hashCode() > r.hashCode()) {
-      reverse(r, l)
-    } else {
-      bc.withNewChildren(Seq(l, r))
-    }
-  }
-
   def preCanonicalizeAndReorderOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
     case a @ Add(_, _, f) =>
@@ -78,14 +66,10 @@ object Canonicalize {
       val newChildren = orderCommutative(l, { case Least(children) => children })
       Least(newChildren)
 
-    case bc: EqualTo => orderBinaryComparison(bc, EqualTo)
-    case bc: EqualNullSafe => orderBinaryComparison(bc, EqualNullSafe)
-
-    case bc: GreaterThan => orderBinaryComparison(bc, LessThan)
-    case bc: LessThan => orderBinaryComparison(bc, GreaterThan)
-
-    case bc: GreaterThanOrEqual => orderBinaryComparison(bc, LessThanOrEqual)
-    case bc: LessThanOrEqual => orderBinaryComparison(bc, GreaterThanOrEqual)
+    // The following experssion nodes do full canonicalization during pre-canonicalization so we
+    // don't need to recurse.
+    case hof: HigherOrderFunction => hof.preCanonicalized
+    case bc: BinaryComparison => bc.preCanonicalized
 
     case _ => e.mapChildren(preCanonicalizeAndReorderOperators).preCanonicalized
   }
