@@ -59,6 +59,10 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+  }
 }
 
 /**
@@ -98,6 +102,10 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+  }
 }
 
 /**
@@ -137,6 +145,10 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
+  }
 }
 
 /**

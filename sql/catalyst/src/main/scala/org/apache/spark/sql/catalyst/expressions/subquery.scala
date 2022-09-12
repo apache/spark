@@ -263,7 +263,7 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
@@ -305,7 +305,7 @@ case class LateralSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     LateralSubquery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
@@ -350,7 +350,7 @@ case class ListQuery(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     ListQuery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
@@ -402,7 +402,7 @@ case class Exists(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def toString: String = s"exists#${exprId.id} $conditionString"
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     Exists(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),

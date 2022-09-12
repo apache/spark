@@ -224,34 +224,6 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  // Expression canonicalization is done in 2 phases:
-  //   1. Recursively canonicalize each node in the expression tree. This does not change the tree
-  //      structure and is more like "node-local" canonicalization.
-  //   2. Find adjacent commutative operators in the expression tree, reorder them to get a
-  //      static order and remove cosmetic variations. This may change the tree structure
-  //      dramatically and is more like a "global" canonicalization.
-  //
-  // The first phase is done by `preCanonicalized`. It's a `lazy val` which recursively calls
-  // `preCanonicalized` on the children. This means that almost every node in the expression tree
-  // will instantiate the `preCanonicalized` variable, which is good for performance as you can
-  // reuse the canonicalization result of the children when you construct a new expression node.
-  //
-  // The second phase is done by `canonicalized`, which simply calls `Canonicalize` and is kind of
-  // the actual "user-facing API" of expression canonicalization. Only the root node of the
-  // expression tree will instantiate the `canonicalized` variable. This is different from
-  // `preCanonicalized`, because `canonicalized` does "global" canonicalization and most of the time
-  // you cannot reuse the canonicalization result of the children.
-
-  /**
-   * An internal lazy val to implement expression canonicalization. It should only be called in
-   * `canonicalized`, or in subclass's `preCanonicalized` when the subclass overrides this lazy val
-   * to provide custom canonicalization logic.
-   */
-  lazy val preCanonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.canonicalized)
-    withNewChildren(canonicalizedChildren)
-  }
-
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
@@ -260,7 +232,10 @@ abstract class Expression extends TreeNode[Expression] {
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
    */
-  lazy val canonicalized: Expression = Canonicalize.reorderCommutativeOperators(this)
+  lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    withNewChildren(canonicalizedChildren)
+  }
 
   /**
    * Returns true when two expressions will always compute the same result, even if they differ
@@ -364,7 +339,7 @@ trait RuntimeReplaceable extends Expression {
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = replacement.canonicalized
+  override lazy val canonicalized: Expression = replacement.canonicalized
 
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)

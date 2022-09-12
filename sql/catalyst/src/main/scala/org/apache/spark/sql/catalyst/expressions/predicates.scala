@@ -328,7 +328,7 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     withNewChildren(Seq(child.canonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
@@ -466,7 +466,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
@@ -807,6 +807,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case And(l, r) => Seq(l, r) }).reduce(And)
+  }
 }
 
 @ExpressionDescription(
@@ -896,6 +900,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case Or(l, r) => Seq(l, r) }).reduce(Or)
+  }
 }
 
 
@@ -907,7 +915,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     withNewChildren(children.map(_.canonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)

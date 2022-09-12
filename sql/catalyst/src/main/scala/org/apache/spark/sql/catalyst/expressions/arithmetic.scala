@@ -473,6 +473,11 @@ case class Add(
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case Add(l, r, _) => Seq(l, r) })
+      .reduce(Add(_, _, evalMode))
+  }
 }
 
 @ExpressionDescription(
@@ -612,6 +617,11 @@ case class Multiply(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    Canonicalize.orderCommutative(this, { case Multiply(l, r, _) => Seq(l, r) })
+      .reduce(Multiply(_, _, evalMode))
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -1239,6 +1249,10 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Least(Canonicalize.orderCommutative(this, { case Least(children) => children }))
+  }
 }
 
 /**
@@ -1317,4 +1331,8 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Greatest(Canonicalize.orderCommutative(this, { case Greatest(children) => children }))
+  }
 }
