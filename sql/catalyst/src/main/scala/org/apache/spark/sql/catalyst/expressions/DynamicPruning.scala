@@ -74,7 +74,7 @@ case class DynamicPruningSubquery(
 
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     copy(
       pruningKey = pruningKey,
       buildQuery = buildQuery,

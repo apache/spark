@@ -208,7 +208,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       }
   }
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     var currExprId = -1
     val argumentMap = functions.flatMap(_.collect {
       case l: NamedLambdaVariable =>

@@ -35,7 +35,7 @@ object Canonicalize {
   private def orderCommutative(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] =
-    gatherCommutative(e, f).map(_.preCanonicalized).sortBy(_.hashCode())
+    gatherCommutative(e, f).map(_.expressionSpecificCanonicalization()).sortBy(_.hashCode())
 
   def reorderCommutativeOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
@@ -65,6 +65,7 @@ object Canonicalize {
       val newChildren = orderCommutative(l, { case Least(children) => children })
       Least(newChildren)
 
-    case _ => e.withNewChildren(e.children.map(reorderCommutativeOperators)).customPrecanonicalize()
+    case _ => e.withNewChildren(e.children.map(reorderCommutativeOperators)).
+      expressionSpecificCanonicalization()
   }
 }

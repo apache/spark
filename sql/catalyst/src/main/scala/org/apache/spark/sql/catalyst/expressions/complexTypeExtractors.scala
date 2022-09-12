@@ -107,7 +107,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     copy(child = child, name = None)
   }
 

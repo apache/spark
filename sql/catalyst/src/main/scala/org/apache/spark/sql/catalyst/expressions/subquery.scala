@@ -263,7 +263,7 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     ScalarSubquery(
       plan.canonicalized,
       outerAttrs,
@@ -305,7 +305,7 @@ case class LateralSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     LateralSubquery(
       plan.canonicalized,
       outerAttrs,
@@ -350,7 +350,7 @@ case class ListQuery(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     ListQuery(
       plan.canonicalized,
       outerAttrs,
@@ -403,7 +403,7 @@ case class Exists(
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def toString: String = s"exists#${exprId.id} $conditionString"
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     Exists(
       plan.canonicalized,
       outerAttrs,
