@@ -78,11 +78,6 @@ public class LevelDBIterator implements DBIterator {
         it.seek(key);
     }
 
-    @Override
-    public void remove() {
-      throw new UnsupportedOperationException();
-    }
-
     private Map.Entry<byte[], byte[]> loadNext() {
         boolean hasNext = it.hasNext();
         if (!hasNext) {

@@ -77,7 +77,22 @@ SELECT true = cast('1' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true = CAST('1' AS BINARY))' due to data type mismatch: differing types in '(true = CAST('1' AS BINARY))' (boolean and binary).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true = CAST(1 AS BINARY))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "SELECT true = cast('1' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -94,7 +109,22 @@ SELECT true = cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true = CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(true = CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (boolean and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 63,
+    "fragment" : "SELECT true = cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -103,7 +133,22 @@ SELECT true = cast('2017-12-11 09:30:00' as date) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true = CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(true = CAST('2017-12-11 09:30:00' AS DATE))' (boolean and date).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true = CAST(2017-12-11 09:30:00 AS DATE))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 56,
+    "fragment" : "SELECT true = cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -176,7 +221,22 @@ SELECT true <=> cast('1' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true <=> CAST('1' AS BINARY))' due to data type mismatch: differing types in '(true <=> CAST('1' AS BINARY))' (boolean and binary).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true <=> CAST(1 AS BINARY))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT true <=> cast('1' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -193,7 +253,22 @@ SELECT true <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true <=> CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(true <=> CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (boolean and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 65,
+    "fragment" : "SELECT true <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -202,7 +277,22 @@ SELECT true <=> cast('2017-12-11 09:30:00' as date) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true <=> CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(true <=> CAST('2017-12-11 09:30:00' AS DATE))' (boolean and date).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(true <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 58,
+    "fragment" : "SELECT true <=> cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -275,7 +365,22 @@ SELECT cast('1' as binary) = true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) = true)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) = true)' (binary and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(1 AS BINARY) = true)\"",
+    "left" : "\"BINARY\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 40,
+    "fragment" : "SELECT cast('1' as binary) = true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -292,7 +397,22 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) = true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) = true)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) = true)' (timestamp and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = true)\"",
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 63,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) = true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -301,7 +421,22 @@ SELECT cast('2017-12-11 09:30:00' as date) = true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) = true)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) = true)' (date and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = true)\"",
+    "left" : "\"DATE\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 56,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date) = true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -374,7 +509,22 @@ SELECT cast('1' as binary) <=> true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) <=> true)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) <=> true)' (binary and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(1 AS BINARY) <=> true)\"",
+    "left" : "\"BINARY\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 42,
+    "fragment" : "SELECT cast('1' as binary) <=> true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -391,7 +541,22 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) <=> true)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) <=> true)' (timestamp and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> true)\"",
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 65,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -400,7 +565,22 @@ SELECT cast('2017-12-11 09:30:00' as date) <=> true FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) <=> true)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) <=> true)' (date and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> true)\"",
+    "left" : "\"DATE\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 58,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date) <=> true FROM t"
+  } ]
+}
 
 
 -- !query
@@ -473,7 +653,22 @@ SELECT false = cast('0' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false = CAST('0' AS BINARY))' due to data type mismatch: differing types in '(false = CAST('0' AS BINARY))' (boolean and binary).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false = CAST(0 AS BINARY))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 41,
+    "fragment" : "SELECT false = cast('0' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -490,7 +685,22 @@ SELECT false = cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false = CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(false = CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (boolean and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 64,
+    "fragment" : "SELECT false = cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -499,7 +709,22 @@ SELECT false = cast('2017-12-11 09:30:00' as date) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false = CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(false = CAST('2017-12-11 09:30:00' AS DATE))' (boolean and date).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false = CAST(2017-12-11 09:30:00 AS DATE))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 57,
+    "fragment" : "SELECT false = cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -572,7 +797,22 @@ SELECT false <=> cast('0' as binary) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false <=> CAST('0' AS BINARY))' due to data type mismatch: differing types in '(false <=> CAST('0' AS BINARY))' (boolean and binary).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false <=> CAST(0 AS BINARY))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "SELECT false <=> cast('0' as binary) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -589,7 +829,22 @@ SELECT false <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false <=> CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(false <=> CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (boolean and timestamp).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "SELECT false <=> cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -598,7 +853,22 @@ SELECT false <=> cast('2017-12-11 09:30:00' as date) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(false <=> CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(false <=> CAST('2017-12-11 09:30:00' AS DATE))' (boolean and date).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(false <=> CAST(2017-12-11 09:30:00 AS DATE))\"",
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 59,
+    "fragment" : "SELECT false <=> cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -671,7 +941,22 @@ SELECT cast('0' as binary) = false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('0' AS BINARY) = false)' due to data type mismatch: differing types in '(CAST('0' AS BINARY) = false)' (binary and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(0 AS BINARY) = false)\"",
+    "left" : "\"BINARY\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 41,
+    "fragment" : "SELECT cast('0' as binary) = false FROM t"
+  } ]
+}
 
 
 -- !query
@@ -688,7 +973,22 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) = false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) = false)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) = false)' (timestamp and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = false)\"",
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 64,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) = false FROM t"
+  } ]
+}
 
 
 -- !query
@@ -697,7 +997,22 @@ SELECT cast('2017-12-11 09:30:00' as date) = false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) = false)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) = false)' (date and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) = false)\"",
+    "left" : "\"DATE\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 57,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date) = false FROM t"
+  } ]
+}
 
 
 -- !query
@@ -770,7 +1085,22 @@ SELECT cast('0' as binary) <=> false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('0' AS BINARY) <=> false)' due to data type mismatch: differing types in '(CAST('0' AS BINARY) <=> false)' (binary and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(0 AS BINARY) <=> false)\"",
+    "left" : "\"BINARY\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "SELECT cast('0' as binary) <=> false FROM t"
+  } ]
+}
 
 
 -- !query
@@ -787,7 +1117,22 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) <=> false)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) <=> false)' (timestamp and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <=> false)\"",
+    "left" : "\"TIMESTAMP\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) <=> false FROM t"
+  } ]
+}
 
 
 -- !query
@@ -796,4 +1141,19 @@ SELECT cast('2017-12-11 09:30:00' as date) <=> false FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) <=> false)' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) <=> false)' (date and boolean).; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "BINARY_OP_DIFF_TYPES",
+  "messageParameters" : {
+    "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) <=> false)\"",
+    "left" : "\"DATE\"",
+    "right" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 59,
+    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date) <=> false FROM t"
+  } ]
+}

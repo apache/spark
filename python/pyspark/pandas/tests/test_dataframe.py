@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from distutils.version import LooseVersion
 import inspect
 import sys
@@ -342,6 +342,152 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
                 ps.DataFrame(
                     data=ps.DataFrame([1, 2]), index=ps.MultiIndex.from_tuples([(1, 3), (2, 4)])
                 )
+
+    def test_creation_index_same_anchor(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 2, None, 4],
+                "b": [1, None, None, 4],
+                "c": [1, 2, None, None],
+                "d": [None, 2, None, 4],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["a", "c"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["a", "c"]] * 2, index=pdf.index),
+        )
+
+        # test String Index
+        pdf = pd.DataFrame(
+            data={"s": ["Hello", "World", "Databricks"], "x": [2002, 2003, 2004], "y": [4, 5, 6]}
+        )
+        pdf = pdf.set_index("s")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test DatetimeIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    datetime(2022, 9, 1, 0, 0, 0, 0),
+                    datetime(2022, 9, 2, 0, 0, 0, 0),
+                    datetime(2022, 9, 3, 0, 0, 0, 0),
+                ],
+                "x": [2002, 2003, 2004],
+                "y": [4, 5, 6],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test TimedeltaIndex
+        pdf = pd.DataFrame(
+            data={
+                "t": [
+                    timedelta(1),
+                    timedelta(3),
+                    timedelta(5),
+                ],
+                "x": [2002, 2003, 2004],
+                "y": [4, 5, 6],
+            }
+        )
+        pdf = pdf.set_index("t")
+        pdf.index.name = None
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test CategoricalIndex
+        pdf = pd.DataFrame(
+            data={
+                "z": [-1, -2, -3, -4],
+                "x": [2002, 2003, 2004, 2005],
+                "y": [4, 5, 6, 7],
+            },
+            index=pd.CategoricalIndex(["a", "c", "b", "a"], categories=["a", "b", "c"]),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            ps.DataFrame(data=psdf, index=psdf.index),
+            pd.DataFrame(data=pdf, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf + 1, index=psdf.index),
+            pd.DataFrame(data=pdf + 1, index=pdf.index),
+        )
+        self.assert_eq(
+            ps.DataFrame(data=psdf[["y"]] * 2, index=psdf.index),
+            pd.DataFrame(data=pdf[["y"]] * 2, index=pdf.index),
+        )
+
+        # test distributed data with ps.MultiIndex
+        pdf = pd.DataFrame(
+            data={
+                "z": [-1, -2, -3, -4],
+                "x": [2002, 2003, 2004, 2005],
+                "y": [4, 5, 6, 7],
+            },
+            index=pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z"), ("a", "x")]),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        err_msg = "Cannot combine a Distributed Dataset with a MultiIndex"
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with ps.MultiIndex
+            ps.DataFrame(data=psdf, index=psdf.index)
+        with self.assertRaisesRegex(ValueError, err_msg):
+            # test ps.DataFrame with pd.MultiIndex
+            ps.DataFrame(data=psdf, index=pdf.index)
 
     def _check_extension(self, psdf, pdf):
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):

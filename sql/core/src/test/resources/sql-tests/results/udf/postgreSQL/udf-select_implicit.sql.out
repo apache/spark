@@ -124,11 +124,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`udf(count(1))`"
-  }
+    "proposal" : "`udf(count(1))`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 77,
+    "fragment" : "ORDER BY udf(b)"
+  } ]
 }
 
 
@@ -216,7 +224,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 64,
+    "stopIndex" : 64,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -343,11 +358,19 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN",
+  "errorSubClass" : "WITH_SUGGESTION",
   "sqlState" : "42000",
   "messageParameters" : {
     "objectName" : "`b`",
-    "objectList" : "`udf(count(udf(a)))`"
-  }
+    "proposal" : "`udf(count(udf(a)))`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 68,
+    "stopIndex" : 82,
+    "fragment" : "ORDER BY udf(b)"
+  } ]
 }
 
 
