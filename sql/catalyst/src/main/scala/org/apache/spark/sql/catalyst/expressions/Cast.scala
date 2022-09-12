@@ -563,8 +563,8 @@ case class Cast(
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  override def expressionSpecificCanonicalization(): Expression = {
-    val basic = withNewChildren(Seq(child)).asInstanceOf[Cast]
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[Cast]
     if (timeZoneId.isDefined && !needsTimeZone) {
       basic.withTimeZone(null)
     } else {

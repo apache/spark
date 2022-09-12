@@ -126,7 +126,7 @@ case class AggregateExpression(
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.
-  override def expressionSpecificCanonicalization(): Expression = {
+  override lazy val preCanonicalized: Expression = {
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
       // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
@@ -137,10 +137,10 @@ case class AggregateExpression(
     }
 
     AggregateExpression(
-      normalizedAggFunc.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.preCanonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
-      filter,
+      filter.map(_.preCanonicalized),
       ExprId(0))
   }
 

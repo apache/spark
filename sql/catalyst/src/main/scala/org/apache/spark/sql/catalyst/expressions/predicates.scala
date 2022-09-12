@@ -328,8 +328,8 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
-  override def expressionSpecificCanonicalization(): Expression = {
-    withNewChildren(Seq(child)) match {
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(Seq(child.preCanonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
@@ -466,8 +466,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
-  override def expressionSpecificCanonicalization(): Expression = {
-    val basic = withNewChildren(children).asInstanceOf[In]
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
     } else {
@@ -907,7 +907,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override def expressionSpecificCanonicalization(): Expression = this match {
+  override lazy val preCanonicalized: Expression =
+    withNewChildren(children.map(_.preCanonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
 

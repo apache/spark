@@ -652,7 +652,7 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
  */
 case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
   with Unevaluable {
-  override def expressionSpecificCanonicalization(): Expression = child
+  override lazy val preCanonicalized = child.preCanonicalized
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
