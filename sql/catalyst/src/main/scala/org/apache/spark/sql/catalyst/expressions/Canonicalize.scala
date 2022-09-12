@@ -35,14 +35,14 @@ object Canonicalize {
   private def orderCommutative(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = {
-    gatherCommutative(e, f).sortBy(_.hashCode())
+    gatherCommutative(e, f).map(_.preCanonicalized).sortBy(_.hashCode())
   }
 
   private def orderBinaryComparison(
       bc: BinaryComparison,
       reverse: (Expression, Expression) => BinaryComparison) = {
-    val l = reorderOperators(bc.left)
-    val r = reorderOperators(bc.right)
+    val l = reorderOperators(bc.left).preCanonicalized
+    val r = reorderOperators(bc.right).preCanonicalized
     if (l.hashCode() > r.hashCode()) {
       reverse(r, l)
     } else {
@@ -87,6 +87,6 @@ object Canonicalize {
     case bc: GreaterThanOrEqual => orderBinaryComparison(bc, LessThanOrEqual)
     case bc: LessThanOrEqual => orderBinaryComparison(bc, GreaterThanOrEqual)
 
-    case _ => e.withNewChildren(e.children.map(reorderOperators))
+    case _ => e.mapChildren(reorderOperators).preCanonicalized
   }
 }
