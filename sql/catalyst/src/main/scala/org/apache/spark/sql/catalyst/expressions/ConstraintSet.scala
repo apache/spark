@@ -1288,7 +1288,7 @@ object ConstraintSet extends ConstraintHelper {
    */
   def templatizedConstraints(
     templateAttributeGenerator: TemplateAttributeGenerator,
-    expressions: Seq[Expression]): ExpressionMap[Array[Array[Attribute]]] = {
+    expressions: Seq[Expression]): Map[Expression, Array[Array[Attribute]]] = {
     val templatizedExprsToSolutionSpace = expressions.map(origExpr => {
       templateAttributeGenerator.reset()
       // contains the refs comprising each of the constraint as collected
@@ -1303,7 +1303,7 @@ object ConstraintSet extends ConstraintHelper {
     val groupedData = templatizedExprsToSolutionSpace.groupBy(_._1.canonicalized).map {
       case (_, keyVals) => keyVals.head._1 -> keyVals.map(_._2).toArray
     }
-    ExpressionMap(mutable.Map(groupedData.toSeq: _*))
+    Map(groupedData.toSeq: _*)
   }
 
   /**
@@ -1388,8 +1388,8 @@ object ConstraintSet extends ConstraintHelper {
    * @return ExpressionSet containing common filters for the union output
    */
   private def generateCommonSolutions(
-    templatizedConstraintsMapLeg1: ExpressionMap[Array[Array[Attribute]]],
-    templatizedConstraintsMapLeg2: ExpressionMap[Array[Array[Attribute]]],
+    templatizedConstraintsMapLeg1: Map[Expression, Array[Array[Attribute]]],
+    templatizedConstraintsMapLeg2: Map[Expression, Array[Array[Attribute]]],
     commonAttribListMapping: Map[(Attribute, Attribute), Seq[Attribute]]):
   ExpressionSet = {
     val results = (for ((templatizedExpr1, bindings1) <- templatizedConstraintsMapLeg1) yield {

@@ -1798,6 +1798,34 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite
     comparePlans(correctAnswer, plan2)
   }
 
+  test("Bug caused by swapping of operands due to" +
+    " canonicalization in ExpressionMap during templatization in union constraint eval") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val plan = tr.where('b < 'a + 7 && 'a + 2 < 'c).analyze
+    val optimized = GetOptimizer(
+      OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING).
+      execute(plan)
+    val constraints = optimized.constraints
+    val templateAttributeGenerator = new TemplateAttributeGenerator()
+    val templatizedConstraintsMap = ConstraintSet.templatizedConstraints(templateAttributeGenerator,
+      constraints.toSeq)
+
+    assert(templatizedConstraintsMap.nonEmpty)
+
+    val reconstructedConstraints =
+      for ((templatizedExpr, bindings) <- templatizedConstraintsMap) yield {
+        for (binding <- bindings) yield {
+          val solution = binding.toBuffer
+          templatizedExpr.transformDown {
+            case _: Attribute => solution.remove(0)
+          }
+        }
+      }
+    val newExprSet = ExpressionSet(reconstructedConstraints.flatten)
+    assertEquals(newExprSet.size, constraints.size)
+    assertTrue((newExprSet -- constraints).isEmpty)
+  }
+
   ignore("plan equivalence with case statements and performance comparison with benefit" +
     "of more than 10x conservatively") {
     def getTestPlan: LogicalPlan = {
