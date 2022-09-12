@@ -50,8 +50,7 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   import testImplicits._
 
