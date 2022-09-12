@@ -44,6 +44,8 @@ public interface Expression {
    * List of fields or columns that are referenced by this expression.
    */
   default NamedReference[] references() {
+    // When Java 17 is default, can consider using `LinkedHashSet` instead of
+    // `ArrayList + HashSet`, which will be 5 ~ 10% faster than the current implementation.
     List<NamedReference> list = new ArrayList<>();
     Set<NamedReference> uniqueValues = new HashSet<>();
     for (Expression e : children()) {
