@@ -28,7 +28,7 @@ object Canonicalize {
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
     case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
-    case other => preCanonicalizeAndReorderOperators(other) :: Nil
+    case other => reorderOperators(other) :: Nil
   }
 
   /** Orders a set of commutative operations by their hash code. */
@@ -38,7 +38,7 @@ object Canonicalize {
     gatherCommutative(e, f).sortBy(_.hashCode())
   }
 
-  def preCanonicalizeAndReorderOperators(e: Expression): Expression = e match {
+  def reorderOperators(e: Expression): Expression = e match {
     // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
     case a @ Add(_, _, f) =>
       orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
@@ -66,11 +66,6 @@ object Canonicalize {
       val newChildren = orderCommutative(l, { case Least(children) => children })
       Least(newChildren)
 
-    // The following experssion nodes do full canonicalization during pre-canonicalization so we
-    // don't need to recurse.
-    case hof: HigherOrderFunction => hof.preCanonicalized
-    case bc: BinaryComparison => bc.preCanonicalized
-
-    case _ => e.mapChildren(preCanonicalizeAndReorderOperators).preCanonicalized
+    case _ => e.preCanonicalized
   }
 }

@@ -159,7 +159,7 @@ case class InSubqueryExec(
 
   override lazy val preCanonicalized: InSubqueryExec = {
     copy(
-      child = child.preCanonicalized,
+      child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
       resultBroadcast = null,

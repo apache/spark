@@ -329,7 +329,7 @@ case class Not(child: Expression)
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
   override lazy val preCanonicalized: Expression = {
-    withNewChildren(Seq(child.preCanonicalized)) match {
+    withNewChildren(Seq(child.canonicalized)) match {
       case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
@@ -467,7 +467,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
   override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+    val basic = withNewChildren(children.map(_.canonicalized)).asInstanceOf[In]
     if (list.size > 1) {
       basic.copy(list = basic.list.sortBy(_.hashCode()))
     } else {

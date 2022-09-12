@@ -76,9 +76,9 @@ case class DynamicPruningSubquery(
 
   override lazy val preCanonicalized: DynamicPruning = {
     copy(
-      pruningKey = pruningKey.preCanonicalized,
+      pruningKey = pruningKey.canonicalized,
       buildQuery = buildQuery.canonicalized,
-      buildKeys = buildKeys.map(_.preCanonicalized),
+      buildKeys = buildKeys.map(_.canonicalized),
       exprId = ExprId(0))
   }
 

@@ -137,10 +137,10 @@ case class AggregateExpression(
     }
 
     AggregateExpression(
-      normalizedAggFunc.preCanonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
-      filter.map(_.preCanonicalized),
+      filter.map(_.canonicalized),
       ExprId(0))
   }
 

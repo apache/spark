@@ -266,9 +266,9 @@ case class ScalarSubquery(
   override lazy val preCanonicalized: Expression = {
     ScalarSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.preCanonicalized),
+      outerAttrs.map(_.canonicalized),
       ExprId(0),
-      joinCond.map(_.preCanonicalized))
+      joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(
@@ -308,9 +308,9 @@ case class LateralSubquery(
   override lazy val preCanonicalized: Expression = {
     LateralSubquery(
       plan.canonicalized,
-      outerAttrs.map(_.preCanonicalized),
+      outerAttrs.map(_.canonicalized),
       ExprId(0),
-      joinCond.map(_.preCanonicalized))
+      joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(
@@ -353,10 +353,10 @@ case class ListQuery(
   override lazy val preCanonicalized: Expression = {
     ListQuery(
       plan.canonicalized,
-      outerAttrs.map(_.preCanonicalized),
+      outerAttrs.map(_.canonicalized),
       ExprId(0),
-      childOutputs.map(_.preCanonicalized.asInstanceOf[Attribute]),
-      joinCond.map(_.preCanonicalized))
+      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]),
+      joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
@@ -405,9 +405,9 @@ case class Exists(
   override lazy val preCanonicalized: Expression = {
     Exists(
       plan.canonicalized,
-      outerAttrs.map(_.preCanonicalized),
+      outerAttrs.map(_.canonicalized),
       ExprId(0),
-      joinCond.map(_.preCanonicalized))
+      joinCond.map(_.canonicalized))
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
