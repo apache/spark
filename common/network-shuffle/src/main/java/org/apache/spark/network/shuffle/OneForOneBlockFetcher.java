@@ -121,6 +121,7 @@ public class OneForOneBlockFetcher {
     return true;
   }
 
+  // SPARK-40398: Replace `Arrays.stream().anyMatch()` with this method due to perf gain.
   private static boolean isAnyBlockNotStartWithShuffleBlockPrefix(String[] blockIds) {
     for (String blockId : blockIds) {
       if (!blockId.startsWith(SHUFFLE_BLOCK_PREFIX)) {
@@ -130,6 +131,7 @@ public class OneForOneBlockFetcher {
     return false;
   }
 
+  // SPARK-40398: Replace `Arrays.stream().allMatch()` with this method due to perf gain.
   private static boolean isAllBlocksStartWithShuffleChunkPrefix(String[] blockIds) {
     for (String blockId : blockIds) {
       if (!blockId.startsWith(SHUFFLE_CHUNK_PREFIX)) {
