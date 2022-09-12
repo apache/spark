@@ -64,7 +64,7 @@ case class ScalaUDF(
 
   override def name: String = udfName.getOrElse("UDF")
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
     copy(children = children, inputEncoders = Nil, outputEncoder = None)

@@ -295,7 +295,7 @@ case class AttributeReference(
     h
   }
 
-  override def customPrecanonicalize(): Expression = {
+  override def expressionSpecificCanonicalization(): Expression = {
     AttributeReference("none", dataType)(exprId)
   }
 
