@@ -852,8 +852,8 @@ The following extra configuration options are available when the shuffle service
   <td><code>spark.shuffle.service.db.backend</code></td>
   <td>LEVELDB</td>
   <td>
-    To specify the kind of disk-base store used in shuffle service state store, supports `LEVELDB` and `ROCKSDB` now 
-    and `LEVELDB` as default value. 
+    When Yarn NodeManager recovery is enabled, this use to specify the kind of disk-base store used in shuffle 
+    service state store, supports `LEVELDB` and `ROCKSDB` now and `LEVELDB` as default value. 
     The original data store in `LevelDB/RocksDB` will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>
