@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 
 class UnsafeArrayWriterSuite extends SparkFunSuite {
-  test("Big array size") {
+  test("SPARK-40403: don't print negative number when array is too big") {
     val rowWriter = new UnsafeRowWriter(1)
     rowWriter.resetRowWriter()
     val arrayWriter = new UnsafeArrayWriter(rowWriter, 8)
