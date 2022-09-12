@@ -741,7 +741,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + 1)\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "actualDataType" : "\"TIMESTAMP_NTZ\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "select timestamp'2011-11-11 11:11:11' + '1'"
+  } ]
 }
 
 
@@ -758,7 +765,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 + TIMESTAMP_NTZ '2011-11-11 11:11:11')\"",
     "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "actualDataType" : "\"TIMESTAMP_NTZ\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 43,
+    "fragment" : "select '1' + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 
@@ -775,7 +789,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\"",
     "left" : "\"TIMESTAMP_NTZ\"",
     "right" : "\"VOID\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "select timestamp'2011-11-11 11:11:11' + null"
+  } ]
 }
 
 
@@ -792,7 +813,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\"",
     "left" : "\"VOID\"",
     "right" : "\"TIMESTAMP_NTZ\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "select null + timestamp'2011-11-11 11:11:11'"
+  } ]
 }
 
 

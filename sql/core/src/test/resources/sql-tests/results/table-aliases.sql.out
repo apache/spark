@@ -64,7 +64,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`a`",
     "proposal" : "`t`.`c`, `t`.`d`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 52,
+    "fragment" : "SELECT a AS col1, b AS col2 FROM testData AS t(c, d)"
+  } ]
 }
 
 

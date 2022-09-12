@@ -493,5 +493,12 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
     "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 100,
+    "fragment" : "select\n  (select udf(max((select i.unique2 from tenk1 i where i.unique1 = o.unique1))))\nfrom tenk1 o"
+  } ]
 }

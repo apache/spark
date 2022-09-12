@@ -374,6 +374,16 @@ abstract class SparkFunSuite
       exception: SparkThrowable,
       errorClass: String,
       errorSubClass: String,
+      sqlState: Option[String],
+      parameters: Map[String, String],
+      context: QueryContext): Unit =
+    checkError(exception, errorClass, Some(errorSubClass), sqlState, parameters,
+      false, Array(context))
+
+  protected def checkError(
+      exception: SparkThrowable,
+      errorClass: String,
+      errorSubClass: String,
       sqlState: String,
       parameters: Map[String, String],
       context: QueryContext): Unit =

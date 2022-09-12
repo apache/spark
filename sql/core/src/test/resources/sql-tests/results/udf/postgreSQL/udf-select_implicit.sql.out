@@ -129,7 +129,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`udf(count(1))`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 77,
+    "fragment" : "ORDER BY udf(b)"
+  } ]
 }
 
 
@@ -217,7 +224,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "index" : "3",
     "size" : "2"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 64,
+    "stopIndex" : 64,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -349,7 +363,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`udf(count(udf(a)))`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 68,
+    "stopIndex" : 82,
+    "fragment" : "ORDER BY udf(b)"
+  } ]
 }
 
 

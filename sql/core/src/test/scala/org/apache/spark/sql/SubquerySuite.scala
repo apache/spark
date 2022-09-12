@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -29,7 +30,10 @@ import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SubquerySuite extends QueryTest
+  with SharedSparkSession
+  with QueryErrorsSuiteBase
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -886,14 +890,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
+      val query = "SELECT (SELECT count(*) FROM t WHERE a = 1)"
       checkError(
         exception =
-          intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)")),
+          intercept[AnalysisException](sql(query)),
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
-          "proposal" -> "`t`.`i`, `t`.`j`"))
+          "proposal" -> "`t`.`i`, `t`.`j`"),
+        context = ExpectedContext(
+          fragment = query, start = 0, stop = 42))
     }
   }
 

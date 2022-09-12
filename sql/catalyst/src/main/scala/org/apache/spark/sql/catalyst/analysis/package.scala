@@ -70,7 +70,7 @@ package object analysis {
   def withPosition[A](t: TreeNode[_])(f: => A): A = {
     try f catch {
       case a: AnalysisException =>
-        throw a.withPosition(t.origin.line, t.origin.startPosition)
+        throw a.withPosition(t.origin)
     }
   }
 }
