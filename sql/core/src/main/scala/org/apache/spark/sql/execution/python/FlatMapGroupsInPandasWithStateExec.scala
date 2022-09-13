@@ -64,8 +64,6 @@ case class FlatMapGroupsInPandasWithStateExec(
     eventTimeWatermark: Option[Long],
     child: SparkPlan) extends UnaryExecNode with FlatMapGroupsWithStateExecBase {
 
-  private val keySchema: StructType = groupingAttributes.toStructType
-
   // TODO(SPARK-XXXXX): Add the support of initial state.
   override protected val initialStateDeserializer: Expression = null
   override protected val initialStateGroupAttrs: Seq[Attribute] = null
@@ -114,6 +112,12 @@ case class FlatMapGroupsInPandasWithStateExec(
       process(processIter, hasTimedOut = false)
     }
 
+    override def processNewDataWithInitialState(
+        childDataIter: Iterator[InternalRow],
+        initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
+      throw new UnsupportedOperationException("Should not reach here!")
+    }
+
     override def processTimedOutState(): Iterator[InternalRow] = {
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
@@ -143,7 +147,7 @@ case class FlatMapGroupsInPandasWithStateExec(
     private def process(
         iter: Iterator[(UnsafeRow, StateData, Iterator[InternalRow])],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
-      val runner = new ArrowPythonRunnerWithState(
+      val runner = new ApplyInPandasWithStatePythonRunner(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         Array(argOffsets),

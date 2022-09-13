@@ -2707,21 +2707,38 @@ object SQLConf {
 
   val MAP_PANDAS_UDF_WITH_STATE_SOFT_LIMIT_SIZE_PER_BATCH =
     buildConf("spark.sql.execution.applyInPandasWithState.softLimitSizePerBatch")
-      // FIXME: doc
+      .internal()
+      .doc("When using applyInPandasWithState, set a soft limit of the accumulated size of " +
+        "records that can be written to a single ArrowRecordBatch in memory. This is used to " +
+        "restrict the amount of memory being used to materialize the data in both executor and " +
+        "Python worker. The accumulated size of records are calculated via sampling a set of " +
+        "records. Splitting the ArrowRecordBatch is performed per record, so unless a record " +
+        "is quite huge, the size of constructed ArrowRecordBatch will be around the " +
+        "configured value.")
       .version("3.4.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("64MB")
 
   val MAP_PANDAS_UDF_WITH_STATE_MIN_DATA_COUNT_FOR_SAMPLE =
     buildConf("spark.sql.execution.applyInPandasWithState.minDataCountForSample")
-      // FIXME: doc
+      .internal()
+      .doc("When using applyInPandasWithState, specify the minimum number of records to sample " +
+        "the size of record. The size being retrieved from sampling will be used to estimate " +
+        "the accumulated size of records. Note that limiting by size does not work if the " +
+        "number of records are less than the configured value. For such case, ArrowRecordBatch " +
+        "will only be split for soft timeout.")
       .version("3.4.0")
       .intConf
       .createWithDefault(100)
 
   val MAP_PANDAS_UDF_WITH_STATE_SOFT_TIMEOUT_PURGE_BATCH =
     buildConf("spark.sql.execution.applyInPandasWithState.softTimeoutPurgeBatch")
-      // FIXME: doc
+      .internal()
+      .doc("When using applyInPandasWithState, specify the soft timeout for purging the " +
+        "ArrowRecordBatch. If batching records exceeds the timeout, Spark will force splitting " +
+        "the ArrowRecordBatch regardless of estimated size. This config ensures the receiver " +
+        "of data (both executor and Python worker) to not wait indefinitely for sender to " +
+        "complete the ArrowRecordBatch, which may hurt both throughput and latency.")
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("100ms")

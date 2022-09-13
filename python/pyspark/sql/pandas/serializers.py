@@ -475,6 +475,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         data_state_generator = gen_data_and_state(batches)
 
+        # state will be same object for same grouping key
         for state, data in groupby(data_state_generator, key=lambda x: x[1]):
             yield (data, state,)
 
@@ -486,6 +487,11 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         """
 
         def construct_record_batch(pdfs, pdf_data_cnt, pdf_schema, state_pdfs, state_data_cnt):
+            """
+            Arrow RecordBatch requires all columns to have all same number of rows.
+            Insert empty data for state/data with less elements to compensate.
+            """
+
             import pandas as pd
             import pyarrow as pa
 
@@ -525,9 +531,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             state_data_cnt = 0
 
             sampled_data_size_per_row = 0
-            sampled_state_size = 0
-            # FIXME: sample with empty state size separately?
-            sampled_empty_state_size = 0
 
             last_purged_time_ns = time.time_ns()
 
@@ -539,14 +542,36 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 # this won't change across batches
                 return_schema = packaged_result[1]
 
-                # FIXME: arrow type to pandas type
-                # FIXME: probably also need to check columns to validate?
-
                 for pdf in pdf_iter:
-                    # FIXME: probably need to reduce down the scope of record batch to this?
                     if len(pdf) > 0:
                         pdf_data_cnt += len(pdf)
                         pdfs.append(pdf)
+
+                        if sampled_data_size_per_row == 0 and \
+                           pdf_data_cnt > self.minDataCountForSample:
+                            memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
+                            sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
+
+                        # This effectively works after the sampling has completed, size we multiply by 0
+                        # if the sampling is still in progress.
+                        batch_over_limit_on_size = (sampled_data_size_per_row * pdf_data_cnt) >= \
+                                                    self.softLimitBytesPerBatch
+
+                        if batch_over_limit_on_size:
+                            batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
+                                                           state_pdfs, state_data_cnt)
+
+                            pdfs = []
+                            state_pdfs = []
+                            pdf_data_cnt = 0
+                            state_data_cnt = 0
+                            last_purged_time_ns = time.time_ns()
+
+                            if should_write_start_length:
+                                write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                                should_write_start_length = False
+
+                            yield batch
 
                 # pick up state for only last chunk as state should have been updated so far
                 state_properties = state.json().encode("utf-8")
@@ -566,24 +591,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_pdfs.append(state_pdf)
                 state_data_cnt += 1
 
-                # FIXME: threshold of sample data
-                if sampled_data_size_per_row == 0 and pdf_data_cnt > self.minDataCountForSample:
-                    memory_usages = [p.memory_usage(deep=True).sum() for p in pdfs]
-                    sampled_data_size_per_row = sum(memory_usages) / pdf_data_cnt
-
-                # FIXME: threshold of sample data
-                if sampled_state_size == 0 and state_data_cnt > self.minDataCountForSample:
-                    memory_usages = [p.memory_usage(deep=True).sum() for p in state_pdfs]
-                    sampled_state_size = sum(memory_usages) / state_data_cnt
-
-                # This effectively works after the sampling has completed, size we multiply by 0
-                # if the sampling is still in progress.
-                batch_over_limit_on_size = (sampled_data_size_per_row * pdf_data_cnt) + \
-                    (sampled_state_size * state_data_cnt) >= self.softLimitBytesPerBatch
                 cur_time_ns = time.time_ns()
                 is_timed_out_on_purge = ((cur_time_ns - last_purged_time_ns) // 1000000) >= \
                     self.softTimeoutMillisPurgeBatch
-                if batch_over_limit_on_size or is_timed_out_on_purge:
+                if is_timed_out_on_purge:
                     batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
                                                    state_pdfs, state_data_cnt)
 
@@ -604,14 +615,8 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 batch = construct_record_batch(pdfs, pdf_data_cnt, return_schema,
                                                state_pdfs, state_data_cnt)
 
-                pdfs = []
-                state_pdfs = []
-                pdf_data_cnt = 0
-                state_data_cnt = 0
-
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
 
                 yield batch
 
