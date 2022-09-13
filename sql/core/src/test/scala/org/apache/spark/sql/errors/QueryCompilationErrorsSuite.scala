@@ -413,7 +413,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY",
       errorSubClass = "WITH_SUGGESTION",
       sqlState = None,
-      parameters = Map("columnName" -> "`a`",
+      parameters = Map("objectName" -> "`a`",
         "proposal" ->
           "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
       context = ExpectedContext(
@@ -574,7 +574,8 @@ class QueryCompilationErrorsSuite
       exception = e1,
       errorClass = "UNSUPPORTED_DESERIALIZER",
       errorSubClass = Some("FIELD_NUMBER_MISMATCH"),
-      parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT>\"",
+      parameters = Map(
+        "schema" -> "\"STRUCT<a: STRING, b: INT>\"",
         "ordinal" -> "3"))
 
     val e2 = intercept[AnalysisException] {

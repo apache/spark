@@ -203,7 +203,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -238,7 +238,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -273,7 +273,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -309,7 +309,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -345,7 +345,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -381,7 +381,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "message" : "integer overflow",
     "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "config" : "spark.sql.ansi.enabled"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",

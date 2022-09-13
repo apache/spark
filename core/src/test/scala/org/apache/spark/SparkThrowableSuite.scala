@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.IllegalFormatException
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
@@ -146,24 +145,26 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Check if error class is missing") {
     val ex1 = intercept[IllegalArgumentException] {
-      getMessage("", null, Array.empty)
+      getMessage("", null, Map.empty[String, String])
     }
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM", null, Array.empty)
+      getMessage("LOREM_IPSUM", null, Map.empty[String, String])
     }
     assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
 
   test("Check if message parameters match message format") {
     // Requires 2 args
-    intercept[IllegalFormatException] {
-      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Array.empty)
+    val e = intercept[SparkException] {
+      getMessage("UNRESOLVED_COLUMN", "WITHOUT_SUGGESTION", Map.empty[String, String])
     }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessageParameters.head.contains("Undefined an error message parameter"))
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", null, Array("foo", "bar", "baz")) ==
+    assert(getMessage("DIVIDE_BY_ZERO", null, Map("config" -> "foo", "a" -> "bar")) ==
       "[DIVIDE_BY_ZERO] Division by zero. " +
       "Use `try_divide` to tolerate divisor being 0 and return NULL instead. " +
         "If necessary set foo to \"false\" " +
@@ -175,7 +176,20 @@ class SparkThrowableSuite extends SparkFunSuite {
       getMessage(
         "UNRESOLVED_COLUMN",
         "WITH_SUGGESTION",
-        Array("`foo`", "`bar`, `baz`")
+        Map("objectName" -> "`foo`", "proposal" -> "`bar`, `baz`")
+      ) ==
+      "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+        "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
+    )
+
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN",
+        "WITH_SUGGESTION",
+        Map(
+          "objectName" -> "`foo`",
+          "proposal" -> "`bar`, `baz`"),
+        ""
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]"
@@ -199,7 +213,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     try {
       throw new SparkException(
         errorClass = "WRITING_JOB_ABORTED",
-        messageParameters = Array.empty,
+        messageParameters = Map.empty,
         cause = null)
     } catch {
       case e: SparkThrowable =>
@@ -215,7 +229,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     try {
       throw new SparkException(
         errorClass = "INTERNAL_ERROR",
-        messageParameters = Array("this is an internal error"),
+        messageParameters = Map("message" -> "this is an internal error"),
         cause = null
       )
     } catch {
@@ -240,7 +254,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e = new SparkArithmeticException(
       errorClass = "DIVIDE_BY_ZERO",
       errorSubClass = None,
-      messageParameters = Array("CONFIG"),
+      messageParameters = Map("config" -> "CONFIG"),
       context = Array(new TestQueryContext),
       summary = "Query summary")
 
@@ -283,7 +297,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE",
       errorSubClass = Some("EXISTENT_PATH"),
-      messageParameters = Array("UNSUPPORTED_MODE"))
+      messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
     assert(SparkThrowableHelper.getMessage(e2, STANDARD) ===
       """{
         |  "errorClass" : "UNSUPPORTED_SAVE_MODE",
