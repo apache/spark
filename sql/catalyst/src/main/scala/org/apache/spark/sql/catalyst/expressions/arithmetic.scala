@@ -352,8 +352,8 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    // TODO: do not reorder consecutive `Add`s with different `failOnError`
+    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, failOnError))
   }
 }
 
@@ -445,8 +445,8 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, evalMode))
+    // TODO: do not reorder consecutive `Multiply`s with different `failOnError`
+    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, failOnError))
   }
 }
 
