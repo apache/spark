@@ -343,25 +343,6 @@ private[spark] class SparkIllegalArgumentException(
   override def getQueryContext: Array[QueryContext] = context
 }
 
-/**
- * Index out of bounds exception thrown from Spark with an error class.
- */
-private[spark] class SparkIndexOutOfBoundsException(
-    errorClass: String,
-    errorSubClass: Option[String] = None,
-    messageParameters: Map[String, String])
-  extends IndexOutOfBoundsException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
-  with SparkThrowable {
-
-  override def getMessageParameters: Array[String] = {
-    SparkThrowableHelper.getMessageParameters(errorClass, errorSubClass.orNull, messageParameters)
-  }
-
-  override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull
-}
-
 private[spark] class SparkRuntimeException(
     errorClass: String,
     errorSubClass: Option[String] = None,
