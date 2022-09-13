@@ -193,6 +193,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     plan match {
       case p: Project => p.mapChildren(addTagForRootRepartition)
       case f: Filter => f.mapChildren(addTagForRootRepartition)
+      case d: DeserializeToObject => d.mapChildren(addTagForRootRepartition)
       case r if userSpecifiedRepartition(r) =>
         r.setTagValue(ROOT_REPARTITION, ())
         r

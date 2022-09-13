@@ -51,11 +51,6 @@ case class InsertAdaptiveSparkPlan(
     case c: DataWritingCommandExec
         if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
-    // `DeserializeToObjectExec` is used by Spark internally e.g. `Dataset.rdd`.
-    // It should always be a root node, and does not allow a shuffle on top of it.
-    // This conflicts with AQE framework since we may add shuffle back during re-optimize
-    // to preserve the user-specified repartition, so here we only apply it's children to AQE.
-    case d: DeserializeToObjectExec => d.withNewChildren(d.children.map(apply))
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
