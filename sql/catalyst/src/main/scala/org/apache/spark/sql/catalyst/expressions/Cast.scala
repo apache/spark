@@ -322,8 +322,8 @@ abstract class CastBase extends UnaryExpression
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  override lazy val preCanonicalized: Expression = {
-    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[CastBase]
+  override lazy val canonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.canonicalized)).asInstanceOf[CastBase]
     if (timeZoneId.isDefined && !needsTimeZone) {
       basic.withTimeZone(null)
     } else {

@@ -313,7 +313,8 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic
+  with CommutativeExpression {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -349,6 +350,11 @@ case class Add(
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Add`s with different `failOnError`
+    orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, failOnError))
+  }
 }
 
 @ExpressionDescription(
@@ -413,7 +419,8 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic
+  with CommutativeExpression {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
@@ -436,6 +443,11 @@ case class Multiply(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
+
+  override lazy val canonicalized: Expression = {
+    // TODO: do not reorder consecutive `Multiply`s with different `failOnError`
+    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, failOnError))
+  }
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -905,7 +917,8 @@ case class Pmod(
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -968,6 +981,10 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Least(orderCommutative({ case Least(children) => children }))
+  }
 }
 
 /**
@@ -983,7 +1000,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression
+  with CommutativeExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1046,4 +1064,8 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+
+  override lazy val canonicalized: Expression = {
+    Greatest(orderCommutative({ case Greatest(children) => children }))
+  }
 }
