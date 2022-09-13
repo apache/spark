@@ -48,14 +48,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 43,
-    "fragment" : "GROUP BY b"
-  } ]
+  }
 }
 
 
@@ -125,14 +118,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"a\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 38,
-    "stopIndex" : 51,
-    "fragment" : "GROUP BY a + 1"
-  } ]
+  }
 }
 
 
@@ -197,14 +183,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`non_existing`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 59,
-    "fragment" : "GROUP BY k"
-  } ]
+  }
 }
 
 
@@ -237,14 +216,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42000",
   "messageParameters" : {
     "expression" : "\"k\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 59,
-    "stopIndex" : 68,
-    "fragment" : "GROUP BY a"
-  } ]
+  }
 }
 
 
@@ -269,14 +241,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`k`",
     "proposal" : "`testdata`.`a`, `testdata`.`b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 39,
-    "stopIndex" : 48,
-    "fragment" : "GROUP BY k"
-  } ]
+  }
 }
 
 

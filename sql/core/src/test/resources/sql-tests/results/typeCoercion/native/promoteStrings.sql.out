@@ -84,14 +84,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 + CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast('1' as binary)                        FROM t"
-  } ]
+  }
 }
 
 
@@ -108,14 +101,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 + CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast(1 as boolean)                         FROM t"
-  } ]
+  }
 }
 
 
@@ -132,14 +118,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 + CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' + cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
-  } ]
+  }
 }
 
 
@@ -229,14 +208,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 - CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' - cast('1' as binary)                        FROM t"
-  } ]
+  }
 }
 
 
@@ -253,14 +225,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 - CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' - cast(1 as boolean)                         FROM t"
-  } ]
+  }
 }
 
 
@@ -358,14 +323,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 * CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('1' as binary)                        FROM t"
-  } ]
+  }
 }
 
 
@@ -382,14 +340,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 * CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast(1 as boolean)                         FROM t"
-  } ]
+  }
 }
 
 
@@ -406,14 +357,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
-  } ]
+  }
 }
 
 
@@ -430,14 +374,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 * CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"DATE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' * cast('2017-12-11 09:30:00' as date)        FROM t"
-  } ]
+  }
 }
 
 
@@ -518,14 +455,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 / CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('1' as binary)                        FROM t"
-  } ]
+  }
 }
 
 
@@ -542,14 +472,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 / CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast(1 as boolean)                         FROM t"
-  } ]
+  }
 }
 
 
@@ -566,14 +489,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
-  } ]
+  }
 }
 
 
@@ -590,14 +506,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 / CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"DATE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' / cast('2017-12-11 09:30:00' as date)        FROM t"
-  } ]
+  }
 }
 
 
@@ -678,14 +587,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 % CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('1' as binary)                        FROM t"
-  } ]
+  }
 }
 
 
@@ -702,14 +604,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 % CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast(1 as boolean)                         FROM t"
-  } ]
+  }
 }
 
 
@@ -726,14 +621,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
-  } ]
+  }
 }
 
 
@@ -750,14 +638,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(1 % CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"DATE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT '1' % cast('2017-12-11 09:30:00' as date)        FROM t"
-  } ]
+  }
 }
 
 
@@ -838,14 +719,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(1, CAST(1 AS BINARY))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BINARY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('1' as binary))                        FROM t"
-  } ]
+  }
 }
 
 
@@ -862,14 +736,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(1, CAST(1 AS BOOLEAN))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"BOOLEAN\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast(1 as boolean))                         FROM t"
-  } ]
+  }
 }
 
 
@@ -886,14 +753,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('2017-12-11 09:30:00.0' as timestamp)) FROM t"
-  } ]
+  }
 }
 
 
@@ -910,14 +770,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(1, CAST(2017-12-11 09:30:00 AS DATE))\"",
     "left" : "\"DOUBLE\"",
     "right" : "\"DATE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod('1', cast('2017-12-11 09:30:00' as date))        FROM t"
-  } ]
+  }
 }
 
 
@@ -990,14 +843,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BINARY) + 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        + '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1014,14 +860,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) + 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         + '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1038,14 +877,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) + '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1127,14 +959,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BINARY) - 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        - '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1151,14 +976,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) - 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         - '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1249,14 +1067,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BINARY) * 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        * '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1273,14 +1084,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) * 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         * '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1297,14 +1101,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) * 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) * '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1321,14 +1118,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) * 1)\"",
     "left" : "\"DATE\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        * '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1401,14 +1191,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BINARY) / 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        / '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1425,14 +1208,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         / '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1449,14 +1225,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) / '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1473,14 +1242,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / 1)\"",
     "left" : "\"DATE\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        / '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1553,14 +1315,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BINARY) % 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('1' as binary)                        % '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1577,14 +1332,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) % 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast(1 as boolean)                         % '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1601,14 +1349,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) % 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00.0' as timestamp) % '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1625,14 +1366,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) % 1)\"",
     "left" : "\"DATE\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 62,
-    "fragment" : "SELECT cast('2017-12-11 09:30:00' as date)        % '1' FROM t"
-  } ]
+  }
 }
 
 
@@ -1705,14 +1439,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(CAST(1 AS BINARY), 1)\"",
     "left" : "\"BINARY\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('1' as binary), '1')                        FROM t"
-  } ]
+  }
 }
 
 
@@ -1729,14 +1456,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(CAST(1 AS BOOLEAN), 1)\"",
     "left" : "\"BOOLEAN\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast(1 as boolean), '1')                         FROM t"
-  } ]
+  }
 }
 
 
@@ -1753,14 +1473,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), 1)\"",
     "left" : "\"TIMESTAMP\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('2017-12-11 09:30:00.0' as timestamp), '1') FROM t"
-  } ]
+  }
 }
 
 
@@ -1777,14 +1490,7 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"pmod(CAST(2017-12-11 09:30:00 AS DATE), 1)\"",
     "left" : "\"DATE\"",
     "right" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "SELECT pmod(cast('2017-12-11 09:30:00' as date), '1')        FROM t"
-  } ]
+  }
 }
 
 

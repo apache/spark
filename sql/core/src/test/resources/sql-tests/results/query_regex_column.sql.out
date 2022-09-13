@@ -40,14 +40,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
     "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 43,
-    "fragment" : "SELECT `(a)?+.+` FROM testData2 WHERE a = 1"
-  } ]
+  }
 }
 
 
@@ -64,14 +57,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t`.`(a)?+.+`",
     "proposal" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 47,
-    "fragment" : "SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1"
-  } ]
+  }
 }
 
 
@@ -88,14 +74,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a|b)`",
     "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 41,
-    "fragment" : "SELECT `(a|b)` FROM testData2 WHERE a = 2"
-  } ]
+  }
 }
 
 
@@ -112,14 +91,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
     "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 45,
-    "fragment" : "SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2"
-  } ]
+  }
 }
 
 
@@ -136,14 +108,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
     "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 38,
-    "fragment" : "SELECT SUM(`(a|b)?+.+`) FROM testData2"
-  } ]
+  }
 }
 
 
@@ -160,14 +125,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a)`",
     "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 32,
-    "fragment" : "SELECT SUM(`(a)`) FROM testData2"
-  } ]
+  }
 }
 
 
@@ -395,14 +353,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a)`",
     "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 43,
-    "fragment" : "GROUP BY `(a)`"
-  } ]
+  }
 }
 
 
@@ -419,12 +370,5 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
     "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 47,
-    "fragment" : "GROUP BY `(a)?+.+`"
-  } ]
+  }
 }

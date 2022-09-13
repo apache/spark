@@ -165,14 +165,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`db1`.`t1`.`i1`",
     "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`, `spark_catalog`.`mydb2`.`t1`.`i1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 34,
-    "fragment" : "SELECT db1.t1.i1 FROM t1, mydb2.t1"
-  } ]
+  }
 }
 
 
@@ -205,14 +198,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
     "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT mydb1.t1 FROM t1"
-  } ]
+  }
 }
 
 
@@ -238,14 +224,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t1`",
     "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT t1 FROM mydb1.t1"
-  } ]
+  }
 }
 
 
@@ -270,14 +249,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`.`i1`",
     "proposal" : "`spark_catalog`.`mydb2`.`t1`.`i1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 26,
-    "fragment" : "SELECT mydb1.t1.i1 FROM t1"
-  } ]
+  }
 }
 
 
