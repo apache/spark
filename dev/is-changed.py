@@ -71,7 +71,10 @@ def main():
         print("false")
         if opts.fail:
             sys.exit(1)
-    elif "root" in test_modules or modules.root in changed_modules:
+    # `./dev/is-changed.py -m infra-image` == True only when changing the infra dockerfile
+    elif ("root" in test_modules or modules.root in changed_modules) and (
+        ["infra-image"] != test_modules
+    ):
         print("true")
     elif len(set(test_modules).intersection(module_names)) == 0:
         print("false")

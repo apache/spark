@@ -51,7 +51,7 @@ object TypeCheckResult {
    */
   case class DataTypeMismatch(
       errorSubClass: String,
-      messageParameters: Array[String])
+      messageParameters: Map[String, String])
     extends TypeCheckResult {
     def isSuccess: Boolean = false
   }

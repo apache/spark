@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.unsafe.types.UTF8String
@@ -28,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with QueryErrorsSuiteBase {
+trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 
   import testImplicits._
 
