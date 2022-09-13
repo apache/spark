@@ -103,10 +103,7 @@ object FileFormatWriter extends Logging {
       .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation))
     val dataColumns = finalOutputSpec.outputColumns.filterNot(partitionSet.contains)
 
-    val hasEmpty2Null = plan.find {
-      case p: ProjectExec => V1WritesUtils.hasEmptyToNull(p.projectList)
-      case _ => false
-    }.isDefined
+    val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
     val empty2NullPlan = if (hasEmpty2Null) {
       plan
     } else {
@@ -150,14 +147,7 @@ object FileFormatWriter extends Logging {
     // the sort order doesn't matter
     // Use the output ordering from the original plan before adding the empty2null projection.
     val actualOrdering = plan.outputOrdering.map(_.child)
-    val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
-      false
-    } else {
-      requiredOrdering.zip(actualOrdering).forall {
-        case (requiredOrder, childOutputOrder) =>
-          requiredOrder.semanticEquals(childOutputOrder)
-      }
-    }
+    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
 
