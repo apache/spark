@@ -191,7 +191,7 @@ object ApplyInPandasWithStatePythonRunner {
       StructField("properties", StringType),
       StructField("keyRowAsUnsafe", BinaryType),
       StructField("object", BinaryType),
-      StructField("oldTimeoutTimestamp", LongType),
+      StructField("oldTimeoutTimestamp", LongType)
     )
   )
 }
