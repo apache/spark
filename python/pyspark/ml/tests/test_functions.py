@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import unittest
 
-from pyspark.ml.functions import batch_infer_udf
+from pyspark.ml.functions import predict_batch_udf
 from pyspark.sql.functions import struct
 from pyspark.sql.types import DoubleType, IntegerType, StructType, StructField
 from pyspark.testing.mlutils import SparkSessionTestCase
@@ -50,16 +50,17 @@ class BatchInferUDFTests(SparkSessionTestCase):
             return predict
 
         # single column input => single column output
-        identity = batch_infer_udf(predict_batch_fn, return_type=DoubleType())
+        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
         preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         self.assertTrue(preds["a"].equals(preds["preds"]))
 
         # multiple column input => multiple column output
-        identity = batch_infer_udf(
+        identity = predict_batch_udf(
             predict_batch_fn,
             return_type=StructType(
                 [StructField("a1", DoubleType(), True), StructField("b1", DoubleType(), True)]
             ),
+            batch_size=5,
         )
         preds = (
             self.df.withColumn("preds", identity(struct("a", "b")))
@@ -81,7 +82,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        identity = batch_infer_udf(
+        identity = predict_batch_udf(
             predict_batch_fn, return_type=IntegerType(), batch_size=batch_size
         )
         preds = self.df.withColumn("preds", identity(struct("a"))).toPandas()
@@ -99,7 +100,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        identity = batch_infer_udf(predict_batch_fn, return_type=DoubleType())
+        identity = predict_batch_udf(predict_batch_fn, return_type=DoubleType(), batch_size=5)
 
         # results should be the same
         df1 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
@@ -116,7 +117,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        sum_cols = batch_infer_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
+        sum_cols = predict_batch_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
@@ -128,7 +129,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             dict_sum_fn, return_type=DoubleType(), batch_size=5, input_names=columns
         )
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
@@ -142,7 +143,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
 
             return predict
 
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             dict_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
@@ -152,14 +153,14 @@ class BatchInferUDFTests(SparkSessionTestCase):
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
         # scalar columns with one tensor_input_shape => single numpy array
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
         )
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
         # scalar columns with multiple tensor_input_shapes => ERROR
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             array_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
@@ -180,26 +181,26 @@ class BatchInferUDFTests(SparkSessionTestCase):
             return predict
 
         # tensor column with no input_names or input_tensor_shapes => ERROR
-        sum_cols = batch_infer_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
+        sum_cols = predict_batch_udf(array_sum_fn, return_type=DoubleType(), batch_size=5)
         with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
         # tensor column with only input_names => ERROR
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_names=["dense_input"]
         )
         with self.assertRaisesRegex(Exception, "Tensor columns require input_tensor_shapes"):
             preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
 
         # tensor column with only tensor_input_shapes => single numpy array
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[-1, 4]]
         )
         preds = self.df_tensor1.withColumn("preds", sum_cols(struct(*columns1))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
         # tensor column with multiple tensor_input_shapes => ERROR
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             array_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
@@ -221,7 +222,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
             return predict
 
         # multiple tensor columns with only tensor_input_shapes => ERROR
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             multi_dict_sum_fn,
             return_type=DoubleType(),
             batch_size=5,
@@ -233,7 +234,7 @@ class BatchInferUDFTests(SparkSessionTestCase):
             preds = self.df_tensor2.withColumn("preds", sum_cols(struct(*columns))).toPandas()
 
         # multiple tensor columns with input_names and tensor_input_shapes => dict of numpy arrays
-        sum_cols = batch_infer_udf(
+        sum_cols = predict_batch_udf(
             multi_dict_sum_fn,
             return_type=DoubleType(),
             batch_size=5,

@@ -20,8 +20,8 @@ import uuid
 from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.types import ArrayType, DataType, FloatType, StructType
-from typing import Any, Callable, Iterator, Union
+from pyspark.sql.types import ArrayType, DataType, StructType
+from typing import Any, Callable, Iterator, List, Mapping, Optional, Union
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -111,17 +111,13 @@ def array_to_vector(col: Column) -> Column:
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
-def batched(df: pd.DataFrame, batch_size: int = -1) -> Iterator[pd.DataFrame]:
+def _batched(df: pd.DataFrame, batch_size: int) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
-    if batch_size <= 0 or batch_size >= len(df):
-        yield df
-    else:
-        # for batch in np.array_split(df, (len(df.index) + batch_size - 1) // batch_size):
-        for _, batch in df.groupby(np.arange(len(df)) // batch_size):
-            yield batch
+    for _, batch in df.groupby(np.arange(len(df)) // batch_size):
+        yield batch
 
 
-def has_tensor_cols(df: pd.DataFrame) -> bool:
+def _has_tensor_cols(df: pd.DataFrame) -> bool:
     """Check if input DataFrame contains any tensor-valued columns"""
     if any(df.dtypes == np.object_):
         # pd.DataFrame object types can contain different types, e.g. string, dates, etc.
@@ -132,12 +128,19 @@ def has_tensor_cols(df: pd.DataFrame) -> bool:
         return False
 
 
-def batch_infer_udf(
-    predict_batch_fn: Callable,
-    return_type: DataType = ArrayType(FloatType()),
-    batch_size: int = -1,
-    input_names: list[str] = [],
-    input_tensor_shapes: list[list[int]] = [],
+def predict_batch_udf(
+    predict_batch_fn: Callable[
+        ...,
+        Callable[
+            [Union[np.ndarray, Mapping[str, np.ndarray]]],
+            Union[np.ndarray, List[Mapping[str, np.dtype]]],
+        ],
+    ],
+    return_type: DataType,
+    batch_size: int,
+    *,
+    input_names: Optional[list[str]] = None,
+    input_tensor_shapes: Optional[list[list[int]]] = None,
     **kwargs: Any,
 ) -> Callable:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
@@ -171,15 +174,18 @@ def batch_infer_udf(
 
     Parameters
     ----------
-    predict_batch_fn : Callable
-        Function which is responsible for loading a model and returning a `predict` function.
+    predict_batch_fn : Callable[..., Callable[Union[np.ndarray, Mapping[str, np.ndarray]]],
+        Union[np.ndarray, List[Mapping[str, np.dtype]]]]
+        Function which is responsible for loading a model and returning a `predict` function which
+        takes either a numpy array or a dictionary of named numpy arrays as input and returns either
+        a numpy array (for a single output) or a row-oriented list of dictionaries (for multiple
+        outputs).
     return_type : :class:`pspark.sql.types.DataType` or str.
         Spark SQL datatype for the expected output.
         Default: ArrayType(FloatType())
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
-        Default: -1, which sends the entire Spark partition to the model.
     input_names: list[str]
         Optional list of input names which will be used to map DataFrame column names to model
         input names.  The order of names must match the order of the selected DataFrame columns.
@@ -206,8 +212,8 @@ def batch_infer_udf(
             ModelCache.add(model_uuid, predict_fn)
 
         for partition in data:
-            has_tensors = has_tensor_cols(partition)
-            for batch in batched(partition, batch_size):
+            has_tensors = _has_tensor_cols(partition)
+            for batch in _batched(partition, batch_size):
                 inputs: Union[np.ndarray, dict[str, np.ndarray]]
                 if input_names:
                     # input names provided, expect a dictionary of named numpy arrays
@@ -267,7 +273,7 @@ def batch_infer_udf(
                 elif isinstance(return_type, ArrayType):
                     yield pd.Series(list(preds))  # type: ignore[misc]
                 else:
-                    yield pd.Series(np.squeeze(preds))  # type: ignore[misc]
+                    yield pd.Series(np.squeeze(preds))  # type: ignore
 
     return pandas_udf(predict, return_type)  # type: ignore[call-overload]
 
