@@ -227,10 +227,20 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
-   * commutative operations, etc.)  See [[Canonicalize]] for more details.
+   * commutative operations, etc.).
    *
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
+   *
+   * The process of canonicalization is a one pass, bottum-up expression tree computation based on
+   * canonicalizing children before canonicalizing the current node. There is one exception though,
+   * as adjacent, same class [[CommutativeExpression]]s canonicalazion happens in a way that calling
+   * `canonicalized` on the root:
+   *   1. Gathers and canonicalizes the non-commutative (or commutative but not same class) child
+   *      expressions of the adjacent expressions.
+   *   2. Reorder the canonicalized child expressions by their hashcode.
+   * This means that the lazy `cannonicalized` is called and computed only on the root of the
+   * adjacent expressions.
    */
   lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
