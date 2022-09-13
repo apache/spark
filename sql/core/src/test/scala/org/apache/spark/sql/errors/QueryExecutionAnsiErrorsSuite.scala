@@ -25,8 +25,7 @@ import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends QueryTest
-  with SharedSparkSession
-  with QueryErrorsSuiteBase {
+  with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 

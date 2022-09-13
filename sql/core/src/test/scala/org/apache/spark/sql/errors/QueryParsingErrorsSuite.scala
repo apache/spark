@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase with SharedSparkSession {
+class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())

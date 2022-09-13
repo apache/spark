@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -32,7 +31,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class SubquerySuite extends QueryTest
   with SharedSparkSession
-  with QueryErrorsSuiteBase
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

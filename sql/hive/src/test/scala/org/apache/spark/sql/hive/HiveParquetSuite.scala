@@ -21,7 +21,6 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -30,8 +29,7 @@ case class Cases(lower: String, UPPER: String)
 
 class HiveParquetSuite extends QueryTest
   with ParquetTest
-  with TestHiveSingleton
-  with QueryErrorsSuiteBase {
+  with TestHiveSingleton {
 
   test("Case insensitive attribute names") {
     withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -34,7 +33,7 @@ class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 /**
  * A suite for testing view related functionality.
  */
-abstract class SQLViewSuite extends QueryTest with SQLTestUtils with QueryErrorsSuiteBase {
+abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
