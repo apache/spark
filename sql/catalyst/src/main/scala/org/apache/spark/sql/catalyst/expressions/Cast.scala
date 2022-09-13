@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
@@ -412,46 +413,46 @@ object Cast {
     }
   }
 
-  // Show suggestion on how to complete the disallowed explicit casting with built-in type
-  // conversion functions.
-  private def suggestionOnConversionFunctions (
-      from: DataType,
-      to: DataType,
-      functionNames: String): String = {
-    // scalastyle:off line.size.limit
-    s"""cannot cast ${from.catalogString} to ${to.catalogString}.
-       |To convert values from ${from.catalogString} to ${to.catalogString}, you can use $functionNames instead.
-       |""".stripMargin
-    // scalastyle:on line.size.limit
-  }
-
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConf: Option[(String, String)]): String =
+      fallbackConf: Option[(String, String)]): DataTypeMismatch =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
-        suggestionOnConversionFunctions(from, to,
-          "functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS")
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+          messageParameters = Array("TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS"))
 
       case (TimestampType, _: NumericType) =>
-        suggestionOnConversionFunctions(from, to, "functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS")
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+          messageParameters = Array("UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS"))
 
       case (_: NumericType, DateType) =>
-        suggestionOnConversionFunctions(from, to, "function DATE_FROM_UNIX_DATE")
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+          messageParameters = Array("DATE_FROM_UNIX_DATE"))
 
       case (DateType, _: NumericType) =>
-        suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+          messageParameters = Array("UNIX_DATE"))
 
-      // scalastyle:off line.size.limit
       case _ if fallbackConf.isDefined && Cast.canCast(from, to) =>
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConf.get._1} as ${fallbackConf.get._2}.
-           |""".stripMargin
-      // scalastyle:on line.size.limit
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Array(
+            from.catalogString,
+            to.catalogString,
+            from.catalogString,
+            to.catalogString,
+            fallbackConf.get._1,
+            fallbackConf.get._2))
 
-      case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Array(from.catalogString, to.catalogString))
     }
 
   def apply(
@@ -509,7 +510,7 @@ case class Cast(
     evalMode == EvalMode.TRY
   }
 
-  private def typeCheckFailureMessage: String = evalMode match {
+  private def typeCheckFailureInCast: DataTypeMismatch = evalMode match {
     case EvalMode.ANSI =>
       if (getTagValue(Cast.BY_TABLE_INSERTION).isDefined) {
         Cast.typeCheckFailureMessage(child.dataType, dataType,
@@ -522,7 +523,9 @@ case class Cast(
     case EvalMode.TRY =>
       Cast.typeCheckFailureMessage(child.dataType, dataType, None)
     case _ =>
-      s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Array(child.dataType.catalogString, dataType.catalogString))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -535,7 +538,7 @@ case class Cast(
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
+      typeCheckFailureInCast
     }
   }
 
