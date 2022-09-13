@@ -95,6 +95,11 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+      <groupId>com.squareup.okio</groupId>
+      <artifactId>okio</artifactId>
+      <version>${okio.version}</version>
+    </dependency>
 
     <!-- Required by kubernetes-client but we exclude it -->
     <dependency>

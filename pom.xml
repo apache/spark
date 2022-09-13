@@ -215,6 +215,7 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>5.12.3</kubernetes-client.version>
+    <okio.version>1.15.0</okio.version>
 
     <test.java.home>${java.home}</test.java.home>
 
