@@ -736,7 +736,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -809,7 +810,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    Canonicalize.orderCommutative(this, { case And(l, r) => Seq(l, r) }).reduce(And)
+    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
   }
 }
 
@@ -828,7 +829,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
+  with CommutativeExpression {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -902,7 +904,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    Canonicalize.orderCommutative(this, { case Or(l, r) => Seq(l, r) }).reduce(Or)
+    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
   }
 }
 

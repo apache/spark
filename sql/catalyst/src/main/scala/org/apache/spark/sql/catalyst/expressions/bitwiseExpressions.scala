@@ -36,7 +36,8 @@ import org.apache.spark.sql.types._
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -61,7 +62,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseAnd = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    Canonicalize.orderCommutative(this, { case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+    orderCommutative({ case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
   }
 }
 
@@ -79,7 +80,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -104,7 +106,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     newLeft: Expression, newRight: Expression): BitwiseOr = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    Canonicalize.orderCommutative(this, { case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+    orderCommutative({ case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
   }
 }
 
@@ -122,7 +124,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   """,
   since = "1.4.0",
   group = "bitwise_funcs")
-case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
+case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic
+  with CommutativeExpression {
 
   protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
 
@@ -147,7 +150,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     newLeft: Expression, newRight: Expression): BitwiseXor = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    Canonicalize.orderCommutative(this, { case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
+    orderCommutative({ case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
   }
 }
 

@@ -1151,3 +1151,21 @@ trait ComplexTypeMergingExpression extends Expression {
 trait UserDefinedExpression {
   def name: String
 }
+
+trait CommutativeExpression extends Expression {
+  /** Collects adjacent commutative operations. */
+  private def gatherCommutative(
+      e: Expression,
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] = e match {
+    case c: CommutativeExpression if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
+    case other => other.canonicalized :: Nil
+  }
+
+  /**
+   * Reorders adjacent commutative operators such as [[And]] in the expression tree, according to
+   * the `hashCode` of non-commutative nodes, to remove cosmetic variations.
+   */
+  protected def orderCommutative(
+      f: PartialFunction[CommutativeExpression, Seq[Expression]]): Seq[Expression] =
+    gatherCommutative(this, f).sortBy(_.hashCode())
+}
