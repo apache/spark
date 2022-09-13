@@ -121,7 +121,8 @@ final class Int128 extends Ordered[Int128] with Serializable {
   def % (that: Int128): Int128 = if (that.isZero) {
     null
   } else {
-    val (newHigh, newLow) = Int128Math.remainder(this._high, this._low, that.high, that.low, 0, 0)
+    val (newHigh, newLow) =
+      Int128Math.remainder(this._high, this._low, that.high, that.low, 0, 0, false)
 
     Int128(newHigh, newLow)
   }

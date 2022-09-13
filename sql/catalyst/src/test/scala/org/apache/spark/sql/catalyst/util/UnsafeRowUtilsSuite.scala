@@ -79,7 +79,11 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLHelper {
         // precision=19, scale=0
         val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789"))
         row.setDecimal(0, bigDecimalVal2, 19) // should succeed
-        assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
+        if (implementation == "Int128") {
+          assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 16))
+        } else {
+          assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
+        }
         assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
 
         // set Decimal field to null explicitly, after which this field no longer supports updating

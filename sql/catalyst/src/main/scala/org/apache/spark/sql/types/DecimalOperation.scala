@@ -411,13 +411,3 @@ trait DecimalOperation[T <: DecimalOperation[T]] extends Serializable {
 
   protected def copy(from: T): Unit
 }
-
-object DecimalOperation {
-
-  def createDecimalOperation[T <: DecimalOperation[T]](): T =
-    if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal") {
-      new JDKDecimalOperation().asInstanceOf[T]
-    } else {
-      new Decimal128Operation().asInstanceOf[T]
-    }
-}

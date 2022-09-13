@@ -223,7 +223,8 @@ object Int128Math {
       rightHigh: Long,
       rightLow: Long,
       leftScale: Int,
-      rightScale: Int): (Long, Long) = {
+      rightScale: Int,
+      returnQuotient: Boolean): (Long, Long) = {
     val dividendIsNegative = leftHigh < 0
     val divisorIsNegative = rightHigh < 0
 
@@ -241,8 +242,15 @@ object Int128Math {
       tmpRightHigh = negateHighExact(tmpRightHigh, tmpRightLow)
     }
 
-    val (_, remainder) =
-      dividePositives(tmpLeftHigh, tmpLeftLow, tmpRightHigh, tmpRightLow, leftScale, rightScale)
+    val (quotient, remainder) = dividePositives(tmpLeftHigh, tmpLeftLow, tmpRightHigh, tmpRightLow,
+      leftScale, rightScale, false, returnQuotient)
+
+    if (returnQuotient) {
+      if (dividendIsNegative != divisorIsNegative) {
+        return negate(quotient._1, quotient._2)
+      }
+      return quotient
+    }
 
     if (dividendIsNegative) {
       // negateExact not needed since all positive values can be negated without overflow
@@ -377,7 +385,9 @@ object Int128Math {
       rightHigh: Long,
       rightLow: Long,
       leftScale: Int,
-      rightScale: Int): ((Long, Long), (Long, Long)) = {
+      rightScale: Int,
+      returnBoth: Boolean = true,
+      returnQuotient: Boolean = false): ((Long, Long), (Long, Long)) = {
     if (rightHigh == 0 && rightLow == 0) {
       throw divisionByZeroException()
     }
@@ -408,9 +418,16 @@ object Int128Math {
     val multiPrecisionQuotient = new Array[Int](NUMBER_OF_INTS * 2)
     divideUnsignedMultiPrecision(dividend, divisor, multiPrecisionQuotient)
 
-    val quotient = pack(multiPrecisionQuotient)
-    val remainder = pack(dividend)
-    (quotient, remainder)
+    lazy val quotient = pack(multiPrecisionQuotient)
+    lazy val remainder = pack(dividend)
+
+    if (returnBoth) {
+      (quotient, remainder)
+    } else if (returnQuotient) {
+      (quotient, null)
+    } else {
+      (null, remainder)
+    }
   }
 
   private def scaleDownRoundUp(high: Long, low: Long, rescale: Int): (Long, Long) = {
