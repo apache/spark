@@ -18,8 +18,6 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 import org.apache.spark.errors.SparkCoreErrors;
 import org.apache.spark.unsafe.array.LongArray;
