@@ -1489,10 +1489,10 @@ class DataFrame(Frame, Generic[T]):
             num_scols = len(numeric_scols)
 
             sdf = internal.spark_frame
-            tmp_index_1_col = verify_temp_column_name(sdf, "__tmp_index_1_col__")
-            tmp_index_2_col = verify_temp_column_name(sdf, "__tmp_index_2_col__")
-            tmp_value_1_col = verify_temp_column_name(sdf, "__tmp_value_1_col__")
-            tmp_value_2_col = verify_temp_column_name(sdf, "__tmp_value_2_col__")
+            tmp_index_1_col_name = verify_temp_column_name(sdf, "__tmp_index_1_col__")
+            tmp_index_2_col_name = verify_temp_column_name(sdf, "__tmp_index_2_col__")
+            tmp_value_1_col_name = verify_temp_column_name(sdf, "__tmp_value_1_col__")
+            tmp_value_2_col_name = verify_temp_column_name(sdf, "__tmp_value_2_col__")
 
             # simple dataset
             # +---+---+----+
@@ -1507,10 +1507,10 @@ class DataFrame(Frame, Generic[T]):
                 for j in range(i, num_scols):
                     pair_scols.append(
                         F.struct(
-                            F.lit(i).alias(tmp_index_1_col),
-                            F.lit(j).alias(tmp_index_2_col),
-                            numeric_scols[i].alias(tmp_value_1_col),
-                            numeric_scols[j].alias(tmp_value_2_col),
+                            F.lit(i).alias(tmp_index_1_col_name),
+                            F.lit(j).alias(tmp_index_2_col_name),
+                            numeric_scols[i].alias(tmp_value_1_col_name),
+                            numeric_scols[j].alias(tmp_value_2_col_name),
                         )
                     )
 
@@ -1530,12 +1530,12 @@ class DataFrame(Frame, Generic[T]):
             # |                  1|                  2|                1.0|               null|
             # |                  2|                  2|               null|               null|
             # +-------------------+-------------------+-------------------+-------------------+
-            tmp_tuple_col = verify_temp_column_name(sdf, "__tmp_tuple_col__")
-            sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tmp_tuple_col)).select(
-                F.col(f"{tmp_tuple_col}.{tmp_index_1_col}").alias(tmp_index_1_col),
-                F.col(f"{tmp_tuple_col}.{tmp_index_2_col}").alias(tmp_index_2_col),
-                F.col(f"{tmp_tuple_col}.{tmp_value_1_col}").alias(tmp_value_1_col),
-                F.col(f"{tmp_tuple_col}.{tmp_value_2_col}").alias(tmp_value_2_col),
+            tmp_tuple_col_name = verify_temp_column_name(sdf, "__tmp_tuple_col__")
+            sdf = sdf.select(F.explode(F.array(*pair_scols)).alias(tmp_tuple_col_name)).select(
+                F.col(f"{tmp_tuple_col_name}.{tmp_index_1_col_name}").alias(tmp_index_1_col_name),
+                F.col(f"{tmp_tuple_col_name}.{tmp_index_2_col_name}").alias(tmp_index_2_col_name),
+                F.col(f"{tmp_tuple_col_name}.{tmp_value_1_col_name}").alias(tmp_value_1_col_name),
+                F.col(f"{tmp_tuple_col_name}.{tmp_value_2_col_name}").alias(tmp_value_2_col_name),
             )
 
             # +-------------------+-------------------+------------------------+-----------------+
@@ -1548,15 +1548,17 @@ class DataFrame(Frame, Generic[T]):
             # |                  0|                  1|                    -1.0|                2|
             # |                  0|                  2|                    null|                1|
             # +-------------------+-------------------+------------------------+-----------------+
-            tmp_corr_col = verify_temp_column_name(sdf, "__tmp_pearson_corr_col__")
-            tmp_count_col = verify_temp_column_name(sdf, "__tmp_count_col__")
-            sdf = sdf.groupby(tmp_index_1_col, tmp_index_2_col).agg(
-                F.corr(tmp_value_1_col, tmp_value_2_col).alias(tmp_corr_col),
+            tmp_corr_col_name = verify_temp_column_name(sdf, "__tmp_pearson_corr_col__")
+            tmp_count_col_name = verify_temp_column_name(sdf, "__tmp_count_col__")
+            sdf = sdf.groupby(tmp_index_1_col_name, tmp_index_2_col_name).agg(
+                F.corr(tmp_value_1_col_name, tmp_value_2_col_name).alias(tmp_corr_col_name),
                 F.count(
                     F.when(
-                        F.col(tmp_value_1_col).isNotNull() & F.col(tmp_value_2_col).isNotNull(), 1
+                        F.col(tmp_value_1_col_name).isNotNull()
+                        & F.col(tmp_value_2_col_name).isNotNull(),
+                        1,
                     )
-                ).alias(tmp_count_col),
+                ).alias(tmp_count_col_name),
             )
 
             # +-------------------+-------------------+------------------------+
@@ -1574,28 +1576,28 @@ class DataFrame(Frame, Generic[T]):
             # +-------------------+-------------------+------------------------+
             sdf = (
                 sdf.withColumn(
-                    tmp_corr_col,
-                    F.when(F.col(tmp_count_col) >= min_periods, F.col(tmp_corr_col)).otherwise(
-                        F.lit(None)
-                    ),
+                    tmp_corr_col_name,
+                    F.when(
+                        F.col(tmp_count_col_name) >= min_periods, F.col(tmp_corr_col_name)
+                    ).otherwise(F.lit(None)),
                 )
                 .withColumn(
-                    tmp_tuple_col,
+                    tmp_tuple_col_name,
                     F.explode(
                         F.when(
-                            F.col(tmp_index_1_col) == F.col(tmp_index_2_col),
+                            F.col(tmp_index_1_col_name) == F.col(tmp_index_2_col_name),
                             F.lit([0]),
                         ).otherwise(F.lit([0, 1]))
                     ),
                 )
                 .select(
-                    F.when(F.col(tmp_tuple_col) == 0, F.col(tmp_index_1_col))
-                    .otherwise(F.col(tmp_index_2_col))
-                    .alias(tmp_index_1_col),
-                    F.when(F.col(tmp_tuple_col) == 0, F.col(tmp_index_2_col))
-                    .otherwise(F.col(tmp_index_1_col))
-                    .alias(tmp_index_2_col),
-                    F.col(tmp_corr_col),
+                    F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_1_col_name))
+                    .otherwise(F.col(tmp_index_2_col_name))
+                    .alias(tmp_index_1_col_name),
+                    F.when(F.col(tmp_tuple_col_name) == 0, F.col(tmp_index_2_col_name))
+                    .otherwise(F.col(tmp_index_1_col_name))
+                    .alias(tmp_index_2_col_name),
+                    F.col(tmp_corr_col_name),
                 )
             )
 
@@ -1606,21 +1608,25 @@ class DataFrame(Frame, Generic[T]):
             # |                  1|[{0, -1.0}, {1, 1...|
             # |                  2|[{0, null}, {1, n...|
             # +-------------------+--------------------+
-            tmp_array_col = verify_temp_column_name(sdf, "__tmp_array_col__")
+            tmp_array_col_name = verify_temp_column_name(sdf, "__tmp_array_col__")
             sdf = (
-                sdf.groupby(tmp_index_1_col)
+                sdf.groupby(tmp_index_1_col_name)
                 .agg(
                     F.array_sort(
-                        F.collect_list(F.struct(F.col(tmp_index_2_col), F.col(tmp_corr_col)))
-                    ).alias(tmp_array_col)
+                        F.collect_list(
+                            F.struct(F.col(tmp_index_2_col_name), F.col(tmp_corr_col_name))
+                        )
+                    ).alias(tmp_array_col_name)
                 )
-                .orderBy(tmp_index_1_col)
+                .orderBy(tmp_index_1_col_name)
             )
 
             for i in range(0, num_scols):
-                sdf = sdf.withColumn(tmp_tuple_col, F.get(F.col(tmp_array_col), i)).withColumn(
+                sdf = sdf.withColumn(
+                    tmp_tuple_col_name, F.get(F.col(tmp_array_col_name), i)
+                ).withColumn(
                     numeric_col_names[i],
-                    F.col(f"{tmp_tuple_col}.{tmp_corr_col}"),
+                    F.col(f"{tmp_tuple_col_name}.{tmp_corr_col_name}"),
                 )
 
             index_col_names: List[str] = []
@@ -1629,13 +1635,13 @@ class DataFrame(Frame, Generic[T]):
                     index_col_name = SPARK_INDEX_NAME_FORMAT(level)
                     indices = [label[level] for label in numeric_labels]
                     sdf = sdf.withColumn(
-                        index_col_name, F.get(F.lit(indices), F.col(tmp_index_1_col))
+                        index_col_name, F.get(F.lit(indices), F.col(tmp_index_1_col_name))
                     )
                     index_col_names.append(index_col_name)
             else:
                 sdf = sdf.withColumn(
                     SPARK_DEFAULT_INDEX_NAME,
-                    F.get(F.lit(numeric_col_names), F.col(tmp_index_1_col)),
+                    F.get(F.lit(numeric_col_names), F.col(tmp_index_1_col_name)),
                 )
                 index_col_names = [SPARK_DEFAULT_INDEX_NAME]
 

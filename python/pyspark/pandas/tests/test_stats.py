@@ -258,6 +258,8 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.kurt(), pdf.kurt(), almost=True)
 
     def test_dataframe_corr(self):
+        # existing 'test_corr' is mixed by df.corr and ser.corr, will delete 'test_corr'
+        # when we have separate tests for df.corr and ser.corr
         pdf = makeMissingDataframe(0.3, 42)
         psdf = ps.from_pandas(pdf)
 
@@ -273,6 +275,9 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
         self.assert_eq(psdf.corr(min_periods=1), pdf.corr(min_periods=1), check_exact=False)
         self.assert_eq(psdf.corr(min_periods=3), pdf.corr(min_periods=3), check_exact=False)
+        self.assert_eq(
+            (psdf + 1).corr(min_periods=2), (pdf + 1).corr(min_periods=2), check_exact=False
+        )
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
@@ -282,6 +287,9 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
         self.assert_eq(psdf.corr(min_periods=1), pdf.corr(min_periods=1), check_exact=False)
         self.assert_eq(psdf.corr(min_periods=3), pdf.corr(min_periods=3), check_exact=False)
+        self.assert_eq(
+            (psdf + 1).corr(min_periods=2), (pdf + 1).corr(min_periods=2), check_exact=False
+        )
 
     def test_corr(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
