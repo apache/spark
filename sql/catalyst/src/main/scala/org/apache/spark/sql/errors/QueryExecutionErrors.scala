@@ -2128,8 +2128,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       elementSize: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "TOO_MANY_ARRAY_ELEMENTS",
-      messageParameters = Array(
-        numElements.toString,
-        elementSize.toString))
+      messageParameters = Map(
+        "numElements" -> numElements.toString,
+        "size" -> elementSize.toString))
   }
 }
