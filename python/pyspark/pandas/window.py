@@ -595,7 +595,7 @@ class Rolling(RollingLike[FrameLike]):
             calculation.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
         parameters are not supported yet.
@@ -1265,7 +1265,7 @@ class RollingGroupby(RollingLike[FrameLike]):
             calculation.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
         parameters are not supported yet.
@@ -1681,7 +1681,7 @@ class Expanding(ExpandingLike[FrameLike]):
             This is a panda-on-Spark specific parameter.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas (the result is
         similar to the interpolation set to `lower`), also `interpolation` parameters are
@@ -2238,7 +2238,7 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
             calculation.
 
         Notes
-        -------
+        -----
         `quantile` in pandas-on-Spark are using distributed percentile approximation
         algorithm unlike pandas, the result might different with pandas, also `interpolation`
         parameters are not supported yet.
