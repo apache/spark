@@ -103,7 +103,7 @@ class DataFrameTests(ReusedSQLTestCase):
         renamed_df1 = df.withColumnsRenamed({"name": "naam", "age": "leeftijd"})
         self.assertEqual(renamed_df1.columns, ["naam", "leeftijd"])
 
-        # rename one columns with one missing name
+        # rename one column with one missing name
         renamed_df2 = df.withColumnsRenamed({"name": "naam", "address": "adres"})
         self.assertEqual(renamed_df2.columns, ["naam", "age"])
 
