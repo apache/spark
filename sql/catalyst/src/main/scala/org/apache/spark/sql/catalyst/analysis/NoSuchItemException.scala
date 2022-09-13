@@ -54,6 +54,10 @@ case class NoSuchTableException(
   def this(tableIdent: Identifier) = {
     this(s"Table ${tableIdent.quoted} not found")
   }
+
+  def this(nameParts: Seq[String]) = {
+    this(s"Table ${nameParts.quoted} not found")
+  }
 }
 
 case class NoSuchPartitionException(

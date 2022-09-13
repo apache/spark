@@ -131,12 +131,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
-      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
-        u.failAnalysis(
-          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
-            "because view support in v2 catalog has not been implemented yet. " +
-            s"$cmd expects a view.")
-
       case u: UnresolvedView =>
         u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
 

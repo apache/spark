@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -247,7 +247,28 @@ case class DropTableCommand(
     } else if (ifExists) {
       // no-op
     } else {
-      throw QueryCompilationErrors.tableOrViewNotFoundError(tableName.identifier)
+      throw QueryCompilationErrors.noSuchTableError(
+        tableName.catalog.toSeq ++ tableName.database :+ tableName.table)
+    }
+    Seq.empty[Row]
+  }
+}
+
+case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    assert(ident.namespace().isEmpty || ident.namespace().length == 1)
+    val nameParts = ident.namespace() :+ ident.name()
+    val catalog = sparkSession.sessionState.catalog
+    catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
+      val hasViewText = view.tableMeta.viewText.isDefined
+      sparkSession.sharedState.cacheManager.uncacheTableOrView(
+        sparkSession, nameParts, cascade = hasViewText)
+      view.refresh()
+      if (ident.namespace().isEmpty) {
+        catalog.dropTempView(ident.name())
+      } else {
+        catalog.dropGlobalTempView(ident.name())
+      }
     }
     Seq.empty[Row]
   }

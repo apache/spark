@@ -2089,33 +2089,18 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(
-        sql: String,
-        catalogName: String,
-        viewName: String,
-        cmdName: String): Unit = {
-      assertAnalysisError(
-        sql,
-        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
-          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    def validateViewCommand(sqlStatement: String): Unit = {
+      val e = intercept[AnalysisException](sql(sqlStatement))
+      checkError(
+        e,
+        errorClass = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
     }
 
-    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
-    validateViewCommand(
-      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... SET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
-      "testcat",
-      "v",
-      "ALTER VIEW ... UNSET TBLPROPERTIES")
-    validateViewCommand(
-      "ALTER VIEW testcat.v AS SELECT 1",
-      "testcat",
-      "v",
-      "ALTER VIEW ... AS")
+    validateViewCommand("DROP VIEW testcat.v")
+    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
+    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
+    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
