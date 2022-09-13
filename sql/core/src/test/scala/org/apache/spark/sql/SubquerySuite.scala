@@ -893,13 +893,10 @@ class SubquerySuite extends QueryTest
         exception =
           intercept[AnalysisException](sql(query)),
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
-        sqlState = None,
+        errorSubClass = Some("WITH_SUGGESTION"),
         parameters = Map(
           "objectName" -> "`a`",
-          "proposal" -> "`t`.`i`, `t`.`j`"),
-        context = ExpectedContext(
-          fragment = query, start = 0, stop = 42))
+          "proposal" -> "`t`.`i`, `t`.`j`"))
     }
   }
 
