@@ -55,7 +55,7 @@ package object analysis {
      * Fails the analysis at the point where a specific tree node was parsed using a provided
      * error class and message parameters.
      */
-    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
+    def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
@@ -69,7 +69,7 @@ package object analysis {
     def failAnalysis(
         errorClass: String,
         errorSubClass: String,
-        messageParameters: Array[String] = Array.empty[String]): Nothing = {
+        messageParameters: Map[String, String] = Map.empty[String, String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         errorSubClass = errorSubClass,
@@ -90,7 +90,8 @@ package object analysis {
       throw new AnalysisException(
         errorClass = errorClass,
         errorSubClass = errorSubClass,
-        messageParameters = Array(if (SQLConf.get.includePlansInErrors) s": $planString" else ""),
+        messageParameters =
+          Map("planString" -> (if (SQLConf.get.includePlansInErrors) s": $planString" else "")),
         origin = t.origin)
     }
 
@@ -98,7 +99,7 @@ package object analysis {
       throw new AnalysisException(
         errorClass = "DATATYPE_MISMATCH",
         errorSubClass = mismatch.errorSubClass,
-        messageParameters = toSQLExpr(expr) +: mismatch.messageParameters,
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
         origin = t.origin)
     }
   }

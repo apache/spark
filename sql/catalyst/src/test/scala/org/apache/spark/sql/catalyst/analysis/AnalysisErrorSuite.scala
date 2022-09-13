@@ -116,7 +116,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       name: String,
       plan: LogicalPlan,
       errorClass: String,
-      messageParameters: Array[String]): Unit = {
+      messageParameters: Map[String, String]): Unit = {
     errorClassTest(name, plan, errorClass, null, messageParameters)
   }
 
@@ -125,7 +125,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       plan: LogicalPlan,
       errorClass: String,
       errorSubClass: String,
-      messageParameters: Array[String]): Unit = {
+      messageParameters: Map[String, String]): Unit = {
     test(name) {
       assertAnalysisErrorClass(plan, errorClass, errorSubClass, messageParameters,
         caseSensitive = true)
@@ -303,7 +303,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select($"abcd"),
     "UNRESOLVED_COLUMN",
     "WITH_SUGGESTION",
-    Array("`abcd`", "`a`"))
+    Map("objectName" -> "`abcd`", "proposal" -> "`a`"))
 
   errorClassTest(
     "unresolved attributes with a generated name",
@@ -312,7 +312,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .orderBy($"havingCondition".asc),
     "UNRESOLVED_COLUMN",
     "WITH_SUGGESTION",
-    Array("`havingCondition`", "`max(b)`"))
+    Map("objectName" -> "`havingCondition`", "proposal" -> "`max(b)`"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -329,7 +329,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "UNRESOLVED_COLUMN",
     "WITH_SUGGESTION",
-    Array("`b`", "`a`, `c`, `a3`"))
+    Map("objectName" -> "`b`", "proposal" -> "`a`, `c`, `a3`"))
 
   errorTest(
     "non-boolean filters",
@@ -424,7 +424,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN",
     "WITH_SUGGESTION",
-    Array("`bad_column`", "`a`, `b`, `c`, `d`, `e`"))
+    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
 
   errorTest(
     "slide duration greater than window in time window",

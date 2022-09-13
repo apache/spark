@@ -761,7 +761,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-          messageParameters = Array(invalidCols.map(_.name).mkString(",")))
+          messageParameters = Map("value" -> invalidCols.map(_.name).mkString(",")))
       }
     }
 
@@ -789,7 +789,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   o.failAnalysis(
                     errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                     errorSubClass = "CORRELATED_COLUMN_NOT_FOUND",
-                    messageParameters = Array(o.name))
+                    messageParameters = Map("value" -> o.name))
                 })
             case _ =>
           })
@@ -810,7 +810,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           expr.failAnalysis(
             errorClass = "INVALID_SUBQUERY_EXPRESSION",
             errorSubClass = "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
-            messageParameters = Array(query.output.size.toString))
+            messageParameters = Map("number" -> query.output.size.toString))
         }
 
         if (outerAttrs.nonEmpty) {
@@ -866,7 +866,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           join.condition.get.failAnalysis(
             errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
             errorSubClass = "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC",
-            messageParameters = Array(join.condition.get.sql))
+            messageParameters = Map("condition" -> join.condition.get.sql))
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -937,7 +937,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             a.failAnalysis(
               errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
               errorSubClass = "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES",
-              messageParameters = Array(a.sql))
+              messageParameters = Map("function" -> a.sql))
           }
         case _ =>
       }

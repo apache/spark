@@ -51,6 +51,11 @@ def mode(col: Column, dropna: bool) -> Column:
     return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
 
 
+def covar(col1: Column, col2: Column, ddof: int) -> Column:
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
+
+
 def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.

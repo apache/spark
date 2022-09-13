@@ -1733,7 +1733,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val store = newStateStore()
     val mapGroupsSparkPlan = newFlatMapGroupsWithStateExec(
       mapGroupsFunc, timeoutConf, currentBatchTimestamp)
-    val inputProcessor = new mapGroupsSparkPlan.InputProcessor(store)
+    val inputProcessor = mapGroupsSparkPlan.createInputProcessor(store)
     val stateManager = mapGroupsSparkPlan.stateManager
     val key = intToRow(0)
     // Prepare store with prior state configs

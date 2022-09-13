@@ -21,9 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{TruncatePartition, TruncateTable}
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 
-class TruncateTableParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
+class TruncateTableParserSuite extends AnalysisTest {
   test("truncate table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
