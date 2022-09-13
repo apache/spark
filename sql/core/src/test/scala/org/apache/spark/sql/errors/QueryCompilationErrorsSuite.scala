@@ -35,7 +35,6 @@ case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
-  with QueryErrorsSuiteBase
   with SharedSparkSession {
   import testImplicits._
 

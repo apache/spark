@@ -8738,8 +8738,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, check_same_anchor=False)
 
-    # TODO: ddof should be implemented.
-    def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
+    def cov(self, min_periods: Optional[int] = None, ddof: int = 1) -> "DataFrame":
         """
         Compute pairwise covariance of columns, excluding NA/null values.
 
@@ -8755,8 +8754,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         below this threshold will be returned as ``NaN``.
 
         This method is generally used for the analysis of time series data to
-        understand the relationship between different measures
-        across time.
+        understand the relationship between different measures across time.
 
         .. versionadded:: 3.3.0
 
@@ -8765,6 +8763,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         min_periods : int, optional
             Minimum number of observations required per pair of columns
             to have a valid result.
+        ddof : int, default 1
+            Delta degrees of freedom.  The divisor used in calculations
+            is ``N - ddof``, where ``N`` represents the number of elements.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -8794,6 +8797,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         c  0.059277 -0.008543  1.010670 -0.001486 -0.000271
         d -0.008943 -0.024738 -0.001486  0.921297 -0.013692
         e  0.014144  0.009826 -0.000271 -0.013692  0.977795
+        >>> df.cov(ddof=2)
+                  a         b         c         d         e
+        a  0.999439 -0.020181  0.059336 -0.008952  0.014159
+        b -0.020181  1.060413 -0.008551 -0.024762  0.009836
+        c  0.059336 -0.008551  1.011683 -0.001487 -0.000271
+        d -0.008952 -0.024762 -0.001487  0.922220 -0.013705
+        e  0.014159  0.009836 -0.000271 -0.013705  0.978775
+        >>> df.cov(ddof=-1)
+          a         b         c         d         e
+        a  0.996444 -0.020121  0.059158 -0.008926  0.014116
+        b -0.020121  1.057235 -0.008526 -0.024688  0.009807
+        c  0.059158 -0.008526  1.008650 -0.001483 -0.000270
+        d -0.008926 -0.024688 -0.001483  0.919456 -0.013664
+        e  0.014116  0.009807 -0.000270 -0.013664  0.975842
 
         **Minimum number of periods**
 
@@ -8813,6 +8830,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b       NaN  1.248003  0.191417
         c -0.150812  0.191417  0.895202
         """
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
         min_periods = 1 if min_periods is None else min_periods
 
         # Only compute covariance for Boolean and Numeric except Decimal
@@ -8891,8 +8910,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             step += r
             for c in range(r, num_cols):
                 cov_scols.append(
-                    F.covar_samp(
-                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
+                    SF.covar(
+                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double"), ddof
                     )
                     if count_not_null[r * num_cols + c - step] >= min_periods
                     else F.lit(None)

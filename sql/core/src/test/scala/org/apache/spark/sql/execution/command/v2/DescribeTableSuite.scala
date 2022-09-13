@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.TableCatalog
-import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -29,8 +28,7 @@ import org.apache.spark.util.Utils
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase
-  with CommandSuiteBase
-  with QueryErrorsSuiteBase {
+  with CommandSuiteBase {
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
