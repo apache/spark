@@ -103,7 +103,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-  "messageParameters" : { },
+  "messageParameters" : {
+    "planString" : ": (cast(udf(cast(k#0 as string)) as string) = cast(udf(cast(outer(k#1) as string)) as string))"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

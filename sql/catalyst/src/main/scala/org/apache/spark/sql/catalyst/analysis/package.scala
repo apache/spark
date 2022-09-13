@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.util.UUID
+
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
@@ -86,12 +91,58 @@ package object analysis {
     def failAnalysis(
         errorClass: String,
         errorSubClass: String,
-        planString: String): Nothing = {
+        treeNodes: Seq[TreeNode[_]]): Nothing = {
+      // Normalize expression IDs in the query plan to keep tests deterministic.
+      object IdGen {
+        private val curId = new java.util.concurrent.atomic.AtomicLong()
+        private val jvmId = UUID.randomUUID()
+        private val idMap = mutable.Map.empty[ExprId, ExprId]
+        def get(previous: ExprId): ExprId = {
+          if (!idMap.contains(previous)) idMap.put(previous, ExprId(curId.getAndIncrement(), jvmId))
+          idMap.get(previous).get
+        }
+      }
+      def normalizeExpr(expr: Expression): Expression = {
+        expr.withNewChildren(expr.children.map(normalizeExpr)) match {
+          case a: Attribute => a.withExprId(IdGen.get(a.exprId))
+          case a: Alias => a.withExprId(IdGen.get(a.exprId))
+          case n: NamedLambdaVariable => n.copy(exprId = IdGen.get(n.exprId))
+          case o: OuterReference => o.copy(e = normalizeExpr(o.e).asInstanceOf[NamedExpression])
+          case s: ScalarSubquery => s.copy(plan = normalizePlan(s.plan),
+            exprId = IdGen.get(s.exprId), outerAttrs = s.outerAttrs.map(normalizeExpr),
+            joinCond = s.joinCond.map(normalizeExpr))
+          case s: Exists => s.copy(plan = normalizePlan(s.plan), exprId = IdGen.get(s.exprId),
+            outerAttrs = s.outerAttrs.map(normalizeExpr), joinCond = s.joinCond.map(normalizeExpr))
+          case s: LateralSubquery => s.copy(plan = normalizePlan(s.plan),
+            exprId = IdGen.get(s.exprId), outerAttrs = s.outerAttrs.map(normalizeExpr),
+            joinCond = s.joinCond.map(normalizeExpr))
+          case s: InSubquery => s.copy(values = s.values.map(normalizeExpr),
+            query = s.query.copy(plan = normalizePlan(s.query.plan),
+              exprId = IdGen.get(s.query.exprId),
+              childOutputs = s.query.childOutputs.map(a => a.withExprId(IdGen.get(a.exprId))),
+              outerAttrs = s.query.outerAttrs.map(normalizeExpr),
+              joinCond = s.query.joinCond.map(normalizeExpr)))
+          case other => other
+        }
+      }
+      def normalizePlan(node: LogicalPlan): LogicalPlan = {
+        node.withNewChildren(node.children.map(normalizePlan)).mapExpressions(normalizeExpr)
+      }
+      val planString =
+        if (SQLConf.get.includePlansInErrors) {
+          s": ${
+            treeNodes.map {
+              case plan: LogicalPlan => normalizePlan(plan)
+              case expr: Expression => normalizeExpr(expr)
+            }.mkString("\n")
+          }"
+        } else {
+          ""
+        }
       throw new AnalysisException(
         errorClass = errorClass,
         errorSubClass = errorSubClass,
-        messageParameters =
-          Map("planString" -> (if (SQLConf.get.includePlansInErrors) s": $planString" else "")),
+        messageParameters = Map("planString" -> planString),
         origin = t.origin)
     }
 

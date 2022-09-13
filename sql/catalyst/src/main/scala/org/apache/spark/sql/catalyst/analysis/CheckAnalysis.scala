@@ -822,7 +822,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               expr.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                 errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                planString = other.toString)
+                treeNodes = Seq(other))
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -837,13 +837,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 a.failAnalysis(
                   errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                   errorSubClass = "MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
-                  planString = a.toString)
+                  treeNodes = Seq(a))
               }
             case other =>
               other.failAnalysis(
                 errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
                 errorSubClass = "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
-                planString = other.toString)
+                treeNodes = Seq(other))
           }
         }
         // Validate to make sure the correlations appearing in the query are valid and
@@ -859,7 +859,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           expr.failAnalysis(
             errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
             errorSubClass = "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-            planString = plan.toString)
+            treeNodes = Seq(plan))
         }
         // Check if the lateral join's join condition is deterministic.
         if (join.condition.exists(!_.deterministic)) {
@@ -880,7 +880,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             expr.failAnalysis(
               errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
               errorSubClass = "UNSUPPORTED_IN_EXISTS_SUBQUERY",
-              planString = plan.toString)
+              treeNodes = Seq(plan))
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
@@ -949,7 +949,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-          planString = p.toString)
+          treeNodes = Seq(p))
       }
     }
 
@@ -971,7 +971,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "UNSUPPORTED_CORRELATED_REFERENCE",
-          planString = p.toString)
+          treeNodes = Seq(p))
       }
     }
 
@@ -1037,7 +1037,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         p.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
           errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-          planString = s"${predicates.map(_.sql).mkString}:\n$p")
+          treeNodes = predicates)
       }
     }
 

@@ -204,12 +204,7 @@ private[spark] object SparkThrowableHelper {
           if (!parameterNames.isEmpty) {
             g.writeObjectFieldStart("messageParameters")
             (parameterNames zip e.getMessageParameters).foreach { case (name, value) =>
-              // Skip parameters with the name "planString" in the output to keep results
-              // deterministic since these strings usually contain expression IDs which change from
-              // one test run to another.
-              if (name != "planString") {
-                g.writeStringField(name, value)
-              }
+              g.writeStringField(name, value)
             }
             g.writeEndObject()
           }

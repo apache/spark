@@ -709,7 +709,7 @@
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
-      "Invalid subquery expression:"
+      "Unsupported subquery expression:"
     ],
     "subClass" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {

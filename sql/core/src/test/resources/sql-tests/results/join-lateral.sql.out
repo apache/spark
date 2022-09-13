@@ -320,7 +320,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-  "messageParameters" : { },
+  "messageParameters" : {
+    "planString" : ": !LateralJoin lateral-subquery#5 [c1#6 && c2#7], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#2) + outer(c2#3)) as double) + rand(0)) AS c3#4]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#2,c2#3])\n      +- Project [cast(col1#0 as int) AS c1#2, cast(col2#1 as int) AS c2#3]\n         +- LocalRelation [col1#0, col2#1]\n"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -340,7 +342,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "NON_DETERMINISTIC_LATERAL_SUBQUERIES",
-  "messageParameters" : { },
+  "messageParameters" : {
+    "planString" : ": LateralJoin lateral-subquery#9 [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(0) AS rand(0)#8]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#6,c2#7])\n:              +- Project [cast(col1#4 as int) AS c1#6, cast(col2#5 as int) AS c2#7]\n:                 +- LocalRelation [col1#4, col2#5]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#2,c2#3])\n      +- Project [cast(col1#0 as int) AS c1#2, cast(col2#1 as int) AS c2#3]\n         +- LocalRelation [col1#0, col2#1]\n"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

@@ -569,7 +569,7 @@ class SubquerySuite extends QueryTest
       exception,
       errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
       errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-      parameters = Map("planString" -> "(?s): .*"),
+      parameters = Map("planString" -> "(?s).*"),
       sqlState = None,
       context = ExpectedContext(fragment = str, start = 0, stop = 68))
   }
@@ -2020,7 +2020,7 @@ class SubquerySuite extends QueryTest
         exception,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
         errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("planString" -> "(?s): .*"),
+        parameters = Map("planString" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(fragment = str, start = 0, stop = 74))
     }
@@ -2052,7 +2052,7 @@ class SubquerySuite extends QueryTest
         exception1,
         errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
         errorSubClass = "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
-        parameters = Map("planString" -> "(?s): .*"),
+        parameters = Map("planString" -> "(?s).*"),
         sqlState = None,
         context = ExpectedContext(fragment = str, start = 0, stop = 100))
     }
