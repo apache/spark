@@ -141,5 +141,12 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t1a`",
     "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 84,
+    "stopIndex" : 86,
+    "fragment" : "t1a"
+  } ]
 }

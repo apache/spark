@@ -126,7 +126,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(1)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 
@@ -353,7 +360,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`b`",
     "proposal" : "`count(a)`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 62,
+    "stopIndex" : 62,
+    "fragment" : "b"
+  } ]
 }
 
 

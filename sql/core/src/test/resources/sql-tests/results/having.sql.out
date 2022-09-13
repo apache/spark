@@ -42,7 +42,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(v = array(1))\"",
     "left" : "\"INT\"",
     "right" : "\"ARRAY<INT>\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 55,
+    "fragment" : "v = array(1)"
+  } ]
 }
 
 

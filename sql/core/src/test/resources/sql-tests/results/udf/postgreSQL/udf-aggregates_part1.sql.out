@@ -493,5 +493,12 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
     "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 75,
+    "stopIndex" : 83,
+    "fragment" : "o.unique1"
+  } ]
 }
