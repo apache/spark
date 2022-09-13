@@ -175,6 +175,20 @@ trait AnalysisTest extends PlanTest {
       expectedErrorClass: String,
       expectedMessageParameters: Array[String],
       caseSensitive: Boolean = true): Unit = {
+    assertAnalysisErrorClass(
+      inputPlan,
+      expectedErrorClass,
+      null,
+      expectedMessageParameters,
+      caseSensitive)
+  }
+
+  protected def assertAnalysisErrorClass(
+      inputPlan: LogicalPlan,
+      expectedErrorClass: String,
+      expectedErrorSubClass: String,
+      expectedMessageParameters: Array[String],
+      caseSensitive: Boolean): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val e = intercept[AnalysisException] {
@@ -182,12 +196,19 @@ trait AnalysisTest extends PlanTest {
       }
 
       if (e.getErrorClass != expectedErrorClass ||
-        !e.messageParameters.sameElements(expectedMessageParameters)) {
+        !e.messageParameters.sameElements(expectedMessageParameters) ||
+        e.getErrorSubClass != expectedErrorSubClass) {
         var failMsg = ""
         if (e.getErrorClass != expectedErrorClass) {
           failMsg +=
             s"""Error class should be: ${expectedErrorClass}
                |Actual error class: ${e.getErrorClass}
+             """.stripMargin
+        }
+        if (e.getErrorSubClass != expectedErrorSubClass) {
+          failMsg +=
+            s"""Error sub class should be: $expectedErrorSubClass
+               |Actual error sub class: ${e.getErrorSubClass}
              """.stripMargin
         }
         if (!e.messageParameters.sameElements(expectedMessageParameters)) {

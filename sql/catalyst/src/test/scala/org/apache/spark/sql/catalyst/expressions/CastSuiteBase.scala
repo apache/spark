@@ -674,6 +674,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
+    " overflow") {
+    Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
+      val decimalType = DecimalType.forType(integralType)
+      assert(!Cast.canUpCast(decimalType, integralType))
+      assert(Cast.canUpCast(integralType, decimalType))
+    }
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 

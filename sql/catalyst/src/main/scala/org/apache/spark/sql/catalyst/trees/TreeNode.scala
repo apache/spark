@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import org.apache.commons.lang3.ClassUtils
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
@@ -68,6 +69,12 @@ case class Origin(
 
   lazy val context: SQLQueryContext = SQLQueryContext(
     line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+
+  def getQueryContext: Array[QueryContext] = if (context.isValid) {
+    Array(context)
+  } else {
+    Array.empty
+  }
 }
 
 /**
