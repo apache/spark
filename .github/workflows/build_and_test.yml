@@ -581,10 +581,10 @@ jobs:
         gem install bundler
         cd docs
         bundle install
-    - name: Install Java 11
+    - name: Install Java 8
       uses: actions/setup-java@v1
       with:
-        java-version: 11
+        java-version: 8
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
