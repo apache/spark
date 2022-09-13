@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase with SharedSparkSession {
+class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())
@@ -183,7 +183,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase with S
       exception = parseException("SELECT * FROM db.func()"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
-      parameters = Map("inputString" -> "table valued function cannot specify database name "),
+      parameters = Map(
+        "inputString" -> "table valued function cannot specify database name: `db`.`func`"),
       context = ExpectedContext(
         fragment = "db.func()",
         start = 14,
@@ -193,7 +194,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase with S
       exception = parseException("SELECT * FROM ns.db.func()"),
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
-      parameters = Map("inputString" -> "table valued function cannot specify database name "),
+      parameters = Map(
+        "inputString" -> "table valued function cannot specify database name: `ns`.`db`.`func`"),
       context = ExpectedContext(
         fragment = "ns.db.func()",
         start = 14,

@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsSuiteBase}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -57,7 +57,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
-class InsertSuite extends DataSourceTest with QueryErrorsSuiteBase with SharedSparkSession {
+class InsertSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -2092,19 +2092,30 @@ class InsertSuite extends DataSourceTest with QueryErrorsSuiteBase with SharedSp
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
-            |SELECT * FROM (
-            | SELECT c3 FROM (
-            |  SELECT c1, c2 from values(1,2) t(c1, c2)
-            |  )
-            |)
-          """.stripMargin)
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      val insert = s"INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |$insert
+              |SELECT * FROM (
+              | SELECT c3 FROM (
+              |  SELECT c1, c2 from values(1,2) t(c1, c2)
+              |  )
+              |)
+            """.stripMargin)
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = "42000",
+        parameters = Map(
+          "objectName" -> "`c3`",
+          "proposal" ->
+            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+        context = ExpectedContext(
+          fragment = insert,
+          start = 1,
+          stop = insert.length))
     }
   }
 

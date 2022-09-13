@@ -295,7 +295,7 @@ class PandasConversionMixin:
         elif type(dt) == DoubleType:
             return np.float64
         elif type(dt) == BooleanType:
-            return np.bool  # type: ignore[attr-defined]
+            return bool
         elif type(dt) == TimestampType:
             return np.datetime64
         elif type(dt) == TimestampNTZType:
