@@ -30,9 +30,9 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         if not pd_func:
             pd_func = ps_func
         if isinstance(pd_func, str):
-            pd_func = self._convert_str_to_lambda(pd_func)
+            pd_func = self.convert_str_to_lambda(pd_func)
         if isinstance(ps_func, str):
-            ps_func = self._convert_str_to_lambda(ps_func)
+            ps_func = self.convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
@@ -101,9 +101,9 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         if not pd_func:
             pd_func = ps_func
         if isinstance(pd_func, str):
-            pd_func = self._convert_str_to_lambda(pd_func)
+            pd_func = self.convert_str_to_lambda(pd_func)
         if isinstance(ps_func, str):
-            ps_func = self._convert_str_to_lambda(ps_func)
+            ps_func = self.convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(

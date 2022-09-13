@@ -65,7 +65,7 @@ class PandasOnSparkTestCase(ReusedSQLTestCase):
         super(PandasOnSparkTestCase, cls).setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
 
-    def _convert_str_to_lambda(self, func):
+    def convert_str_to_lambda(self, func):
         """
         This function coverts `func` str to lambda call
         """
