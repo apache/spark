@@ -637,6 +637,8 @@ object SparkConnect {
       PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
     ),
 
+    (assembly / test) := false,
+
     (assembly / logLevel) := Level.Info,
 
     (assembly / assemblyShadeRules) := Seq(
