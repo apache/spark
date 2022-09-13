@@ -22,7 +22,7 @@ import java.util.TimeZone
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
