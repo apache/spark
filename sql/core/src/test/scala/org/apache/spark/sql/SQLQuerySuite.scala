@@ -2663,16 +2663,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t(c struct<f:int>) USING parquet")
         sql("CREATE TABLE S(C struct<F:int>) USING parquet")
         checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
+        val query = "SELECT * FROM t, S WHERE c = C"
         checkError(
           exception = intercept[AnalysisException] {
-            sql("SELECT * FROM t, S WHERE c = C")
+            sql(query)
           },
           errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
             "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""))
+            "right" -> "\"STRUCT<F: INT>\""),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = 29))
       }
     }
   }
@@ -4475,6 +4481,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
+  }
+
+  test("SPARK-40389: Don't eliminate a cast which can cause overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9000000000BD as d")
+        val msg = intercept[SparkException] {
+          sql("select cast(cast(d as int) as long) from dt").collect()
+        }.getCause.getMessage
+        assert(msg.contains("[CAST_OVERFLOW]"))
+      }
+    }
   }
 }
 

@@ -1298,8 +1298,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception =
             intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
           errorClass = "UNRESOLVED_COLUMN",
-          errorSubClass = Some("WITH_SUGGESTION"),
-          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"))
+          errorSubClass = "WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+          context = ExpectedContext(
+            fragment = "insert into t (I)", start = 0, stop = 16))
       }
     }
   }
@@ -2089,19 +2092,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
     withTempPath { path =>
-      val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
-            |SELECT * FROM (
-            | SELECT c3 FROM (
-            |  SELECT c1, c2 from values(1,2) t(c1, c2)
-            |  )
-            |)
-          """.stripMargin)
-      }
-      assert(ex.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(ex.messageParameters.head == "`c3`")
+      val insert = s"INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+              |$insert
+              |SELECT * FROM (
+              | SELECT c3 FROM (
+              |  SELECT c1, c2 from values(1,2) t(c1, c2)
+              |  )
+              |)
+            """.stripMargin)
+        },
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = "42000",
+        parameters = Map(
+          "objectName" -> "`c3`",
+          "proposal" ->
+            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+        context = ExpectedContext(
+          fragment = insert,
+          start = 1,
+          stop = insert.length))
     }
   }
 

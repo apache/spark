@@ -141,5 +141,12 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`t1a`",
     "proposal" : "`t2`.`t2a`, `t2`.`t2b`, `t2`.`t2c`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT t1.t1a\nFROM   t1\nJOIN   t1_copy\nON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)"
+  } ]
 }

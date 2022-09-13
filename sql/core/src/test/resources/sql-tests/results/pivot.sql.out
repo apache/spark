@@ -236,7 +236,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`year`",
     "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 113,
+    "fragment" : "SELECT * FROM (\n  SELECT course, earnings FROM courseSales\n)\nPIVOT (\n  sum(earnings)\n  FOR year IN (2012, 2013)\n)"
+  } ]
 }
 
 
@@ -346,7 +353,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "objectName" : "`s`",
     "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 75,
+    "fragment" : "SELECT * FROM courseSales\nPIVOT (\n  sum(earnings)\n  FOR year IN (s, 2013)\n)"
+  } ]
 }
 
 

@@ -239,12 +239,6 @@
       }
     }
   },
-  "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [
-      "Index <indexValue> must be between 0 and the length of the ArrayData."
-    ],
-    "sqlState" : "22023"
-  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -490,7 +484,7 @@
   },
   "UNRESOLVED_MAP_KEY" : {
     "message" : [
-      "Cannot resolve column <columnName> as a map key. If the key is a string literal, please add single quotes around it."
+      "Cannot resolve column <objectName> as a map key. If the key is a string literal, please add single quotes around it."
     ],
     "subClass" : {
       "WITHOUT_SUGGESTION" : {

@@ -26,37 +26,37 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class ExpandingTest(PandasOnSparkTestCase, TestUtils):
-    def _test_expanding_func(self, f):
+    def _test_expanding_func(self, ps_func, pd_func=None):
+        if not pd_func:
+            pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self.convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self.convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 7, 9, 8], index=np.random.rand(6), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(
-            getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)(), almost=True
-        )
-        self.assert_eq(
-            getattr(psser.expanding(2), f)().sum(),
-            getattr(pser.expanding(2), f)().sum(),
-            almost=True,
-        )
+        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
+        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)), almost=True)
 
         # Multiindex
         pser = pd.Series(
             [1, 2, 3], index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")])
         )
         psser = ps.from_pandas(pser)
-        self.assert_eq(getattr(psser.expanding(2), f)(), getattr(pser.expanding(2), f)())
+        self.assert_eq(ps_func(psser.expanding(2)), pd_func(pser.expanding(2)))
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(getattr(psdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
-        self.assert_eq(getattr(psdf.expanding(2), f)().sum(), getattr(pdf.expanding(2), f)().sum())
+        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)))
+        self.assert_eq(ps_func(psdf.expanding(2)).sum(), pd_func(pdf.expanding(2)).sum())
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
         psdf.columns = columns
-        self.assert_eq(getattr(psdf.expanding(2), f)(), getattr(pdf.expanding(2), f)())
+        self.assert_eq(ps_func(psdf.expanding(2)), pd_func(pdf.expanding(2)))
 
     def test_expanding_error(self):
         with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
@@ -97,16 +97,22 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def test_expanding_kurt(self):
         self._test_expanding_func("kurt")
 
-    def _test_groupby_expanding_func(self, f):
+    def _test_groupby_expanding_func(self, ps_func, pd_func=None):
+        if not pd_func:
+            pd_func = ps_func
+        if isinstance(pd_func, str):
+            pd_func = self.convert_str_to_lambda(pd_func)
+        if isinstance(ps_func, str):
+            ps_func = self.convert_str_to_lambda(ps_func)
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
         psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(psser.groupby(psser).expanding(2), f)().sort_index(),
-            getattr(pser.groupby(pser).expanding(2), f)().sort_index(),
+            ps_func(psser.groupby(psser).expanding(2)).sort_index(),
+            pd_func(pser.groupby(pser).expanding(2)).sort_index(),
         )
         self.assert_eq(
-            getattr(psser.groupby(psser).expanding(2), f)().sum(),
-            getattr(pser.groupby(pser).expanding(2), f)().sum(),
+            ps_func(psser.groupby(psser).expanding(2)).sum(),
+            pd_func(pser.groupby(pser).expanding(2)).sum(),
         )
 
         # Multiindex
@@ -117,8 +123,8 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         )
         psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(psser.groupby(psser).expanding(2), f)().sort_index(),
-            getattr(pser.groupby(pser).expanding(2), f)().sort_index(),
+            ps_func(psser.groupby(psser).expanding(2)).sort_index(),
+            pd_func(pser.groupby(pser).expanding(2)).sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
@@ -127,42 +133,42 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         # The behavior of GroupBy.expanding is changed from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pdf.a).expanding(2), f)().sort_index(),
+                ps_func(psdf.groupby(psdf.a).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(pdf.a).expanding(2)).sort_index(),
             )
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a).expanding(2), f)().sum(),
-                getattr(pdf.groupby(pdf.a).expanding(2), f)().sum(),
+                ps_func(psdf.groupby(psdf.a).expanding(2)).sum(),
+                pd_func(pdf.groupby(pdf.a).expanding(2)).sum(),
             )
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a + 1).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pdf.a + 1).expanding(2), f)().sort_index(),
+                ps_func(psdf.groupby(psdf.a + 1).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(pdf.a + 1).expanding(2)).sort_index(),
             )
         else:
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pdf.a).expanding(2), f)().drop("a", axis=1).sort_index(),
+                ps_func(psdf.groupby(psdf.a).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(pdf.a).expanding(2)).drop("a", axis=1).sort_index(),
             )
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a).expanding(2), f)().sum(),
-                getattr(pdf.groupby(pdf.a).expanding(2), f)().sum().drop("a"),
+                ps_func(psdf.groupby(psdf.a).expanding(2)).sum(),
+                pd_func(pdf.groupby(pdf.a).expanding(2)).sum().drop("a"),
             )
             self.assert_eq(
-                getattr(psdf.groupby(psdf.a + 1).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(pdf.a + 1).expanding(2), f)().drop("a", axis=1).sort_index(),
+                ps_func(psdf.groupby(psdf.a + 1).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(pdf.a + 1).expanding(2)).drop("a", axis=1).sort_index(),
             )
 
         self.assert_eq(
-            getattr(psdf.b.groupby(psdf.a).expanding(2), f)().sort_index(),
-            getattr(pdf.b.groupby(pdf.a).expanding(2), f)().sort_index(),
+            ps_func(psdf.b.groupby(psdf.a).expanding(2)).sort_index(),
+            pd_func(pdf.b.groupby(pdf.a).expanding(2)).sort_index(),
         )
         self.assert_eq(
-            getattr(psdf.groupby(psdf.a)["b"].expanding(2), f)().sort_index(),
-            getattr(pdf.groupby(pdf.a)["b"].expanding(2), f)().sort_index(),
+            ps_func(psdf.groupby(psdf.a)["b"].expanding(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a)["b"].expanding(2)).sort_index(),
         )
         self.assert_eq(
-            getattr(psdf.groupby(psdf.a)[["b"]].expanding(2), f)().sort_index(),
-            getattr(pdf.groupby(pdf.a)[["b"]].expanding(2), f)().sort_index(),
+            ps_func(psdf.groupby(psdf.a)[["b"]].expanding(2)).sort_index(),
+            pd_func(pdf.groupby(pdf.a)[["b"]].expanding(2)).sort_index(),
         )
 
         # Multiindex column
@@ -173,25 +179,23 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
         # The behavior of GroupBy.expanding is changed from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
             self.assert_eq(
-                getattr(psdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
+                ps_func(psdf.groupby(("a", "x")).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(("a", "x")).expanding(2)).sort_index(),
             )
 
             self.assert_eq(
-                getattr(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
+                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
+                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
             )
         else:
             self.assert_eq(
-                getattr(psdf.groupby(("a", "x")).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby(("a", "x")).expanding(2), f)()
-                .drop(("a", "x"), axis=1)
-                .sort_index(),
+                ps_func(psdf.groupby(("a", "x")).expanding(2)).sort_index(),
+                pd_func(pdf.groupby(("a", "x")).expanding(2)).drop(("a", "x"), axis=1).sort_index(),
             )
 
             self.assert_eq(
-                getattr(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)().sort_index(),
-                getattr(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2), f)()
+                ps_func(psdf.groupby([("a", "x"), ("a", "y")]).expanding(2)).sort_index(),
+                pd_func(pdf.groupby([("a", "x"), ("a", "y")]).expanding(2))
                 .drop([("a", "x"), ("a", "y")], axis=1)
                 .sort_index(),
             )

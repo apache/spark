@@ -42,7 +42,14 @@ org.apache.spark.sql.AnalysisException
     "sqlExpr" : "\"(v = array(1))\"",
     "left" : "\"INT\"",
     "right" : "\"ARRAY<INT>\""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 55,
+    "fragment" : "SELECT count(k) FROM hav GROUP BY v HAVING v = array(1)"
+  } ]
 }
 
 

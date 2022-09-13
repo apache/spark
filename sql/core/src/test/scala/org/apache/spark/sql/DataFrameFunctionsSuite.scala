@@ -763,6 +763,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-40292: arrays_zip should retain field names in nested structs") {
+    val df = spark.sql("""
+      select
+        named_struct(
+          'arr_1', array(named_struct('a', 1, 'b', 2)),
+          'arr_2', array(named_struct('p', 1, 'q', 2)),
+          'field', named_struct(
+            'arr_3', array(named_struct('x', 1, 'y', 2))
+          )
+        ) as obj
+      """)
+
+    val res = df.selectExpr("arrays_zip(obj.arr_1, obj.arr_2, obj.field.arr_3) as arr")
+
+    val fieldNames = res.schema.head.dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames
+    assert(fieldNames.toSeq === Seq("arr_1", "arr_2", "arr_3"))
+  }
+
   def testSizeOfMap(sizeOfNull: Any): Unit = {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
