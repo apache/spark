@@ -1372,11 +1372,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
-    new SparkIndexOutOfBoundsException(
-      errorClass = "INDEX_OUT_OF_BOUNDS", None, Array(toSQLValue(idx, IntegerType)))
-  }
-
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
     new SparkException("Malformed records are detected in record parsing. " +
       s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +

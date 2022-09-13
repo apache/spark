@@ -239,12 +239,6 @@
       }
     }
   },
-  "INDEX_OUT_OF_BOUNDS" : {
-    "message" : [
-      "Index <indexValue> must be between 0 and the length of the ArrayData."
-    ],
-    "sqlState" : "22023"
-  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"

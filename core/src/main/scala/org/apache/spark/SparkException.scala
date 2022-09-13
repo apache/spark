@@ -317,22 +317,6 @@ private[spark] class SparkIllegalArgumentException(
 }
 
 /**
- * Index out of bounds exception thrown from Spark with an error class.
- */
-private[spark] class SparkIndexOutOfBoundsException(
-    errorClass: String,
-    errorSubClass: Option[String] = None,
-    messageParameters: Array[String])
-  extends IndexOutOfBoundsException(
-    SparkThrowableHelper.getMessage(errorClass, errorSubClass.orNull, messageParameters))
-    with SparkThrowable {
-
-  override def getMessageParameters: Array[String] = messageParameters
-  override def getErrorClass: String = errorClass
-  override def getErrorSubClass: String = errorSubClass.orNull
-}
-
-/**
  * IO exception thrown from Spark with an error class.
  */
 private[spark] class SparkIOException(
