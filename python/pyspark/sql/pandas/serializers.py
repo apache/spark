@@ -23,7 +23,7 @@ import time
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.types import StringType, StructType, BinaryType, StructField, BooleanType
+from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
 class SpecialLengths:
@@ -391,6 +391,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             StructField('properties', StringType()),
             StructField('keyRowAsUnsafe', BinaryType()),
             StructField('object', BinaryType()),
+            StructField('oldTimeoutTimestamp', LongType()),
         ])
 
         self.result_state_pdf_arrow_type = to_arrow_type(self.result_state_df_type)
@@ -497,7 +498,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                     dict.fromkeys(pa.schema(pdf_schema).names),
                     index=[x for x in range(0, empty_row_cnt_in_data)])
             empty_rows_state = pd.DataFrame(
-                    columns=['properties', 'keyRowAsUnsafe', 'object'],
+                    columns=['properties', 'keyRowAsUnsafe', 'object', 'oldTimeoutTimestamp'],
                     index=[x for x in range(0, empty_row_cnt_in_state)])
 
             pdfs.append(empty_rows_pdf)
@@ -551,11 +552,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                 state_properties = state.json().encode("utf-8")
                 state_key_row_as_binary = state._keyAsUnsafe
                 state_object = self.pickleSer.dumps(state._value_schema.toInternal(state._value))
+                state_old_timeout_timestamp = state.oldTimeoutTimestamp
 
                 state_dict = {
                     'properties': [state_properties, ],
                     'keyRowAsUnsafe': [state_key_row_as_binary, ],
                     'object': [state_object, ],
+                    'oldTimeoutTimestamp': [state_old_timeout_timestamp, ],
                 }
 
                 state_pdf = pd.DataFrame.from_dict(state_dict)

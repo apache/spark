@@ -64,7 +64,7 @@ class ArrowPythonRunnerWithState(
     softTimeoutMillsPurgeBatch: Long)
   extends BasePythonRunner[
     (UnsafeRow, GroupStateImpl[Row], Iterator[InternalRow]),
-    (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])](
+    (Iterator[(UnsafeRow, GroupStateImpl[Row], Long)], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -111,7 +111,7 @@ class ArrowPythonRunnerWithState(
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
-    : Iterator[(Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow])] = {
+    : Iterator[(Iterator[(UnsafeRow, GroupStateImpl[Row], Long)], Iterator[InternalRow])] = {
     new StateReaderIterator(stream, writerThread, startTime, env, worker, pid,
       releasedOrClosed, context)
   }
@@ -388,7 +388,7 @@ class ArrowPythonRunnerWithState(
     private var batchLoaded = true
 
     protected override def read()
-      : (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow]) = {
+      : (Iterator[(UnsafeRow, GroupStateImpl[Row], Long)], Iterator[InternalRow]) = {
       if (writerThread.exception.isDefined) {
         throw writerThread.exception.get
       }
@@ -433,7 +433,7 @@ class ArrowPythonRunnerWithState(
     }
 
     private def deserializeColumnarBatch(batch: ColumnarBatch)
-      : (Iterator[(UnsafeRow, GroupStateImpl[Row])], Iterator[InternalRow]) = {
+      : (Iterator[(UnsafeRow, GroupStateImpl[Row], Long)], Iterator[InternalRow]) = {
       // This should at least have one row for state. Also, we ensure that all columns across
       // data and state metadata have same number of rows, which is required by Arrow record
       // batch.
@@ -459,7 +459,7 @@ class ArrowPythonRunnerWithState(
       }
 
       def constructIterForState(
-          batch: ColumnarBatch): Iterator[(UnsafeRow, GroupStateImpl[Row])] = {
+          batch: ColumnarBatch): Iterator[(UnsafeRow, GroupStateImpl[Row], Long)] = {
         //  UDF returns a StructType column in ColumnarBatch, select the children here
         val structVector = batch.column(1).asInstanceOf[ArrowColumnVector]
 
@@ -479,6 +479,7 @@ class ArrowPythonRunnerWithState(
             //   StructField("properties", StringType),
             //   StructField("keyRowAsUnsafe", BinaryType),
             //   StructField("object", BinaryType),
+            //   StructField("oldTimeoutTimestamp", LongType),
             // )
             // TODO: Do we want to rely on the column name rather than the ordinal for safety?
             val propertiesAsJson = parse(row.getUTF8String(0).toString)
@@ -492,8 +493,10 @@ class ArrowPythonRunnerWithState(
               Some(PythonSQLUtils.toJVMRow(pickledStateValue, stateValueSchema,
                 stateRowDeserializer))
             }
+            val oldTimeoutTimestamp = row.getLong(3)
 
-            Some(keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson))
+            Some((keyRowAsUnsafe, GroupStateImpl.fromJson(maybeObjectRow, propertiesAsJson),
+              oldTimeoutTimestamp))
           }
         }
       }

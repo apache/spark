@@ -175,15 +175,16 @@ case class FlatMapGroupsInPandasWithStateExec(
           // When the iterator is consumed, then write changes to state.
           // state does not affect each others, hence when to update does not affect to the result.
           def onIteratorCompletion: Unit = {
-            stateIter.foreach { case (keyRow, newGroupState) =>
+            stateIter.foreach { case (keyRow, newGroupState, oldTimeoutTimestamp) =>
               if (newGroupState.isRemoved && !newGroupState.getTimeoutTimestampMs.isPresent()) {
                 stateManager.removeState(store, keyRow)
                 numRemovedStateRows += 1
               } else {
                 val currentTimeoutTimestamp = newGroupState.getTimeoutTimestampMs
                   .orElse(NO_TIMESTAMP)
+                val hasTimeoutChanged = currentTimeoutTimestamp != oldTimeoutTimestamp
                 val shouldWriteState = newGroupState.isUpdated || newGroupState.isRemoved ||
-                  newGroupState.isTimeoutUpdated
+                  hasTimeoutChanged
 
                 if (shouldWriteState) {
                   val updatedStateObj = if (newGroupState.exists) newGroupState.get else null

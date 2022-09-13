@@ -123,9 +123,6 @@ trait TestGroupState[S] extends GroupState[S] {
   /** Whether the state has been updated but not removed */
   def isUpdated: Boolean
 
-  /** FIXME: ... */
-  def isTimeoutUpdated: Boolean
-
   /**
    * Returns the timestamp if `setTimeoutTimestamp()` is called.
    * Or, returns batch processing time + the duration when

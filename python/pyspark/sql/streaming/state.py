@@ -45,7 +45,6 @@ class GroupStateImpl:
         defined: bool,
         updated: bool,
         removed: bool,
-        timeoutUpdated: bool,
         timeoutTimestamp: int,
         # Python internal state.
         keyAsUnsafe: bytes,
@@ -70,7 +69,8 @@ class GroupStateImpl:
         self._updated = updated
         self._removed = removed
         self._timeout_timestamp = timeoutTimestamp
-        self._timeout_updated = timeoutUpdated
+        # Python internal state.
+        self._old_timeout_timestamp = timeoutTimestamp
 
         self._value_schema = valueSchema
 
@@ -95,6 +95,12 @@ class GroupStateImpl:
     @property
     def hasTimedOut(self) -> bool:
         return self._has_timed_out
+
+    # NOTE: this function is only available to PySpark implementation due to underlying
+    # implementation, do not port to Scala implementation!
+    @property
+    def oldTimeoutTimestamp(self) -> int:
+        return self._old_timeout_timestamp
 
     def update(self, newValue: Tuple) -> None:
         if newValue is None:
@@ -124,7 +130,6 @@ class GroupStateImpl:
         if durationMs <= 0:
             raise ValueError("Timeout duration must be positive")
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
-        self._timeout_updated = True
 
     # TODO(SPARK-XXXXX): Implement additionalDuration parameter.
     def setTimeoutTimestamp(self, timestampMs: int) -> None:
@@ -150,7 +155,6 @@ class GroupStateImpl:
             )
 
         self._timeout_timestamp = timestampMs
-        self._timeout_updated = True
 
     def getCurrentWatermarkMs(self) -> int:
         if not self._watermark_present:
@@ -184,6 +188,5 @@ class GroupStateImpl:
                 "updated": self._updated,
                 "removed": self._removed,
                 "timeoutTimestamp": self._timeout_timestamp,
-                "timeoutUpdated": self._timeout_updated,
             }
         )
