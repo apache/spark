@@ -611,10 +611,26 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(CAST(123 AS TINYINT) AS BINARY)' due to data type mismatch: 
- cannot cast tinyint to binary with ANSI mode on.
- If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 45,
+    "fragment" : "SELECT HEX(CAST(CAST(123 AS byte) AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -623,10 +639,26 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(CAST(-123 AS TINYINT) AS BINARY)' due to data type mismatch: 
- cannot cast tinyint to binary with ANSI mode on.
- If you have to cast tinyint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"TINYINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 46,
+    "fragment" : "SELECT HEX(CAST(CAST(-123 AS byte) AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -635,10 +667,26 @@ SELECT HEX(CAST(123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123S AS BINARY)' due to data type mismatch: 
- cannot cast smallint to binary with ANSI mode on.
- If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "SELECT HEX(CAST(123S AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -647,10 +695,26 @@ SELECT HEX(CAST(-123S AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123S AS BINARY)' due to data type mismatch: 
- cannot cast smallint to binary with ANSI mode on.
- If you have to cast smallint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"SMALLINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 33,
+    "fragment" : "SELECT HEX(CAST(-123S AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -659,10 +723,26 @@ SELECT HEX(CAST(123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123 AS BINARY)' due to data type mismatch: 
- cannot cast int to binary with ANSI mode on.
- If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "SELECT HEX(CAST(123 AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -671,10 +751,26 @@ SELECT HEX(CAST(-123 AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123 AS BINARY)' due to data type mismatch: 
- cannot cast int to binary with ANSI mode on.
- If you have to cast int to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "SELECT HEX(CAST(-123 AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -683,10 +779,26 @@ SELECT HEX(CAST(123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(123L AS BINARY)' due to data type mismatch: 
- cannot cast bigint to binary with ANSI mode on.
- If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "SELECT HEX(CAST(123L AS binary))"
+  } ]
+}
 
 
 -- !query
@@ -695,10 +807,26 @@ SELECT HEX(CAST(-123L AS binary))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(-123L AS BINARY)' due to data type mismatch: 
- cannot cast bigint to binary with ANSI mode on.
- If you have to cast bigint to binary, you can set spark.sql.ansi.enabled as false.
-; line 1 pos 11
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITH_CONF_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\"",
+    "srcType" : "\"BIGINT\"",
+    "targetType" : "\"BINARY\"",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 33,
+    "fragment" : "SELECT HEX(CAST(-123L AS binary))"
+  } ]
+}
 
 
 -- !query

@@ -101,7 +101,22 @@ select cast(a as array<string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to array<string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"ARRAY<STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 38,
+    "fragment" : "select cast(a as array<string>) from t"
+  } ]
+}
 
 
 -- !query
@@ -110,7 +125,22 @@ select cast(a as struct<s:string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to struct<s:string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"STRUCT<s: STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 41,
+    "fragment" : "select cast(a as struct<s:string>) from t"
+  } ]
+}
 
 
 -- !query
@@ -119,7 +149,22 @@ select cast(a as map<string, string>) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.a' due to data type mismatch: cannot cast string to map<string,string>; line 1 pos 7
+{
+  "errorClass" : "DATATYPE_MISMATCH",
+  "errorSubClass" : "CAST_WITHOUT_SUGGESTION",
+  "messageParameters" : {
+    "sqlExpr" : "\"a\"",
+    "srcType" : "\"STRING\"",
+    "targetType" : "\"MAP<STRING, STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "select cast(a as map<string, string>) from t"
+  } ]
+}
 
 
 -- !query

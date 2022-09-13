@@ -34,14 +34,14 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
-object Cast {
+object Cast extends QueryErrorsBase {
   /**
    * As per section 6.13 "cast specification" in "Information technology — Database languages " +
    * "- SQL — Part 2: Foundation (SQL/Foundation)":
@@ -416,44 +416,45 @@ object Cast {
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConf: Option[(String, String)]): DataTypeMismatch =
+      fallbackConf: Option[(String, String)]): DataTypeMismatch = {
+    def withFunSuggest(names: String*): DataTypeMismatch = {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITH_FUN_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(from),
+          "targetType" -> toSQLType(to),
+          "functionNames" -> names.map(toSQLId).mkString("/")))
+    }
     (from, to) match {
       case (_: NumericType, TimestampType) =>
-        DataTypeMismatch(
-          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
-          messageParameters = Array("TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS"))
+        withFunSuggest("TIMESTAMP_SECONDS", "TIMESTAMP_MILLIS", "TIMESTAMP_MICROS")
 
       case (TimestampType, _: NumericType) =>
-        DataTypeMismatch(
-          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
-          messageParameters = Array("UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS"))
+        withFunSuggest("UNIX_SECONDS", "UNIX_MILLIS", "UNIX_MICROS")
 
       case (_: NumericType, DateType) =>
-        DataTypeMismatch(
-          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
-          messageParameters = Array("DATE_FROM_UNIX_DATE"))
+        withFunSuggest("DATE_FROM_UNIX_DATE")
 
       case (DateType, _: NumericType) =>
-        DataTypeMismatch(
-          errorSubClass = "CAST_WITH_FUN_SUGGESTION",
-          messageParameters = Array("UNIX_DATE"))
+        withFunSuggest("UNIX_DATE")
 
       case _ if fallbackConf.isDefined && Cast.canCast(from, to) =>
         DataTypeMismatch(
           errorSubClass = "CAST_WITH_CONF_SUGGESTION",
-          messageParameters = Array(
-            from.catalogString,
-            to.catalogString,
-            from.catalogString,
-            to.catalogString,
-            fallbackConf.get._1,
-            fallbackConf.get._2))
+          messageParameters = Map(
+            "srcType" -> toSQLType(from),
+            "targetType" -> toSQLType(to),
+            "config" -> toSQLConf(fallbackConf.get._1),
+            "configVal" -> toSQLValue(fallbackConf.get._2, StringType)))
 
       case _ =>
         DataTypeMismatch(
           errorSubClass = "CAST_WITHOUT_SUGGESTION",
-          messageParameters = Array(from.catalogString, to.catalogString))
+          messageParameters = Map(
+            "srcType" -> toSQLType(from),
+            "targetType" -> toSQLType(to)))
     }
+  }
 
   def apply(
       child: Expression,
@@ -488,8 +489,12 @@ case class Cast(
     child: Expression,
     dataType: DataType,
     timeZoneId: Option[String] = None,
-    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get)) extends UnaryExpression
-  with TimeZoneAwareExpression with NullIntolerant with SupportQueryContext {
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with NullIntolerant
+  with SupportQueryContext
+  with QueryErrorsBase {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
@@ -525,7 +530,9 @@ case class Cast(
     case _ =>
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters = Array(child.dataType.catalogString, dataType.catalogString))
+        messageParameters = Map(
+          "srcType" -> toSQLType(child.dataType),
+          "targetType" -> toSQLType(dataType)))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
