@@ -154,7 +154,7 @@ final class Int128 extends Ordered[Int128] with Serializable {
     JLong.hashCode(hash)
   }
 
-  override def toString: String = toBigInteger.toString
+  override def toString: String = s"Int128($high, $low)"
 }
 
 @Unstable

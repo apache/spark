@@ -175,10 +175,13 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   def remainder(that: Decimal128Operation): Decimal128Operation = {
     val leftRescaleFactor = Int128Math.rescaleFactor(this._scale, that.scale)
     val rightRescaleFactor = Int128Math.rescaleFactor(that.scale, this._scale)
-    val (newHigh, newLow) = Int128Math.remainder(
-      this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor, false)
-
-    checkOverflow(newHigh, newLow, "Get Decimal128 remainder.")
+    val (newHigh, newLow) = try {
+      Int128Math.remainder(
+        this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor, false)
+    } catch {
+      case _: ArithmeticException =>
+        throw overflowError(s"Get remainder of ${this.int128} divide ${that.int128}.")
+    }
 
     val resultScale = Math.max(this._scale, that.scale)
     val resultPrecision =
@@ -191,10 +194,13 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
   def quot(that: Decimal128Operation): Decimal128Operation = {
     val leftRescaleFactor = Int128Math.rescaleFactor(this._scale, that.scale)
     val rightRescaleFactor = Int128Math.rescaleFactor(that.scale, this._scale)
-    val (newHigh, newLow) = Int128Math.remainder(
-      this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor, true)
-
-    checkOverflow(newHigh, newLow, "Get Decimal128 quotient.")
+    val (newHigh, newLow) = try {
+      Int128Math.remainder(
+        this.high, this.low, that.high, that.low, leftRescaleFactor, rightRescaleFactor, true)
+    } catch {
+      case _: ArithmeticException =>
+        throw overflowError(s"Get quotient of ${this.int128} divide ${that.int128}.")
+    }
 
     val resultScale = 0
     val resultPrecision = this._precision - this._scale + that.scale + resultScale

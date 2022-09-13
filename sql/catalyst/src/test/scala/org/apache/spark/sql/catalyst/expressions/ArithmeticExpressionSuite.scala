@@ -634,17 +634,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkExceptionInExpression[ArithmeticException](
             IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "Division by zero")
         }
-        if (implementation.equals("JDKBigDecimal")) {
-          // overflows long and so returns a wrong result
-          checkEvaluation(IntegralDivide(
-            Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
-            687399551400672280L)
-        } else {
-          checkExceptionInExpression[ArithmeticException](
-            IntegralDivide(
-              Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
-            "Decimal overflow: Decimal128 division.")
-        }
+        // overflows long and so returns a wrong result
+        checkEvaluation(IntegralDivide(
+          Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001))),
+          687399551400672280L)
         // overflow during promote precision
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
           if (implementation.equals("JDKBigDecimal")) {
@@ -655,7 +648,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
             checkExceptionInExpression[ArithmeticException](
               IntegralDivide(
                 Literal(Decimal("99999999999999999999999999999999999999")),
-                Literal(Decimal(0.00001))), "Decimal overflow: Decimal128 division.")
+                Literal(Decimal(0.00001))),
+              "Decimal overflow: Get quotient of " +
+                "Int128(5421010862427522170, 687399551400673279) divide Int128(0, 10).")
           }
         }
       }
