@@ -1183,7 +1183,7 @@ object CopyDependencies {
       // For the SparkConnect build, we manually call the assembly target to
       // produce the shaded Jar which happens automatically in the case of Maven.
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
-      val fid = (LocalProject("connect")/assembly).value
+//      val fid = (LocalProject("connect")/assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
@@ -1193,11 +1193,11 @@ object CopyDependencies {
           if (destJar.isFile()) {
             destJar.delete()
           }
-          if (jar.getName.contains("spark-connect")) {
-            Files.copy(fid.toPath, destJar.toPath)
-          } else {
-            Files.copy(jar.toPath(), destJar.toPath())
-          }
+//          if (jar.getName.contains("spark-connect")) {
+//            Files.copy(fid.toPath, destJar.toPath)
+//          } else {
+          Files.copy(jar.toPath(), destJar.toPath())
+//          }
         }
     },
     (Compile / packageBin / crossTarget) := destPath.value,
