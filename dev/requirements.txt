@@ -18,7 +18,7 @@ unittest-xml-reporting
 coverage
 
 # Linter
-mypy
+mypy==0.920
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.

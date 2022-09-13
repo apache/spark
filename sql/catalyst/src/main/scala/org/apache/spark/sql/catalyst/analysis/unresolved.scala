@@ -374,7 +374,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     if (target.isEmpty) return input.output
 
     // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = input.metadataOutput.filter(_.supportsQualifiedStar)
+    val hiddenOutput = input.metadataOutput.filter(_.qualifiedAccessOnly)
     val expandedAttributes = (hiddenOutput ++ input.output).filter(
       matchedQualifier(_, target.get, resolver))
 

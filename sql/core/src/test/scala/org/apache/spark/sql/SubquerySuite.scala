@@ -29,7 +29,9 @@ import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SubquerySuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -886,9 +888,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
-      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.getErrorClass == "UNRESOLVED_COLUMN")
-      assert(e.messageParameters.sameElements(Array("`a`", "`t`.`i`, `t`.`j`")))
+      val query = "SELECT (SELECT count(*) FROM t WHERE a = 1)"
+      checkError(
+        exception =
+          intercept[AnalysisException](sql(query)),
+        errorClass = "UNRESOLVED_COLUMN",
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
+        parameters = Map(
+          "objectName" -> "`a`",
+          "proposal" -> "`t`.`i`, `t`.`j`"),
+        context = ExpectedContext(
+          fragment = query, start = 0, stop = 42))
     }
   }
 

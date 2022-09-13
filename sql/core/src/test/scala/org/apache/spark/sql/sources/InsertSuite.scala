@@ -1294,11 +1294,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable("t") {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t (I) select true from (select 1)")
-        }.getMessage.contains(
-          "[UNRESOLVED_COLUMN] A column or function parameter with name `I` cannot be resolved. " +
-            "Did you mean one of the following? [`i`, `s`]"))
+        checkError(
+          exception =
+            intercept[AnalysisException](sql("insert into t (I) select true from (select 1)")),
+          errorClass = "UNRESOLVED_COLUMN",
+          errorSubClass = "WITH_SUGGESTION",
+          sqlState = None,
+          parameters = Map("objectName" -> "`I`", "proposal" -> "`i`, `s`"),
+          context = ExpectedContext(
+            fragment = "insert into t (I)", start = 0, stop = 16))
       }
     }
   }

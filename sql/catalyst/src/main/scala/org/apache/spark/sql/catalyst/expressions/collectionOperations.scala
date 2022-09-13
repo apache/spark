@@ -270,6 +270,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder
+        case (e: GetStructField, _) => Literal(e.extractFieldName)
         case (_, idx) => Literal(idx.toString)
       })
   }
