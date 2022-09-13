@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -60,8 +61,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     long totalInitialSize = headerInBytes + fixedPartInBytesLong;
 
     if (totalInitialSize > Integer.MAX_VALUE) {
-      throw new IllegalArgumentException(
-        "Cannot initialize array with size " + totalInitialSize + " bytes");
+      throw QueryExecutionErrors.tooManyArrayElementsError(numElements, elementSize);
     }
 
     // it's now safe to cast fixedPartInBytesLong and totalInitialSize to int

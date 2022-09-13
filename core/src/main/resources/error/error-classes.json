@@ -708,5 +708,10 @@
       "Writing job aborted"
     ],
     "sqlState" : "40000"
+  },
+  "TOO_MANY_ARRAY_ELEMENTS" : {
+    "message" : [
+      "Cannot initialize array with <numElements> elements of size <size>"
+    ]
   }
 }

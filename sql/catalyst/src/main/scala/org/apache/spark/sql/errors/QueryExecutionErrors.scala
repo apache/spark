@@ -2122,4 +2122,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "functionName" -> toSQLId(funcName),
         "expected" -> pattern))
   }
+
+  def tooManyArrayElementsError(
+      numElements: Int,
+      elementSize: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "TOO_MANY_ARRAY_ELEMENTS",
+      messageParameters = Array(
+        numElements.toString,
+        elementSize.toString))
+  }
 }
