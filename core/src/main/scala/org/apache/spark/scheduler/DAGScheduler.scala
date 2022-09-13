@@ -2296,12 +2296,16 @@ private[spark] class DAGScheduler(
                         // Do not fail the future as this would cause dag scheduler to prematurely
                         // give up on waiting for merge results from the remaining shuffle services
                         // if one fails
+                        results(index).set(false)
                       }
                     })
                 }
               })
           }
         }
+      // DAGScheduler only waits for a limited amount of time for the merge results.
+      // It will attempt to submit the next stage(s) irrespective of whether merge results
+      // from all shuffle services are received or not.
       var timedOut = false
       try {
         Futures.allAsList(results: _*).get(shuffleMergeResultsTimeoutSec, TimeUnit.SECONDS)
