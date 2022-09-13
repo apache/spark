@@ -47,8 +47,8 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     }
 
     @Override
-    public String[] getMessageParameters() {
-        return SparkThrowableHelper.getMessageParameters(errorClass, null, messageParameters);
+    public Map<String, String> getMessageParameters() {
+        return messageParameters;
     }
 
     @Override
