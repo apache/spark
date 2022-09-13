@@ -2669,11 +2669,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             sql(query)
           },
           errorClass = "DATATYPE_MISMATCH",
-          errorSubClass = Some("BINARY_OP_DIFF_TYPES"),
+          errorSubClass = "BINARY_OP_DIFF_TYPES",
+          sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"(c = C)\"",
             "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""))
+            "right" -> "\"STRUCT<F: INT>\""),
+          context = ExpectedContext(
+            fragment = "c = C",
+            start = 25,
+            stop = 29
+          ))
       }
     }
   }
