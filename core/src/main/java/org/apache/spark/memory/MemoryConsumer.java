@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.spark.errors.SparkCoreErrors;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -155,11 +156,6 @@ public abstract class MemoryConsumer {
       taskMemoryManager.freePage(page, this);
     }
     taskMemoryManager.showMemoryUsage();
-    // checkstyle.off: RegexpSinglelineJava
-    Map<String, String> params = new HashMap<String, String>();
-    params.put("requestedBytes", Long.toString(required));
-    params.put("receivedBytes", Long.toString(got));
-    throw new SparkOutOfMemoryError("UNABLE_TO_ACQUIRE_MEMORY", params);
-    // checkstyle.on: RegexpSinglelineJava
+    throw SparkCoreErrors.outOfMemoryError(required, got);
   }
 }
