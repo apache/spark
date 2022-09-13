@@ -1173,7 +1173,6 @@
         <version>3.2.13.0</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-40397): Migrate selenium-java from 3.1 to 4.2 and upgrade this to 3.2.13.0 -->
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-4-2_${scala.binary.version}</artifactId>
