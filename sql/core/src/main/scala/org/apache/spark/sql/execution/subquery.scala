@@ -70,7 +70,7 @@ case class ScalarSubquery(
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
   def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
   }
 
@@ -157,9 +157,9 @@ case class InSubqueryExec(
     inSet.doGenCode(ctx, ev)
   }
 
-  override lazy val preCanonicalized: InSubqueryExec = {
+  override lazy val canonicalized: InSubqueryExec = {
     copy(
-      child = child.preCanonicalized,
+      child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
       resultBroadcast = null,

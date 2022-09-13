@@ -692,7 +692,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       parsedPlan,
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
-      Array("`a`", "`x`, `y`"),
+      Map("objectName" -> "`a`", "proposal" -> "`x`, `y`"),
       caseSensitive = true)
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
@@ -706,7 +706,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       parsedPlan2,
       "UNRESOLVED_COLUMN",
       "WITH_SUGGESTION",
-      Array("`a`", "`x`, `y`"),
+      Map("objectName" -> "`a`", "proposal" -> "`x`, `y`"),
       caseSensitive = true)
   }
 
