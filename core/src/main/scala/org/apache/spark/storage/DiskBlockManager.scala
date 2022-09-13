@@ -105,7 +105,7 @@ private[spark] class DiskBlockManager(
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
         if (!newDir.exists()) {
           val path = newDir.toPath
-          Files.createDirectory(path)
+          Files.createDirectories(path)
           if (permissionChangingRequired) {
             // SPARK-37618: Create dir as group writable so files within can be deleted by the
             // shuffle service in a secure setup. This will remove the setgid bit so files created
