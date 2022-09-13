@@ -405,7 +405,7 @@ case class FlatMapGroupsWithStateExec(
         valueRowIter: Iterator[InternalRow],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
 
-      val keyObj = getKeyObj(stateData.keyRow) // convert key to objects
+      val keyObj = getKeyObj(stateData.keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
       val groupState = GroupStateImpl.createForStreaming(
         Option(stateData.stateObj),
@@ -444,7 +444,6 @@ case class FlatMapGroupsWithStateExec(
     }
   }
 }
-
 
 object FlatMapGroupsWithStateExec {
 
