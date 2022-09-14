@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{mutable, GenSet, GenTraversableOnce}
+import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
@@ -67,11 +67,10 @@ class ExpressionSet protected(
 
     protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
     protected var originals: mutable.Buffer[Expression] = new ArrayBuffer)
-  extends scala.collection.Set[Expression]
-    with scala.collection.SetLike[Expression, ExpressionSet]  {
+  extends Iterable[Expression]  {
 
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
-  override def empty: ExpressionSet = new ExpressionSet()
+  def empty: ExpressionSet = new ExpressionSet()
 
 
   protected def add(e: Expression): Unit = {
@@ -85,12 +84,12 @@ class ExpressionSet protected(
 
   protected def remove(e: Expression): Unit = {
     if (e.deterministic) {
-      baseSet.remove(e.canonicalized)
-      originals = originals.filter(!_.semanticEquals(e))
+      baseSet --= baseSet.filter(_ == e.canonicalized)
+      originals --= originals.filter(_.canonicalized == e.canonicalized)
     }
   }
 
-  override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
+  def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
   override def filter(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filter(e => p(e))
@@ -109,14 +108,14 @@ class ExpressionSet protected(
     new ExpressionSet(newBaseSet, newOriginals)
   }
 
-  override def +(elem: Expression): ExpressionSet = {
+  def +(elem: Expression): ExpressionSet = {
     val newSet = clone()
     newSet.add(this.convertToCanonicalizedIfRequired(elem))
     newSet
   }
 
 
-  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+  def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
     val newSet = clone()
     elems.foreach(ele => newSet.add(this.convertToCanonicalizedIfRequired(ele)))
     newSet
@@ -128,7 +127,7 @@ class ExpressionSet protected(
     newSet
   }
 
-  override def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+  def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
     val newSet = clone()
     elems.foreach(ele => newSet.remove(this.convertToCanonicalizedIfRequired(ele)))
     newSet
@@ -147,14 +146,21 @@ class ExpressionSet protected(
     newSet
   }
 
-  override def union(that: GenSet[Expression]): ExpressionSet = {
+  def union(that: ExpressionSet): ExpressionSet = {
     val newSet = clone()
     that.iterator.foreach(newSet.add)
     newSet
   }
+
+  def subsetOf(that: ExpressionSet): Boolean = this.iterator.forall(that.contains)
+
+  def intersect(that: ExpressionSet): ExpressionSet = this.filter(that.contains)
+
+  def diff(that: ExpressionSet): ExpressionSet = this -- that
+
   override def iterator: Iterator[Expression] = originals.iterator
 
-  override def apply(elem: Expression): Boolean = this.contains(elem)
+  def apply(elem: Expression): Boolean = this.contains(elem)
 
   override def equals(obj: Any): Boolean = obj match {
     case other: ExpressionSet => this.baseSet == other.baseSet
