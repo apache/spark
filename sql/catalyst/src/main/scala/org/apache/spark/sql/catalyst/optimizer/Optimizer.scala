@@ -1306,7 +1306,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
 object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(GENERATE)) {
-    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+    case generate @ Generate(g, _, false, _, _, child) if canInferFilters(g) =>
       assert(g.children.length == 1)
       val input = g.children.head
       // Generating extra predicates here has overheads/risks:
@@ -1320,10 +1320,12 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
       // idempotence will break.
       if (input.isInstanceOf[Attribute]) {
         // Exclude child's constraints to guarantee idempotency
-        val inferredFilters = ExpressionSet(
+        // create a new constraintset so that attrib ref list etc is copied
+        // else -- will not be able to canonicalize the expression
+        // causing idempotency to be broken
+        val possibleNewFilters = child.constraints.constructNew() ++
           Seq(GreaterThan(Size(input), Literal(0)), IsNotNull(input))
-        ) -- generate.child.constraints
-
+        val inferredFilters = possibleNewFilters -- child.constraints
         if (inferredFilters.nonEmpty) {
           generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
         } else {
