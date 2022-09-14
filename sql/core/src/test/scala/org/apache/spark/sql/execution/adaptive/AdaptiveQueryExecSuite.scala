@@ -2643,6 +2643,49 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
     }
   }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6") {
+      // partitioning:  HashPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5, $"id").rdd.getNumPartitions == 5)
+      // shuffleOrigin: REPARTITION_BY_COL
+      // The minimum partition number after AQE coalesce is 1
+      assert(spark.range(0).repartition($"id").rdd.getNumPartitions == 1)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5, $"c1").select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  RangePartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      // The minimum partition number of RangePartitioner is 1
+      assert(spark.range(0).repartitionByRange(5, $"id").rdd.getNumPartitions == 1)
+      // shuffleOrigin: REPARTITION_BY_COL
+      assert(spark.range(0).repartitionByRange($"id").rdd.getNumPartitions == 1)
+
+      // partitioning:  RoundRobinPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5).rdd.getNumPartitions == 5)
+      // shuffleOrigin: REBALANCE_PARTITIONS_BY_NONE
+      assert(spark.range(0).repartition().rdd.getNumPartitions == 0)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5).select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  SinglePartition
+      assert(spark.range(0).repartition(1).rdd.getNumPartitions == 1)
+    }
+  }
+
+  test("SPARK-39915: Ensure the output partitioning is user-specified") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(1).selectExpr("id as c1")
+      val df2 = spark.range(1).selectExpr("id as c2")
+      val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
+      assert(df.rdd.getNumPartitions == 3)
+    }
+  }
 }
 
 /**
