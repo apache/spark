@@ -506,8 +506,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 95,
-    "fragment" : "select\n  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))\nfrom tenk1 o"
+    "startIndex" : 71,
+    "stopIndex" : 79,
+    "fragment" : "o.unique1"
   } ]
 }

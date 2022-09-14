@@ -165,8 +165,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "sum(data.b) AS `sum(b)`"
+    "aggExpr" : "sum(data.b) AS `sum(b)`",
+    "index" : "3"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -188,8 +188,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`"
+    "aggExpr" : "(sum(data.b) + CAST(2 AS BIGINT)) AS `(sum(b) + 2)`",
+    "index" : "3"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -446,8 +446,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "count(1) AS `count(1)`"
+    "aggExpr" : "count(1) AS `count(1)`",
+    "index" : "3"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -492,8 +492,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "GROUP_BY_POS_REFERS_AGG_EXPR",
   "sqlState" : "42000",
   "messageParameters" : {
-    "index" : "3",
-    "aggExpr" : "count(1) AS `count(1)`"
+    "aggExpr" : "count(1) AS `count(1)`",
+    "index" : "3"
   },
   "queryContext" : [ {
     "objectType" : "",

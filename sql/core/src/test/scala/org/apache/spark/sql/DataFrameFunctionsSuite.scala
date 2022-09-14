@@ -2537,8 +2537,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("transform(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 10,
+        stop = 10))
   }
 
   test("map_filter") {
@@ -2610,8 +2615,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("map_filter(a, (k, v) -> k > v)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 11,
+        stop = 11)
+    )
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2771,8 +2782,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("filter(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2905,8 +2921,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("exists(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -3053,8 +3074,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("forall(a, x -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 7,
+        stop = 7))
 
     checkError(
       exception =
@@ -3239,8 +3265,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("aggregate(a, 0, (acc, x) -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`i`, `s`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 10,
+        stop = 10))
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3795,8 +3826,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception =
         intercept[AnalysisException](df.selectExpr("zip_with(a1, a, (acc, x) -> x)")),
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
-      parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"))
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
+      parameters = Map("objectName" -> "`a`", "proposal" -> "`a1`, `a2`, `i`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 13,
+        stop = 13)
+    )
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

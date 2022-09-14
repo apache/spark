@@ -184,10 +184,10 @@ private[spark] object SparkThrowableHelper {
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)
-          val messageParameters = e.getMessageParameters.asScala
+          val messageParameters = e.getMessageParameters
           if (!messageParameters.isEmpty) {
             g.writeObjectFieldStart("messageParameters")
-            messageParameters.foreach { case (name, value) =>
+            messageParameters.asScala.toSeq.sortBy(_._1).foreach { case (name, value) =>
               g.writeStringField(name, value)
             }
             g.writeEndObject()

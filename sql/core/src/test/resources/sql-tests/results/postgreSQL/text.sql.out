@@ -66,10 +66,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'four: 2'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -91,10 +91,10 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "42000",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'four: 2'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -312,9 +312,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_PARAMETER_VALUE",
   "sqlState" : "22023",
   "messageParameters" : {
-    "parameter" : "strfmt",
+    "expected" : "expects %1$, %2$ and so on, but got %0$.",
     "functionName" : "`format_string`",
-    "expected" : "expects %1$, %2$ and so on, but got %0$."
+    "parameter" : "strfmt"
   },
   "queryContext" : [ {
     "objectType" : "",

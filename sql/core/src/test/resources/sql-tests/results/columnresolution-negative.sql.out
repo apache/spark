@@ -169,9 +169,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 34,
-    "fragment" : "SELECT db1.t1.i1 FROM t1, mydb2.t1"
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "db1.t1.i1"
   } ]
 }
 
@@ -209,9 +209,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT mydb1.t1 FROM t1"
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "mydb1.t1"
   } ]
 }
 
@@ -242,9 +242,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 23,
-    "fragment" : "SELECT t1 FROM mydb1.t1"
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "t1"
   } ]
 }
 
@@ -274,9 +274,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 26,
-    "fragment" : "SELECT mydb1.t1.i1 FROM t1"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "mydb1.t1.i1"
   } ]
 }
 

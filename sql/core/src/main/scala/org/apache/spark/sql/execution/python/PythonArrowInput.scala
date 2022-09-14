@@ -32,14 +32,20 @@ import org.apache.spark.util.Utils
 
 /**
  * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
- * JVM (an iterator of internal rows) to Python (Arrow).
+ * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
-private[python] trait PythonArrowInput { self: BasePythonRunner[Iterator[InternalRow], _] =>
+private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected val workerConf: Map[String, String]
 
   protected val schema: StructType
 
   protected val timeZoneId: String
+
+  protected def writeIteratorToArrowStream(
+      root: VectorSchemaRoot,
+      writer: ArrowStreamWriter,
+      dataOut: DataOutputStream,
+      inputIterator: Iterator[IN]): Unit
 
   protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     // Write config for the worker as a number of key -> value pairs of strings
@@ -53,7 +59,7 @@ private[python] trait PythonArrowInput { self: BasePythonRunner[Iterator[Interna
   protected override def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[Iterator[InternalRow]],
+      inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
@@ -74,17 +80,8 @@ private[python] trait PythonArrowInput { self: BasePythonRunner[Iterator[Interna
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
-          while (inputIterator.hasNext) {
-            val nextBatch = inputIterator.next()
+          writeIteratorToArrowStream(root, writer, dataOut, inputIterator)
 
-            while (nextBatch.hasNext) {
-              arrowWriter.write(nextBatch.next())
-            }
-
-            arrowWriter.finish()
-            writer.writeBatch()
-            arrowWriter.reset()
-          }
           // end writes footer to the output stream and doesn't clean any resources.
           // It could throw exception if the output stream is closed, so it should be
           // in the try block.
@@ -104,6 +101,30 @@ private[python] trait PythonArrowInput { self: BasePythonRunner[Iterator[Interna
           allocator.close()
         }
       }
+    }
+  }
+}
+
+private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
+  self: BasePythonRunner[Iterator[InternalRow], _] =>
+
+  protected def writeIteratorToArrowStream(
+      root: VectorSchemaRoot,
+      writer: ArrowStreamWriter,
+      dataOut: DataOutputStream,
+      inputIterator: Iterator[Iterator[InternalRow]]): Unit = {
+    val arrowWriter = ArrowWriter.create(root)
+
+    while (inputIterator.hasNext) {
+      val nextBatch = inputIterator.next()
+
+      while (nextBatch.hasNext) {
+        arrowWriter.write(nextBatch.next())
+      }
+
+      arrowWriter.finish()
+      writer.writeBatch()
+      arrowWriter.reset()
     }
   }
 }

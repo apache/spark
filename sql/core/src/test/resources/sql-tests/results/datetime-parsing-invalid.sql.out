@@ -18,8 +18,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'1'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'1'"
   }
 }
 
@@ -42,8 +42,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'123'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'123'"
   }
 }
 
@@ -58,8 +58,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'1'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'1'"
   }
 }
 
@@ -74,8 +74,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
   "messageParameters" : {
-    "pattern" : "'yyyyyyy'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "pattern" : "'yyyyyyy'"
   }
 }
 
@@ -98,8 +98,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'9'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'9'"
   }
 }
 
@@ -114,8 +114,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'9'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'9'"
   }
 }
 
@@ -130,8 +130,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'99'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'99'"
   }
 }
 
@@ -202,8 +202,8 @@ org.apache.spark.SparkUpgradeException
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
   "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
   "messageParameters" : {
-    "datetime" : "'2018-366'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'2018-366'"
   }
 }
 
