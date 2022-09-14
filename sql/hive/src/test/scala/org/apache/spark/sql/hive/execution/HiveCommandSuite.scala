@@ -286,4 +286,22 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       FsConstants.LOCAL_FS_URI, workingDir, new Path("kv1.txt"))
     assert(r === new Path(s"$workingDir/kv1.txt"))
   }
+
+  test("SPARK-38482 keep the legacy output schema") {
+    Seq(true, false).foreach { keepLegacySchema =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
+        withView("v1") {
+          spark.sql("CREATE VIEW v1 AS SELECT 1 AS id ")
+
+          val views = sql("SHOW VIEWS")
+          val schema = views.schema.fieldNames.toSeq.head
+          if (keepLegacySchema) {
+            assert(schema === "database")
+          } else {
+            assert(schema === "namespace")
+          }
+        }
+      }
+    }
+  }
 }
