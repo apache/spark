@@ -77,10 +77,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "10000000000000000000000000000000000000.1",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "1",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "10000000000000000000000000000000000000.1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -102,10 +102,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "-11000000000000000000000000000000000000.1",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "1",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "-11000000000000000000000000000000000000.1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -127,10 +127,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "152415787532388367501905199875019052100",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "2",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "152415787532388367501905199875019052100"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -152,10 +152,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "1000000000000000000000000000000000000.00000000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "1000000000000000000000000000000000000.00000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -201,10 +201,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "10123456789012345678901234567890123456.00000000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "10123456789012345678901234567890123456.00000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -226,10 +226,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "101234567890123456789012345678901234.56000000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "101234567890123456789012345678901234.56000000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -251,10 +251,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "10123456789012345678901234567890123.45600000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "10123456789012345678901234567890123.45600000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -276,10 +276,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "1012345678901234567890123456789012.34560000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "1012345678901234567890123456789012.34560000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -301,10 +301,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -334,10 +334,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000",
+    "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "6",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "value" : "101234567890123456789012345678901.23456000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",

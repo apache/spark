@@ -112,7 +112,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           "objectName" -> "`key1`",
           "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
         context = ExpectedContext(
-          fragment = query, start = 0, stop = 28))
+          fragment = query,
+          start = 0,
+          stop = query.length -1)
+      )
     }
   }
 
@@ -141,7 +144,9 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
             "objectName" -> "`KEY`",
             "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
           context = ExpectedContext(
-            fragment = query, start = 0, stop = 27))
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
       }
     }
   }

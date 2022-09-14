@@ -104,13 +104,13 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE",
   "messageParameters" : {
-    "planString" : ": (cast(udf(cast(k#0 as string)) as string) = cast(udf(cast(outer(k#1) as string)) as string))"
+    "treeNode" : ": (cast(udf(cast(k#0 as string)) as string) = cast(udf(cast(outer(k#1) as string)) as string))"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 281,
-    "fragment" : "SELECT t1.k\nFROM   t1\nWHERE  t1.v <= (SELECT   udf(max(udf(t2.v)))\n                FROM     t2\n                WHERE    udf(t2.k) = udf(t1.k))\nMINUS\nSELECT t1.k\nFROM   t1\nWHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))\n                FROM     t2\n                WHERE    t2.k = t1.k)"
+    "startIndex" : 39,
+    "stopIndex" : 141,
+    "fragment" : "SELECT   udf(max(udf(t2.v)))\n                FROM     t2\n                WHERE    udf(t2.k) = udf(t1.k)"
   } ]
 }

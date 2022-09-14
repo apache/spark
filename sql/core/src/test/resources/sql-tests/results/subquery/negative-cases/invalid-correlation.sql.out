@@ -135,14 +135,14 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY",
   "errorSubClass" : "UNSUPPORTED_CORRELATED_REFERENCE",
   "messageParameters" : {
-    "planString" : ": Aggregate [min(outer(t2a#6)) AS min(outer(t2.t2a))#7]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#3,t3b#4,t3c#5])\n      +- Project [cast(t3a#0 as int) AS t3a#3, cast(t3b#1 as int) AS t3b#4, cast(t3c#2 as int) AS t3c#5]\n         +- Project [t3a#0, t3b#1, t3c#2]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#0, t3b#1, t3c#2]\n"
+    "treeNode" : ": Aggregate [min(outer(t2a#6)) AS min(outer(t2.t2a))#7]\n+- SubqueryAlias t3\n   +- View (`t3`, [t3a#3,t3b#4,t3c#5])\n      +- Project [cast(t3a#0 as int) AS t3a#3, cast(t3b#1 as int) AS t3b#4, cast(t3c#2 as int) AS t3c#5]\n         +- Project [t3a#0, t3b#1, t3c#2]\n            +- SubqueryAlias t3\n               +- LocalRelation [t3a#0, t3b#1, t3c#2]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 162,
-    "fragment" : "SELECT t1a \nFROM   t1\nWHERE  t1a IN (SELECT t2a \n               FROM   t2\n               WHERE  EXISTS (SELECT min(t2a) \n                              FROM   t3))"
+    "startIndex" : 105,
+    "stopIndex" : 160,
+    "fragment" : "SELECT min(t2a) \n                              FROM   t3"
   } ]
 }
 
@@ -177,8 +177,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 87,
-    "fragment" : "SELECT t1.t1a\nFROM   t1\nJOIN   t1_copy\nON     EXISTS (SELECT 1 FROM t2 WHERE t2a > t1a)"
+    "startIndex" : 84,
+    "stopIndex" : 86,
+    "fragment" : "t1a"
   } ]
 }

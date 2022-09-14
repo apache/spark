@@ -781,14 +781,6 @@ docker_integration_tests = Module(
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 
-infra_image = Module(
-    name="infra-image",
-    dependencies=[],
-    source_file_regexes=[
-        "dev/infra/",
-    ],
-)
-
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.
 root = Module(

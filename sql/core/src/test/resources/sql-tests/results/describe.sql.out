@@ -283,7 +283,14 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: temp_v; line 1 pos 5
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`temp_v`",
+    "objectType" : "TEMPORARY VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query
@@ -328,7 +335,14 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table or view not found: v; line 1 pos 5
+{
+  "errorClass" : "FORBIDDEN_OPERATION",
+  "messageParameters" : {
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "statement" : "DESC PARTITION"
+  }
+}
 
 
 -- !query
