@@ -411,10 +411,16 @@ class QueryCompilationErrorsSuite
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
       errorClass = "UNRESOLVED_MAP_KEY",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
       parameters = Map("objectName" -> "`a`",
         "proposal" ->
-          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"))
+          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+      context = ExpectedContext(
+        fragment = "a",
+        start = 9,
+        stop = 9)
+    )
   }
 
   test("UNRESOLVED_COLUMN: SELECT distinct does not work correctly " +
@@ -441,11 +447,16 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "UNRESOLVED_COLUMN",
-      errorSubClass = Some("WITH_SUGGESTION"),
+      errorSubClass = "WITH_SUGGESTION",
+      sqlState = None,
       parameters = Map(
         "objectName" -> "`struct`.`a`",
         "proposal" -> "`a`, `b`"
-      )
+      ),
+      context = ExpectedContext(
+        fragment = "struct.a",
+        start = 180,
+        stop = 187)
     )
   }
 
@@ -458,10 +469,15 @@ class QueryCompilationErrorsSuite
       checkError(
         exception = intercept[AnalysisException](sql(query)),
         errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = Some("WITH_SUGGESTION"),
+        errorSubClass = "WITH_SUGGESTION",
+        sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "proposal" -> "`__auto_generated_subquery_name`.`i`"))
+          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
+        context = ExpectedContext(
+          fragment = "v.i",
+          start = 7,
+          stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
