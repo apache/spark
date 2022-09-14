@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import uuid
@@ -21,7 +23,10 @@ from pyspark import SparkContext
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.types import ArrayType, DataType, StructType
-from typing import Any, Callable, Iterator, List, Mapping, Optional, Union
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql._typing import UserDefinedFunctionLike
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
@@ -132,17 +137,17 @@ def predict_batch_udf(
     predict_batch_fn: Callable[
         ...,
         Callable[
-            [Union[np.ndarray, Mapping[str, np.ndarray]]],
-            Union[np.ndarray, List[Mapping[str, np.dtype]]],
+            [np.ndarray | Mapping[str, np.ndarray]],
+            np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]],
         ],
     ],
     return_type: DataType,
     batch_size: int,
     *,
-    input_names: Optional[list[str]] = None,
-    input_tensor_shapes: Optional[list[list[int]]] = None,
+    input_names: list[str] | None = None,
+    input_tensor_shapes: list[list[int]] | None = None,
     **kwargs: Any,
-) -> Callable:
+) -> UserDefinedFunctionLike:
     """Given a function which loads a model, returns a pandas_udf for inferencing over that model.
 
     This will handle:
@@ -172,17 +177,42 @@ def predict_batch_udf(
        `pyspark.sql.functions.array()` to transform the input into a single-col tensor first.
     4. pass thru dataframe column => model input as an (ordered) dictionary of numpy arrays.
 
+    Example:
+    ```
+    from pyspark.ml.functions import predict_batch_udf
+
+    def predict_batch_fn():
+        # load/init happens once per python worker
+        import tensorflow as tf
+        model = tf.keras.models.load_model('/path/to/mnist_model')
+
+        # predict on batches of tasks/partitions, using cached model
+        def predict(
+            inputs: np.ndarray | Mapping[str, np.ndarray]
+        ) -> np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]]:
+            return model.predict(inputs)
+
+        return predict
+
+    mnist = predict_batch_udf(predict_batch_fn,
+                              return_type=ArrayType(FloatType()),
+                              batch_size=100,
+                              input_tensor_shapes=[[-1, 784]])
+
+    df = spark.read.parquet("/path/to/mnist_data")
+    preds = df.withColumn("preds", mnist(struct(df.columns))).collect()
+    ```
+
     Parameters
     ----------
-    predict_batch_fn : Callable[..., Callable[Union[np.ndarray, Mapping[str, np.ndarray]]],
-        Union[np.ndarray, List[Mapping[str, np.dtype]]]]
+    predict_batch_fn : Callable[..., Callable[np.ndarray | Mapping[str, np.ndarray]],
+        np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]] ]
         Function which is responsible for loading a model and returning a `predict` function which
         takes either a numpy array or a dictionary of named numpy arrays as input and returns either
-        a numpy array (for a single output) or a row-oriented list of dictionaries (for multiple
-        outputs).
+        a numpy array (for a single output), a dictionary of named numpy arrays (for multiple
+        outputs), or a row-oriented list of dictionaries (for multiple outputs).
     return_type : :class:`pspark.sql.types.DataType` or str.
         Spark SQL datatype for the expected output.
-        Default: ArrayType(FloatType())
     batch_size : int
         Batch size to use for inference, note that this is typically a limitation of the model
         and/or the hardware resources and is usually smaller than the Spark partition size.
@@ -214,7 +244,7 @@ def predict_batch_udf(
         for partition in data:
             has_tensors = _has_tensor_cols(partition)
             for batch in _batched(partition, batch_size):
-                inputs: Union[np.ndarray, dict[str, np.ndarray]]
+                inputs: np.ndarray | Mapping[str, np.ndarray]
                 if input_names:
                     # input names provided, expect a dictionary of named numpy arrays
                     # check if the number of inputs matches expected
@@ -269,7 +299,7 @@ def predict_batch_udf(
 
                 # return predictions to Spark
                 if isinstance(return_type, StructType):
-                    yield pd.DataFrame(list(preds))
+                    yield pd.DataFrame(preds)
                 elif isinstance(return_type, ArrayType):
                     yield pd.Series(list(preds))  # type: ignore[misc]
                 else:
