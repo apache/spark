@@ -604,7 +604,7 @@ case class Join(
       case RightOuter =>
         right.constraints
 
-      case _ => if (SQLConf.get.useOptimizedConstraintPropagation) {
+      case _ => if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
         new ConstraintSet()
       } else ExpressionSet()
     }

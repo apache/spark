@@ -54,7 +54,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * See [[Canonicalize]] for more details.
    */
   protected lazy val validConstraints: ExpressionSet =
-       if (SQLConf.get.useOptimizedConstraintPropagation) new ConstraintSet()
+       if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+         new ConstraintSet()
+       }
        else ExpressionSet(Set.empty[Expression])
 
   // For testing purposes
