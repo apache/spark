@@ -94,14 +94,13 @@ class ExpressionSet protected(
 
   override def filter(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filter(e => p(e))
-    val newOriginals = originals.filter(e => p(e.canonicalized))
+    val newOriginals = originals.filter(e => p(e))
     this.constructNew(newBaseSet, newOriginals)
   }
 
   override def filterNot(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filterNot(e => p(e))
-
-    val newOriginals = originals.filterNot(e => p(e.canonicalized))
+    val newOriginals = originals.filterNot(e => p(e))
     this.constructNew(newBaseSet, newOriginals)
   }
 

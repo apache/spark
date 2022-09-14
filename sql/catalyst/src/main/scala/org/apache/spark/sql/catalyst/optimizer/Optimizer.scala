@@ -1539,8 +1539,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         // this will be used to generate not null constraints
         val (trivialConstraints, constraintsPart1) = inferredFromOtherConstraint.partition(expr =>
           expr match {
-          case EqualNullSafe(x, y) if x.canonicalized == y.canonicalized => true
-          case EqualTo(x, y) if x.canonicalized == y.canonicalized => true
+          case EqualNullSafe(x, y) => x.canonicalized == y.canonicalized
+          case EqualTo(x, y) => x.canonicalized == y.canonicalized
           case _ => false
         })
         val constraintsOfInterest = validConstraintsFilter(ExpressionSet(extraOtherConstraints ++
