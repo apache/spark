@@ -204,7 +204,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       decimalVal.toBigInt
     } else {
-      BigInt(rawLongValue)
+      BigInt(actualLongVal)
     }
   }
 
@@ -212,7 +212,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.ne(null)) {
       decimalVal.underlying().toBigInteger()
     } else {
-      java.math.BigInteger.valueOf(rawLongValue)
+      java.math.BigInteger.valueOf(actualLongVal)
     }
   }
 
@@ -240,11 +240,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toFloat: Float = toBigDecimal.floatValue
 
-  private def rawLongValue: Long = longVal / POW_10(_scale)
+  private def actualLongVal: Long = longVal / POW_10(_scale)
 
   def toLong: Long = {
     if (decimalVal.eq(null)) {
-      rawLongValue
+      actualLongVal
     } else {
       decimalVal.longValue
     }
@@ -280,8 +280,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   private def roundToNumeric[T <: AnyVal](integralType: IntegralType, maxValue: Int, minValue: Int)
       (f1: Long => T) (f2: Double => T): T = {
     if (decimalVal.eq(null)) {
-      val numericVal = f1(rawLongValue)
-      if (rawLongValue == numericVal) {
+      val numericVal = f1(actualLongVal)
+      if (actualLongVal == numericVal) {
         numericVal
       } else {
         throw QueryExecutionErrors.castingCauseOverflowError(
@@ -304,7 +304,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   private[sql] def roundToLong(): Long = {
     if (decimalVal.eq(null)) {
-      rawLongValue
+      actualLongVal
     } else {
       try {
         // We cannot store Long.MAX_VALUE as a Double without losing precision.
