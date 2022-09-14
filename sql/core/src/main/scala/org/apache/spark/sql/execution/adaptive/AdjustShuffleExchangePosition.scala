@@ -27,7 +27,8 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
  */
 object AdjustShuffleExchangePosition extends Rule[SparkPlan] {
   private def shouldAdjust(plan: SparkPlan): Boolean = plan match {
-    // `DeserializeToObjectExec` is used by Spark internally e.g. `Dataset.rdd`.
+    // `DeserializeToObjectExec` is used by Spark internally e.g. `Dataset.rdd`. It produces
+    // safe rows and must be root node because SQL operators only accept unsafe rows as input.
     // This conflicts with AQE framework since we may add shuffle back during re-optimize
     // to preserve the user-specified repartition, so here we adjust the position with shuffle.
     case _: DeserializeToObjectExec => true
