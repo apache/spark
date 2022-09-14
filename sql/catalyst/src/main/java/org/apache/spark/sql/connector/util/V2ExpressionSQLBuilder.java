@@ -61,8 +61,9 @@ public class V2ExpressionSQLBuilder {
       String name = e.name();
       switch (name) {
         case "IN": {
-          List<String> children = expressionsToStringList(e.children());
-          return visitIn(children.get(0), children.subList(1, children.size()));
+          Expression[] expressions = e.children();
+          List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
+          return visitIn(build(expressions[0]), children);
         }
         case "IS_NULL":
           return visitIsNull(build(e.children()[0]));
@@ -393,10 +394,11 @@ public class V2ExpressionSQLBuilder {
     return result;
   }
 
-  private List<String> expressionsToStringList(Expression[] expressions) {
-    List<String> list = new ArrayList<>(expressions.length);
-    for (Expression expression : expressions) {
-      list.add(build(expression));
+  private List<String> expressionsToStringList(Expression[] expressions, int offset, int length) {
+    List<String> list = new ArrayList<>(length);
+    while (offset < offset + length) {
+      list.add(build(expressions[offset]));
+      offset++;
     }
     return list;
   }
