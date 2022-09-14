@@ -116,6 +116,7 @@ case class AdaptiveSparkPlanExec(
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
+      AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,
       RemoveRedundantSorts,

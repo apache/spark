@@ -4551,6 +4551,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("select * from test_temp_view"),
       Row(1, 2, 3, 1, 2, 3, 1, 1))
   }
+
+  test("SPARK-40389: Don't eliminate a cast which can cause overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9000000000BD as d")
+        val msg = intercept[SparkException] {
+          sql("select cast(cast(d as int) as long) from dt").collect()
+        }.getCause.getMessage
+        assert(msg.contains("The value 9000000000BD of the type \"DECIMAL(10,0)\" " +
+          "cannot be cast to \"INT\" due to an overflow"))
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

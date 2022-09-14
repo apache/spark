@@ -189,22 +189,23 @@ package object util extends Logging {
 
   implicit class MetadataColumnHelper(attr: Attribute) {
     /**
-     * If set, this metadata column is a candidate during qualified star expansions.
+     * If set, this metadata column can only be accessed with qualifiers, e.g. `qualifiers.col` or
+     * `qualifiers.*`. If not set, metadata columns cannot be accessed via star.
      */
-    val SUPPORTS_QUALIFIED_STAR = "__supports_qualified_star"
+    val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
     def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
       attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
 
-    def supportsQualifiedStar: Boolean = attr.isMetadataCol &&
-      attr.metadata.contains(SUPPORTS_QUALIFIED_STAR) &&
-      attr.metadata.getBoolean(SUPPORTS_QUALIFIED_STAR)
+    def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
+      attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
 
-    def markAsSupportsQualifiedStar(): Attribute = attr.withMetadata(
+    def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
         .putBoolean(METADATA_COL_ATTR_KEY, true)
-        .putBoolean(SUPPORTS_QUALIFIED_STAR, true)
+        .putBoolean(QUALIFIED_ACCESS_ONLY, true)
         .build()
     )
   }

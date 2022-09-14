@@ -482,7 +482,7 @@ class DataFrameSuite extends QueryTest
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 0)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -3280,6 +3280,13 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df,
       Row(java.sql.Date.valueOf("2020-02-01"), java.sql.Date.valueOf("2020-02-01")) ::
         Row(java.sql.Date.valueOf("2020-01-01"), java.sql.Date.valueOf("2020-01-02")) :: Nil)
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.sql("select * from values(1) where 1 < rand()").repartition(2)
+      assert(df.queryExecution.executedPlan.execute().getNumPartitions == 2)
+    }
   }
 }
 
