@@ -91,8 +91,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case v: Int if v < 0 =>
             e.failAnalysis(
               errorClass = "INVALID_LIMIT_CLAUSE",
-              errorSubClass = "NON_INTEGER_TYPE",
-              messageParameters = Map("type" -> v.toString))
+              errorSubClass = "NEGATIVE_LIMIT",
+              messageParameters = Map("value" -> v.toString))
           case _ => // OK
         }
     }
@@ -116,8 +116,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case v: Int if v < 0 =>
             e.failAnalysis(
               errorClass = "INVALID_OFFSET_CLAUSE",
-              errorSubClass = "NON_INTEGER_TYPE",
-              messageParameters = Map("type" -> v.toString))
+              errorSubClass = "NEGATIVE_OFFSET",
+              messageParameters = Map("value" -> v.toString))
           case _ => // OK
         }
     }
@@ -141,8 +141,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case v: Int if v < 0 =>
             e.failAnalysis(
               errorClass = "INVALID_TAIL_CLAUSE",
-              errorSubClass = "NON_INTEGER_TYPE",
-              messageParameters = Map("type" -> v.toString))
+              errorSubClass = "NEGATIVE_TAIL",
+              messageParameters = Map("value" -> v.toString))
           case _ => // OK
         }
     }

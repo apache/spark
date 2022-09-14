@@ -531,37 +531,37 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
-    "The evaluated limit expression must not be null, but got " :: Nil
+    "The expression in the LIMIT clause must not evaluate to NULL" :: Nil
   )
 
   errorTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
-    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+    "The expression in the LIMIT clause must be non-negative, but got -1" :: Nil
   )
 
   errorTest(
     "an evaluated offset class must not be string",
     testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
-    "The offset expression must be integer type, but got string" :: Nil
+    "The expression in the OFFSET clause must have integer type, but got string" :: Nil
   )
 
   errorTest(
     "an evaluated offset class must not be long",
     testRelation.offset(Literal(10L, LongType)),
-    "The offset expression must be integer type, but got bigint" :: Nil
+    "The expression in the OFFSET clause must have integer type, but got bigint" :: Nil
   )
 
   errorTest(
     "an evaluated offset class must not be null",
     testRelation.offset(Literal(null, IntegerType)),
-    "The evaluated offset expression must not be null, but got " :: Nil
+    "The expression in the OFFSET clause must not evaluate to NULL" :: Nil
   )
 
   errorTest(
     "num_rows in offset clause must be equal to or greater than 0",
     testRelation.offset(-1),
-    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+    "The expression in the OFFSET clause must be non-negative, but got -1" :: Nil
   )
 
   errorTest(
