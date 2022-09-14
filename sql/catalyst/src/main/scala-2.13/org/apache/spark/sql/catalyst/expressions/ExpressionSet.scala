@@ -193,5 +193,7 @@ class ExpressionSet protected(
     ExpressionSet(this.map(_ transform {
       case a: Attribute => mapping(a)
     }))
+
+  def getConstraintsWithDecanonicalizedNullIntolerant: ExpressionSet = this
 }
 
