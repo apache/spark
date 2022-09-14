@@ -26,7 +26,6 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -36,8 +35,6 @@ import org.apache.spark.util.Utils
  * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
-  protected val sqlConf = SQLConf.get
-
   protected val workerConf: Map[String, String]
 
   protected val schema: StructType
@@ -112,10 +109,10 @@ private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[In
   self: BasePythonRunner[Iterator[InternalRow], _] =>
 
   protected def writeIteratorToArrowStream(
-    root: VectorSchemaRoot,
-    writer: ArrowStreamWriter,
-    dataOut: DataOutputStream,
-    inputIterator: Iterator[Iterator[InternalRow]]): Unit = {
+      root: VectorSchemaRoot,
+      writer: ArrowStreamWriter,
+      dataOut: DataOutputStream,
+      inputIterator: Iterator[Iterator[InternalRow]]): Unit = {
     val arrowWriter = ArrowWriter.create(root)
 
     while (inputIterator.hasNext) {

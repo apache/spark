@@ -123,6 +123,6 @@ private[python] trait BasicPythonArrowOutput extends PythonArrowOutput[ColumnarB
   self: BasePythonRunner[_, ColumnarBatch] =>
 
   protected def deserializeColumnarBatch(
-    batch: ColumnarBatch,
-    schema: StructType): ColumnarBatch = batch
+      batch: ColumnarBatch,
+      schema: StructType): ColumnarBatch = batch
 }
