@@ -39,7 +39,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
-import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, SerializableBuffer, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * A scheduler backend that waits for coarse-grained executors to connect.
@@ -126,6 +126,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { _ =>
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
     }
+
+  private var _shutdownHookRef: AnyRef = _
+
+  _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+    ShutdownHookManager.DEFAULT_SHUTDOWN_PRIORITY) { () =>
+    logInfo("Invoking scheduler stop() from shutdown hook")
+    try {
+      stop()
+    } catch {
+      case e: Throwable =>
+        logWarning("Ignoring Exception while stopping scheduler from shutdown hook", e)
+    }
+  }
 
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
