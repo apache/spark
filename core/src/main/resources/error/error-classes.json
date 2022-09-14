@@ -435,6 +435,11 @@
     ],
     "sqlState" : "22023"
   },
+  "TOO_MANY_ARRAY_ELEMENTS" : {
+    "message" : [
+      "Cannot initialize array with <numElements> elements of size <size>"
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>"

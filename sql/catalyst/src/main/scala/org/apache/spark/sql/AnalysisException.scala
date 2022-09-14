@@ -137,7 +137,7 @@ class AnalysisException protected[sql] (
       cause: Option[Throwable] = this.cause,
       errorClass: Option[String] = this.errorClass,
       messageParameters: Map[String, String] = this.messageParameters,
-      context: Array[QueryContext] = Array.empty): AnalysisException =
+      context: Array[QueryContext] = this.context): AnalysisException =
     new AnalysisException(message, line, startPosition, plan, cause, errorClass, errorSubClass,
       messageParameters, context)
 

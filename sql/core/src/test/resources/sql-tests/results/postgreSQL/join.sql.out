@@ -3256,9 +3256,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 78,
     "stopIndex" : 81,
-    "fragment" : "select * from\n  int8_tbl x join (int4_tbl x cross join int4_tbl y) j on q1 = y.f1"
+    "fragment" : "y.f1"
   } ]
 }
 
@@ -3290,9 +3290,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "select t1.uunique1 from\n  tenk1 t1 join tenk2 t2 on t1.two = t2.two"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "t1.uunique1"
   } ]
 }
 
@@ -3315,9 +3315,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 67,
-    "fragment" : "select t2.uunique1 from\n  tenk1 t1 join tenk2 t2 on t1.two = t2.two"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "t2.uunique1"
   } ]
 }
 
@@ -3340,9 +3340,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 64,
-    "fragment" : "select uunique1 from\n  tenk1 t1 join tenk2 t2 on t1.two = t2.two"
+    "startIndex" : 8,
+    "stopIndex" : 15,
+    "fragment" : "uunique1"
   } ]
 }
 
@@ -3554,9 +3554,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 48,
-    "fragment" : "select f1,g from int4_tbl a, (select f1 as g) ss"
+    "startIndex" : 38,
+    "stopIndex" : 39,
+    "fragment" : "f1"
   } ]
 }
 
@@ -3577,9 +3577,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 50,
-    "fragment" : "select f1,g from int4_tbl a, (select a.f1 as g) ss"
+    "startIndex" : 38,
+    "stopIndex" : 41,
+    "fragment" : "a.f1"
   } ]
 }
 
@@ -3600,9 +3600,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 58,
-    "fragment" : "select f1,g from int4_tbl a cross join (select f1 as g) ss"
+    "startIndex" : 48,
+    "stopIndex" : 49,
+    "fragment" : "f1"
   } ]
 }
 
@@ -3623,9 +3623,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 60,
-    "fragment" : "select f1,g from int4_tbl a cross join (select a.f1 as g) ss"
+    "startIndex" : 48,
+    "stopIndex" : 51,
+    "fragment" : "a.f1"
   } ]
 }
 

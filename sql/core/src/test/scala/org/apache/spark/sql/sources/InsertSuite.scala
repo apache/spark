@@ -2113,9 +2113,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "proposal" ->
             "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
         context = ExpectedContext(
-          fragment = insert,
-          start = 1,
-          stop = insert.length))
+          fragment = "c3",
+          start = insert.length + 26,
+          stop = insert.length + 27))
     }
   }
 

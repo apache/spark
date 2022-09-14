@@ -474,9 +474,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
   "messageParameters" : {
-    "statement" : "DESC PARTITION",
+    "objectName" : "`temp_v`",
     "objectType" : "TEMPORARY VIEW",
-    "objectName" : "`temp_v`"
+    "statement" : "DESC PARTITION"
   }
 }
 
@@ -560,9 +560,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "FORBIDDEN_OPERATION",
   "messageParameters" : {
-    "statement" : "DESC PARTITION",
+    "objectName" : "`v`",
     "objectType" : "VIEW",
-    "objectName" : "`v`"
+    "statement" : "DESC PARTITION"
   }
 }
 

@@ -1119,10 +1119,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1146,10 +1146,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1163,10 +1163,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a?'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a?'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1180,10 +1180,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcde'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcde'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1197,10 +1197,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'abcd='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'abcd='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1214,10 +1214,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'a==='",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'a==='",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1231,10 +1231,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'ab==f'",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'ab==f'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1321,10 +1321,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'GG'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'GG'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1338,10 +1338,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "'01 AF'",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "'01 AF'",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1363,10 +1363,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'BASE64'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 
@@ -1380,10 +1380,10 @@ org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "CONVERSION_INVALID_INPUT",
   "messageParameters" : {
-    "str" : "' ab cdef= = '",
     "fmt" : "'HEX'",
-    "targetType" : "\"BINARY\"",
-    "suggestion" : "`try_to_binary`"
+    "str" : "' ab cdef= = '",
+    "suggestion" : "`try_to_binary`",
+    "targetType" : "\"BINARY\""
   }
 }
 

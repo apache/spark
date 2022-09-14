@@ -393,9 +393,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -737,10 +737,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "4567890123456789L",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "4567890123456789L"
   }
 }
 
@@ -763,10 +763,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "4567890123456789L",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"SMALLINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "4567890123456789L"
   }
 }
 
@@ -809,10 +809,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "9.223372036854776E20D",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "9.223372036854776E20D"
   }
 }
 
@@ -890,10 +890,10 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22005",
   "messageParameters" : {
-    "value" : "-9223372036854775808L",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "-9223372036854775808L"
   }
 }
 
@@ -908,9 +908,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -948,9 +948,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -988,9 +988,9 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "ARITHMETIC_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "message" : "long overflow",
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\""
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
   },
   "queryContext" : [ {
     "objectType" : "",

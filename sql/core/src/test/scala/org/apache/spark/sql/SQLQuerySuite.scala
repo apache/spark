@@ -2676,9 +2676,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             "left" -> "\"STRUCT<f: INT>\"",
             "right" -> "\"STRUCT<F: INT>\""),
           context = ExpectedContext(
-            fragment = query,
-            start = 0,
-            stop = 29))
+            fragment = "c = C",
+            start = 25,
+            stop = 29
+          ))
       }
     }
   }
