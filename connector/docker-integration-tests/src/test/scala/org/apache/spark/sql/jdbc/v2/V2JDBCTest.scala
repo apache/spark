@@ -128,7 +128,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> s"`$catalogName`.`not_existing_table`"))
+      parameters = Map("relation_name"
+        -> s"`$catalogName`.`not_existing_table`"))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
