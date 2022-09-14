@@ -322,9 +322,9 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>true</td>
   <td>
     Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
-    automatically reload info on current executors.  This only affects standalone mode.  You should also enable 
-    <code>spark.worker.cleanup.enabled</code>, to ensure that the state eventually gets cleaned up.  
-    This config may be removed in the future.
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
   </td>
   <td>3.0.0</td>
 </tr>
