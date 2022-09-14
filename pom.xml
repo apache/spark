@@ -691,20 +691,12 @@
         <scope>test</scope>
         <exclusions>
           <exclusion>
-            <groupId>org.seleniumhq.selenium</groupId>
-            <artifactId>selenium-remote-driver</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-remote-driver</artifactId>
-        <version>${selenium.version}</version>
-        <scope>test</scope>
-        <exclusions>
-          <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
