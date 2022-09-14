@@ -17,22 +17,13 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Any, Union, no_type_check
-
-import numpy as np
+from typing import Union, no_type_check
 
 from pyspark import SparkContext
-from pyspark.sql import functions as F
 from pyspark.sql.column import (
     Column,
     _to_java_column,
     _create_column_from_literal,
-)
-from pyspark.sql.types import (
-    ByteType,
-    FloatType,
-    IntegerType,
-    LongType,
 )
 
 
@@ -74,13 +65,6 @@ def date_part(field: Union[str, Column], source: Column) -> Column:
         _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
     )
     return _call_udf(sc, "date_part", field, _to_java_column(source))
-
-
-def lit(literal: Any) -> Column:
-    """
-    Creates a Column of literal value.
-    """
-    return F.lit(literal)
 
 
 @no_type_check
