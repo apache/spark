@@ -396,7 +396,8 @@ public class V2ExpressionSQLBuilder {
 
   private List<String> expressionsToStringList(Expression[] expressions, int offset, int length) {
     List<String> list = new ArrayList<>(length);
-    while (offset < offset + length) {
+    final int till = Math.min(offset + length, expressions.length);
+    while (offset < till) {
       list.add(build(expressions[offset]));
       offset++;
     }
