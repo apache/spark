@@ -176,5 +176,22 @@ class ExpressionSet protected(
        |baseSet: ${baseSet.mkString(", ")}
        |originals: ${originals.mkString(", ")}
      """.stripMargin
+
+  def convertToCanonicalizedIfRequired(ele: Expression): Expression = ele
+  def rewriteUsingAlias(expr: Expression): Expression = expr
+
+  def getConstraintsSubsetOfAttributes(expressionsOfInterest: Iterable[Expression]):
+  Seq[Expression] = Seq.empty
+
+  def updateConstraints(outputAttribs: Seq[Attribute],
+                        inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
+                        oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]):
+  ExpressionSet = oldAliasedConstraintsCreator.map(aliasCreator =>
+    this.union(aliasCreator(projectList))).getOrElse(this)
+
+  def attributesRewrite(mapping: AttributeMap[Attribute]): ExpressionSet =
+    ExpressionSet(this.map(_ transform {
+      case a: Attribute => mapping(a)
+    }))
 }
 
