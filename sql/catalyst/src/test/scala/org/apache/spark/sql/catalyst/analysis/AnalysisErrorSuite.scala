@@ -795,7 +795,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
     assertAnalysisErrorClass(plan,
       expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relation_name" -> "`nonexist`.`t`"))
+      Map("relationName" -> "`nonexist`.`t`"))
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {

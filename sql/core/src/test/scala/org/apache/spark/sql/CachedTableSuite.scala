@@ -155,7 +155,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
       checkError(e,
         errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> "`tempView`"))
+        parameters = Map("relationName" -> "`tempView`"))
     }
   }
 
@@ -966,7 +966,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
             checkError(e,
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              parameters = Map("relation_name" -> "`t1`"))
+              parameters = Map("relationName" -> "`t1`"))
           }
         }
       }
@@ -999,7 +999,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
                 checkError(e,
                   errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-                  parameters = Map("relation_name" -> "`t1`"))
+                  parameters = Map("relationName" -> "`t1`"))
               }
             }
           }
@@ -1439,7 +1439,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> s"`$t`"))
+        parameters = Map("relationName" -> s"`$t`"))
     }
   }
 

@@ -213,7 +213,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`showdb`.`show_t*`"
+    "relationName" : "`showdb`.`show_t*`"
   }
 }
 
@@ -246,8 +246,8 @@ org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
   "errorClass" : "PARTITIONS_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "partition_list" : "PARTITION (`c` = Ch, `d` = 1)",
-    "table_name" : "`showdb`.`show_t1`"
+    "partitionList" : "PARTITION (`c` = Ch, `d` = 1)",
+    "tableName" : "`showdb`.`show_t1`"
   }
 }
 

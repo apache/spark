@@ -753,7 +753,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`nonexistent`"))
+        parameters = Map("relationName" -> "`nonexistent`"))
     }
   }
 

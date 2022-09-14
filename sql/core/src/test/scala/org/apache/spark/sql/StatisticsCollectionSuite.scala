@@ -602,7 +602,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
       checkError(e1,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> s"`$globalTempDB`.`gTempView`"))
+        parameters = Map("relationName" -> s"`$globalTempDB`.`gTempView`"))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
       val errMsg2 = intercept[AnalysisException] {
@@ -799,6 +799,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`db_not_exists`"))
+      parameters = Map("schemaName" -> "`db_not_exists`"))
   }
 }

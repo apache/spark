@@ -94,7 +94,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
       checkError(e,
         errorClass = "SCHEMA_ALREADY_EXISTS",
-        parameters = Map("schema_name" -> s"`$namespace`"))
+        parameters = Map("schemaName" -> s"`$namespace`"))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")

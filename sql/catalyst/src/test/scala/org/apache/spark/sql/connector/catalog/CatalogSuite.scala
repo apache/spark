@@ -173,7 +173,7 @@ class CatalogSuite extends SparkFunSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> testIdent.quoted))
+      parameters = Map("relationName" -> testIdent.quoted))
   }
 
   test("invalidateTable") {
@@ -626,7 +626,7 @@ class CatalogSuite extends SparkFunSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> testIdent.quoted))
+      parameters = Map("relationName" -> testIdent.quoted))
   }
 
   test("dropTable") {
@@ -684,7 +684,7 @@ class CatalogSuite extends SparkFunSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> testIdent.quoted))
+      parameters = Map("relationName" -> testIdent.quoted))
   }
 
   test("renameTable: fail if new table name already exists") {

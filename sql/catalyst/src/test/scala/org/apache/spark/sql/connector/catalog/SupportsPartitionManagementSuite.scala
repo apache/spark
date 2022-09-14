@@ -223,8 +223,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     }
     checkError(e,
       errorClass = "PARTITIONS_ALREADY_EXIST",
-      parameters = Map("partition_list" -> "PARTITION (`part0` = 1, `part1` = abc)",
-      "table_name" -> "`test`.`ns`.`test_table`"))
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 1, `part1` = abc)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
 
     val newPart = InternalRow(2, "xyz")
     val e2 = intercept[NoSuchPartitionException] {
@@ -232,8 +232,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     }
     checkError(e2,
       errorClass = "PARTITIONS_NOT_FOUND",
-      parameters = Map("partition_list" -> "PARTITION (`part0` = 2, `part1` = xyz)",
-        "table_name" -> "`test`.`ns`.`test_table`"))
+      parameters = Map("partitionList" -> "PARTITION (`part0` = 2, `part1` = xyz)",
+        "tableName" -> "`test`.`ns`.`test_table`"))
 
     assert(partTable.renamePartition(InternalRow(0, "abc"), newPart))
     assert(partTable.partitionExists(newPart))

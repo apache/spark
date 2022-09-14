@@ -154,7 +154,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Hint not found: ${u.name}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        throw new NoSuchTableException(u.multipartIdentifier)
+        u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>

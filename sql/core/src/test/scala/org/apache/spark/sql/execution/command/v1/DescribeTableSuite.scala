@@ -48,8 +48,8 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       }
       checkError(e,
         errorClass = "PARTITIONS_NOT_FOUND",
-        parameters = Map("partition_list" -> "PARTITION (`id` = 1)",
-          "table_name" -> "`ns`.`table`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 1)",
+          "tableName" -> "`ns`.`table`"))
     }
   }
 

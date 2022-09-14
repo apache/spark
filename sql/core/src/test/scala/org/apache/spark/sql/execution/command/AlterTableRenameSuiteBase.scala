@@ -52,7 +52,7 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> s"`$catalog`.`dbx`.`does_not_exist`"))
+      parameters = Map("relationName" -> s"`$catalog`.`dbx`.`does_not_exist`"))
   }
 
   test("omit namespace in the destination table") {

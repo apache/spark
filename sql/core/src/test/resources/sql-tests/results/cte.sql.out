@@ -25,7 +25,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`s`"
+    "relationName" : "`s`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -48,7 +48,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`r`"
+    "relationName" : "`r`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -80,7 +80,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`s2`"
+    "relationName" : "`s2`"
   },
   "queryContext" : [ {
     "objectType" : "",

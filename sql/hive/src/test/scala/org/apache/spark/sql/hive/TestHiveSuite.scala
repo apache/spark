@@ -40,7 +40,7 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
       }
       checkError(err,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`SRC`"))
+        parameters = Map("relationName" -> "`SRC`"))
     }
     testHiveSparkSession.reset()
   }

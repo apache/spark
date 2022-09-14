@@ -273,7 +273,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
       checkError(e,
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schema_name" -> "`d:b`"))
+        parameters = Map("schemaName" -> "`d:b`"))
     }
 
     {
@@ -282,7 +282,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
       checkError(e,
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schema_name" -> "`d:b`"))
+        parameters = Map("schemaName" -> "`d:b`"))
     }
 
     withTempDir { dir =>
@@ -314,7 +314,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         }
         checkError(e,
           errorClass = "SCHEMA_NOT_FOUND",
-          parameters = Map("schema_name" -> "`d:b`"))
+          parameters = Map("schemaName" -> "`d:b`"))
       }
     }
   }

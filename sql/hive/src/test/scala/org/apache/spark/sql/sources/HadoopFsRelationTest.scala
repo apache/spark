@@ -387,7 +387,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
+        parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
     }
   }
 

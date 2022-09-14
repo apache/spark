@@ -593,7 +593,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`v7_temp`"
+    "relationName" : "`v7_temp`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -615,7 +615,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`v10_temp`"
+    "relationName" : "`v10_temp`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -637,7 +637,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`v11_temp`"
+    "relationName" : "`v11_temp`"
   },
   "queryContext" : [ {
     "objectType" : "",

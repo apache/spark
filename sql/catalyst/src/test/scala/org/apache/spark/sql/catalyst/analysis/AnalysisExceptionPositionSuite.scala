@@ -53,7 +53,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assertAnalysisErrorClass(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relation_name" -> "`db`.`unknown`"),
+      Map("relationName" -> "`db`.`unknown`"),
       line = 1,
       pos = 18)
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
@@ -99,7 +99,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     assertAnalysisErrorClass(
       parsePlan(sql),
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relation_name" -> s"`$table`"),
+      Map("relationName" -> s"`$table`"),
       line = 1,
       pos = expectedPos)
   }

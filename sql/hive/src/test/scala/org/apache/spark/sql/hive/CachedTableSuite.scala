@@ -106,19 +106,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     var e = intercept[AnalysisException](spark.table("nonexistentTable"))
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`nonexistentTable`"))
+      parameters = Map("relationName" -> "`nonexistentTable`"))
     e = intercept[AnalysisException] {
       uncacheTable("nonexistentTable")
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`nonexistentTable`"))
+      parameters = Map("relationName" -> "`nonexistentTable`"))
     e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistentTable")
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`nonexistentTable`"))
+      parameters = Map("relationName" -> "`nonexistentTable`"))
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 

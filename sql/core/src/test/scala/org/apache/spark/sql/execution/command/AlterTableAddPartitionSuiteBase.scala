@@ -86,7 +86,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`test_catalog`.`ns`.`does_not_exist`"))
+        parameters = Map("relationName" -> "`test_catalog`.`ns`.`does_not_exist`"))
     }
   }
 
@@ -180,8 +180,8 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       }
       checkError(e,
         errorClass = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partition_list" -> "PARTITION (`id` = 1)",
-        "table_name" -> "`ns`.`tbl`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 1)",
+        "tableName" -> "`ns`.`tbl`"))
 
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")

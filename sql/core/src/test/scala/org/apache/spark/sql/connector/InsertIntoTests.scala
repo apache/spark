@@ -236,7 +236,7 @@ trait InsertIntoSQLOnlyTests
         }
         checkError(e,
           errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-          parameters = Map("relation_name" -> "`tbl2`"))
+          parameters = Map("relationName" -> "`tbl2`"))
       }
     }
 

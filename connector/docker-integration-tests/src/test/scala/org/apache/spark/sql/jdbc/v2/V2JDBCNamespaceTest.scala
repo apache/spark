@@ -92,7 +92,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       }
       checkError(e,
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schema_name" -> "`foo`"))
+        parameters = Map("schemaName" -> "`foo`"))
     }
   }
 

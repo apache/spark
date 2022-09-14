@@ -300,7 +300,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`cte_invisible_inner`"
+    "relationName" : "`cte_invisible_inner`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -335,7 +335,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`cte_invisible_inner`"
+    "relationName" : "`cte_invisible_inner`"
   },
   "queryContext" : [ {
     "objectType" : "",

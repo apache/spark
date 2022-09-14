@@ -189,20 +189,20 @@ private[sql] object H2Dialect extends JdbcDialect {
             val quotedName = UnresolvedAttribute.parseAttributeName(message)
               .map(part => quoteIdentifier(part)).mkString(".")
             throw new TableAlreadyExistsException(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-              messageParameters = Map("relation_name" -> quotedName),
+              messageParameters = Map("relationName" -> quotedName),
               cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
             val quotedName = UnresolvedAttribute.parseAttributeName(message)
               .map(part => quoteIdentifier(part)).mkString(".")
             throw new NoSuchTableException(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relation_name" -> quotedName))
+              messageParameters = Map("relationName" -> quotedName))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
             val quotedName = UnresolvedAttribute.parseAttributeName(message)
               .map(part => quoteIdentifier(part)).mkString(".")
             throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
-              messageParameters = Map("schema_name" -> quotedName))
+              messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
           case 42111 =>
             throw new IndexAlreadyExistsException(message, cause = Some(e))

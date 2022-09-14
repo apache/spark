@@ -168,8 +168,8 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     }
     checkError(e,
       errorClass = "PARTITIONS_NOT_FOUND",
-      parameters = Map("partition_list" -> "PARTITION (`dt` = 6)",
-      "table_name" -> "`test`.`ns`.`test_table`"))
+      parameters = Map("partitionList" -> "PARTITION (`dt` = 6)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
   }
 }

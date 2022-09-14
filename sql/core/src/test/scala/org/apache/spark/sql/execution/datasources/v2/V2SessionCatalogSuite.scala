@@ -234,7 +234,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`db`.`test_table`"))
+      parameters = Map("relationName" -> "`db`.`test_table`"))
   }
 
   test("invalidateTable") {
@@ -687,7 +687,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> testIdent.quoted))
+      parameters = Map("relationName" -> testIdent.quoted))
   }
 
   test("alterTable: location") {
@@ -765,7 +765,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`db`.`test_table`"))
+      parameters = Map("relationName" -> "`db`.`test_table`"))
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -786,7 +786,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      parameters = Map("relation_name" -> testIdentNew.quoted))
+      parameters = Map("relationName" -> testIdentNew.quoted))
   }
 
   test("renameTable: fail if db does not match for old and new table names") {

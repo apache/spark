@@ -89,7 +89,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -112,13 +112,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
     checkError(exp1,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`h2`.`test`.`not_existing_table`"))
+      parameters = Map("relationName" -> "`h2`.`test`.`not_existing_table`"))
     val exp2 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
     checkError(exp2,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`h2`.`bad_test`.`not_existing_table`"))
+      parameters = Map("relationName" -> "`h2`.`bad_test`.`not_existing_table`"))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>
@@ -153,7 +153,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -171,7 +171,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> "`test`.`new_table`"))
+        parameters = Map("relationName" -> "`test`.`new_table`"))
     }
     val exp = intercept[NoSuchNamespaceException] {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
@@ -211,7 +211,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected)
+        parameters = Map("relationName" -> expected)
       )
     }
   }
@@ -242,7 +242,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -271,7 +271,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -307,7 +307,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -338,7 +338,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 
@@ -367,7 +367,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> expected))
+        parameters = Map("relationName" -> expected))
     }
   }
 

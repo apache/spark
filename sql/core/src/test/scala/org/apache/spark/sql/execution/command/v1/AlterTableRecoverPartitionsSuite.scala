@@ -42,7 +42,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`does_not_exist`"))
+      parameters = Map("relationName" -> "`does_not_exist`"))
   }
 
   test("valid locations") {

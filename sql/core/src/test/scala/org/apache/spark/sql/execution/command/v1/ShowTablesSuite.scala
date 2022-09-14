@@ -135,7 +135,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`unknown`"))
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 
 }

@@ -62,7 +62,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> s"`$catalog`.`ns`.`no_tbl`"))
+        parameters = Map("relationName" -> s"`$catalog`.`ns`.`no_tbl`"))
     }
   }
 
@@ -75,8 +75,8 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
       checkError(e,
         errorClass = "PARTITIONS_NOT_FOUND",
-        parameters = Map("partition_list" -> "PARTITION (`id` = 3)",
-          "table_name" -> "`ns`.`tbl`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 3)",
+          "tableName" -> "`ns`.`tbl`"))
     }
   }
 
@@ -90,7 +90,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
       checkError(e,
         errorClass = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partition_list" -> "PARTITION (`id` = 2)", "table_name" -> "`ns`.`tbl`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)", "tableName" -> "`ns`.`tbl`"))
     }
   }
 

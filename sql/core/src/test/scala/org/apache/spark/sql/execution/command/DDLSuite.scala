@@ -827,7 +827,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val e = intercept[AnalysisException](spark.table("tab1"))
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`tab1`"))
+        parameters = Map("relationName" -> "`tab1`"))
       sql("ALTER VIEW tab2 RENAME TO tab1")
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
       intercept[AnalysisException] { spark.table("tab2") }
@@ -863,7 +863,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       }
       checkError(e,
       "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> "`tab2`"))
+        parameters = Map("relationName" -> "`tab2`"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))

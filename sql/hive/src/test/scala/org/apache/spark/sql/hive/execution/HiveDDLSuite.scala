@@ -1222,7 +1222,7 @@ class HiveDDLSuite
       assertAnalysisErrorClass(
         sqlDropDatabase,
         "SCHEMA_NOT_EMPTY",
-        Map("schema_name" -> s"`$dbName`"))
+        Map("schemaName" -> s"`$dbName`"))
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
@@ -2970,7 +2970,7 @@ class HiveDDLSuite
       }
       checkError(e,
         errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routine_name" -> "`f1`"))
+        parameters = Map("routineName" -> "`f1`"))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
 
       sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +

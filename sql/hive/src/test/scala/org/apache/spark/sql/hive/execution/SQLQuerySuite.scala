@@ -89,7 +89,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> s"`${global_temp_db}`.`nonexistentview`"))
+      parameters = Map("relationName" -> s"`${global_temp_db}`.`nonexistentview`"))
   }
 
   test("script") {

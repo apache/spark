@@ -59,7 +59,7 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> s"`$catalog`.`ns`.`tbl`"))
+        parameters = Map("relationName" -> s"`$catalog`.`ns`.`tbl`"))
     }
   }
 

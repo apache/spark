@@ -337,7 +337,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         checkError(e,
           errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-          parameters = Map("relation_name" -> s"`$SESSION_CATALOG_NAME`.`default`.`ctasJsonTable`"))
+          parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`ctasJsonTable`"))
 
         // The following statement should be fine if it has IF NOT EXISTS.
         // It tries to create a table ctasJsonTable with a new schema.
@@ -527,7 +527,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             }
           checkError(e,
             errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-            parameters = Map("relation_name"
+            parameters = Map("relationName"
               -> s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`"))
         }
 
@@ -1256,7 +1256,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+        parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
       )
     }
   }

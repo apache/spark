@@ -143,7 +143,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
   "errorClass" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "schema_name" : "`wrongdb`"
+    "schemaName" : "`wrongdb`"
   }
 }
 

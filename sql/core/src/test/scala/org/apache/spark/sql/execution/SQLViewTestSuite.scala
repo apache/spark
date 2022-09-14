@@ -291,7 +291,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           }
           checkError(e,
             errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-            parameters = Map("relation_name" -> "`t`"))
+            parameters = Map("relationName" -> "`t`"))
         }
       }
     }

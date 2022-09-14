@@ -191,7 +191,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     }
     checkError(ex,
       errorClass = "SCHEMA_NOT_EMPTY",
-      parameters = Map("schema_name" -> "`temporary`"))
+      parameters = Map("schemaName" -> "`temporary`"))
 
     client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
     assert(!client.databaseExists("temporary"))
@@ -532,8 +532,8 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       }
       checkError(e,
         errorClass = "PARTITIONS_ALREADY_EXIST",
-        parameters = Map("partition_list" -> "PARTITION (`key1` = 101, `key2` = 102)",
-          "table_name" -> "`default`.`src_part`"))
+        parameters = Map("partitionList" -> "PARTITION (`key1` = 101, `key2` = 102)",
+          "tableName" -> "`default`.`src_part`"))
     } finally {
       client.dropPartitions(
         "default",

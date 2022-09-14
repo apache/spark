@@ -159,7 +159,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`testcat`.`table_name`"))
+      parameters = Map("relationName" -> "`testcat`.`table_name`"))
   }
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
@@ -265,7 +265,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`testcat`.`table_name`"))
+      parameters = Map("relationName" -> "`testcat`.`table_name`"))
   }
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
@@ -371,7 +371,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     checkError(exc,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`testcat`.`table_name`"))
+      parameters = Map("relationName" -> "`testcat`.`table_name`"))
   }
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {

@@ -653,7 +653,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotDropNonemptyDatabaseError(db: String): Throwable = {
     new AnalysisException(errorClass = "SCHEMA_NOT_EMPTY",
-      Map("schema_name" -> toSQLId(db)))
+      Map("schemaName" -> toSQLId(db)))
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {

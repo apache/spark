@@ -57,7 +57,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       checkError(exc,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> quotedT2))
+        parameters = Map("relationName" -> quotedT2))
     }
   }
 

@@ -220,7 +220,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`outermost`"
+    "relationName" : "`outermost`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -399,8 +399,15 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`test`"
-  }
+    "relationName" : "`test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 41,
+    "fragment" : "test"
+  } ]
 }
 
 

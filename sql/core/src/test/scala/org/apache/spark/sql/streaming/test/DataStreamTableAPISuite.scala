@@ -80,7 +80,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`non-existent_table`"))
+      parameters = Map("relationName" -> "`non-existent_table`"))
   }
 
   test("read: stream table API with temp view") {

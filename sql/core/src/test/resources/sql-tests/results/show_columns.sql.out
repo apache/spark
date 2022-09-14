@@ -95,7 +95,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`showdb`.`badtable`"
+    "relationName" : "`showdb`.`badtable`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -144,7 +144,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`showdb`.`showcolumn3`"
+    "relationName" : "`showdb`.`showcolumn3`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -166,7 +166,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`showdb`.`showcolumn3`"
+    "relationName" : "`showdb`.`showcolumn3`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -188,7 +188,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42000",
   "messageParameters" : {
-    "relation_name" : "`showcolumn4`"
+    "relationName" : "`showcolumn4`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -1208,7 +1208,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`ns`"))
+      parameters = Map("schemaName" -> "`ns`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
@@ -1219,7 +1219,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`ns1`.`ns2`"))
+      parameters = Map("schemaName" -> "`ns1`.`ns2`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
@@ -1579,7 +1579,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         "UPDATE dummy SET name='abc'",
         expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
         expectedErrorSubClass = "",
-        expectedErrorMessageParameters = Map("relation_name" -> "`dummy`"))
+        expectedErrorMessageParameters = Map("relationName" -> "`dummy`"))
 
       // UPDATE non-existing column
       assertAnalysisErrorClass(
@@ -1638,7 +1638,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin,
         expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
         expectedErrorSubClass = "",
-        expectedErrorMessageParameters = Map("relation_name" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
+        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
 
       // USING non-existing table
       assertAnalysisErrorClass(
@@ -1653,7 +1653,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
          """.stripMargin,
         expectedErrorClass = "TABLE_OR_VIEW_NOT_FOUND",
         expectedErrorSubClass = "",
-        expectedErrorMessageParameters = Map("relation_name" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
+        expectedErrorMessageParameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`dummy`"))
 
 
       // UPDATE non-existing column
@@ -1717,7 +1717,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`testcat`.`ns`.`tbl`"))
+      parameters = Map("relationName" -> "`testcat`.`ns`.`tbl`"))
   }
 
   test("ANALYZE TABLE") {
@@ -1776,7 +1776,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`testcat`.`ns1`.`ns2`.`tbl`"))
+      parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`tbl`"))
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")

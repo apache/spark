@@ -91,7 +91,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`test_catalog`.`ns`.`does_not_exist`"))
+        parameters = Map("relationName" -> "`test_catalog`.`ns`.`does_not_exist`"))
     }
   }
 
@@ -137,8 +137,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       }
       checkError(e,
         errorClass = "PARTITIONS_NOT_FOUND",
-        parameters = Map("partition_list" -> "PARTITION (`id` = 2)",
-        "table_name" -> "`test_catalog`.`ns`.`tbl`"))
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
+        "tableName" -> "`test_catalog`.`ns`.`tbl`"))
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")

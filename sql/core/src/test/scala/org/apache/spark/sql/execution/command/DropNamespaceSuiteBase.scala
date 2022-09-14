@@ -65,7 +65,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`unknown`"))
+      parameters = Map("schemaName" -> "`unknown`"))
   }
 
   test("drop non-empty namespace with a non-cascading mode") {
@@ -79,7 +79,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_EMPTY",
-      parameters = Map("schema_name" -> "`ns`"))
+      parameters = Map("schemaName" -> "`ns`"))
     sql(s"DROP TABLE $catalog.ns.table")
 
     // Now that $catalog.ns is empty, it can be dropped.

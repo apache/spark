@@ -41,7 +41,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
       checkError(e,
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relation_name" -> "`spark_catalog`.`ns`.`does_not_exist`"))
+        parameters = Map("relationName" -> "`spark_catalog`.`ns`.`does_not_exist`"))
     }
   }
 

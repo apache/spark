@@ -420,14 +420,14 @@
   },
   "PARTITIONS_ALREADY_EXIST" : {
     "message" : [
-      "Cannot ADD or RENAME TO partition(s) <partition_list> in table <table_name> because they already exist.",
+      "Cannot ADD or RENAME TO partition(s) <partition_list> in table <tableName> because they already exist.",
       "Choose a different name, drop the existing partition, or add the IF NOT EXISTS clause to tolerate a pre-existing partition."
     ],
     "sqlState" : "42000"
   },
   "PARTITIONS_NOT_FOUND" : {
     "message" : [
-      "The partition(s) <partition_list> cannot be found in table <table_name>.",
+      "The partition(s) <partitionList> cannot be found in table <tableName>.",
       "Verify the partition specification and table name.",
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
@@ -452,14 +452,14 @@
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the function <routine_name> because it already exists.",
+      "Cannot create the function <routineName> because it already exists.",
       "Choose a different name, drop or replace the existing function, or add the IF NOT EXISTS clause to tolerate a pre-existing function."
     ],
     "sqlState" : "42000"
   },
   "ROUTINE_NOT_FOUND" : {
     "message" : [
-      "The function <routine_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The function <routineName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
@@ -467,21 +467,21 @@
   },
   "SCHEMA_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create schema <schema_name> because it already exists.",
+      "Cannot create schema <schemaName> because it already exists.",
       "Choose a different name, drop the existing schema, or add the IF NOT EXISTS clause to tolerate pre-existing schema."
     ],
     "sqlState" : "42000"
   },
   "SCHEMA_NOT_EMPTY" : {
     "message" : [
-      "Cannot drop a schema <schema_name> because it contains objects.",
+      "Cannot drop a schema <schemaName> because it contains objects.",
       "Use DROP SCHEMA ... CASCADE to drop the schema and all its objects."
     ],
     "sqlState" : "42000"
   },
   "SCHEMA_NOT_FOUND" : {
     "message" : [
-      "The schema <schema_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The schema <schemaName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.",
       "To tolerate the error on drop use DROP SCHEMA IF EXISTS."
     ],
@@ -495,14 +495,14 @@
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create table or view <relation_name> because it already exists.",
+      "Cannot create table or view <relationName> because it already exists.",
       "Choose a different name, drop or replace the existing object, or add the IF NOT EXISTS clause to tolerate pre-existing objects."
     ],
     "sqlState" : "42000"
   },
   "TABLE_OR_VIEW_NOT_FOUND" : {
     "message" : [
-      "The table or view <relation_name> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "The table or view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
       "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
@@ -510,7 +510,7 @@
   },
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
-      "Cannot create the temporary view <relation_name> because it already exists.",
+      "Cannot create the temporary view <relationName> because it already exists.",
       "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
     ],
     "sqlState" : "42000"

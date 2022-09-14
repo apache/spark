@@ -77,7 +77,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`BADTABLE`"))
+      parameters = Map("relationName" -> "`BADTABLE`"))
   }
 
   test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {

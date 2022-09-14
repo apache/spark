@@ -731,7 +731,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
     assertAnalysisErrorClass(parsePlan("INSERT INTO test VALUES (1)"),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relation_name" -> "`test`"))
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`test`"))
   }
 
   test("check CollectMetrics resolved") {
@@ -1197,7 +1197,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
          |FROM t1
          |JOIN t2 ON t1.user_id = t2.user_id
          |WHERE t1.dt >= DATE_SUB('2020-12-27', 90)""".stripMargin),
-      "TABLE_OR_VIEW_NOT_FOUND", Map("relation_name" -> "`t2`"))
+      "TABLE_OR_VIEW_NOT_FOUND", Map("relationName" -> "`t2`"))
   }
 
   test("SPARK-39144: nested subquery expressions deduplicate relations should be done bottom up") {

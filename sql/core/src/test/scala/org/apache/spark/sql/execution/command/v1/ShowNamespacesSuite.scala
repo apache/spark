@@ -50,7 +50,7 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schema_name" -> "`dummy`"))
+      parameters = Map("schemaName" -> "`dummy`"))
   }
 }
 

@@ -36,7 +36,7 @@ class NamespaceAlreadyExistsException(errorClass: String, messageParameters: Map
   extends AnalysisException(errorClass, messageParameters) {
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_ALREADY_EXISTS",
-      Map("schema_name" -> (namespace.map(quoteIdentifier).mkString("."))))
+      Map("schemaName" -> (namespace.map(quoteIdentifier).mkString("."))))
   }
 }
 
@@ -45,25 +45,25 @@ class TableAlreadyExistsException(errorClass: String, messageParameters: Map[Str
   extends AnalysisException(errorClass, messageParameters, cause = cause) {
   def this(db: String, table: String) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relation_name" ->
+      messageParameters = Map("relationName" ->
         (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
   def this(table: String) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relation_name" ->
+      messageParameters = Map("relationName" ->
         (UnresolvedAttribute.parseAttributeName(table)
           .map(part => quoteIdentifier(part)).mkString("."))))
   }
 
   def this(tableIdent: Identifier) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relation_name" -> tableIdent.quoted))
+      messageParameters = Map("relationName" -> tableIdent.quoted))
   }
 
   def this(table: Seq[String]) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relation_name" -> table.map(quoteIdentifier).mkString(".")))
+      messageParameters = Map("relationName" -> table.map(quoteIdentifier).mkString(".")))
   }
 }
 
@@ -72,7 +72,7 @@ class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map
   extends AnalysisException(errorClass, messageParameters, cause = cause) {
   def this(table: String) = {
     this(errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relation_name" -> UnresolvedAttribute.parseAttributeName(table)
+      messageParameters = Map("relationName" -> UnresolvedAttribute.parseAttributeName(table)
         .map(part => quoteIdentifier(part)).mkString(".")))
   }
 }
@@ -81,17 +81,17 @@ class PartitionAlreadyExistsException(errorClass: String, messageParameters: Map
   extends AnalysisException(errorClass, messageParameters) {
   def this(db: String, table: String, spec: TablePartitionSpec) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
-      Map("partition_list" -> ("PARTITION (" +
+      Map("partitionList" -> ("PARTITION (" +
         spec.map( kv => quoteIdentifier(kv._1) + s" = ${kv._2}").mkString(", ") + ")"),
-        "table_name" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
+        "tableName" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
   def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
-      Map("partition_list" ->
+      Map("partitionList" ->
         ("PARTITION (" + partitionIdent.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
         .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}").mkString(", ") + ")"),
-        "table_name" -> UnresolvedAttribute.parseAttributeName(tableName)
+        "tableName" -> UnresolvedAttribute.parseAttributeName(tableName)
           .map(part => quoteIdentifier(part)).mkString(".")))
   }
 }
@@ -100,21 +100,21 @@ class PartitionsAlreadyExistException(errorClass: String, messageParameters: Map
   extends AnalysisException(errorClass, messageParameters) {
   def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
-      Map("partition_list" ->
+      Map("partitionList" ->
         ("PARTITION ("
         + specs.map(spec => spec.map(kv => quoteIdentifier(kv._1) + s" = ${kv._2}").mkString(", "))
         .mkString("), PARTITION (") + ")"),
-        "table_name" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
+        "tableName" -> (quoteIdentifier(db) + "." + quoteIdentifier(table))))
   }
 
   def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
-      Map("partition_list" ->
+      Map("partitionList" ->
         ("PARTITION (" +
           partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
             .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}")
             .mkString(", ")).mkString("), PARTITION (") + ")"),
-        "table_name" -> UnresolvedAttribute.parseAttributeName(tableName)
+        "tableName" -> UnresolvedAttribute.parseAttributeName(tableName)
           .map(part => quoteIdentifier(part)).mkString(".")))
   }
 }
@@ -124,7 +124,7 @@ class FunctionAlreadyExistsException(errorClass: String, messageParameters: Map[
 
   def this(function: Seq[String]) = {
     this (errorClass = "ROUTINE_ALREADY_EXISTS",
-      Map("routine_name" -> function.map(quoteIdentifier).mkString(".")))
+      Map("routineName" -> function.map(quoteIdentifier).mkString(".")))
   }
 }
 

@@ -286,7 +286,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> relation))
+      parameters = Map("relationName" -> relation))
   }
 
 
@@ -312,7 +312,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertAnalysisErrorClass(
       "CREATE OR REPLACE TEMPORARY VIEW myabcdview AS SELECT * FROM db_not_exist234.jt",
       "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relation_name" -> "`db_not_exist234`.`jt`"))
+      Map("relationName" -> "`db_not_exist234`.`jt`"))
 
     // A table that does not exist
     assertRelationNotFound(
@@ -386,7 +386,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       checkError(e,
         "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relation_name" -> "`testView`"))
+        parameters = Map("relationName" -> "`testView`"))
     }
   }
 

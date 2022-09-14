@@ -1618,14 +1618,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`in_valid_table`"))
+      parameters = Map("relationName" -> "`in_valid_table`"))
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" -> "`no_db`.`no_table`"))
+      parameters = Map("relationName" -> "`no_db`.`no_table`"))
 
     e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
@@ -1642,7 +1642,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
     checkError(e,
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relation_name" ->
+      parameters = Map("relationName" ->
         "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
 
     e = intercept[AnalysisException] {

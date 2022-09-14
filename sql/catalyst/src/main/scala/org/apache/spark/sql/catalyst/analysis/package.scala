@@ -69,7 +69,7 @@ package object analysis {
     def tableNotFound(name: Seq[String]): Nothing = {
       throw new AnalysisException(
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        messageParameters = Map("relation_name" ->
+        messageParameters = Map("relationName" ->
           name.map(part => quoteIdentifier(part)).mkString(".")),
         origin = t.origin)
     }
@@ -77,7 +77,7 @@ package object analysis {
     def schemaNotFound(name: Seq[String]): Nothing = {
       throw new AnalysisException(
         errorClass = "SCHEMA_NOT_FOUND",
-        messageParameters = Map("schema_name" ->
+        messageParameters = Map("schemaName" ->
           name.map(part => quoteIdentifier(part)).mkString(".")),
         origin = t.origin)
     }
