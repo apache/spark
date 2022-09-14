@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.max
+import scala.math.{max, min}
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.util.Int128Math
@@ -75,11 +75,11 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
       return false
     }
 
-    val rescale = scale - _scale
     if (roundMode == ROUND_CEILING || roundMode == ROUND_FLOOR) {
       set(newDecimalVal)
     } else {
       try {
+        val rescale = scale - _scale
         val (newLeftHigh, newLeftLow) =
           Int128Math.rescale(this.int128.high, this.int128.low, rescale)
         this.int128 = Int128(newLeftHigh, newLeftLow)
@@ -147,7 +147,7 @@ class Decimal128Operation extends DecimalOperation[Decimal128Operation] {
     checkOverflow(newHigh, newLow, "Decimal128 multiply.")
 
     val resultScale = this._scale + that.scale
-    val resultPrecision = this._precision + that.precision + 1
+    val resultPrecision = min(DecimalType.MAX_PRECISION, this._precision + that.precision + 1)
 
     val decimal128Operation = newInstance()
     decimal128Operation.set(Int128(newHigh, newLow), resultPrecision, resultScale)
