@@ -153,9 +153,10 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     rdd.map { case (pred, lab, rel) =>
+      import org.apache.spark.util.collection.Utils
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
-      val relMap = lab.zip(rel).toMap
+      val relMap = Utils.toMap(lab, rel)
       if (useBinary && lab.size != rel.size) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +
