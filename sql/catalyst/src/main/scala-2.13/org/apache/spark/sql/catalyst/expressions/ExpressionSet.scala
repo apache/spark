@@ -64,8 +64,8 @@ object ExpressionSet {
  *    accessed.
  */
 class ExpressionSet protected(
-    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    protected var originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends scala.collection.Set[Expression]
     with scala.collection.SetOps[Expression, scala.collection.Set, ExpressionSet] {
 
@@ -110,13 +110,13 @@ class ExpressionSet protected(
 
   override def filter(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filter(e => p(e))
-    val newOriginals = originals.filter(e => p(e.canonicalized))
+    val newOriginals = originals.filter(e => p(e))
     new ExpressionSet(newBaseSet, newOriginals)
   }
 
   override def filterNot(p: Expression => Boolean): ExpressionSet = {
     val newBaseSet = baseSet.filterNot(e => p(e))
-    val newOriginals = originals.filterNot(e => p(e.canonicalized))
+    val newOriginals = originals.filterNot(e => p(e))
     new ExpressionSet(newBaseSet, newOriginals)
   }
 
