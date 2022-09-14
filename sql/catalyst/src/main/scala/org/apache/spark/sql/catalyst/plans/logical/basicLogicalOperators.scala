@@ -505,7 +505,7 @@ case class Union(
   }
 
   override lazy val validConstraints: ExpressionSet = {
-    if (SQLConf.get.useOptimizedConstraintPropagation) {
+    if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
          val head = children.head
         val headOutput = head.output
         val remaining = children.slice(1, children.length)
@@ -1141,10 +1141,9 @@ case class Aggregate(
   final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
 
   override lazy val validConstraints: ExpressionSet = {
-
     val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
-        child.constraints.updateConstraints(this.output,
-            child.output, nonAgg, Option(getAllValidConstraints))
+    child.constraints.updateConstraints(this.output,
+     child.output, nonAgg, Option(getAllValidConstraints))
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
@@ -1325,8 +1324,9 @@ case class Expand(
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override lazy val validConstraints: ExpressionSet =
-      if (SQLConf.get.useOptimizedConstraintPropagation) new ConstraintSet()
-      else ExpressionSet(Set.empty)
+      if (conf.constraintPropagationEnabled && conf.useOptimizedConstraintPropagation) {
+        new ConstraintSet()
+      } else ExpressionSet(Set.empty)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Expand =
     copy(child = newChild)
