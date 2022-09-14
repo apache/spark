@@ -72,7 +72,7 @@ private[spark] object Utils {
     val keyIter = keys.iterator
     val valueIter = values.iterator
     while (keyIter.hasNext && valueIter.hasNext) {
-      builder += (keyIter.next(), valueIter.next())
+      builder += (keyIter.next(), valueIter.next()).asInstanceOf[(K, V)]
     }
     builder.result()
   }
