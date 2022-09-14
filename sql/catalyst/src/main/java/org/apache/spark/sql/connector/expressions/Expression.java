@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
 
