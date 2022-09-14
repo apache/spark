@@ -113,10 +113,10 @@ import org.apache.spark.util.Utils
  *  - Scala UDF test case with a Scalar UDF registered as the name 'udf'.
  *
  *  - Python UDF test case with a Python UDF registered as the name 'udf'
- *    iff Python executable and pyspark are available.
+ *    if Python executable and pyspark are available.
  *
  *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
- *    iff Python executable, pyspark, pandas and pyarrow are available.
+ *    if Python executable, pyspark, pandas and pyarrow are available.
  *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
@@ -211,6 +211,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** A UDF test case. */
   protected case class UDFTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest
+
+  /** A UDAF test case. */
+  protected case class UDAFTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
@@ -436,6 +443,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && shouldTestScalarPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
+            shouldTestGroupedAggPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case _ =>
         s"${testCase.name}${System.lineSeparator()}"
     }
@@ -493,6 +505,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udaf")) {
+        Seq(TestGroupedAggPandasUDF("udaf")).map { udf =>
+          UDAFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
