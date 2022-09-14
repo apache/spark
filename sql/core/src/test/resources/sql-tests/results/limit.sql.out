@@ -50,7 +50,20 @@ SELECT * FROM testdata LIMIT -1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_INTEGER_TYPE",
+  "messageParameters" : {
+    "type" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 31,
+    "fragment" : "LIMIT -1"
+  } ]
+}
 
 
 -- !query
@@ -59,7 +72,20 @@ SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be equal to or greater than 0, but got -1
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_INTEGER_TYPE",
+  "messageParameters" : {
+    "type" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "SELECT * FROM testData TABLESAMPLE (-1 ROWS)"
+  } ]
+}
 
 
 -- !query
@@ -76,7 +102,17 @@ SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The evaluated limit expression must not be null, but got CAST(NULL AS INT)
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NULL_LIMIT",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 46,
+    "fragment" : "LIMIT CAST(NULL AS INT)"
+  } ]
+}
 
 
 -- !query
@@ -85,7 +121,20 @@ SELECT * FROM testdata LIMIT key > 3
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got (spark_catalog.default.testdata.key > 3)
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_CONSTANT_LIMIT",
+  "messageParameters" : {
+    "sql" : "(spark_catalog.default.testdata.key > 3)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 36,
+    "fragment" : "LIMIT key > 3"
+  } ]
+}
 
 
 -- !query
@@ -94,7 +143,20 @@ SELECT * FROM testdata LIMIT true
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got boolean
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_INTEGER_TYPE",
+  "messageParameters" : {
+    "type" : "boolean"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "LIMIT true"
+  } ]
+}
 
 
 -- !query
@@ -103,7 +165,20 @@ SELECT * FROM testdata LIMIT 'a'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must be integer type, but got string
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_INTEGER_TYPE",
+  "messageParameters" : {
+    "type" : "string"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 32,
+    "fragment" : "LIMIT 'a'"
+  } ]
+}
 
 
 -- !query

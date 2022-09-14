@@ -73,20 +73,76 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     case _ => None
   }
 
-  private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
+  private def checkLimitClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
-      case e if !e.foldable => failAnalysis(
-        s"The $name expression must evaluate to a constant value, but got " +
-          limitExpr.sql)
-      case e if e.dataType != IntegerType => failAnalysis(
-        s"The $name expression must be integer type, but got " +
-          e.dataType.catalogString)
+      case e if !e.foldable => e.failAnalysis(
+        errorClass = "INVALID_LIMIT_CLAUSE",
+        errorSubClass = "NON_CONSTANT_LIMIT",
+        messageParameters = Map("sql" -> limitExpr.sql))
+      case e if e.dataType != IntegerType => e.failAnalysis(
+        errorClass = "INVALID_LIMIT_CLAUSE",
+        errorSubClass = "NON_INTEGER_TYPE",
+        messageParameters = Map("type" -> e.dataType.catalogString))
       case e =>
         e.eval() match {
-          case null => failAnalysis(
-            s"The evaluated $name expression must not be null, but got ${limitExpr.sql}")
-          case v: Int if v < 0 => failAnalysis(
-            s"The $name expression must be equal to or greater than 0, but got $v")
+          case null => e.failAnalysis(
+            errorClass = "INVALID_LIMIT_CLAUSE",
+            errorSubClass = "NULL_LIMIT")
+          case v: Int if v < 0 =>
+            e.failAnalysis(
+              errorClass = "INVALID_LIMIT_CLAUSE",
+              errorSubClass = "NON_INTEGER_TYPE",
+              messageParameters = Map("type" -> v.toString))
+          case _ => // OK
+        }
+    }
+  }
+
+  private def checkOffsetClause(name: String, offsetExpr: Expression): Unit = {
+    offsetExpr match {
+      case e if !e.foldable => e.failAnalysis(
+        errorClass = "INVALID_OFFSET_CLAUSE",
+        errorSubClass = "NON_CONSTANT_OFFSET",
+        messageParameters = Map("sql" -> offsetExpr.sql))
+      case e if e.dataType != IntegerType => e.failAnalysis(
+        errorClass = "INVALID_OFFSET_CLAUSE",
+        errorSubClass = "NON_INTEGER_TYPE",
+        messageParameters = Map("type" -> e.dataType.catalogString))
+      case e =>
+        e.eval() match {
+          case null => e.failAnalysis(
+            errorClass = "INVALID_OFFSET_CLAUSE",
+            errorSubClass = "NULL_OFFSET")
+          case v: Int if v < 0 =>
+            e.failAnalysis(
+              errorClass = "INVALID_OFFSET_CLAUSE",
+              errorSubClass = "NON_INTEGER_TYPE",
+              messageParameters = Map("type" -> v.toString))
+          case _ => // OK
+        }
+    }
+  }
+
+  private def checkTailClause(name: String, offsetExpr: Expression): Unit = {
+    offsetExpr match {
+      case e if !e.foldable => e.failAnalysis(
+        errorClass = "INVALID_TAIL_CLAUSE",
+        errorSubClass = "NON_CONSTANT_TAIL",
+        messageParameters = Map("sql" -> offsetExpr.sql))
+      case e if e.dataType != IntegerType => e.failAnalysis(
+        errorClass = "INVALID_TAIL_CLAUSE",
+        errorSubClass = "NON_INTEGER_TYPE",
+        messageParameters = Map("type" -> e.dataType.catalogString))
+      case e =>
+        e.eval() match {
+          case null => e.failAnalysis(
+            errorClass = "INVALID_TAIL_CLAUSE",
+            errorSubClass = "NULL_TAIL")
+          case v: Int if v < 0 =>
+            e.failAnalysis(
+              errorClass = "INVALID_TAIL_CLAUSE",
+              errorSubClass = "NON_INTEGER_TYPE",
+              messageParameters = Map("type" -> v.toString))
           case _ => // OK
         }
     }
@@ -437,10 +493,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+          case GlobalLimit(limitExpr, _) => checkLimitClause("limit", limitExpr)
 
           case LocalLimit(limitExpr, child) =>
-            checkLimitLikeClause("limit", limitExpr)
+            checkLimitClause("limit", limitExpr)
             child match {
               case Offset(offsetExpr, _) =>
                 val limit = limitExpr.eval().asInstanceOf[Int]
@@ -456,9 +512,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               case _ =>
             }
 
-          case Offset(offsetExpr, _) => checkLimitLikeClause("offset", offsetExpr)
+          case Offset(offsetExpr, _) => checkOffsetClause("offset", offsetExpr)
 
-          case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
+          case Tail(limitExpr, _) => checkTailClause("tail", limitExpr)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)

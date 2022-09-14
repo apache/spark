@@ -294,6 +294,60 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ]
   },
+  "INVALID_LIMIT_CLAUSE" : {
+    "message": [
+      "Invalid LIMIT clause:"
+    ],
+    "subClass" : {
+      "NON_CONSTANT_LIMIT" : {
+        "message" : [
+          "The expression provided as input to the LIMIT clause must be constant, but got <sql>"
+        ]
+      },
+      "NON_INTEGER_TYPE" : {
+        "message": [
+          "The expression in the LIMIT clause must have integer type, but got <type>"
+        ]
+      },
+      "NEGATIVE_LIMIT" : {
+        "message": [
+          "The expression in the LIMIT clause must be non-negative, but got <value>"
+        ]
+      },
+      "NULL_LIMIT" : {
+        "message": [
+          "The expression in the LIMIT clause must not evaluate to NULL"
+        ]
+      }
+    }
+  },
+  "INVALID_OFFSET_CLAUSE" : {
+    "message": [
+      "Invalid OFFSET clause:"
+    ],
+    "subClass" : {
+      "NON_CONSTANT_OFFSET" : {
+        "message" : [
+          "The expression provided as input to the OFFSET clause must be constant, but got <sql>"
+        ]
+      },
+      "NON_INTEGER_TYPE" : {
+        "message": [
+          "The expression in the OFFSET clause must have integer type, but got <type>"
+        ]
+      },
+      "NEGATIVE_OFFSET" : {
+        "message": [
+          "The expression in the OFFSET clause must be non-negative, but got <value>"
+        ]
+      },
+      "NULL_OFFSET" : {
+        "message": [
+          "The expression in the OFFSET clause must not evaluate to NULL"
+        ]
+      }
+    }
+  },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [
       "The group aggregate pandas UDF <functionList> cannot be invoked together with as other, non-pandas aggregate functions."
@@ -329,6 +383,33 @@
       "SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN" : {
         "message" : [
           "Scalar subquery must return only one column, but got <number>"
+        ]
+      }
+    }
+  },
+  "INVALID_TAIL_CLAUSE" : {
+    "message": [
+      "Invalid TAIL clause:"
+    ],
+    "subClass" : {
+      "NON_CONSTANT_TAIL" : {
+        "message" : [
+          "The expression provided as input to the TAIL clause must be constant, but got <sql>"
+        ]
+      },
+      "NON_INTEGER_TYPE" : {
+        "message": [
+          "The expression in the TAIL clause must have integer type, but got <type>"
+        ]
+      },
+      "NEGATIVE_TAIL" : {
+        "message": [
+          "The expression in the TAIL clause must be non-negative, but got <value>"
+        ]
+      },
+      "NULL_TAIL" : {
+        "message": [
+          "The expression in the TAIL clause must not evaluate to NULL"
         ]
       }
     }

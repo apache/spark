@@ -131,7 +131,20 @@ select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The limit expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END
+{
+  "errorClass" : "INVALID_LIMIT_CLAUSE",
+  "errorSubClass" : "NON_CONSTANT_LIMIT",
+  "messageParameters" : {
+    "sql" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 77,
+    "fragment" : "limit (case when random() < 0.5 then bigint(null) end)"
+  } ]
+}
 
 
 -- !query
@@ -140,7 +153,20 @@ select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The offset expression must evaluate to a constant value, but got CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END
+{
+  "errorClass" : "INVALID_OFFSET_CLAUSE",
+  "errorSubClass" : "NON_CONSTANT_OFFSET",
+  "messageParameters" : {
+    "sql" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 78,
+    "fragment" : "offset (case when random() < 0.5 then bigint(null) end)"
+  } ]
+}
 
 
 -- !query
