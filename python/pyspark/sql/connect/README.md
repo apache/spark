@@ -1,8 +1,14 @@
-# Spark Connect
+
+# [EXPERIMENTAL] Spark Connect
+
+**Spark Connect is a strictly experimental feature and under heavy development.
+All APIs should be considered volatile and should not be used in production.**
 
 This module contains the implementation of Spark Connect which is a logical plan
 facade for the implementation in Spark. Spark Connect is directly integrated into the build
 of Spark. To enable it, you only need to activate the driver plugin for Spark Connect.
+
+
 
 
 ## Build
