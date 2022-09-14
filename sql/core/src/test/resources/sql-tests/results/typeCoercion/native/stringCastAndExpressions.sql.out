@@ -112,9 +112,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 38,
-    "fragment" : "select cast(a as array<string>) from t"
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(a as array<string>)"
   } ]
 }
 
@@ -136,9 +136,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 41,
-    "fragment" : "select cast(a as struct<s:string>) from t"
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(a as struct<s:string>)"
   } ]
 }
 
@@ -160,9 +160,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 44,
-    "fragment" : "select cast(a as map<string, string>) from t"
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "cast(a as map<string, string>)"
   } ]
 }
 
