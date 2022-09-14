@@ -53,7 +53,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("cast from long #2") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(cast(123L, DecimalType(3, 1)), null)
         checkEvaluation(cast(123L, DecimalType(2, 0)), null)
       }
@@ -65,7 +65,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(cast(123, DecimalType(3, 1)), null)
         checkEvaluation(cast(123, DecimalType(2, 0)), null)
       }
@@ -82,7 +82,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("casting to fixed-precision decimals") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
         assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
         assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable)
@@ -185,7 +185,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   test("SPARK-28470: Cast should honor nullOnOverflow property") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
           checkEvaluation(
             Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
@@ -386,7 +386,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   test("Cast should output null for invalid strings when ANSI is not enabled.") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(cast("abdef", DecimalType.USER_DEFAULT), null)
         }
       }
@@ -514,7 +514,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(d, FloatType), null)
     checkEvaluation(cast(d, DoubleType), null)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
         checkEvaluation(cast(d, DecimalType(10, 2)), null)
       }
@@ -552,7 +552,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("Fast fail for cast string type to decimal type") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
           Decimal("12345678901234567890123456789012345678"))
         checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
@@ -579,7 +579,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("data type casting II") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(
           cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
             DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
@@ -637,7 +637,7 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("SPARK-39749: cast Decimal to string") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
         checkEvaluation(cast(input, StringType), "1.23E-7")
       }

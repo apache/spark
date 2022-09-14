@@ -59,7 +59,7 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("Handle special case for null variable-length Decimal") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val schema = StructType(StructField("d", DecimalType(19, 0), nullable = true) :: Nil)
         val unsafeRowProjection = UnsafeProjection.create(schema)
         val row = unsafeRowProjection(new SpecificInternalRow(schema))

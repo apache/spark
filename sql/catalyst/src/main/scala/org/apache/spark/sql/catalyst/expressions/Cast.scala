@@ -1098,7 +1098,7 @@ case class Cast(
       buildCast[UTF8String](_,
         s => changePrecision(Decimal.fromStringANSI(s, target, getContextOrNull()), target))
     case BooleanType =>
-      if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "Int128") {
+      if (SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "Int128") {
         buildCast[Boolean](_,
           b => toPrecision(if (b) Decimal.ONE128 else Decimal.ZERO128, target, getContextOrNull()))
       } else {

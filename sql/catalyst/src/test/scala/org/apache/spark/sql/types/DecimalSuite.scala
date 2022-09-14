@@ -36,7 +36,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("creating decimals") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkDecimal(new Decimal(), "0", 1, 0)
         checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 2, 2)
         checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 1, 1)
@@ -74,7 +74,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   test("creating decimals with negative scale under legacy mode") {
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
           checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
           checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
@@ -93,7 +93,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         .contains("Negative scale is not allowed under ansi mode")
     }
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkNegativeScaleDecimal(Decimal(BigDecimal("98765"), 5, -3))
         checkNegativeScaleDecimal(Decimal(BigDecimal("98765").underlying(), 5, -3))
         checkNegativeScaleDecimal(Decimal(98765L, 5, -3))
@@ -116,7 +116,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkValues(new Decimal(), 0.0, 0L)
         checkValues(Decimal(BigDecimal("10.030")), 10.03, 10L)
         checkValues(Decimal(BigDecimal("10.030"), 4, 1), 10.0, 10L)
@@ -178,7 +178,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("hash code") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(123).hashCode() === (123).##)
         assert(Decimal(-123).hashCode() === (-123).##)
         assert(Decimal(Int.MaxValue).hashCode() === Int.MaxValue.##)
@@ -201,7 +201,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     checkCompact(Decimal(BigDecimal(123)), false)
     checkCompact(Decimal("123"), false)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(123) === Decimal(BigDecimal(123)))
         assert(Decimal(123) === Decimal(BigDecimal("123.00")))
         assert(Decimal(-123) === Decimal(BigDecimal(-123)))
@@ -212,7 +212,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("isZero") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(0).isZero)
         assert(Decimal(0, 4, 2).isZero)
         assert(Decimal("0").isZero)
@@ -227,7 +227,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("arithmetic") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(100) + Decimal(-100) === Decimal(0))
         assert(Decimal(100) + Decimal(-100) === Decimal(0))
         assert(Decimal(100) * Decimal(-100) === Decimal(-10000))
@@ -244,7 +244,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("longVal arithmetic") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(10, 2, 0) + Decimal(10, 2, 0) === Decimal(20, 3, 0))
         assert(Decimal(10, 2, 0) + Decimal(90, 2, 0) === Decimal(100, 3, 0))
         assert(Decimal(10, 2, 0) - Decimal(-10, 2, 0) === Decimal(20, 3, 0))
@@ -255,7 +255,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("quot") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal(100).quot(Decimal(100)) === Decimal(BigDecimal("1")))
         assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
         assert(Decimal(100).quot(Decimal(-100)) === Decimal(BigDecimal("-1")))
@@ -266,7 +266,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("negate & abs") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(-Decimal(100) === Decimal(BigDecimal("-100")))
         assert(-Decimal(-100) === Decimal(BigDecimal("100")))
         assert(Decimal(100).abs === Decimal(BigDecimal("100")))
@@ -277,7 +277,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("floor & ceil") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(Decimal("10.03").floor === Decimal(BigDecimal("10")))
         assert(Decimal("10.03").ceil === Decimal(BigDecimal("11")))
         assert(Decimal("-10.03").floor === Decimal(BigDecimal("-11")))
@@ -289,7 +289,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   // regression test for SPARK-8359
   test("accurate precision after multiplication") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimal =
           (Decimal(Long.MaxValue, 38, 0) * Decimal(Long.MaxValue, 38, 0)).toJavaBigDecimal
         assert(decimal.unscaledValue.toString === "85070591730234615847396907784232501249")
@@ -300,7 +300,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   // regression test for SPARK-8677
   test("fix non-terminating decimal expansion problem") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimal = Decimal(1.0, 10, 3) / Decimal(3.0, 10, 3)
         // The difference between decimal should not be more than 0.001.
         assert(decimal.toDouble - 0.333 < 0.001)
@@ -311,7 +311,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   // regression test for SPARK-8800
   test("fix loss of precision/scale when doing division operation") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val a = Decimal(2) / Decimal(3)
         assert(a.toDouble < 1.0 && a.toDouble > 0.6)
         val b = Decimal(1) / Decimal(8)
@@ -322,7 +322,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
   test("set/setOrNull") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(new Decimal().set(10L, 10, 0).toUnscaledLong === 10L)
         assert(new Decimal().set(100L, 10, 0).toUnscaledLong === 100L)
         assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
@@ -337,7 +337,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
           val bd = BigDecimal(sign + n)
           val unscaled = (bd * 10).toLongExact
           Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-            withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+            withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
               val d = Decimal(unscaled, 8, 1)
               assert(d.changePrecision(10, 0, mode))
               assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
@@ -358,7 +358,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   test("SPARK-20341: support BigInt's value does not fit in long value range") {
     val bigInt = scala.math.BigInt("9223372036854775808")
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimal = Decimal.apply(bigInt)
         assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
       }
@@ -370,12 +370,12 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     val decimal = Decimal("1234568790123456789012348790.1234879012345678901234568790")
     assert(decimal.toScalaBigInt == scala.math.BigInt("1234568790123456789012348790"))
     assert(decimal.toJavaBigInteger == new java.math.BigInteger("1234568790123456789012348790"))
-    withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> "Int128") {
+    withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> "Int128") {
       checkBigIntegerOutInt128Range(
         Decimal("1234568790123456789012348790.1234879012345678901234568790"))
     }
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         // fitting long
         val decimalLong = Decimal(123456789123456789L, 18, 9)
         assert(decimalLong.toScalaBigInt == scala.math.BigInt("123456789"))
@@ -387,7 +387,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   test("UTF8String to Decimal") {
     def checkFromString(string: String): Unit = {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
           assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
         }
@@ -396,7 +396,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     def checkOutOfRangeFromString(string: String): Unit = {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           assert(Decimal.fromString(UTF8String.fromString(string)) === null)
           val e =
             intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
@@ -434,7 +434,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
       assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
     }
-    withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> "Int128") {
+    withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> "Int128") {
       checkBigIntegerOutInt128Range(Decimal.fromString(
         UTF8String.fromString("28.9259999999999983799625624669715762138")))
     }
@@ -450,7 +450,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       for (string <- values) {
         Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-          withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
             assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
             assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
           }

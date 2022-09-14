@@ -342,7 +342,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
         checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
         checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
@@ -376,7 +376,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
         checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
         checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
@@ -749,7 +749,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
       checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(checkDataTypeAndCast(
             RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
           checkEvaluation(checkDataTypeAndCast(
@@ -788,7 +788,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         (0 to 7).foreach { i =>
           checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
           checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
@@ -824,7 +824,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Round(-0.35, 1), -0.4)
     checkEvaluation(Round(-35, -1), -40)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(Round(BigDecimal("45.00"), -1), BigDecimal(50))
       }
     }
@@ -835,7 +835,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(BRound(BigDecimal("45.00"), -1), BigDecimal(40))
         checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
         checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))

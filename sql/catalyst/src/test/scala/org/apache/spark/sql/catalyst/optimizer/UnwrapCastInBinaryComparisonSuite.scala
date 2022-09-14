@@ -133,7 +133,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     })
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         Seq(decimal2(100.20), decimal2(-200.50)).foreach(v => {
           assertEquivalent(castDecimal2(f3) > v, f3 > decimal(v))
           assertEquivalent(castDecimal2(f3) >= v, f3 >= decimal(v))
@@ -167,7 +167,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     // Another case: 400.5678 is rounded up to 400.57
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimalValue = decimal2(400.5678)
         assertEquivalent(castDecimal2(f3) > decimalValue, f3 >= decimal(decimalValue))
         assertEquivalent(castDecimal2(f3) >= decimalValue, f3 >= decimal(decimalValue))
@@ -215,7 +215,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     Seq("true", "false").foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
         Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-          withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+          withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
             val decimalValue = decimal2(123456.1234)
             assertEquivalent(castDecimal2(f3) === decimalValue, castDecimal2(f3) === decimalValue)
           }
@@ -253,7 +253,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assert(doubleMax.asInstanceOf[Double].isNaN)
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(getRange(DecimalType(5, 2)).isEmpty)
       }
     }
@@ -301,7 +301,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
   test("SPARK-39896: unwrap cast when the literal of In/InSet downcast failed") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimalValue = decimal2(123456.1234)
         val decimalValue2 = decimal2(100.20)
         checkInAndInSet(
@@ -327,7 +327,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     // Another case: 400.5678 is rounded up to 400.57
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val decimalValue1 = decimal2(400.5678)
         val decimalValue2 = decimal2(1.0)
         checkInAndInSet(

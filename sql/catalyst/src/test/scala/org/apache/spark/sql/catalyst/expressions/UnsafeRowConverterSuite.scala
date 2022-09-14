@@ -198,7 +198,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(createdFromNull.getUTF8String(8) === null)
     assert(createdFromNull.getBinary(9) === null)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         assert(createdFromNull.getDecimal(10, 10, 0) === null)
         assert(createdFromNull.getDecimal(11, 38, 18) === null)
       }
@@ -206,7 +206,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // assert(createdFromNull.get(11) === null)
 
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         // If we have an UnsafeRow with columns that are initially non-null and we null out those
         // columns, then the serialized row representation should be identical to what we would get
         // by creating an entirely null row via the converter
@@ -570,7 +570,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
 
     // Simple tests
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val inputRow = InternalRow.fromSeq(Seq(
           false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
           Decimal(255), IntervalUtils.stringToInterval(UTF8String.fromString( "interval 1 day")),

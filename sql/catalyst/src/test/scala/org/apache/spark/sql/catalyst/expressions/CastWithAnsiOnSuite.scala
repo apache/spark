@@ -46,7 +46,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkExceptionInExpression[ArithmeticException](
             cast(Decimal(value.toString), dt), "overflow")
         }
@@ -61,7 +61,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   private def testLongMaxAndMin(dt: DataType): Unit = {
     assert(Seq(LongType, IntegerType).contains(dt))
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         Seq(
           Decimal(Long.MaxValue) + Decimal(1),
           Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
@@ -90,7 +90,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(value, ByteType), value)
       checkEvaluation(cast(value.toString, ByteType), value)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(cast(Decimal(value.toString), ByteType), value)
         }
       }
@@ -113,7 +113,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(value, ShortType), value)
       checkEvaluation(cast(value.toString, ShortType), value)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(cast(Decimal(value.toString), ShortType), value)
         }
       }
@@ -130,7 +130,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(value, IntegerType), value)
       checkEvaluation(cast(value.toString, IntegerType), value)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
         }
       }
@@ -147,7 +147,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkEvaluation(cast(value, LongType), value)
       checkEvaluation(cast(value.toString, LongType), value)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           checkEvaluation(cast(Decimal(value.toString), LongType), value)
         }
       }
@@ -160,7 +160,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkExceptionInExpression[ArithmeticException](
           cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
         checkExceptionInExpression[ArithmeticException](
@@ -273,7 +273,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("Fast fail for cast string type to decimal type in ansi mode") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
           Decimal("12345678901234567890123456789012345678"))
         checkExceptionInExpression[ArithmeticException](

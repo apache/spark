@@ -558,7 +558,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("udt", new ExamplePointUDT))
 
   Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-    withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+    withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
       testHash(
         new StructType()
           .add(s"bigDecimalWith$implementation", DecimalType.SYSTEM_DEFAULT)
@@ -590,7 +590,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: Long): Unit = {
       val decimalType = DataTypes.createDecimalType(precision, scale)
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           val decimal = {
             val value = Decimal.apply(new java.math.BigDecimal(input))
             if (value.changePrecision(precision, scale)) value else null

@@ -104,7 +104,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("seconds") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(ExtractIntervalSeconds("0 second"), Decimal(0, 8, 6))
         checkEvaluation(ExtractIntervalSeconds("1 second"), Decimal(1.0, 8, 6))
         checkEvaluation(ExtractIntervalSeconds("-1 second"), Decimal(-1.0, 8, 6))

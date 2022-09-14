@@ -144,7 +144,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("encode/decode decimal type") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val schema = new StructType()
           .add("int", IntegerType)
           .add("string", StringType)
@@ -171,7 +171,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("RowEncoder should preserve decimal precision and scale") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val schema = new StructType().add("decimal", DecimalType(10, 5), false)
         val encoder = RowEncoder(schema).resolveAndBind()
         val decimal = Decimal("67123.45")
@@ -185,7 +185,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
         testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
         testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
@@ -203,7 +203,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
           assert(e.getMessage.contains("cannot be represented as Decimal"))
         case e: RuntimeException =>
           assert(e.getCause.isInstanceOf[ArithmeticException])
-          if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal") {
+          if (SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal") {
             assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
           } else {
             assert(e.getCause.getMessage.contains("BigInteger out of Int128 range"))
@@ -213,7 +213,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
-      if (SQLConf.get.getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal") {
+      if (SQLConf.get.getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal") {
         assert(roundTrip(encoder, row).get(0) == null)
       } else {
         intercept[Exception] {
@@ -470,7 +470,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   private def encodeDecodeTestForDecimal(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           doEncodeDecodeTest(schema)
         }
       }

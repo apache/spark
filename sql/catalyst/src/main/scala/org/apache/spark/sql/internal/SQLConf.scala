@@ -2730,7 +2730,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DECIMAL_OPERATION_IMPLEMENTATION = buildConf("spark.sql.decimalOperations.implementation")
+  val DECIMAL_UNDERLYING_IMPLEMENTATION = buildConf("spark.sql.decimal.implementation")
     .internal()
     .doc("When JDKBigDecimal, using the java.math.BigDecimal as the underlying implementation. " +
       "Otherwise, using Int128.")
@@ -4630,7 +4630,7 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
   def isDefaultDecimalImplementation: Boolean =
-    getConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION) == "JDKBigDecimal"
+    getConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION) == "JDKBigDecimal"
 
   def legacyStatisticalAggregate: Boolean = getConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE)
 

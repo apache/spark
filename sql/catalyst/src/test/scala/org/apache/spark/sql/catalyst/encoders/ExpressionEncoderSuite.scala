@@ -718,7 +718,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       useFallback: Boolean = false): Unit = {
     testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input", useFallback) {
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           val newInput = Decimal(input)
           doEncodeDecodeTest(newInput)
         }

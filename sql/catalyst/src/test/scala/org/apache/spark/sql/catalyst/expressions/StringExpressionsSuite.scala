@@ -929,7 +929,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal(3)), "123,123,324,123.000")
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal(-1)), null)
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(
           FormatNumber(
             Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
@@ -951,7 +951,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal("###,###,###,###,###.###")),
       "123,123,324,123")
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         checkEvaluation(
           FormatNumber(Literal(Decimal(123123324123L) * Decimal(123123.21234d)),
             Literal("###,###,###,###,###.####")), "15,159,339,180,002,773.2778")
@@ -970,7 +970,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ToNumber: positive tests") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         Seq(
           ("$345", "S$999,099.99") -> Decimal(345),
           ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
@@ -1093,7 +1093,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
 
       Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-        withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+        withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
           val toCharResult = ToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
           assert(toCharResult != TypeCheckResult.TypeCheckSuccess,
             s"The format string should have been invalid: $format")
@@ -1149,7 +1149,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ToCharacter: positive tests") {
     Seq("JDKBigDecimal", "Int128").foreach { implementation =>
-      withSQLConf(SQLConf.DECIMAL_OPERATION_IMPLEMENTATION.key -> implementation) {
+      withSQLConf(SQLConf.DECIMAL_UNDERLYING_IMPLEMENTATION.key -> implementation) {
         // Test '0' and '9'
         Seq(
           (Decimal(454),
